@@ -17,13 +17,13 @@
   {%- if policy == 'public' -%}
     <span class="badge bg-success {{ width_class }}"><i class="fas fa-globe me-1"></i>一般公開</span>
   {%- elif policy == 'domestic' -%}
-    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i>学内公開</span>
+    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i>構成員だけ</span>
   {%- elif policy == 'private' -%}
     <span class="badge bg-secondary {{ width_class }}"><i class="fas fa-lock me-1"></i>非公開</span>
   {%- elif policy == 'group' -%}
     <span class="badge bg-info text-dark {{ width_class }}"><i class="fas fa-users me-1"></i>グループ</span>
   {%- elif policy == 'domestic_group' -%}
-    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i><i class="fas fa-plus mx-1" style="font-size:0.6rem;"></i><i class="fas fa-users me-1"></i>学内＋グループ</span>
+    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i><i class="fas fa-plus mx-1" style="font-size:0.6rem;"></i><i class="fas fa-users me-1"></i>構成員＋グループ</span>
   {%- else -%}
     <span class="badge bg-light text-dark border {{ width_class }}">不明</span>
   {%- endif -%}

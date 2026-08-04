@@ -33,10 +33,10 @@
 
 ■ アクセスポリシー
   public         一般公開      : 全ユーザ（未ログインを含む）
-  domestic       学内公開      : user_category = 'regular'
+  domestic       構成員だけ      : user_category = 'regular'
   private        非公開        : 作成者本人と admin のみ
   group          グループ限定  : 指定グループ所属者（カテゴリ不問）
-  domestic_group 学内＋グループ: regular または 指定グループ所属者（和集合）
+  domestic_group 構成員＋グループ: regular または 指定グループ所属者（和集合）
 
 ■ 共通ルール（全ポリシー横断）
   - admin は全件閲覧可
@@ -84,7 +84,7 @@ ACCESS_POLICIES = {
         'everyone': True,
     },
     'domestic': {
-        'label': '学内公開',
+        'label': '構成員だけ',
         'uses_groups': False,
         'by_category': {'regular'},
         'everyone': False,
@@ -102,7 +102,7 @@ ACCESS_POLICIES = {
         'everyone': False,
     },
     'domestic_group': {
-        'label': '学内＋グループ',
+        'label': '構成員＋グループ',
         'uses_groups': True,
         'by_category': {'regular'},
         'everyone': False,

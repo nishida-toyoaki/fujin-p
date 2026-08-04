@@ -323,28 +323,28 @@ body {
                     </label>
                     <label class="policy-item">
                         <input type="radio" name="ndPolicy" value="public">
-                        <span class="pbadge pb-public">🌐 一般公開</span>
-                        <span class="pdesc">ログイン済みユーザなら誰でも</span>
+                        <span class="pbadge pb-public">🌐 ゲストにも</span>
+                        <span class="pdesc">ログイン済みの全ユーザに開示</span>
                     </label>
                     <label class="policy-item">
                         <input type="radio" name="ndPolicy" value="domestic">
-                        <span class="pbadge pb-domestic">🏢 学内公開</span>
-                        <span class="pdesc">regularユーザ（学内者）のみ</span>
+                        <span class="pbadge pb-domestic">🏢 構成員だけ</span>
+                        <span class="pdesc">ログイン済みの構成員だけに開示</span>
                     </label>
                     <label class="policy-item">
                         <input type="radio" name="ndPolicy" value="private">
                         <span class="pbadge pb-private">🔒 非公開</span>
-                        <span class="pdesc">作成者とadminのみ</span>
+                        <span class="pdesc">作成者だけに開示</span>
                     </label>
                     <label class="policy-item">
                         <input type="radio" name="ndPolicy" value="group">
                         <span class="pbadge pb-group">👥 グループ</span>
-                        <span class="pdesc">指定グループの所属者（カテゴリ不問）</span>
+                        <span class="pdesc">指定グループの所属者に開示</span>
                     </label>
                     <label class="policy-item">
                         <input type="radio" name="ndPolicy" value="domestic_group">
-                        <span class="pbadge pb-domgroup">🏢＋👥 学内＋グループ</span>
-                        <span class="pdesc">regularユーザ，または指定グループの所属者</span>
+                        <span class="pbadge pb-domgroup">🏢＋👥 構成員＋グループ</span>
+                        <span class="pdesc">構成員と指定グループの所属者に開示</span>
                     </label>
                 </div>
                 <div class="acl-groups" id="ndGroupBox" style="display:none;">
@@ -1071,9 +1071,9 @@ document.getElementById('graph').addEventListener('contextmenu', function(ev) {
 });
 // =============== ノードモーダル ===============
 const POLICY_LABELS = {
-    'inherit': '↰ キャンバスに従う', 'public': '🌐 一般公開',
-    'domestic': '🏢 学内公開', 'private': '🔒 非公開',
-    'group': '👥 グループ', 'domestic_group': '🏢＋👥 学内＋グループ'
+    'inherit': '↰ キャンバスに従う', 'public': '🌐 ゲストにも',
+    'domestic': '🏢 構成員だけ', 'private': '🔒 非公開',
+    'group': '👥 グループ', 'domestic_group': '🏢＋👥 構成員＋グループ'
 };
 function toggleGroupBox() {
     const p = $('input[name=ndPolicy]:checked').val();

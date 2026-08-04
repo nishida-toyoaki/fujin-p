@@ -192,13 +192,13 @@ label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
     <div class="policy-radio-group">
       <label class="policy-radio-item" onclick="selectPolicy('public')">
         <input type="radio" name="access_policy" value="public">
-        <div><div class="pr-label">🌐 公開（public）</div>
+        <div><div class="pr-label">🌐 ゲストにも（public）</div>
              <div class="pr-desc">ログイン済みユーザーであれば誰でも閲覧可</div></div>
       </label>
       <label class="policy-radio-item" onclick="selectPolicy('domestic')">
         <input type="radio" name="access_policy" value="domestic">
-        <div><div class="pr-label">🏫 学内公開（domestic）</div>
-             <div class="pr-desc">regular / admin カテゴリのユーザーのみ閲覧可</div></div>
+        <div><div class="pr-label">🏫 構成員だけ（domestic）</div>
+             <div class="pr-desc">ログイン済みの構成員のみ閲覧可</div></div>
       </label>
       <label class="policy-radio-item" onclick="selectPolicy('group')">
         <input type="radio" name="access_policy" value="group">
@@ -226,8 +226,8 @@ label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
 
 <script>
 const POLICY_LABELS = {
-  public  : ['🌐 公開',      'bp-public'],
-  domestic: ['🏫 学内公開',  'bp-domestic'],
+  public  : ['🌐 ゲストにも',      'bp-public'],
+  domestic: ['🏫 構成員だけ',  'bp-domestic'],
   group   : ['👥 グループ',  'bp-group'],
   private : ['🔒 非公開',    'bp-private'],
 };
@@ -409,4 +409,3 @@ $(function(){ loadStories(); });
 </script>
 </body>
 </html>
-

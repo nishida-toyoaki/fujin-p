@@ -52,7 +52,7 @@
                                     {% if document and document.access_policy == 'domestic' %}checked{% endif %}
                                     onchange="toggleGroupSelect()">
                                 <label class="form-check-label" for="policy_domestic">
-                                    <i class="fas fa-building"></i> 学内公開（regularユーザ）
+                                    <i class="fas fa-building"></i> 構成員だけ
                                 </label>
                             </div>
                             <div class="form-check form-check-inline">
@@ -60,7 +60,7 @@
                                     {% if document and document.access_policy == 'domestic_group' %}checked{% endif %}
                                     onchange="toggleGroupSelect()">
                                 <label class="form-check-label" for="policy_domestic_group">
-                                    <i class="fas fa-building"></i><i class="fas fa-plus mx-1"></i><i class="fas fa-users"></i> 学内公開＋指定グループ
+                                    <i class="fas fa-building"></i><i class="fas fa-plus mx-1"></i><i class="fas fa-users"></i> 構成員＋グループ
                                 </label>
                             </div>
                             <div class="form-check form-check-inline">
@@ -68,7 +68,7 @@
                                     {% if document and document.access_policy == 'public' %}checked{% endif %}
                                     onchange="toggleGroupSelect()">
                                 <label class="form-check-label" for="policy_public">
-                                    <i class="fas fa-globe"></i> 一般公開（全ログインユーザ）
+                                    <i class="fas fa-globe"></i> 一般公開（未ログインでも閲覧可）
                                 </label>
                             </div>
                         </div>
@@ -77,7 +77,7 @@
                             <label class="form-label mb-2">閲覧を許可するグループを選択:</label>
                             <div id="domestic_group_note" class="form-text text-muted mb-2" style="display: none;">
                                 <i class="fas fa-info-circle"></i>
-                                「学内公開＋指定グループ」では、regularユーザ <strong>または</strong> 選択したグループの所属者が閲覧できます。
+                                「構成員＋グループ」では、構成員 <strong>または</strong> 選択したグループの所属者が閲覧できます。
                             </div>
                             <div class="row">
                                 {% for group in groups %}

@@ -251,15 +251,15 @@ label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
       <label class="policy-radio-item" onclick="selectPolicy('public')">
         <input type="radio" name="access_policy" value="public">
         <div>
-          <div class="pr-label">🌐 公開（public）</div>
+          <div class="pr-label">🌐 ゲストにも（public）</div>
           <div class="pr-desc">ログイン済みユーザーであれば誰でも閲覧可</div>
         </div>
       </label>
       <label class="policy-radio-item" onclick="selectPolicy('domestic')">
         <input type="radio" name="access_policy" value="domestic">
         <div>
-          <div class="pr-label">🏫 学内公開（domestic）</div>
-          <div class="pr-desc">regular / admin カテゴリのユーザーのみ閲覧可</div>
+          <div class="pr-label">🏫 構成員だけ（domestic）</div>
+          <div class="pr-desc">ログイン済みの構成員のみ閲覧可</div>
         </div>
       </label>
       <label class="policy-radio-item" onclick="selectPolicy('group')">
@@ -745,8 +745,8 @@ function safeFilename(s){
 
 // ===== アクセス権設定 =====
 const POLICY_LABELS = {
-  public  : ['🌐 公開',      'pb-public'],
-  domestic: ['🏫 学内公開',  'pb-domestic'],
+  public  : ['🌐 ゲストにも',      'pb-public'],
+  domestic: ['🏫 構成員だけ',  'pb-domestic'],
   group   : ['👥 グループ限定','pb-group'],
   private : ['🔒 非公開',    'pb-private'],
 };

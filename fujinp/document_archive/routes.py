@@ -28,10 +28,10 @@
 
 アクセスポリシー（詳細は permissions.py の ACCESS_POLICIES を参照）:
   public         - 一般公開: 未ログインを含む全ユーザ
-  domestic       - 学内公開: user_category が 'regular' のユーザ、作成者本人、admin
+  domestic       - 構成員だけ: user_category が 'regular' のユーザ、作成者本人、admin
   private        - 非公開  : 作成者本人および admin のみ
   group          - グループ: 指定グループ所属者（カテゴリ不問）、作成者本人、admin
-  domestic_group - 学内公開＋指定グループ: regular または 指定グループ所属者（和集合）、作成者本人、admin
+  domestic_group - 構成員＋グループ: regular または 指定グループ所属者（和集合）、作成者本人、admin
 
 データベース構成:
 - users, user_groups, user_group_memberships, features, user_features → default データベース
