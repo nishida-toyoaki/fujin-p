@@ -1,0 +1,564 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>そらから - {{ region.name }} - FUJIN-P</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #0b2545; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif; }
+        #scene { position: fixed; inset: 0; }
+
+        #loading {
+            position: fixed; inset: 0; z-index: 20;
+            background: linear-gradient(180deg, #0b2545, #13315c);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #eef4fa; gap: 14px; transition: opacity 0.8s;
+        }
+        #loading.done { opacity: 0; pointer-events: none; }
+        #loading h2 { font-weight: 600; font-size: 1.2rem; }
+        #loading .bar-wrap { width: 260px; height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; }
+        #loading .bar { height: 100%; width: 0%; background: #54a0ff; transition: width 0.2s; }
+        #loading .sub { color: #9fc5e8; font-size: 0.8rem; }
+
+        .hud {
+            position: fixed; z-index: 10; color: #eef4fa; font-size: 0.82rem;
+            background: rgba(11,37,69,0.55); backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; padding: 10px 14px;
+        }
+        #hud-top { top: 12px; left: 12px; }
+        #hud-top h1 { font-size: 0.95rem; margin-bottom: 4px; }
+        #hud-top .mode { color: #ffd166; font-weight: 700; }
+        #hud-data { top: 12px; right: 12px; text-align: right; font-family: "SF Mono", Consolas, monospace; line-height: 1.55; }
+        #hud-help { bottom: 12px; left: 12px; color: #c9dcee; line-height: 1.6; }
+        #hud-help kbd {
+            background: rgba(255,255,255,0.15); border-radius: 4px; padding: 1px 6px;
+            font-size: 0.75rem; font-family: inherit;
+        }
+        #attrib {
+            position: fixed; bottom: 12px; right: 12px; z-index: 10;
+            color: rgba(255,255,255,0.75); font-size: 0.68rem;
+            background: rgba(11,37,69,0.45); padding: 4px 8px; border-radius: 6px;
+        }
+        #attrib a { color: #9fc5e8; }
+        #back {
+            position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+            color: #9fc5e8; text-decoration: none; font-size: 0.8rem;
+            background: rgba(11,37,69,0.55); border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 8px; padding: 6px 14px;
+        }
+        #back:hover { background: rgba(255,255,255,0.12); }
+    </style>
+</head>
+<body>
+    <div id="scene"></div>
+
+    <div id="loading">
+        <h2>🛩️ そらから — 地形データ読み込み中</h2>
+        <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+        <div class="sub"><span id="prog">0 / 0</span> タイル（国土地理院）</div>
+    </div>
+
+    <a id="back" href="{{ url_for('sorakara.index') }}">← 地域選択に戻る</a>
+
+    <div class="hud" id="hud-top">
+        <h1>⛰️ {{ region.name }}</h1>
+        <div>モード: <span class="mode" id="mode">目標へ直行</span></div>
+        <div id="legend" style="margin-top:6px; font-size:0.76rem; color:#c9dcee;">
+            <span style="color:#ffe08a;">▲山 <span id="c-mtn">0</span></span>
+            <span style="color:#9fd8ff;">～川 <span id="c-riv">0</span></span>
+            <span style="color:#ffb3c1;">■駅 <span id="c-sta">0</span></span>
+            <span id="anno-state" style="color:#8fb3d9;">（注記読込中…）</span>
+        </div>
+    </div>
+
+    <div class="hud" id="debug-panel" style="display:none; top:120px; left:12px; max-width:340px; max-height:60vh; overflow:auto; font-size:0.72rem;">
+        <strong>未分類の注記（Dキーで閉じる）</strong>
+        <div id="debug-list" style="font-family:monospace; white-space:pre-wrap; margin-top:6px;"></div>
+    </div>
+
+    <div class="hud" id="hud-data">
+        <div>高度 <span id="alt">----</span> m</div>
+        <div>速度 <span id="spd">---</span> km/h</div>
+        <div>方位 <span id="hdg">---</span>°</div>
+        <div>目標 <span id="dist">--.-</span> km</div>
+    </div>
+
+    <div class="hud" id="hud-help">
+        <kbd>←</kbd><kbd>→</kbd> 旋回　<kbd>↑</kbd><kbd>↓</kbd> 上昇/下降（手動へ切替）<br>
+        <kbd>Z</kbd>/<kbd>X</kbd> 減速/加速　<kbd>Space</kbd> 自動 ⇔ 手動　<kbd>D</kbd> 注記デバッグ
+    </div>
+
+    <div id="attrib">
+        地図データ：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>（標高タイル・全国最新写真・注記）
+    </div>
+
+    <script>
+    // ================= 設定 =================
+    const REGION = {{ region_json|safe }};
+    const QUALITY = '{{ quality }}';   // 'std' | 'low'
+    const Q = (QUALITY === 'low')
+        ? { radius: 1, seg: 128, texOffset: 1 }   // 3x3タイル, テクスチャz+1
+        : { radius: (REGION.radius || 2), seg: 256, texOffset: 1 }; // 5x5タイル
+    const Z = REGION.zoom || 12;
+    const EXAG = 1.5;   // 標高強調率
+
+    // ================= 地理院タイル座標 =================
+    function tileXY(lon, lat, z) {
+        const n = Math.pow(2, z);
+        const x = (lon + 180) / 360 * n;
+        const r = lat * Math.PI / 180;
+        const y = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
+        return { x: x, y: y };
+    }
+    const ct = tileXY(REGION.lon, REGION.lat, Z);
+    const cx = Math.floor(ct.x), cy = Math.floor(ct.y);
+    const R = Q.radius, TILES = 2 * R + 1;
+    const TILE_M = 40075016.686 * Math.cos(REGION.lat * Math.PI / 180) / Math.pow(2, Z);
+    const W = TILES * TILE_M;   // 地形の一辺（m）
+
+    // ================= 読み込み =================
+    const texScale = Math.pow(2, Q.texOffset);
+    let loadedCount = 0;
+    const totalCount = TILES * TILES + (TILES * texScale) * (TILES * texScale);
+    document.getElementById('prog').textContent = '0 / ' + totalCount;
+
+    function tick() {
+        loadedCount++;
+        document.getElementById('prog').textContent = loadedCount + ' / ' + totalCount;
+        document.getElementById('bar').style.width = (100 * loadedCount / totalCount) + '%';
+    }
+
+    function loadImg(url) {
+        return new Promise(function(resolve) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function() { resolve(img); };
+            img.onerror = function() { resolve(null); };
+            img.src = url;
+        });
+    }
+
+    // 標高タイル（dem_png）→ Float32Array 標高マップ
+    async function loadDEM() {
+        const N = TILES * 256;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = N;
+        const g = cv.getContext('2d');
+        const jobs = [];
+        for (let dy = -R; dy <= R; dy++) {
+            for (let dx = -R; dx <= R; dx++) {
+                const url = 'https://cyberjapandata.gsi.go.jp/xyz/dem_png/' + Z + '/' + (cx + dx) + '/' + (cy + dy) + '.png';
+                jobs.push(loadImg(url).then(function(img) {
+                    if (img) g.drawImage(img, (dx + R) * 256, (dy + R) * 256);
+                    tick();
+                }));
+            }
+        }
+        await Promise.all(jobs);
+        const data = g.getImageData(0, 0, N, N).data;
+        const h = new Float32Array(N * N);
+        for (let i = 0; i < N * N; i++) {
+            const r = data[i * 4], gg = data[i * 4 + 1], b = data[i * 4 + 2];
+            const v = (r << 16) | (gg << 8) | b;
+            let e;
+            if (v === 8388608) e = 0;                    // 無効値（海など）
+            else if (v < 8388608) e = v * 0.01;
+            else e = (v - 16777216) * 0.01;
+            h[i] = e > 0 ? e : 0;
+        }
+        return { h: h, N: N };
+    }
+
+    // 航空写真タイル → CanvasTexture
+    async function loadTexture() {
+        const tz = Z + Q.texOffset;
+        const T = TILES * texScale;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = T * 256;
+        const g = cv.getContext('2d');
+        g.fillStyle = '#41603f';
+        g.fillRect(0, 0, cv.width, cv.height);
+        const bx = (cx - R) * texScale, by = (cy - R) * texScale;
+        const jobs = [];
+        for (let ty = 0; ty < T; ty++) {
+            for (let tx = 0; tx < T; tx++) {
+                const url = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/' + tz + '/' + (bx + tx) + '/' + (by + ty) + '.jpg';
+                jobs.push(loadImg(url).then(function(img) {
+                    if (img) g.drawImage(img, tx * 256, ty * 256);
+                    tick();
+                }));
+            }
+        }
+        await Promise.all(jobs);
+        const tex = new THREE.CanvasTexture(cv);
+        tex.anisotropy = 4;
+        return tex;
+    }
+
+    // ================= 標高サンプラ =================
+    let sampleFn = null;   // (u,v in 0..1) → 標高m
+    function makeSampler(h, N) {
+        return function(u, v) {
+            const x = Math.min(Math.max(u, 0), 1) * (N - 1);
+            const y = Math.min(Math.max(v, 0), 1) * (N - 1);
+            const x0 = Math.floor(x), y0 = Math.floor(y);
+            const x1 = Math.min(x0 + 1, N - 1), y1 = Math.min(y0 + 1, N - 1);
+            const fx = x - x0, fy = y - y0;
+            return h[y0 * N + x0] * (1 - fx) * (1 - fy)
+                 + h[y0 * N + x1] * fx * (1 - fy)
+                 + h[y1 * N + x0] * (1 - fx) * fy
+                 + h[y1 * N + x1] * fx * fy;
+        };
+    }
+    function heightAt(wx, wz) {
+        if (!sampleFn) return 0;
+        return sampleFn((wx + W / 2) / W, (wz + W / 2) / W) * EXAG;
+    }
+
+    // ================= シーン =================
+    const SKY = 0x9ecfff;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(SKY);
+    scene.fog = new THREE.Fog(SKY, W * 0.3, W * 1.05);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 5, W * 4);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('scene').appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x3f5f3f, 0.85));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 0.95);
+    sun.position.set(W * 0.6, W * 0.8, W * 0.3);
+    scene.add(sun);
+
+    // 外周の下敷き（縁隠し）
+    const base = new THREE.Mesh(
+        new THREE.PlaneGeometry(W * 6, W * 6),
+        new THREE.MeshLambertMaterial({ color: 0x3d5a3a })
+    );
+    base.rotation.x = -Math.PI / 2;
+    base.position.y = -3;
+    scene.add(base);
+
+    function buildTerrain(dem, tex) {
+        sampleFn = makeSampler(dem.h, dem.N);
+        const SEG = Q.seg;
+        const geo = new THREE.PlaneGeometry(W, W, SEG, SEG);
+        const pos = geo.attributes.position;
+        for (let j = 0; j <= SEG; j++) {
+            for (let i = 0; i <= SEG; i++) {
+                pos.setZ(j * (SEG + 1) + i, sampleFn(i / SEG, j / SEG) * EXAG);
+            }
+        }
+        geo.rotateX(-Math.PI / 2);
+        geo.computeVertexNormals();
+        scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex })));
+    }
+
+    // ================= 地名注記（山・川・駅） =================
+    // 国土地理院 ベクトルタイル提供実験「注記」(experimental_anno, z15固定)
+    // properties: ftCode(地物種別), annoCtg(注記分類: 322=河川名 等), knj(漢字), kana(かな)
+    const ANNO_Z = 15;
+    const annoCounts = { mtn: 0, riv: 0, sta: 0 };
+    const annoPlaced = { mtn: [], riv: [], sta: [] };
+    const ANNO_CAP = { mtn: 150, riv: 100, sta: 60 };
+    const ANNO_SEP = { mtn: 1200, riv: 4000, sta: 1000 };
+    const unclassified = [];
+    window.SORAKARA_DEBUG = { unclassified: unclassified, counts: annoCounts };
+
+    function classifyAnno(p) {
+        const nm = (p.knj || p.name || '').trim();
+        if (!nm) return null;
+        const ctg = Number(p.annoCtg);
+        if (ctg === 322) return 'riv';                     // 河川名（仕様書で確認済み）
+        if (/[川河]$|用水$|運河$|放水路$|井堰$/.test(nm)) return 'riv';
+        if (/[山岳嶽峰峯嶺]$|ヶ[峰岳]$|[ノ丿][峰岳]$|峠$|高原$|富士$|渓谷$|峡$|山地$|山脈$|連峰$/.test(nm)) return 'mtn';
+        if (/駅$/.test(nm)) return 'sta';
+        return null;
+    }
+
+    function roundRectPath(g, x, y, w, h, r) {
+        g.beginPath();
+        g.moveTo(x + r, y);
+        g.arcTo(x + w, y, x + w, y + h, r);
+        g.arcTo(x + w, y + h, x, y + h, r);
+        g.arcTo(x, y + h, x, y, r);
+        g.arcTo(x, y, x + w, y, r);
+        g.closePath();
+    }
+
+    const LABEL_STYLE = {
+        mtn: { color: '#ffe08a', mark: '▲' },
+        riv: { color: '#9fd8ff', mark: '～' },
+        sta: { color: '#ffb3c1', mark: '■' }
+    };
+
+    function makeLabelSprite(text, kind) {
+        const conf = LABEL_STYLE[kind];
+        const font = 'bold 44px "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif';
+        const mc = document.createElement('canvas');
+        let g = mc.getContext('2d');
+        g.font = font;
+        const label = conf.mark + ' ' + text;
+        const tw = g.measureText(label).width;
+        mc.width = Math.ceil(tw + 40);
+        mc.height = 76;
+        g = mc.getContext('2d');
+        g.font = font;
+        g.fillStyle = 'rgba(8,20,40,0.55)';
+        roundRectPath(g, 0, 8, mc.width, 60, 14);
+        g.fill();
+        g.fillStyle = conf.color;
+        g.textBaseline = 'middle';
+        g.fillText(label, 20, 40);
+        const tex = new THREE.CanvasTexture(mc);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const sp = new THREE.Sprite(mat);
+        sp.renderOrder = 10;
+        const hh = (kind === 'mtn') ? W * 0.011 : W * 0.0095;
+        sp.scale.set(hh * mc.width / mc.height, hh, 1);
+        return sp;
+    }
+
+    function updateLegend() {
+        document.getElementById('c-mtn').textContent = annoCounts.mtn;
+        document.getElementById('c-riv').textContent = annoCounts.riv;
+        document.getElementById('c-sta').textContent = annoCounts.sta;
+    }
+
+    function addAnnoFeature(f) {
+        const p = f.properties || {};
+        const kind = classifyAnno(p);
+        const geom = f.geometry;
+        if (!geom) return;
+        let lon, lat;
+        if (geom.type === 'Point') {
+            lon = geom.coordinates[0]; lat = geom.coordinates[1];
+        } else if (geom.type === 'LineString' && geom.coordinates.length) {
+            const m = geom.coordinates[Math.floor(geom.coordinates.length / 2)];
+            lon = m[0]; lat = m[1];
+        } else return;
+        if (!kind) {
+            const nm = (p.knj || p.name || '').trim();
+            if (nm && unclassified.length < 400) {
+                unclassified.push('[' + (p.annoCtg !== undefined ? p.annoCtg : '-') + '/' + (p.ftCode !== undefined ? p.ftCode : '-') + '] ' + nm);
+            }
+            return;
+        }
+        const t = tileXY(lon, lat, Z);
+        const wx = ((t.x - (cx - R)) / TILES - 0.5) * W;
+        const wz = ((t.y - (cy - R)) / TILES - 0.5) * W;
+        if (Math.abs(wx) > W * 0.5 || Math.abs(wz) > W * 0.5) return;
+        const nm = (p.knj || p.name).trim();
+        const arr = annoPlaced[kind];
+        if (arr.length >= ANNO_CAP[kind]) return;
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i].nm === nm && Math.hypot(arr[i].x - wx, arr[i].z - wz) < ANNO_SEP[kind]) return;
+        }
+        const sp = makeLabelSprite(nm, kind);
+        sp.position.set(wx, heightAt(wx, wz) + (kind === 'mtn' ? 350 : 180), wz);
+        scene.add(sp);
+        arr.push({ nm: nm, x: wx, z: wz });
+        annoCounts[kind]++;
+        updateLegend();
+    }
+
+    async function loadAnnotations() {
+        const scale = Math.pow(2, ANNO_Z - Z);
+        const bx = (cx - R) * scale, by = (cy - R) * scale;
+        const T = TILES * scale;
+        const coords = [];
+        for (let ty = 0; ty < T; ty++) {
+            for (let tx = 0; tx < T; tx++) coords.push([tx, ty]);
+        }
+        const c0 = (T - 1) / 2;
+        coords.sort(function(a, b) {
+            return (Math.pow(a[0] - c0, 2) + Math.pow(a[1] - c0, 2))
+                 - (Math.pow(b[0] - c0, 2) + Math.pow(b[1] - c0, 2));
+        });
+        let idx = 0;
+        async function worker() {
+            while (idx < coords.length) {
+                const c = coords[idx++];
+                const url = 'https://cyberjapandata.gsi.go.jp/xyz/experimental_anno/' + ANNO_Z + '/' + (bx + c[0]) + '/' + (by + c[1]) + '.geojson';
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) continue;
+                    const gj = await res.json();
+                    (gj.features || []).forEach(addAnnoFeature);
+                } catch (e) { /* 404等は無視 */ }
+            }
+        }
+        const workers = [];
+        for (let i = 0; i < 24; i++) workers.push(worker());
+        await Promise.all(workers);
+        document.getElementById('anno-state').textContent = '';
+        if (annoCounts.sta === 0) {
+            console.warn('sorakara: 駅名が見つかりませんでした。Dキーで未分類注記を確認してください。');
+        }
+        console.log('sorakara 注記読込完了', annoCounts, '未分類', unclassified.length);
+    }
+
+    // ================= フライト =================
+    // 自動モードは2段階:
+    //   approach: 目標（地形中心 = 地域の座標）へまっすぐ直行
+    //   orbit:    到達後、目標を小半径 ORBIT_R で周回（常に目標を注視）
+    const ORBIT_R = W * (REGION.orbit || 0.08);   // 周回半径（標準約3km）
+    const state = {
+        pos: new THREE.Vector3(0, 2000, W * 0.38),
+        heading: 0,       // 0 = 北（-Z）
+        speed: 120,       // m/s
+        auto: true,
+        phase: 'approach',
+        bank: 0
+    };
+
+    const keys = {};
+    function updateMode() {
+        document.getElementById('mode').textContent =
+            !state.auto ? '手動操縦' : (state.phase === 'approach' ? '目標へ直行' : '目標を周回');
+    }
+    function setAuto(a) {
+        state.auto = a;
+        if (a) {
+            const dist = Math.hypot(state.pos.x, state.pos.z);
+            state.phase = (dist < ORBIT_R * 1.4) ? 'orbit' : 'approach';
+        }
+        updateMode();
+    }
+    window.addEventListener('keydown', function(e) {
+        keys[e.code] = true;
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(e.code) >= 0) {
+            if (state.auto) setAuto(false);
+            e.preventDefault();
+        }
+        if (e.code === 'Space') { setAuto(!state.auto); e.preventDefault(); }
+        if (e.code === 'KeyD') {
+            const dp = document.getElementById('debug-panel');
+            const show = dp.style.display === 'none';
+            dp.style.display = show ? 'block' : 'none';
+            if (show) {
+                document.getElementById('debug-list').textContent =
+                    '分類済: ▲' + annoCounts.mtn + ' ～' + annoCounts.riv + ' ■' + annoCounts.sta +
+                    '\n--- 未分類 (' + unclassified.length + ') ---\n' +
+                    unclassified.slice(0, 80).join('\n');
+            }
+        }
+    });
+    window.addEventListener('keyup', function(e) { keys[e.code] = false; });
+
+    function normA(a) {
+        while (a > Math.PI) a -= 2 * Math.PI;
+        while (a < -Math.PI) a += 2 * Math.PI;
+        return a;
+    }
+
+    let last = performance.now();
+    function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min((now - last) / 1000, 0.1);
+        last = now;
+
+        const dxc = -state.pos.x, dzc = -state.pos.z;
+        const dist = Math.hypot(dxc, dzc) || 1;
+        const toCenter = Math.atan2(dxc, -dzc);
+
+        let turn = 0;
+        if (state.auto) {
+            if (state.phase === 'approach') {
+                // 目標へまっすぐ向かう
+                turn = Math.min(Math.max(normA(toCenter - state.heading), -0.5), 0.5);
+                const gh = heightAt(state.pos.x, state.pos.z);
+                const tAlt = Math.max(gh + 1400, 900);
+                state.pos.y += (tAlt - state.pos.y) * Math.min(1, dt * 0.6);
+                if (dist < ORBIT_R * 1.15) { state.phase = 'orbit'; updateMode(); }
+            } else {
+                // 目標を小半径で周回（時計回り）
+                const err = Math.min(Math.max((dist - ORBIT_R) / ORBIT_R, -1), 1);
+                const goal = toCenter + Math.PI / 2 - err * Math.PI / 2;
+                turn = Math.min(Math.max(normA(goal - state.heading), -0.5), 0.5);
+                const hc = heightAt(0, 0);
+                const gh = heightAt(state.pos.x, state.pos.z);
+                const tAlt = Math.max(hc + 600, gh + 300);
+                state.pos.y += (tAlt - state.pos.y) * Math.min(1, dt * 0.6);
+            }
+        } else {
+            if (keys['ArrowLeft'])  turn = -0.6;
+            if (keys['ArrowRight']) turn = 0.6;
+            if (keys['ArrowUp'])   state.pos.y += state.speed * 0.8 * dt;
+            if (keys['ArrowDown']) state.pos.y -= state.speed * 0.8 * dt;
+        }
+
+        // 速度調整（Z/X）は自動・手動どちらのモードでも有効
+        if (keys['KeyZ']) state.speed = Math.max(40, state.speed * Math.pow(0.5, dt));
+        if (keys['KeyX']) state.speed = Math.min(800, state.speed * Math.pow(2, dt));
+
+        state.heading += turn * dt;
+        state.bank += (-turn * 0.5 - state.bank) * Math.min(1, dt * 3);
+
+        const dir = new THREE.Vector3(Math.sin(state.heading), 0, -Math.cos(state.heading));
+        state.pos.addScaledVector(dir, state.speed * dt);
+
+        // 範囲外へ出過ぎない
+        const LIM = W * 0.49;
+        state.pos.x = Math.min(Math.max(state.pos.x, -LIM), LIM);
+        state.pos.z = Math.min(Math.max(state.pos.z, -LIM), LIM);
+        // 地形との最低間隔
+        const minY = heightAt(state.pos.x, state.pos.z) + 120;
+        if (state.pos.y < minY) state.pos.y = minY;
+
+        camera.position.copy(state.pos);
+        if (state.auto && state.phase === 'orbit') {
+            // 周回中は常に目標を注視（ターンテーブル視点）
+            camera.lookAt(new THREE.Vector3(0, heightAt(0, 0) + 250, 0));
+            camera.rotateZ(state.bank * 0.6);
+        } else {
+            const look = state.pos.clone().addScaledVector(dir, 2000);
+            look.y -= (state.auto ? 380 : 220);
+            camera.lookAt(look);
+            camera.rotateZ(state.bank);
+        }
+
+        // HUD
+        document.getElementById('alt').textContent = Math.round(state.pos.y / EXAG);
+        document.getElementById('spd').textContent = Math.round(state.speed * 3.6);
+        document.getElementById('hdg').textContent =
+            String(Math.round(((state.heading * 180 / Math.PI) % 360 + 360) % 360)).padStart(3, '0');
+        document.getElementById('dist').textContent = (dist / 1000).toFixed(1);
+
+        renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ================= 起動 =================
+    (async function() {
+        try {
+            const results = await Promise.all([loadDEM(), loadTexture()]);
+            buildTerrain(results[0], results[1]);
+            state.pos.y = heightAt(state.pos.x, state.pos.z) + 1800;
+            document.getElementById('loading').classList.add('done');
+            requestAnimationFrame(function(t) { last = t; animate(t); });
+            loadAnnotations();   // 地名ラベルはバックグラウンドで順次表示
+        } catch (err) {
+            document.querySelector('#loading h2').textContent = '読み込みに失敗しました: ' + err;
+        }
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,500 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者パネル - まいあし</title>
+    <style>
+        :root {
+            --header-height: 50px;
+            --primary-color: #d32f2f;
+            --accent-color: #f44336;
+            --success-color: #4caf50;
+            --border-color: #ddd;
+            --bg-color: #f5f5f5;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            background: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ヘッダー */
+        #header {
+            height: var(--header-height);
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+        #header h1 {
+            font-size: 20px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+        }
+        #header h1::before {
+            content: '⚙️';
+            margin-right: 10px;
+            font-size: 24px;
+        }
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: 0.2s;
+        }
+        .nav-link:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* メインコンテナ */
+        #main-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .page-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .section-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        /* テーブル */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th {
+            background: #fafafa;
+            padding: 12px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: bold;
+            color: #555;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        .data-table tr:hover {
+            background: #fafafa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* ボタン */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--accent-color);
+        }
+        .btn-secondary {
+            background: white;
+            border: 1px solid #ccc;
+            color: #555;
+        }
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+        .btn-danger {
+            background: transparent;
+            border: 1px solid #f44336;
+            color: #f44336;
+            font-size: 11px;
+            padding: 4px 10px;
+        }
+        .btn-danger:hover {
+            background: #f44336;
+            color: white;
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-box {
+            background: white;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: #555;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .form-help {
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>管理者パネル <span style="font-size:12px; opacity:0.8; margin-left:10px; font-weight:400;">Admin Panel</span></h1>
+    <!--<a href="/migration_assistant/admin_migration" class="btn btn-warning">-->
+    <!--    🔄 データマイグレーション-->
+    <!--</a>-->
+    <a href="/migration_assistant" class="nav-link">👣 まいあしに戻る</a>
+</div>
+
+<div id="main-container">
+    <div class="page-title">師匠候補の管理</div>
+    <div class="page-subtitle">
+        ユーザーが「師匠」として指名できる候補者を承認・管理します
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <div class="section-title">承認済み師匠候補一覧</div>
+            <button class="btn btn-primary" onclick="openApproveModal()">＋ 新規承認</button>
+        </div>
+
+        <div id="mentors-container">
+            <div class="empty-state">読み込み中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- 師匠承認モーダル -->
+<div id="modal-approve" class="modal">
+    <div class="modal-box">
+        <div class="modal-title">師匠候補を承認する</div>
+        <div class="form-group">
+            <label>ユーザーを選択 <span style="color:red;">*</span></label>
+            <select id="approve-user-id">
+                <option value="">読み込み中...</option>
+            </select>
+            <div class="form-help">師匠として認定するユーザーを選択してください</div>
+        </div>
+        <div class="form-group">
+            <label>有効開始日時（任意）</label>
+            <input type="datetime-local" id="approve-valid-from">
+            <div class="form-help">未入力の場合は即時有効になります</div>
+        </div>
+        <div class="form-group">
+            <label>有効終了日時（任意）</label>
+            <input type="datetime-local" id="approve-valid-until">
+            <div class="form-help">未入力の場合は無期限です</div>
+        </div>
+        <div class="form-group">
+            <label>備考（任意）</label>
+            <textarea id="approve-notes" rows="2" placeholder="承認理由や注意事項など"></textarea>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="execApprove()">承認する</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '/migration_assistant/api';
+
+// 初期化
+document.addEventListener('DOMContentLoaded', loadMentors);
+
+// 師匠候補一覧読み込み
+async function loadMentors() {
+    try {
+        const res = await fetch(`${API_BASE}/admin/mentors`);
+        const data = await res.json();
+
+        if (!data.success) {
+            document.getElementById('mentors-container').innerHTML =
+                '<div class="empty-state">エラー: ' + esc(data.error) + '</div>';
+            return;
+        }
+
+        const container = document.getElementById('mentors-container');
+
+        if (!data.mentors || data.mentors.length === 0) {
+            container.innerHTML = '<div class="empty-state">まだ承認された師匠候補がいません</div>';
+            return;
+        }
+
+        // テーブル作成
+        let html = '<table class="data-table">';
+        html += '<thead><tr>';
+        html += '<th>ユーザー</th>';
+        html += '<th>承認者</th>';
+        html += '<th>有効期間</th>';
+        html += '<th>備考</th>';
+        html += '<th>状態</th>';
+        html += '<th style="width:100px;">操作</th>';
+        html += '</tr></thead><tbody>';
+
+        data.mentors.forEach(m => {
+            const statusClass = m.is_active ? 'status-active' : 'status-inactive';
+            const statusText = m.is_active ? '有効' : '無効';
+
+            const validFrom = m.valid_from || '即時';
+            const validUntil = m.valid_until || '無期限';
+
+            html += '<tr>';
+            html += `<td><strong>${esc(m.full_name)}</strong><br><span style="font-size:11px; color:#888;">ID: ${m.user_id}</span></td>`;
+            html += `<td>${esc(m.approved_by_name)}</td>`;
+            html += `<td style="font-size:11px;">${esc(validFrom)}<br>～ ${esc(validUntil)}</td>`;
+            html += `<td style="font-size:11px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(m.notes || '-')}</td>`;
+            html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+            html += `<td><button class="btn btn-danger" onclick="revokeMentor(${m.id})">取消</button></td>`;
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error('Error loading mentors:', e);
+        document.getElementById('mentors-container').innerHTML =
+            '<div class="empty-state">読み込みエラーが発生しました</div>';
+    }
+}
+
+// 師匠承認モーダルを開く
+async function openApproveModal() {
+    // ユーザー一覧を読み込む
+    try {
+        const res = await fetch('/user_groups/api/users/candidates');
+        const data = await res.json();
+
+        const select = document.getElementById('approve-user-id');
+        select.innerHTML = '<option value="">選択してください...</option>';
+
+        if (data.success && data.users) {
+            data.users.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = `${u.full_name} (ID: ${u.id})`;
+                select.appendChild(opt);
+            });
+        }
+
+        // フォームクリア
+        document.getElementById('approve-valid-from').value = '';
+        document.getElementById('approve-valid-until').value = '';
+        document.getElementById('approve-notes').value = '';
+
+        document.getElementById('modal-approve').classList.add('active');
+    } catch (e) {
+        alert('ユーザー一覧の読み込みに失敗しました: ' + e.message);
+    }
+}
+
+// 師匠承認実行
+async function execApprove() {
+    const userId = document.getElementById('approve-user-id').value;
+    let validFrom = document.getElementById('approve-valid-from').value;
+    let validUntil = document.getElementById('approve-valid-until').value;
+    const notes = document.getElementById('approve-notes').value;
+
+    if (!userId) {
+        alert('ユーザーを選択してください');
+        return;
+    }
+
+    // 日時フォーマット変換
+    if (validFrom) validFrom = validFrom.replace('T', ' ') + ':00';
+    if (validUntil) validUntil = validUntil.replace('T', ' ') + ':00';
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/mentors`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                valid_from: validFrom || null,
+                valid_until: validUntil || null,
+                notes: notes
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            closeModal();
+            await loadMentors();
+            alert('師匠候補として承認しました');
+        } else {
+            alert('承認失敗: ' + data.error);
+        }
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// 師匠承認取り消し
+async function revokeMentor(mentorId) {
+    if (!confirm('この師匠承認を取り消しますか？\n（既に指名されている弟子との関係も解除されます）')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/mentors/${mentorId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            await loadMentors();
+            alert('師匠承認を取り消しました');
+        } else {
+            alert('取り消し失敗: ' + data.error);
+        }
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// モーダルを閉じる
+function closeModal() {
+    document.getElementById('modal-approve').classList.remove('active');
+}
+
+// ユーティリティ
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[m]));
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,892 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ウィンドウショッピング3D - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* ---------- リセット・全体 ---------- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif;
+            background: #bfe3f2;
+            color: #1f2937;
+        }
+
+        /* 3D描画キャンバス（全画面） */
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+        }
+
+        /* ---------- ヘッダー ---------- */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(6px);
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .back-btn {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(99, 102, 241, 0.9);
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .back-btn:hover { background: rgba(79, 70, 229, 1); }
+
+        /* ---------- コントロールパネル ---------- */
+        .control-panel {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            border-radius: 10px;
+            z-index: 10;
+            min-width: 265px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .control-row:last-child { margin-bottom: 0; }
+
+        .ctrl-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(99, 102, 241, 0.6);
+            background: rgba(99, 102, 241, 0.12);
+            color: #3730a3;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .ctrl-btn:hover { background: rgba(99, 102, 241, 0.3); }
+
+        .readout {
+            font-size: 0.85rem;
+            color: #3730a3;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hint {
+            font-size: 0.72rem;
+            color: #4b5563;
+            line-height: 1.5;
+        }
+
+        /* ---------- トースト（操作メッセージ） ---------- */
+        #toast {
+            position: fixed;
+            top: 56px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 18px;
+            background: rgba(31, 41, 55, 0.85);
+            color: #fff;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            z-index: 20;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .control-panel { right: 16px; min-width: 0; }
+            .hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="header">
+        <a href="{{ url_for('window_shopping.return_to_fujin') }}" class="back-btn">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <h1>🛍️ ウィンドウショッピング3D</h1>
+    </div>
+
+    <div id="toast"></div>
+
+    <div class="control-panel">
+        <div class="control-row">
+            <span class="readout">👥 人数: <span id="figure-count">8</span></span>
+            <button id="btn-fig-minus" class="ctrl-btn">−</button>
+            <button id="btn-fig-plus" class="ctrl-btn">＋</button>
+            <span class="readout">🏬 店: <span id="shop-count">0</span></span>
+        </div>
+        <div class="control-row">
+            <button id="btn-shop-undo" class="ctrl-btn">店を1つ削除</button>
+            <button id="btn-shop-clear" class="ctrl-btn">全削除</button>
+            <button id="btn-reset" class="ctrl-btn">視点リセット</button>
+        </div>
+        <div class="hint">
+            地面をクリック: 店を配置 ／ ドラッグ: 視点回転 ／ ホイール: ズーム<br>
+            店を置くと、棒人形たちがショーウィンドウを見て回ります
+        </div>
+    </div>
+
+    <script>
+    // =====================================================================
+    // ウィンドウショッピング3D（Three.js / WebGL）
+    // 棒人形が広場を歩く・走る・ジャンプ。クリックで店を配置すると
+    // ショーウィンドウを順に見て回る。
+    // =====================================================================
+
+    // ---------- 定数 ----------
+    var AREA = 30;              // 歩行可能領域の半径（正方形の半辺長）
+    var MAX_FIGURES = 20;
+    var MIN_FIGURES = 1;
+    var MAX_SHOPS = 12;
+    var SHOP_MIN_DIST = 8.0;    // 店同士の最小間隔
+    var LEG_LEN = 0.92;         // 股下の高さ（骨盤の基準高）
+
+    var FIGURE_COLORS = [
+        0xe74c3c, 0x3498db, 0x27ae60, 0xf39c12, 0x9b59b6,
+        0x16a085, 0xd35400, 0x2c3e50, 0xc0392b, 0x2980b9,
+        0x8e44ad, 0x1abc9c, 0xe67e22, 0x34495e, 0xf1c40f
+    ];
+
+    var SHOP_COLORS = [
+        0xf8b4c0, 0xa5d8f3, 0xc4e8b0, 0xfbe3a2, 0xd6c4f0,
+        0xf5c8a8, 0xb0e0d8, 0xe8c4d8, 0xcfe3f5, 0xf0e0b0
+    ];
+
+    // ---------- シーン基盤 ----------
+    var container = document.getElementById('canvas-container');
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xbfe3f2);
+    scene.fog = new THREE.Fog(0xbfe3f2, 70, 160);
+
+    var camera = new THREE.PerspectiveCamera(
+        45, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // ---------- 照明 ----------
+    scene.add(new THREE.HemisphereLight(0xe8f4ff, 0x8a9a6a, 0.75));
+
+    var sunLight = new THREE.DirectionalLight(0xfff4e0, 0.85);
+    sunLight.position.set(30, 50, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -45;
+    sunLight.shadow.camera.right = 45;
+    sunLight.shadow.camera.top = 45;
+    sunLight.shadow.camera.bottom = -45;
+    sunLight.shadow.camera.far = 130;
+    scene.add(sunLight);
+
+    // ---------- 地面・境界 ----------
+    var ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(AREA * 2 + 14, AREA * 2 + 14),
+        new THREE.MeshLambertMaterial({ color: 0x9fc98a })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // 広場（歩行領域）を示す舗装部分
+    var plaza = new THREE.Mesh(
+        new THREE.PlaneGeometry(AREA * 2, AREA * 2),
+        new THREE.MeshLambertMaterial({ color: 0xcfc5ae })
+    );
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.y = 0.01;
+    plaza.receiveShadow = true;
+    scene.add(plaza);
+
+    // 生け垣（境界）
+    (function makeHedges() {
+        var hedgeMat = new THREE.MeshLambertMaterial({ color: 0x4a7a3a });
+        var len = AREA * 2 + 2;
+        var defs = [
+            { x: 0, z: -(AREA + 1), w: len, d: 1.0 },
+            { x: 0, z: (AREA + 1),  w: len, d: 1.0 },
+            { x: -(AREA + 1), z: 0, w: 1.0, d: len },
+            { x: (AREA + 1),  z: 0, w: 1.0, d: len }
+        ];
+        defs.forEach(function(h) {
+            var m = new THREE.Mesh(new THREE.BoxGeometry(h.w, 1.1, h.d), hedgeMat);
+            m.position.set(h.x, 0.55, h.z);
+            m.castShadow = true;
+            m.receiveShadow = true;
+            scene.add(m);
+        });
+    })();
+
+    // 木（雰囲気づけ・四隅付近）
+    (function makeTrees() {
+        var trunkMat = new THREE.MeshLambertMaterial({ color: 0x7a5230 });
+        var leafMat = new THREE.MeshLambertMaterial({ color: 0x3e8a3e });
+        var spots = [
+            [-AREA + 3, -AREA + 3], [AREA - 3, -AREA + 3],
+            [-AREA + 3, AREA - 3],  [AREA - 3, AREA - 3]
+        ];
+        spots.forEach(function(s) {
+            var tree = new THREE.Group();
+            var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 1.6, 8), trunkMat);
+            trunk.position.y = 0.8;
+            trunk.castShadow = true;
+            tree.add(trunk);
+            var leaves = new THREE.Mesh(new THREE.ConeGeometry(1.3, 2.6, 10), leafMat);
+            leaves.position.y = 2.7;
+            leaves.castShadow = true;
+            tree.add(leaves);
+            tree.position.set(s[0], 0, s[1]);
+            scene.add(tree);
+        });
+    })();
+
+    // =====================================================================
+    // 棒人形
+    // =====================================================================
+
+    function makeLimb(mat, radius, length) {
+        // 上端を支点に -Y 方向へ伸びる関節（Group）を作る
+        var pivot = new THREE.Group();
+        var mesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(radius, radius * 0.85, length, 8),
+            mat
+        );
+        mesh.position.y = -length / 2;
+        mesh.castShadow = true;
+        pivot.add(mesh);
+        return pivot;
+    }
+
+    function makeStickFigure(color) {
+        var mat = new THREE.MeshLambertMaterial({ color: color });
+
+        var group = new THREE.Group();       // 位置・向き（ワールド）
+        var body = new THREE.Group();        // 骨盤（上下動・前傾）
+        body.position.y = LEG_LEN;
+        group.add(body);
+
+        // 胴体
+        var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.62, 8), mat);
+        torso.position.y = 0.31;
+        torso.castShadow = true;
+        body.add(torso);
+
+        // 頭（首の位置を支点とするGroupで見回しできるように）
+        var headGrp = new THREE.Group();
+        headGrp.position.y = 0.66;
+        var headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), mat);
+        headMesh.position.y = 0.14;
+        headMesh.castShadow = true;
+        headGrp.add(headMesh);
+        body.add(headGrp);
+
+        // 脚（股関節 → 膝）
+        function makeLeg(side) {
+            var hip = makeLimb(mat, 0.055, 0.46);
+            hip.position.set(0.11 * side, 0, 0);
+            var knee = makeLimb(mat, 0.05, 0.46);
+            knee.position.y = -0.46;
+            hip.add(knee);
+            body.add(hip);
+            return { hip: hip, knee: knee };
+        }
+
+        // 腕（肩 → 肘）
+        function makeArm(side) {
+            var shoulder = makeLimb(mat, 0.045, 0.38);
+            shoulder.position.set(0.22 * side, 0.56, 0);
+            var elbow = makeLimb(mat, 0.04, 0.34);
+            elbow.position.y = -0.38;
+            shoulder.add(elbow);
+            body.add(shoulder);
+            return { shoulder: shoulder, elbow: elbow };
+        }
+
+        var legL = makeLeg(-1), legR = makeLeg(1);
+        var armL = makeArm(-1), armR = makeArm(1);
+
+        return {
+            group: group, body: body, head: headGrp,
+            legL: legL, legR: legR, armL: armL, armR: armR
+        };
+    }
+
+    // ---------- 棒人形の状態・行動 ----------
+    var figures = [];
+
+    function randPos(margin) {
+        var m = margin || 3;
+        return new THREE.Vector3(
+            (Math.random() * 2 - 1) * (AREA - m), 0,
+            (Math.random() * 2 - 1) * (AREA - m)
+        );
+    }
+
+    function addFigure() {
+        var color = FIGURE_COLORS[figures.length % FIGURE_COLORS.length];
+        var f = makeStickFigure(color);
+        var p = randPos();
+        f.group.position.copy(p);
+        f.group.rotation.y = Math.random() * Math.PI * 2;
+        scene.add(f.group);
+
+        var fig = {
+            parts: f,
+            phase: Math.random() * Math.PI * 2,
+            seed: Math.random() * 100,
+            mode: 'wander',          // wander / goto / browse
+            style: 'walk',           // walk / run
+            speed: 1.6,
+            target: randPos(),
+            shop: null,
+            lastShop: null,
+            browseTimer: 0,
+            jump: { active: false, t: 0, dur: 0.75, h: 0.9 }
+        };
+        chooseNextGoal(fig);
+        figures.push(fig);
+        updateCounts();
+    }
+
+    function removeFigure() {
+        var fig = figures.pop();
+        if (fig) scene.remove(fig.parts.group);
+        updateCounts();
+    }
+
+    function chooseNextGoal(fig) {
+        fig.shop = null;
+        // 店があれば高確率でウィンドウショッピングへ
+        if (shops.length > 0 && Math.random() < 0.78) {
+            var candidates = shops.filter(function(s) { return s !== fig.lastShop; });
+            if (candidates.length === 0) candidates = shops;
+            var shop = candidates[Math.floor(Math.random() * candidates.length)];
+            var lateral = new THREE.Vector3().crossVectors(
+                new THREE.Vector3(0, 1, 0), shop.forward
+            ).multiplyScalar((Math.random() * 2 - 1) * 1.6);
+            fig.target = shop.browsePoint.clone().add(lateral);
+            fig.shop = shop;
+            fig.mode = 'goto';
+        } else {
+            fig.target = randPos();
+            fig.mode = 'wander';
+        }
+        // 歩くか走るか
+        if (Math.random() < 0.35) {
+            fig.style = 'run';
+            fig.speed = 3.4 + Math.random() * 0.9;
+        } else {
+            fig.style = 'walk';
+            fig.speed = 1.4 + Math.random() * 0.5;
+        }
+    }
+
+    // 歩行・走行の関節アニメーション
+    function applyGait(fig, dt) {
+        var p = fig.parts;
+        var run = (fig.style === 'run');
+        var legAmp = run ? 0.85 : 0.5;
+        var armAmp = run ? 0.95 : 0.45;
+        var omega = fig.speed * (run ? 4.6 : 5.4);   // 歩幅に応じた足の回転速度
+        fig.phase += omega * dt;
+        var s = Math.sin(fig.phase);
+
+        // 脚（左右逆位相）＋膝の曲げ（振り出し中に曲がる）
+        p.legL.hip.rotation.x = legAmp * s;
+        p.legR.hip.rotation.x = -legAmp * s;
+        var bend = run ? 1.15 : 0.6;
+        p.legL.knee.rotation.x = -bend * Math.max(0, Math.sin(fig.phase - 0.7));
+        p.legR.knee.rotation.x = -bend * Math.max(0, Math.sin(fig.phase + Math.PI - 0.7));
+
+        // 腕（脚と逆位相）＋肘
+        p.armL.shoulder.rotation.x = -armAmp * s;
+        p.armR.shoulder.rotation.x = armAmp * s;
+        var elbowBase = run ? 1.0 : 0.35;
+        p.armL.elbow.rotation.x = elbowBase;
+        p.armR.elbow.rotation.x = elbowBase;
+
+        // 上下動と前傾
+        p.body.position.y = LEG_LEN - 0.03 + (run ? 0.075 : 0.045) * Math.abs(Math.cos(fig.phase));
+        p.body.rotation.x = run ? 0.28 : 0.07;
+        p.body.rotation.z = 0;
+        p.head.rotation.set(0, 0, 0);
+    }
+
+    // 立ち止まってショーウィンドウを眺めるアニメーション
+    function applyBrowse(fig, t) {
+        var p = fig.parts;
+        // 関節をゆっくり直立へ戻す
+        var relax = 0.9;
+        ['legL', 'legR'].forEach(function(k) {
+            p[k].hip.rotation.x *= relax;
+            p[k].knee.rotation.x *= relax;
+        });
+        p.armL.shoulder.rotation.x *= relax;
+        p.armR.shoulder.rotation.x *= relax;
+        p.armL.elbow.rotation.x = 0.25;
+        p.armR.elbow.rotation.x = 0.25;
+        p.body.rotation.x *= relax;
+        p.body.position.y = LEG_LEN - 0.03;
+
+        // 体の揺れ・キョロキョロ見回す頭
+        p.body.rotation.z = 0.05 * Math.sin(t * 1.3 + fig.seed);
+        p.head.rotation.y = 0.55 * Math.sin(t * 0.9 + fig.seed * 2);
+        p.head.rotation.x = 0.08 * Math.sin(t * 2.1 + fig.seed);
+    }
+
+    // ジャンプ（跳んでいる間は脚をたたみ腕を上げる）
+    function applyJump(fig, dt) {
+        var p = fig.parts;
+        var j = fig.jump;
+        j.t += dt;
+        var u = Math.min(j.t / j.dur, 1);
+        var y = 4 * j.h * u * (1 - u);
+        p.body.position.y = LEG_LEN - 0.03 + y;
+
+        var tuck = Math.sin(u * Math.PI);   // 跳躍中ほどで最大
+        p.legL.hip.rotation.x = 0.7 * tuck;
+        p.legR.hip.rotation.x = 0.7 * tuck;
+        p.legL.knee.rotation.x = -1.5 * tuck;
+        p.legR.knee.rotation.x = -1.5 * tuck;
+        p.armL.shoulder.rotation.x = -2.4 * tuck;
+        p.armR.shoulder.rotation.x = -2.4 * tuck;
+        p.armL.elbow.rotation.x = 0.2;
+        p.armR.elbow.rotation.x = 0.2;
+
+        if (u >= 1) {
+            j.active = false;
+            j.t = 0;
+        }
+    }
+
+    // 向きをなめらかに回す
+    function turnToward(fig, targetAngle, dt) {
+        var cur = fig.parts.group.rotation.y;
+        var diff = targetAngle - cur;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        fig.parts.group.rotation.y = cur + diff * Math.min(1, dt * 6);
+    }
+
+    function updateFigure(fig, dt, t) {
+        var g = fig.parts.group;
+
+        if (fig.mode === 'browse') {
+            // 店が消されていたら次へ
+            if (!fig.shop || shops.indexOf(fig.shop) < 0) { chooseNextGoal(fig); return; }
+            // ショーウィンドウの方を向いて眺める
+            var toWin = fig.shop.windowPoint.clone().sub(g.position);
+            turnToward(fig, Math.atan2(toWin.x, toWin.z), dt);
+            applyBrowse(fig, t);
+            fig.browseTimer -= dt;
+            if (fig.browseTimer <= 0) {
+                fig.lastShop = fig.shop;
+                chooseNextGoal(fig);
+            }
+            return;
+        }
+
+        // 目的地の店が消されていたら選び直す
+        if (fig.mode === 'goto' && (!fig.shop || shops.indexOf(fig.shop) < 0)) {
+            chooseNextGoal(fig);
+        }
+
+        // 移動
+        var to = fig.target.clone().sub(g.position);
+        to.y = 0;
+        var dist = to.length();
+
+        if (dist < 0.55) {
+            if (fig.mode === 'goto' && fig.shop) {
+                fig.mode = 'browse';
+                fig.browseTimer = 4 + Math.random() * 7;
+            } else {
+                chooseNextGoal(fig);
+            }
+            return;
+        }
+
+        var dir = to.normalize();
+        turnToward(fig, Math.atan2(dir.x, dir.z), dt);
+        g.position.addScaledVector(dir, fig.speed * dt);
+        g.position.x = Math.max(-AREA + 1, Math.min(AREA - 1, g.position.x));
+        g.position.z = Math.max(-AREA + 1, Math.min(AREA - 1, g.position.z));
+
+        // ジャンプ中はジャンプの姿勢、それ以外は歩行・走行の姿勢
+        if (fig.jump.active) {
+            applyJump(fig, dt);
+        } else {
+            applyGait(fig, dt);
+            // ぶらぶら歩き中は時々ジャンプ
+            if (fig.mode === 'wander' && Math.random() < dt * 0.12) {
+                fig.jump.active = true;
+                fig.jump.t = 0;
+                fig.jump.dur = 0.65 + Math.random() * 0.25;
+                fig.jump.h = 0.7 + Math.random() * 0.5;
+            }
+        }
+    }
+
+    // =====================================================================
+    // 店（ショーウィンドウ付き）
+    // =====================================================================
+    var shops = [];
+
+    function makeShop(pos) {
+        var color = SHOP_COLORS[shops.length % SHOP_COLORS.length];
+        var group = new THREE.Group();
+
+        // 広場中心の方を向ける（中心付近ならランダムな向き）
+        var dir = new THREE.Vector3(-pos.x, 0, -pos.z);
+        if (dir.lengthSq() < 1) dir.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+        dir.normalize();
+        group.rotation.y = Math.atan2(dir.x, dir.z);
+        group.position.copy(pos);
+
+        var W = 5.6, H = 3.4, D = 4.0;   // 建物の幅・高さ・奥行き
+
+        // 本体
+        var bodyMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(W, H, D),
+            new THREE.MeshLambertMaterial({ color: color })
+        );
+        bodyMesh.position.y = H / 2;
+        bodyMesh.castShadow = true;
+        bodyMesh.receiveShadow = true;
+        group.add(bodyMesh);
+
+        // 屋根
+        var roof = new THREE.Mesh(
+            new THREE.BoxGeometry(W + 0.6, 0.3, D + 0.6),
+            new THREE.MeshLambertMaterial({ color: 0x8a6a4a })
+        );
+        roof.position.y = H + 0.15;
+        roof.castShadow = true;
+        group.add(roof);
+
+        // 看板
+        var sign = new THREE.Mesh(
+            new THREE.BoxGeometry(W * 0.7, 0.55, 0.15),
+            new THREE.MeshLambertMaterial({ color: 0xffffff })
+        );
+        sign.position.set(0, H + 0.6, D / 2 - 0.2);
+        sign.castShadow = true;
+        group.add(sign);
+
+        // ショーウィンドウ内の商品（小さな色付きの箱・棚2段）
+        var itemColors = [0xff6b6b, 0x4ecdc4, 0xffd93d, 0x6c5ce7, 0xff9f43, 0x55efc4];
+        for (var i = 0; i < 6; i++) {
+            var itm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.42, 0.42, 0.42),
+                new THREE.MeshLambertMaterial({
+                    color: itemColors[Math.floor(Math.random() * itemColors.length)]
+                })
+            );
+            itm.position.set(-1.2 + (i % 3) * 1.2, 0.9 + Math.floor(i / 3) * 0.85, D / 2 + 0.22);
+            itm.rotation.y = Math.random() * 0.8;
+            group.add(itm);
+        }
+
+        // ウィンドウガラス（発光気味の半透明）
+        var glass = new THREE.Mesh(
+            new THREE.PlaneGeometry(W * 0.72, 2.1),
+            new THREE.MeshBasicMaterial({
+                color: 0xdff3ff, transparent: true, opacity: 0.32, side: THREE.DoubleSide
+            })
+        );
+        glass.position.set(0, 1.45, D / 2 + 0.5);
+        group.add(glass);
+
+        // ウィンドウ枠
+        var frameMat = new THREE.MeshLambertMaterial({ color: 0x5a4632 });
+        var frameTop = new THREE.Mesh(new THREE.BoxGeometry(W * 0.78, 0.12, 0.12), frameMat);
+        frameTop.position.set(0, 2.55, D / 2 + 0.5);
+        group.add(frameTop);
+        var frameBottom = new THREE.Mesh(new THREE.BoxGeometry(W * 0.78, 0.12, 0.12), frameMat);
+        frameBottom.position.set(0, 0.38, D / 2 + 0.5);
+        group.add(frameBottom);
+
+        // 日よけ（アーニング）
+        var awning = new THREE.Mesh(
+            new THREE.BoxGeometry(W * 0.85, 0.08, 1.1),
+            new THREE.MeshLambertMaterial({ color: 0xd94f4f })
+        );
+        awning.position.set(0, 2.85, D / 2 + 0.9);
+        awning.rotation.x = 0.28;
+        awning.castShadow = true;
+        group.add(awning);
+
+        scene.add(group);
+
+        var forward = dir.clone();
+        var shop = {
+            group: group,
+            forward: forward,
+            // ウィンドウ前面の位置（眺める対象）と、人が立つ位置
+            windowPoint: pos.clone().add(forward.clone().multiplyScalar(D / 2 + 0.5))
+                            .add(new THREE.Vector3(0, 1.4, 0)),
+            browsePoint: pos.clone().add(forward.clone().multiplyScalar(D / 2 + 2.6))
+        };
+        shops.push(shop);
+        updateCounts();
+        return shop;
+    }
+
+    function removeShop(shop) {
+        var idx = shops.indexOf(shop);
+        if (idx < 0) return;
+        shops.splice(idx, 1);
+        scene.remove(shop.group);
+        // その店を目指していた・眺めていた人は行き先を選び直す
+        figures.forEach(function(fig) {
+            if (fig.shop === shop) chooseNextGoal(fig);
+            if (fig.lastShop === shop) fig.lastShop = null;
+        });
+        updateCounts();
+    }
+
+    function canPlaceShop(pos) {
+        if (Math.abs(pos.x) > AREA - 4 || Math.abs(pos.z) > AREA - 4) {
+            showToast('広場の内側（縁から少し離れた場所）に置いてください');
+            return false;
+        }
+        if (shops.length >= MAX_SHOPS) {
+            showToast('店は最大 ' + MAX_SHOPS + ' 軒までです');
+            return false;
+        }
+        for (var i = 0; i < shops.length; i++) {
+            if (shops[i].group.position.distanceTo(pos) < SHOP_MIN_DIST) {
+                showToast('他の店と近すぎます。少し離して置いてください');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // =====================================================================
+    // カメラ操作（ドラッグ回転・ホイールズーム）とクリックでの店配置
+    // =====================================================================
+    var cam = {
+        yaw: 0.7, pitch: 0.5, distance: 42,
+        dragging: false, lastX: 0, lastY: 0,
+        downX: 0, downY: 0, moved: 0
+    };
+
+    function updateCamera() {
+        var cp = Math.cos(cam.pitch);
+        camera.position.set(
+            cam.distance * cp * Math.sin(cam.yaw),
+            cam.distance * Math.sin(cam.pitch) + 1,
+            cam.distance * cp * Math.cos(cam.yaw)
+        );
+        camera.lookAt(0, 1, 0);
+    }
+
+    var el = renderer.domElement;
+    var raycaster = new THREE.Raycaster();
+    var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    var ndc = new THREE.Vector2();
+
+    function placeShopAt(clientX, clientY) {
+        ndc.x = (clientX / window.innerWidth) * 2 - 1;
+        ndc.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(ndc, camera);
+        var hit = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(groundPlane, hit)) {
+            hit.y = 0;
+            if (canPlaceShop(hit)) {
+                makeShop(hit);
+                showToast('店を配置しました（' + shops.length + ' 軒）');
+            }
+        }
+    }
+
+    el.addEventListener('mousedown', function(e) {
+        if (e.button === 0) {
+            cam.dragging = true;
+            cam.lastX = cam.downX = e.clientX;
+            cam.lastY = cam.downY = e.clientY;
+            cam.moved = 0;
+        }
+    });
+
+    window.addEventListener('mousemove', function(e) {
+        if (!cam.dragging) return;
+        rotateBy(e.clientX - cam.lastX, e.clientY - cam.lastY);
+        cam.moved += Math.abs(e.clientX - cam.lastX) + Math.abs(e.clientY - cam.lastY);
+        cam.lastX = e.clientX;
+        cam.lastY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', function(e) {
+        if (!cam.dragging) return;
+        cam.dragging = false;
+        // ほとんど動かしていなければ「クリック」とみなして店を配置
+        if (cam.moved < 6 && e.target === el) {
+            placeShopAt(e.clientX, e.clientY);
+        }
+    });
+
+    el.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var steps = -e.deltaY / 100;
+        cam.distance *= Math.pow(0.9, steps);
+        cam.distance = Math.max(8, Math.min(120, cam.distance));
+    }, { passive: false });
+
+    // タッチ（1本指ドラッグ回転・ピンチズーム・タップで配置）
+    var lastPinch = 0;
+    el.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            cam.dragging = true;
+            cam.lastX = cam.downX = e.touches[0].clientX;
+            cam.lastY = cam.downY = e.touches[0].clientY;
+            cam.moved = 0;
+        } else if (e.touches.length === 2) {
+            cam.dragging = false;
+            lastPinch = pinchDist(e);
+        }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 1 && cam.dragging) {
+            rotateBy(e.touches[0].clientX - cam.lastX, e.touches[0].clientY - cam.lastY);
+            cam.moved += Math.abs(e.touches[0].clientX - cam.lastX)
+                       + Math.abs(e.touches[0].clientY - cam.lastY);
+            cam.lastX = e.touches[0].clientX;
+            cam.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            var d = pinchDist(e);
+            if (lastPinch > 0) {
+                cam.distance *= lastPinch / d;
+                cam.distance = Math.max(8, Math.min(120, cam.distance));
+            }
+            lastPinch = d;
+        }
+        e.preventDefault();
+    }, { passive: false });
+
+    el.addEventListener('touchend', function(e) {
+        if (cam.dragging && cam.moved < 6) {
+            placeShopAt(cam.downX, cam.downY);
+        }
+        cam.dragging = false;
+        lastPinch = 0;
+    });
+
+    function pinchDist(e) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function rotateBy(dx, dy) {
+        cam.yaw += dx * 0.01;
+        cam.pitch += dy * 0.008;
+        cam.pitch = Math.max(0.12, Math.min(1.45, cam.pitch));
+    }
+
+    // =====================================================================
+    // UI
+    // =====================================================================
+    function updateCounts() {
+        $('#figure-count').text(figures.length);
+        $('#shop-count').text(shops.length);
+    }
+
+    var toastTimer = null;
+    function showToast(msg) {
+        $('#toast').text(msg).stop(true, true).fadeIn(120);
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function() { $('#toast').fadeOut(300); }, 2200);
+    }
+
+    $('#btn-fig-plus').on('click', function() {
+        if (figures.length < MAX_FIGURES) addFigure();
+        else showToast('人数は最大 ' + MAX_FIGURES + ' 人までです');
+    });
+    $('#btn-fig-minus').on('click', function() {
+        if (figures.length > MIN_FIGURES) removeFigure();
+    });
+    $('#btn-shop-undo').on('click', function() {
+        if (shops.length > 0) removeShop(shops[shops.length - 1]);
+    });
+    $('#btn-shop-clear').on('click', function() {
+        while (shops.length > 0) removeShop(shops[shops.length - 1]);
+    });
+    $('#btn-reset').on('click', function() {
+        cam.yaw = 0.7; cam.pitch = 0.5; cam.distance = 42;
+    });
+
+    window.addEventListener('resize', function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // =====================================================================
+    // 初期化・メインループ
+    // =====================================================================
+    for (var i = 0; i < 8; i++) addFigure();
+
+    var lastFrame = performance.now();
+
+    function animate(now) {
+        requestAnimationFrame(animate);
+        var dt = Math.min((now - lastFrame) / 1000, 0.1);  // タブ復帰時の飛びを抑制
+        lastFrame = now;
+        var t = now / 1000;
+
+        figures.forEach(function(fig) { updateFigure(fig, dt, t); });
+
+        updateCamera();
+        renderer.render(scene, camera);
+    }
+
+    updateCamera();
+    requestAnimationFrame(animate);
+    </script>
+</body>
+</html>

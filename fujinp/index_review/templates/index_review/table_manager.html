@@ -1,0 +1,1016 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>テーブル集管理 | FUJIN-P</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<style>
+:root {
+  --primary:    #6366f1;
+  --primary-dk: #4f46e5;
+  --primary-lt: #e0e7ff;
+  --success:    #10b981;
+  --danger:     #ef4444;
+  --warning:    #f59e0b;
+  --gray-50:    #f9fafb;
+  --gray-100:   #f3f4f6;
+  --gray-200:   #e5e7eb;
+  --gray-300:   #d1d5db;
+  --gray-400:   #9ca3af;
+  --gray-500:   #6b7280;
+  --gray-600:   #4b5563;
+  --gray-700:   #374151;
+  --gray-800:   #1f2937;
+  --radius:     8px;
+  --shadow:     0 1px 4px rgba(0,0,0,.10);
+  --shadow-lg:  0 4px 16px rgba(0,0,0,.12);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--gray-800);
+  background: var(--gray-50);
+}
+
+/* ── ヘッダー ── */
+#app-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: #fff;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(30,64,175,.4);
+}
+#app-header h1 { font-size: 1rem; font-weight: 700; }
+#app-header .subtitle { font-size: .75rem; opacity: .8; }
+
+.hdr-btn {
+  padding: 5px 12px; border-radius: 20px;
+  border: 1.5px solid rgba(255,255,255,.6);
+  background: rgba(255,255,255,.15); color: #fff;
+  font-size: .78rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.hdr-btn:hover { background: rgba(255,255,255,.30); color: #fff; }
+
+/* ── レイアウト ── */
+#layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 14px 14px 40px;
+  align-items: start;
+}
+
+/* ── カード ── */
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+.card-title {
+  font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: #1e40af;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* ── ボタン ── */
+.btn {
+  padding: 5px 13px; border-radius: 6px; border: none;
+  font-size: .75rem; font-weight: 600; cursor: pointer;
+  transition: all .15s;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dk); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger  { background: var(--danger);  color: #fff; }
+.btn-outline {
+  background: #fff; border: 1.5px solid var(--gray-300); color: var(--gray-700);
+}
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm { padding: 3px 9px; font-size: .7rem; }
+
+/* ── テーブル集リスト（左） ── */
+.ts-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 6px;
+  cursor: pointer; border: 1.5px solid transparent;
+  margin-bottom: 5px; transition: all .12s;
+  background: var(--gray-50);
+}
+.ts-item:hover { background: var(--primary-lt); }
+.ts-item.active {
+  background: var(--primary-lt);
+  border-color: var(--primary);
+}
+.ts-item-name { flex: 1; font-weight: 600; font-size: .8rem; color: var(--gray-800); }
+.ts-item-meta { font-size: .65rem; color: var(--gray-400); }
+.ts-item-cnt  {
+  font-size: .65rem; background: var(--primary-lt);
+  color: var(--primary); border-radius: 10px; padding: 1px 7px;
+}
+
+/* ── アイテムテーブル（右） ── */
+.data-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.data-table th {
+  background: #1e40af; color: #fff;
+  padding: 7px 10px; text-align: left;
+  white-space: nowrap; font-weight: 600;
+}
+.data-table td {
+  padding: 6px 10px; border-bottom: 1px solid var(--gray-100);
+  vertical-align: middle;
+}
+.data-table tr:hover td { background: #f0f5ff; }
+.data-table-wrap { overflow-x: auto; border-radius: 6px; border: 1px solid var(--gray-200); }
+
+/* ── フォーム ── */
+.form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.form-input, .form-select {
+  padding: 6px 9px; border: 1.5px solid var(--gray-300);
+  border-radius: 6px; font-size: .78rem; color: var(--gray-800);
+  background: #fff; flex: 1; min-width: 0;
+}
+.form-input:focus, .form-select:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99,102,241,.12);
+}
+.form-label { font-size: .67rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block; }
+
+/* ── トースト ── */
+#toast-container {
+  position: fixed; bottom: 18px; right: 18px;
+  z-index: 9999; display: flex; flex-direction: column; gap: 7px;
+}
+.toast {
+  padding: 8px 15px; border-radius: 7px;
+  font-size: .78rem; font-weight: 600; color: #fff;
+  box-shadow: var(--shadow-lg); animation: toastIn .2s ease;
+}
+.toast.success { background: var(--success); }
+.toast.error   { background: var(--danger); }
+.toast.info    { background: var(--primary); }
+@keyframes toastIn {
+  from { opacity:0; transform: translateY(8px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* ── プレースホルダー ── */
+.placeholder-msg {
+  text-align: center; padding: 40px 20px;
+  color: var(--gray-400); font-size: .88rem;
+}
+.placeholder-msg .icon { font-size: 2rem; display: block; margin-bottom: 8px; opacity: .4; }
+
+/* ── バッジ ── */
+.badge-admin {
+  font-size: .62rem; background: #fef3c7; color: #92400e;
+  border-radius: 10px; padding: 1px 7px; font-weight: 600;
+}
+
+/* ── レスポンシブ ── */
+@media (max-width: 800px) {
+  #layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="app-header">
+  <span style="font-size:1.3rem">🗂️</span>
+  <div>
+    <h1>テーブル集管理</h1>
+    <div class="subtitle">index_review — パブリックテーブル管理</div>
+  </div>
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+    <a href="{{ url_for('index_review.index') }}" class="hdr-btn">
+      ← 時系列指標ビジュアルに戻る
+    </a>
+  </div>
+</div>
+
+<div id="layout">
+
+  <!-- ═══ 左カラム：テーブル集一覧 ═══ -->
+  <div id="left-col">
+    <div class="card">
+      <div class="card-title">📁 テーブル集
+        <span id="ts-count" style="font-size:.65rem;background:var(--primary-lt);
+              color:var(--primary);border-radius:10px;padding:1px 7px;">0</span>
+        <span id="admin-badge" class="badge-admin" style="display:none;">管理者</span>
+      </div>
+
+      <!-- 新規作成フォーム（管理者のみ表示） -->
+      <div id="create-form" style="display:none; margin-bottom:12px;
+           background:var(--gray-50); border:1px solid var(--gray-200);
+           border-radius:6px; padding:10px;">
+        <label class="form-label">新しいテーブル集を作成</label>
+        <div class="form-row">
+          <input class="form-input" id="new-ts-name" type="text" placeholder="テーブル集名 *">
+        </div>
+        <div class="form-row">
+          <input class="form-input" id="new-ts-desc" type="text" placeholder="説明（任意）">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:6px;">
+          <button class="btn btn-primary btn-sm" id="btn-create-ts">＋ 作成</button>
+        </div>
+      </div>
+
+      <div id="ts-list">
+        <div class="placeholder-msg">
+          <span class="icon">📁</span>読込中…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 右カラム：選択中テーブル集の内容 ═══ -->
+  <div id="right-col">
+    <div class="card" id="right-card">
+
+      <!-- 未選択時 -->
+      <div id="no-selection" class="placeholder-msg">
+        <span class="icon">👈</span>
+        左のリストからテーブル集を選択してください
+      </div>
+
+      <!-- 選択時 -->
+      <div id="ts-detail" style="display:none;">
+
+        <!-- ヘッダー -->
+        <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:1rem; font-weight:700; color:var(--gray-800);" id="detail-name"></div>
+            <div style="font-size:.72rem; color:var(--gray-500); margin-top:2px;" id="detail-meta"></div>
+            <div style="font-size:.72rem; color:var(--gray-500);" id="detail-desc"></div>
+          </div>
+          <div id="detail-edit-btns" style="display:none; display:flex; gap:6px; flex-shrink:0;">
+            <button class="btn btn-outline btn-sm" id="btn-edit-ts">✏️ 名称変更</button>
+            <button class="btn btn-danger btn-sm" id="btn-delete-ts">🗑 削除</button>
+          </div>
+            <div id="detail-view-btns" style="display:none; display:flex; gap:6px; flex-shrink:0;">
+              <button class="btn btn-outline btn-sm" id="btn-tbl-browser">🗂️ テーブル参照</button>
+              <button class="btn btn-outline btn-sm" id="btn-schema-dump">📄 スキーマ一覧</button>
+            </div>
+        </div>
+
+        <!-- テーブル追加フォーム（権限者のみ） -->
+        <div id="add-item-form" style="display:none;
+             background:var(--gray-50); border:1px solid var(--gray-200);
+             border-radius:6px; padding:10px; margin-bottom:12px;">
+          <label class="form-label">テーブルを追加</label>
+          <div class="form-row">
+            <select class="form-select" id="add-db-select" style="max-width:220px;">
+              <option value="">DB を選択…</option>
+            </select>
+            <select class="form-select" id="add-tbl-select" style="max-width:220px;" disabled>
+              <option value="">テーブルを選択…</option>
+            </select>
+            <select class="form-select" id="add-mgr-select" style="max-width:180px;">
+              <option value="">責任者（任意）</option>
+            </select>
+            <button class="btn btn-success btn-sm" id="btn-add-item">＋ 追加</button>
+          </div>
+        </div>
+
+        <!-- アイテム一覧 -->
+        <div id="items-area">
+          <div style="font-size:.72rem; font-weight:700; color:var(--gray-500);
+                      text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">
+            テーブル一覧 <span id="item-count" style="font-weight:400;"></span>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table" id="items-table">
+              <thead>
+                <tr>
+                  <th>データベース</th>
+                  <th>テーブル名</th>
+                  <th>責任グループ</th>
+                  <th>追加日時</th>
+                  <th id="col-ops" style="display:none;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="items-tbody"></tbody>
+            </table>
+          </div>
+          <div id="items-empty" class="placeholder-msg" style="display:none;">
+            <span class="icon">📭</span>テーブルが登録されていません
+          </div>
+        </div>
+
+      </div><!-- /ts-detail -->
+    </div>
+  </div>
+
+</div><!-- /layout -->
+
+<!-- 名称編集モーダル -->
+<div id="edit-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.5); z-index:9000;
+     align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:10px; padding:22px;
+              width:min(440px,92vw); display:flex; flex-direction:column; gap:12px;">
+    <strong style="font-size:.95rem;">✏️ テーブル集の名称変更</strong>
+    <div>
+      <label class="form-label">テーブル集名 *</label>
+      <input class="form-input" id="edit-ts-name" type="text" style="width:100%;">
+    </div>
+    <div>
+      <label class="form-label">説明</label>
+      <input class="form-input" id="edit-ts-desc" type="text" style="width:100%;"
+             placeholder="（任意）">
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button class="btn btn-outline" id="edit-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="edit-confirm">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- テーブルブラウザモーダル（テーブル集スコープ） -->
+<div id="tb-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.5); z-index:9000;
+     align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:10px; width:min(1200px,95vw);
+              height:min(800px,90vh); display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#1a3a5c,#2e6da4); color:#fff;
+                padding:10px 15px; display:flex; align-items:center; gap:8px; flex-shrink:0;">
+      <span style="font-size:1.1rem">🗂️</span>
+      <strong>テーブルブラウザ</strong>
+      <span id="tb-set-label" style="font-size:.75rem; opacity:.8;"></span>
+      <button id="tb-close" style="margin-left:auto; background:none;
+              border:1.5px solid rgba(255,255,255,.5); color:#fff;
+              border-radius:6px; padding:3px 11px; cursor:pointer;
+              font-size:.75rem; font-weight:600;">✕ 閉じる</button>
+    </div>
+    <div style="display:flex; flex:1; overflow:hidden;">
+      <!-- 左：テーブルリスト -->
+      <div style="width:260px; border-right:2px solid #e0e0e0; display:flex;
+                  flex-direction:column; background:#fafbfc; flex-shrink:0;">
+        <input id="tb-search" type="text" placeholder="🔍 検索..."
+               style="padding:7px 9px; border:none; border-bottom:1px solid #e0e0e0;
+                      font-size:.76rem; outline:none; background:#f0f4f8;">
+        <div id="tb-list" style="flex:1; overflow-y:auto; font-size:.73rem;"></div>
+      </div>
+      <!-- 右：スキーマ／データ -->
+      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0;">
+        <div id="tb-placeholder" style="flex:1; display:flex; align-items:center;
+             justify-content:center; color:#aab; font-size:.88rem;">
+          左のリストからテーブルを選んでください
+        </div>
+        <div id="tb-content" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+          <div style="display:flex; border-bottom:2px solid #e0e0e0; background:#f5f7fa; flex-shrink:0;">
+            <button class="tb-tab-btn active" data-pane="schema"
+                    style="padding:7px 18px; font-size:.76rem; font-weight:600;
+                           border:none; background:none; cursor:pointer;
+                           border-bottom:2px solid #2e6da4; color:#2e6da4;">
+              📐 スキーマ
+            </button>
+            <button class="tb-tab-btn" data-pane="data"
+                    style="padding:7px 18px; font-size:.76rem; font-weight:600;
+                           border:none; background:none; cursor:pointer;
+                           border-bottom:2px solid transparent; color:#6b7280;">
+              📊 データ
+            </button>
+            <span id="tb-tbl-label"
+                  style="margin-left:auto; padding:0 13px; font-size:.7rem;
+                         color:#6b7280; align-self:center;"></span>
+          </div>
+          <div id="tb-pane" style="flex:1; overflow:auto; padding:11px 14px;">
+            <div id="tb-pane-schema">
+              <pre id="tb-schema-pre"
+                   style="background:#f4f6f8; border:1px solid #dde3ea; border-radius:5px;
+                          padding:12px; font-family:'Courier New',monospace; font-size:.71rem;
+                          line-height:1.7; white-space:pre-wrap; word-break:break-all;"></pre>
+            </div>
+            <div id="tb-pane-data" style="display:none;">
+              <div id="tb-data-info" style="font-size:.7rem; color:#6b7280; margin-bottom:7px;"></div>
+              <div style="overflow:auto; border:1px solid #e0e0e0; border-radius:5px;">
+                <table id="tb-data-table"
+                       style="border-collapse:collapse; width:100%; font-size:.7rem;"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- スキーマダンプモーダル -->
+<div id="schema-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.5); z-index:9000;
+     align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:10px; width:min(820px,94vw);
+              max-height:88vh; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#1a3a5c,#2e6da4); color:#fff;
+                padding:10px 15px; display:flex; align-items:center; gap:8px; flex-shrink:0;">
+      <span>📄</span>
+      <strong>スキーマダンプ（AI連携用）</strong>
+      <span id="schema-count" style="font-size:.72rem; opacity:.8;"></span>
+      <button id="schema-copy"
+              style="margin-left:auto; padding:4px 12px; border-radius:6px;
+                     border:1.5px solid rgba(255,255,255,.6); background:rgba(255,255,255,.2);
+                     color:#fff; font-size:.74rem; font-weight:600; cursor:pointer;">
+        📋 コピー
+      </button>
+      <button id="schema-dl"
+              style="padding:4px 12px; border-radius:6px;
+                     border:1.5px solid rgba(255,255,255,.6); background:rgba(255,255,255,.2);
+                     color:#fff; font-size:.74rem; font-weight:600; cursor:pointer;">
+        ⬇ DL
+      </button>
+      <button id="schema-close"
+              style="padding:3px 11px; border-radius:6px;
+                     border:1.5px solid rgba(255,255,255,.5); background:none;
+                     color:#fff; font-size:.75rem; font-weight:600; cursor:pointer;">
+        ✕ 閉じる
+      </button>
+    </div>
+    <pre id="schema-text"
+         style="flex:1; overflow:auto; margin:0; padding:14px; font-size:.7rem;
+                line-height:1.6; white-space:pre-wrap; word-break:break-all;
+                background:#f8f9fa;">読込中…</pre>
+  </div>
+</div>
+<!-- 責任者編集モーダル -->
+<div id="mgr-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.5); z-index:9000;
+     align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:10px; padding:22px;
+              width:min(380px,92vw); display:flex; flex-direction:column; gap:12px;">
+    <strong style="font-size:.95rem;">👥 責任グループを変更</strong>
+    <div id="mgr-table-label" style="font-size:.78rem; color:var(--gray-500);"></div>
+    <select class="form-select" id="mgr-select" style="width:100%;">
+      <option value="">― 未設定 ―</option>
+    </select>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button class="btn btn-outline" id="mgr-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="mgr-confirm">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+/* ====================================================
+   定数・状態
+   ==================================================== */
+const API = {
+  tableSets    : "{{ url_for('index_review.api_table_sets_list') }}",
+  tableSetsPost: "{{ url_for('index_review.api_table_sets_create') }}",
+  tableSetById : (id) => `/index_review/api/table_sets/${id}`,
+  itemsBySet   : (id) => `/index_review/api/table_sets/${id}/items`,
+  itemById     : (sid, iid) => `/index_review/api/table_sets/${sid}/items/${iid}`,
+  browserTables: "{{ url_for('index_review.api_browser_tables') }}",
+  groups       : "{{ url_for('index_review.api_groups') }}",
+};
+
+let isAdmin        = false;
+let currentUserId  = null;
+let allTableSets   = [];
+let selectedSetId  = null;
+let canEditCurrent = false;
+let allBrowserTbls = [];  // {database, table_name, row_count}
+let allUsers       = [];  // {id, full_name}
+let editingItemId  = null;
+
+/* ====================================================
+   ユーティリティ
+   ==================================================== */
+function toast(msg, type='info') {
+  const el = $('<div>').addClass(`toast ${type}`).text(msg);
+  $('#toast-container').append(el);
+  setTimeout(() => el.fadeOut(300, () => el.remove()), 3200);
+}
+
+function ajax(url, method, data) {
+  return $.ajax({ url, method: method || 'GET',
+    contentType: 'application/json',
+    data: data ? JSON.stringify(data) : undefined });
+}
+
+/* ====================================================
+   初期ロード
+   ==================================================== */
+$(document).ready(function() {
+  loadTableSets();
+  loadBrowserTables();
+});
+
+/* ====================================================
+   テーブル集一覧
+   ==================================================== */
+function loadTableSets() {
+  $('#ts-list').html('<div class="placeholder-msg"><span class="icon">⏳</span>読込中…</div>');
+  $.get(API.tableSets).done(res => {
+    if (!res.success) { toast('取得に失敗しました', 'error'); return; }
+    allTableSets  = res.table_sets;
+    isAdmin       = res.is_admin;
+    currentUserId = res.current_user_id;
+
+    $('#ts-count').text(allTableSets.length + '件');
+    if (isAdmin) {
+      $('#create-form').show();
+      $('#admin-badge').show();
+    }
+
+    renderTableSetList();
+  }).fail(() => toast('通信エラー', 'error'));
+}
+
+function renderTableSetList() {
+  const $list = $('#ts-list');
+  $list.empty();
+  if (!allTableSets.length) {
+    $list.html('<div class="placeholder-msg"><span class="icon">📭</span>テーブル集がありません</div>');
+    return;
+  }
+  allTableSets.forEach(ts => {
+    const active = ts.id === selectedSetId ? ' active' : '';
+    const $item = $(`
+      <div class="ts-item${active}" data-id="${ts.id}">
+        <div style="flex:1; min-width:0;">
+          <div class="ts-item-name">${ts.name}</div>
+          <div class="ts-item-meta">${ts.owner_name} ／ ${ts.created_at || ''}</div>
+        </div>
+        <span class="ts-item-cnt">${ts.item_count}件</span>
+      </div>`);
+    $list.append($item);
+  });
+}
+
+$(document).on('click', '.ts-item', function() {
+  const id = parseInt($(this).data('id'));
+  selectedSetId = id;
+  $('.ts-item').removeClass('active');
+  $(this).addClass('active');
+  loadItems(id);
+});
+
+/* ====================================================
+   テーブル集 作成
+   ==================================================== */
+$('#btn-create-ts').on('click', function() {
+  const name = $('#new-ts-name').val().trim();
+  if (!name) { toast('テーブル集名を入力してください', 'info'); return; }
+  ajax(API.tableSetsPost, 'POST', {
+    name, description: $('#new-ts-desc').val().trim()
+  }).done(res => {
+    if (res.success) {
+      toast('テーブル集を作成しました', 'success');
+      $('#new-ts-name, #new-ts-desc').val('');
+      loadTableSets();
+    } else {
+      toast(res.error || '作成に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   テーブル集 詳細・アイテム
+   ==================================================== */
+function loadItems(setId) {
+  const ts = allTableSets.find(t => t.id === setId);
+  if (!ts) return;
+
+  $('#no-selection').hide();
+  $('#ts-detail').show();
+
+  $('#detail-name').text(ts.name);
+  $('#detail-meta').text(`作成者：${ts.owner_name}　／　${ts.created_at || ''}`);
+  $('#detail-desc').text(ts.description || '');
+
+  // 編集ボタン表示
+  if (ts.can_edit) {
+    $('#detail-edit-btns').show();
+    $('#add-item-form').show();
+  } else {
+    $('#detail-edit-btns').hide();
+    $('#add-item-form').hide();
+  }
+
+  // ★追加：閲覧ボタンは常に表示
+  $('#detail-view-btns').show();
+
+  canEditCurrent = ts.can_edit;
+
+  // DB選択のセットアップ
+  setupDbSelect();
+  // ユーザ一覧（管理者のみ取得済み）
+  if (ts.can_edit && !allUsers.length) loadGroups();
+  setupMgrSelect('#add-mgr-select');
+
+  // アイテム取得
+  $.get(API.itemsBySet(setId)).done(res => {
+    if (!res.success) { toast('取得失敗', 'error'); return; }
+    renderItems(res.items, res.can_edit);
+  }).fail(() => toast('通信エラー', 'error'));
+}
+
+function renderItems(items, canEdit) {
+  const $tbody = $('#items-tbody');
+  $tbody.empty();
+  $('#item-count').text(`（${items.length} 件）`);
+  const showOps = canEdit || items.some(it => it.can_update);
+  $('#col-ops').toggle(showOps);
+
+  if (!items.length) {
+    $('#items-empty').show();
+    return;
+  }
+  $('#items-empty').hide();
+
+  items.forEach(it => {
+    const mgrCell = canEdit
+      ? `<button class="btn btn-outline btn-sm btn-set-mgr"
+             data-id="${it.id}" data-tbl="${it.table_name}" data-mgr="${it.manager_group_id || ''}"
+             title="責任グループを変更">
+           ${it.manager_group_name}
+         </button>`
+      : it.manager_group_name;
+
+    const updateBtn = it.can_update
+      ? `<a href="/index_review/table_data_update/${it.id}"
+            class="btn btn-primary btn-sm" title="データ更新">🔄 更新</a>`
+      : '';
+    const deleteBtn = canEdit
+      ? `<button class="btn btn-outline btn-sm btn-del-item" data-id="${it.id}"
+             title="テーブル集から外す"
+             style="border-color:#d1d5db;color:#6b7280;">✕ 外す</button>`
+      : '';
+    const opsCell = updateBtn || deleteBtn
+      ? `${updateBtn} ${deleteBtn}`
+      : '';
+
+    $tbody.append(`
+      <tr>
+        <td>${it.database_name}</td>
+        <td><code style="font-size:.72rem;">${it.table_name}</code></td>
+        <td>${mgrCell}</td>
+        <td style="font-size:.68rem; color:var(--gray-400);">${it.added_at || ''}</td>
+        ${showOps ? `<td>${opsCell}</td>` : ''}
+      </tr>`);
+  });
+}
+
+/* ====================================================
+   DB・テーブル選択プルダウン
+   ==================================================== */
+function loadBrowserTables() {
+  $.get(API.browserTables).done(res => {
+    if (res.success) allBrowserTbls = res.tables;
+  });
+}
+
+function setupDbSelect() {
+  const $dbSel = $('#add-db-select');
+  $dbSel.empty().append('<option value="">DB を選択…</option>');
+  const dbs = [...new Set(allBrowserTbls.map(t => t.database))].sort();
+  dbs.forEach(db => $dbSel.append(`<option value="${db}">${db}</option>`));
+  $('#add-tbl-select').empty().append('<option value="">テーブルを選択…</option>').prop('disabled', true);
+}
+
+$('#add-db-select').on('change', function() {
+  const db = $(this).val();
+  const $tbl = $('#add-tbl-select');
+  $tbl.empty().append('<option value="">テーブルを選択…</option>');
+  if (!db) { $tbl.prop('disabled', true); return; }
+  const tables = allBrowserTbls.filter(t => t.database === db).sort((a,b) => a.table_name.localeCompare(b.table_name));
+  tables.forEach(t => $tbl.append(`<option value="${t.table_name}">${t.table_name}（${t.row_count}行）</option>`));
+  $tbl.prop('disabled', false);
+});
+
+/* ====================================================
+   ユーザ一覧（責任者用）
+   ==================================================== */
+function loadGroups() {
+  $.get(API.groups).done(res => {
+    if (res.success) {
+      allUsers = res.groups;  // 変数名はそのまま流用
+      setupMgrSelect('#add-mgr-select');
+      setupMgrSelect('#mgr-select');
+    }
+  });
+}
+
+function setupMgrSelect(selector) {
+  const $sel = $(selector);
+  const cur = $sel.val();
+  $sel.empty().append('<option value="">― 未設定 ―</option>');
+  allUsers.forEach(g => $sel.append(`<option value="${g.id}">${g.name}</option>`));
+  if (cur) $sel.val(cur);
+}
+
+/* ====================================================
+   アイテム追加
+   ==================================================== */
+$('#btn-add-item').on('click', function() {
+  const db  = $('#add-db-select').val();
+  const tbl = $('#add-tbl-select').val();
+  if (!db || !tbl) { toast('DBとテーブルを選択してください', 'info'); return; }
+
+  ajax(API.itemsBySet(selectedSetId), 'POST', {
+    database_name: db,
+    table_name:    tbl,
+    manager_group_id: $('#add-mgr-select').val() || null
+  }).done(res => {
+    if (res.success) {
+      toast('テーブルを追加しました', 'success');
+      loadItems(selectedSetId);
+      loadTableSets(); // 件数更新
+    } else {
+      toast(res.error || '追加に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   アイテム削除
+   ==================================================== */
+$(document).on('click', '.btn-del-item', function() {
+  const itemId = $(this).data('id');
+  if (!confirm('このテーブルをテーブル集から外しますか？\n（テーブル自体は削除されません）')) return;
+  ajax(API.itemById(selectedSetId, itemId), 'DELETE').done(res => {
+    if (res.success) {
+      toast('削除しました', 'success');
+      loadItems(selectedSetId);
+      loadTableSets();
+    } else {
+      toast(res.error || '削除に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   テーブル集 名称変更
+   ==================================================== */
+$('#btn-edit-ts').on('click', function() {
+  const ts = allTableSets.find(t => t.id === selectedSetId);
+  if (!ts) return;
+  $('#edit-ts-name').val(ts.name);
+  $('#edit-ts-desc').val(ts.description || '');
+  $('#edit-modal').css('display', 'flex');
+});
+
+$('#edit-cancel').on('click', () => $('#edit-modal').hide());
+$('#edit-modal').on('click', function(e) { if (e.target === this) $(this).hide(); });
+
+$('#edit-confirm').on('click', function() {
+  const name = $('#edit-ts-name').val().trim();
+  if (!name) { toast('テーブル集名は必須です', 'info'); return; }
+  ajax(API.tableSetById(selectedSetId), 'PUT', {
+    name, description: $('#edit-ts-desc').val().trim()
+  }).done(res => {
+    if (res.success) {
+      toast('更新しました', 'success');
+      $('#edit-modal').hide();
+      loadTableSets().then ? loadTableSets() : loadTableSets();
+      // 詳細ヘッダーも即時更新
+      $('#detail-name').text(name);
+    } else {
+      toast(res.error || '更新に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   テーブル集 削除
+   ==================================================== */
+$('#btn-delete-ts').on('click', function() {
+  const ts = allTableSets.find(t => t.id === selectedSetId);
+  if (!ts) return;
+  if (!confirm(`「${ts.name}」を削除しますか？\n中のテーブル登録もすべて削除されます。`)) return;
+  ajax(API.tableSetById(selectedSetId), 'DELETE').done(res => {
+    if (res.success) {
+      toast('削除しました', 'success');
+      selectedSetId = null;
+      $('#ts-detail').hide();
+      $('#no-selection').show();
+      loadTableSets();
+    } else {
+      toast(res.error || '削除に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   責任者変更モーダル
+   ==================================================== */
+$(document).on('click', '.btn-set-mgr', function() {
+  editingItemId = $(this).data('id');
+  const tbl = $(this).data('tbl');
+  const mgr = $(this).data('mgr');
+  $('#mgr-table-label').text(`テーブル：${tbl}`);
+  if (!allUsers.length) {
+    loadGroups();
+    // ユーザ読込後に選択値をセット
+    setTimeout(() => { setupMgrSelect('#mgr-select'); $('#mgr-select').val(mgr || ''); }, 600);
+  } else {
+    setupMgrSelect('#mgr-select');
+    $('#mgr-select').val(mgr || '');
+  }
+  $('#mgr-modal').css('display', 'flex');
+});
+
+$('#mgr-cancel').on('click', () => $('#mgr-modal').hide());
+$('#mgr-modal').on('click', function(e) { if (e.target === this) $(this).hide(); });
+
+$('#mgr-confirm').on('click', function() {
+  const mgrId = $('#mgr-select').val() || null;
+  ajax(API.itemById(selectedSetId, editingItemId), 'PUT', {
+    manager_group_id: mgrId
+  }).done(res => {
+    if (res.success) {
+      toast('責任グループを更新しました', 'success');
+      $('#mgr-modal').hide();
+      loadItems(selectedSetId);
+    } else {
+      toast(res.error || '更新に失敗しました', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+/* ====================================================
+   テーブルブラウザ（テーブル集スコープ）
+   ==================================================== */
+const API_BROWSER = {
+  schema : "{{ url_for('index_review.api_browser_schema') }}",
+  data   : "{{ url_for('index_review.api_browser_data') }}",
+  schema_dump: "{{ url_for('index_review.api_schema_dump') }}",
+};
+
+let tbCurrentDb  = null;
+let tbCurrentTbl = null;
+let tbCurrentPane = 'schema';
+let tbItems = [];  // 現在のテーブル集のアイテム
+
+// ボタンクリック → モーダルを開く
+$('#btn-tbl-browser').on('click', function() {
+  const ts = allTableSets.find(t => t.id === selectedSetId);
+  if (!ts) return;
+  $('#tb-set-label').text(`— ${ts.name}`);
+  tbCurrentDb = tbCurrentTbl = null;
+  $('#tb-placeholder').show();
+  $('#tb-content').hide();
+  renderTbList('');
+  $('#tb-modal').css('display', 'flex');
+});
+
+$('#tb-close').on('click', () => $('#tb-modal').hide());
+$('#tb-modal').on('click', function(e) { if (e.target === this) $(this).hide(); });
+
+$('#tb-search').on('input', function() {
+  renderTbList($(this).val().toLowerCase());
+});
+
+function renderTbList(kw) {
+  // items-tbody から現在表示中のテーブルリストを使う
+  const $list = $('#tb-list');
+  $list.empty();
+  const rows = [];
+  $('#items-tbody tr').each(function() {
+    const db  = $(this).find('td:eq(0)').text().trim();
+    const tbl = $(this).find('td:eq(1) code').text().trim();
+    if (db && tbl) rows.push({db, tbl});
+  });
+
+  const filtered = kw ? rows.filter(r =>
+    r.db.toLowerCase().includes(kw) || r.tbl.toLowerCase().includes(kw)
+  ) : rows;
+
+  // DBごとにグループ化
+  const byDb = {};
+  filtered.forEach(r => (byDb[r.db] = byDb[r.db] || []).push(r.tbl));
+
+  Object.keys(byDb).sort().forEach(db => {
+    $list.append(`<div style="background:#34495e; color:#ecf0f1; padding:4px 11px;
+                              font-size:.68rem; font-weight:700; cursor:pointer;"
+                      class="tb-db-hd">${db}</div>`);
+    byDb[db].sort().forEach(tbl => {
+      const active = (tbCurrentDb === db && tbCurrentTbl === tbl) ? 'background:#d0e4f7;border-left:3px solid #2e6da4;font-weight:600;' : '';
+      $list.append(`<div class="tb-item-row"
+                        data-db="${db}" data-tbl="${tbl}"
+                        style="padding:6px 11px; cursor:pointer; border-bottom:1px solid #eee;
+                               ${active} transition:background .1s;"
+                        onmouseover="this.style.background='#e8f0fe'"
+                        onmouseout="this.style.background='${active?'#d0e4f7':'#fff'}'"
+                        >${tbl}</div>`);
+    });
+  });
+}
+
+$(document).on('click', '.tb-item-row', function() {
+  tbCurrentDb  = $(this).data('db');
+  tbCurrentTbl = $(this).data('tbl');
+  $('#tb-placeholder').hide();
+  $('#tb-content').css('display', 'flex');
+  $('#tb-tbl-label').text(`${tbCurrentDb}.${tbCurrentTbl}`);
+  renderTbList($('#tb-search').val().toLowerCase());
+  showTbPane(tbCurrentPane);
+});
+
+$(document).on('click', '.tb-tab-btn', function() {
+  const pane = $(this).data('pane');
+  tbCurrentPane = pane;
+  $('.tb-tab-btn').css({'border-bottom-color':'transparent','color':'#6b7280'});
+  $(this).css({'border-bottom-color':'#2e6da4','color':'#2e6da4'});
+  showTbPane(pane);
+});
+
+function showTbPane(pane) {
+  if (!tbCurrentDb || !tbCurrentTbl) return;
+  $('#tb-pane-schema, #tb-pane-data').hide();
+  if (pane === 'schema') {
+    $('#tb-pane-schema').show();
+    $('#tb-schema-pre').text('取得中…');
+    $.ajax({ url: API_BROWSER.schema, method: 'POST',
+             contentType: 'application/json',
+             data: JSON.stringify({database: tbCurrentDb, table_name: tbCurrentTbl})
+    }).done(res => $('#tb-schema-pre').text(res.success ? res.schema : 'エラー: ' + res.error));
+  } else {
+    $('#tb-pane-data').show();
+    $('#tb-data-info').text('取得中…');
+    $('#tb-data-table').empty();
+    $.ajax({ url: API_BROWSER.data, method: 'POST',
+             contentType: 'application/json',
+             data: JSON.stringify({database: tbCurrentDb, table_name: tbCurrentTbl, limit:500, offset:0})
+    }).done(res => {
+      if (!res.success) { $('#tb-data-info').text('エラー: ' + res.error); return; }
+      const {columns, rows, total_count} = res;
+      $('#tb-data-info').html(`${rows.length} 行表示（全 ${total_count} 行）`);
+      let html = '<thead><tr>' + columns.map(c=>`<th style="background:#2e6da4;color:#fff;padding:6px 9px;white-space:nowrap;">${c}</th>`).join('') + '</tr></thead><tbody>';
+      rows.forEach(row => {
+        html += '<tr>' + columns.map(c => {
+          const v = row[c];
+          return v===null||v===undefined ? '<td style="padding:5px 9px;border-bottom:1px solid #eee;color:#e74c3c;font-style:italic;">NULL</td>'
+                                        : `<td style="padding:5px 9px;border-bottom:1px solid #eee;white-space:nowrap;">${String(v)}</td>`;
+        }).join('') + '</tr>';
+      });
+      html += '</tbody>';
+      $('#tb-data-table').html(html);
+    });
+  }
+}
+
+/* ====================================================
+   スキーマダンプ（テーブル集スコープ）
+   ==================================================== */
+$('#btn-schema-dump').on('click', function() {
+  $('#schema-text').text('読込中…');
+  $('#schema-count').text('');
+  $('#schema-modal').css('display', 'flex');
+  // テーブル集IDをクエリパラメータで渡す
+  $.get(API_BROWSER.schema_dump + '?table_set_id=' + selectedSetId).done(res => {
+    if (!res.success) { $('#schema-text').text('エラー: ' + res.error); return; }
+    $('#schema-text').text(res.text);
+    $('#schema-count').text(res.table_count + ' テーブル');
+  }).fail(() => $('#schema-text').text('通信エラー'));
+});
+
+$('#schema-close').on('click', () => $('#schema-modal').hide());
+$('#schema-copy').on('click', function() {
+  const text = $('#schema-text').text();
+  if (!text || text === '読込中…') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const $b = $(this); $b.text('✓ コピー完了');
+    setTimeout(() => $b.text('📋 コピー'), 2000);
+  });
+});
+$('#schema-dl').on('click', function() {
+  const text = $('#schema-text').text();
+  if (!text || text === '読込中…') return;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'schema_dump_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click(); URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

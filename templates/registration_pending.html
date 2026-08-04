@@ -1,0 +1,101 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登録申請完了 - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .pending-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .message {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .info-box {
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin-top: 30px;
+            border-radius: 4px;
+            text-align: left;
+        }
+        .info-box h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .info-box p {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .back-link {
+            margin-top: 30px;
+        }
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="pending-container">
+        <div class="success-icon">✉️</div>
+        <h1>登録申請を受け付けました</h1>
+        <p class="message">
+            {{ email }} からの登録申請を受け付けました。<br>
+            管理者による承認をお待ちください。
+        </p>
+
+        <div class="info-box">
+            <h3>今後の流れ</h3>
+            <p>
+                1. 管理者が申請内容を確認します<br>
+                2. 承認されると、登録したメールアドレス宛に通知が届きます<br>
+                3. 通知メールの指示に従ってパスワードを設定してください<br>
+                4. パスワード設定後、システムにログインできるようになります
+            </p>
+        </div>
+
+        <div class="back-link">
+            <a href="{{ url_for('auth.login') }}">← ログイン画面に戻る</a>
+        </div>
+    </div>
+</body>
+</html>

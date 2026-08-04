@@ -1,0 +1,258 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title_label }} 編集 - {{ app_name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; background-color: #f5f7fa; }
+        .top-bar {
+            background-color: #4f46e5; color: white;
+            padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .top-bar h1 { margin: 0; font-size: 1.2rem; }
+        .top-bar-buttons { display: flex; gap: 10px; }
+        .top-bar button, .top-bar a {
+            padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;
+            font-size: 0.9rem; text-decoration: none; display: inline-block; color: white;
+        }
+        .save-btn { background-color: #10b981; } .save-btn:hover { background-color: #059669; }
+        .save-only-btn { background-color: #f59e0b; } .save-only-btn:hover { background-color: #d97706; }
+        .back-btn { background-color: #64748b; } .back-btn:hover { background-color: #475569; }
+
+        .status-message {
+            position: fixed; top: 60px; right: 20px;
+            background-color: #10b981; color: white; padding: 12px 24px;
+            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0; transform: translateY(-20px); transition: all 0.3s ease;
+            z-index: 1000; pointer-events: none;
+        }
+        .status-message.show { opacity: 1; transform: translateY(0); }
+        .status-message.error { background-color: #ef4444; }
+
+        .editor-container { display: flex; height: calc(100vh - 56px); gap: 0; }
+        .editor-pane, .preview-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #cbd5e1; }
+        .pane-header {
+            padding: 8px 16px; background-color: #e2e8f0; font-weight: 600; font-size: 0.85rem;
+            color: #475569; border-bottom: 1px solid #cbd5e1;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .toolbar { padding: 8px 12px; background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 4px; }
+        .toolbar button { padding: 4px 10px; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; font-size: 0.8rem; color: #475569; }
+        .toolbar button:hover { background: #eef2ff; border-color: #6366f1; color: #4f46e5; }
+
+        .editor-area { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 16px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85rem; color: #374151; }
+        .form-group input[type="text"] { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; }
+        #content {
+            width: 100%; flex: 1; min-height: 400px; padding: 16px;
+            border: 1px solid #d1d5db; border-radius: 6px;
+            font-family: 'Consolas','Monaco','Courier New',monospace;
+            font-size: 0.9rem; line-height: 1.6; resize: none; outline: none; tab-size: 4;
+        }
+
+        .preview-content {
+            flex: 1; overflow-y: auto; padding: 20px; background: white;
+            font-size: 0.9rem; line-height: 1.8;
+        }
+        /* ... Markdownスタイルの定義は共通のため省略 ... */
+        .preview-content h1 { font-size: 1.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+        .preview-content h2 { font-size: 1.25rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; color: #1e40af; }
+        .preview-content pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; }
+        .preview-content table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        .preview-content th, .preview-content td { border: 1px solid #d1d5db; padding: 8px 12px; }
+
+        @media (max-width: 768px) {
+            .editor-container { flex-direction: column; }
+            .editor-pane, .preview-pane { flex: none; height: 50vh; }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1>📝 {{ title_label }} - {{ app_name }}</h1>
+        <div class="top-bar-buttons">
+            <button class="save-only-btn" onclick="saveContent(false)">💾 保存</button>
+            <button class="save-btn" onclick="saveContent(true)">💾 保存して戻る</button>
+            <a href="{{ url_for('app_share.dashboard') }}" class="back-btn">← アプシャに戻る</a>
+        </div>
+    </div>
+    <div class="status-message" id="statusMessage"></div>
+
+    <div class="editor-container">
+        <div class="editor-pane">
+            <div class="pane-header">エディタ</div>
+            <div class="toolbar">
+                <button onclick="ins('# ')">H1</button>
+                <button onclick="ins('## ')">H2</button>
+                <button onclick="ins('### ')">H3</button>
+                <button onclick="ins('**','**')">太字</button>
+                <button onclick="ins('`','`')">コード</button>
+                <button onclick="ins('```\n','\n```')">ブロック</button>
+                <button onclick="ins('$$\n','\n$$')">数式</button>
+                <button onclick="insDate()" title="日付見出しを挿入">📅 日付</button>
+                <button onclick="document.getElementById('imgUp').click()">🖼 画像</button>
+            </div>
+            <div class="editor-area">
+                <div class="form-group">
+                    <label for="title">タイトル</label>
+                    <input type="text" id="title" value="{{ doc.title or '' }}" placeholder="{{ title_label }}のタイトル...">
+                </div>
+                <textarea id="content" placeholder="ここにMarkdownを入力...">{{ doc.content or '' }}</textarea>
+                <input type="file" id="imgUp" style="display:none;" accept="image/*" onchange="uploadImg(this)">
+            </div>
+        </div>
+
+        <div class="preview-pane">
+            <div class="pane-header">
+                <span>プレビュー</span>
+                <button onclick="preview()" style="padding: 2px 10px; font-size: 0.75rem; cursor: pointer; background: #4f46e5; color: white; border: none; border-radius: 3px;">
+                    更新 (Ctrl+Enter)
+                </button>
+            </div>
+            <div class="preview-content" id="preview">「更新」ボタンを押すと表示されます</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <script>
+        let dirty = false;
+        let isUpdating = false;
+
+        // プレビュー実行
+        function preview() {
+            if (isUpdating) return;
+
+            const previewArea = document.getElementById('preview');
+            const markdownText = document.getElementById('content').value;
+
+            isUpdating = true;
+            previewArea.style.opacity = "0.5";
+
+            // 💡 解決策：FormDataではなく、URLSearchParamsを使います。
+            // これにより、サーバー側のパケット解析の負荷が大幅に下がります。
+            const params = new URLSearchParams();
+            params.append('markdown', markdownText);
+
+            fetch("{{ url_for('app_share.preview_document_markdown') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded' // ここが鍵
+                },
+                body: params
+            })
+            .then(r => {
+                if (!r.ok) throw new Error("Server Error");
+                return r.text();
+            })
+            .then(html => {
+                previewArea.innerHTML = html;
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(previewArea, {
+                        delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]
+                    });
+                }
+            })
+            .catch(e => {
+                console.error("Preview error:", e);
+                // 画面にはエラーを出さず、静かにログに留める
+            })
+            .finally(() => {
+                isUpdating = false;
+                previewArea.style.opacity = "1";
+            });
+        }
+        function ins(before, after='') {
+            const ta = document.getElementById('content');
+            const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.substring(s, e);
+            ta.value = ta.value.substring(0, s) + before + sel + after + ta.value.substring(e);
+            ta.focus(); ta.setSelectionRange(s + before.length, s + before.length + sel.length);
+            dirty = true;
+        }
+
+        // 📅 日付見出し（## YYYY-MM-DD HH:MM）を挿入
+        function insDate() {
+            const d = new Date();
+            const p = n => String(n).padStart(2, '0');
+            const stamp = d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+            ins('\n## ' + stamp + '\n');
+        }
+
+        function uploadImg(input) {
+            const file = input.files[0]; if (!file) return;
+            const fd = new FormData(); fd.append('file', file);
+            fetch("{{ url_for('my_md_notes.upload_image') }}", { method: 'POST', body: fd })
+            .then(r=>r.json()).then(d=>{
+                if (d.success) {
+                    ins('![画像]('+d.url+')');
+                    showSt('画像アップロード完了');
+                    preview(); // 画像アップ時は自動でプレビュー更新
+                }
+                else alert('失敗: '+d.error);
+            }).catch(()=>alert('画像アップロード失敗'));
+            input.value = '';
+        }
+
+        function saveContent(goBack) {
+            fetch("{{ url_for('app_share.save_document', app_name=app_name, doc_type=doc_type) }}", {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ title: document.getElementById('title').value.trim(), content: document.getElementById('content').value })
+            }).then(r=>r.json()).then(d=>{
+                if (d.success) {
+                    dirty = false; showSt('保存しました');
+                    if (goBack) setTimeout(()=>{ window.location.href = "{{ url_for('app_share.dashboard') }}"; }, 500);
+                } else showSt('エラー: '+d.error, true);
+            }).catch(()=>showSt('保存失敗', true));
+        }
+
+        function showSt(msg, err=false) {
+            const el = document.getElementById('statusMessage');
+            el.textContent = msg; el.classList.toggle('error', err); el.classList.add('show');
+            setTimeout(()=>el.classList.remove('show'), 3000);
+        }
+
+        // キーイベント管理
+        document.getElementById('content').addEventListener('keydown', function(e) {
+            // Tabキー
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const s = this.selectionStart;
+                this.value = this.value.substring(0,s)+'    '+this.value.substring(this.selectionEnd);
+                this.selectionStart = this.selectionEnd = s+4;
+                dirty = true;
+            }
+            // Ctrl + Enter でプレビュー
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                preview();
+            }
+            // Ctrl + S で保存
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveContent(false);
+            }
+        });
+
+        window.addEventListener('beforeunload', function(e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+        // エディタへの入力を検知
+        document.getElementById('content').addEventListener('input', () => { dirty = true; });
+
+        // 初回実行
+        // window.onload = preview;
+    </script>
+</body>
+</html>

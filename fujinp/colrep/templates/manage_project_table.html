@@ -1,0 +1,1023 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoRePo - Collaborative RePort composer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body>
+<div class="container mt-4">
+    <!-- ヘッダー部分 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-kanban"></i> {{ project.プロジェクト名 }} - タスク管理</h1>
+            <p class="text-muted">責任者: {{ project.責任者名 }}</p>
+        </div>
+        <div>
+            <a href="{{ url_for('colrep.edit_project', project_id=project.id) }}" class="btn btn-danger">
+                <i class="bi bi-arrow-left"></i> プロジェクト編集
+            </a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                <i class="bi bi-plus"></i> タスク追加
+            </button>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}" role="alert">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Composer操作パネル（コンパクト版） -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1"><i class="bi bi-file-earmark-text"></i> 統合指示書（Composer）</h6>
+                            <small class="text-muted">
+                                {% if project.Composer %}
+                                    作成済み（{{ project.Composer|length }}文字）
+                                {% else %}
+                                    未作成
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="btn-group">
+                            {% if project.Composer %}
+                                <button class="btn btn-sm btn-success" onclick="previewIntegratedContent()">
+                                    <i class="bi bi-eye"></i> 統合プレビュー
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editComposer()">
+                                    <i class="bi bi-pencil"></i> 編集
+                                </button>
+                            {% else %}
+                                <button class="btn btn-sm btn-warning" onclick="editComposer()">
+                                    <i class="bi bi-plus"></i> Composer作成
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- タスク一覧 -->
+    {% if table_data %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-list-check"></i> タスク一覧
+                <span class="badge bg-secondary ms-2">{{ table_data|length }}件</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>カラム名</th>
+                            <th>担当者</th>
+                            <th>説明</th>
+                            <th>作業内容</th>
+                            <th>備考</th>
+                            <th>更新日時</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in table_data %}
+                        <tr>
+                            <td><span class="badge bg-secondary">#{{ row.id }}</span></td>
+                            <td>
+                                <strong>{{ row.カラム名 }}</strong>
+                            </td>
+                            <td>
+                                {{ row.ユーザ名 }}
+                                <button class="btn btn-sm btn-outline-info ms-2"
+                                        onclick="editAssignee({{ row.id }}, {{ row.担当者アカウント }})">
+                                    <i class="bi bi-person-gear"></i>
+                                </button>
+                            </td>
+                            <td>
+                                {% if row.説明 %}
+                                    <small>{{ row.説明[:50] }}{% if row.説明|length > 50 %}...{% endif %}</small>
+                                    <div class="btn-group btn-group-sm mt-1" role="group">
+                                        <button class="btn btn-outline-info"
+                                                onclick="editDescription({{ row.id }})">
+                                            <i class="bi bi-pencil-square"></i> 詳細編集
+                                        </button>
+                                        <button class="btn btn-outline-success"
+                                                onclick="previewDescription({{ row.id }})">
+                                            <i class="bi bi-eye"></i> 説明
+                                        </button>
+                                        {% if row.content %}
+                                        <button class="btn btn-outline-success"
+                                                onclick="adminPreviewContent({{ row.id }})">
+                                            <i class="bi bi-eye"></i> 本文
+                                        </button>
+                                        <button class="btn btn-outline-secondary"
+                                                onclick="adminViewSource({{ row.id }})">
+                                            <i class="bi bi-code"></i> ソース
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                    <div class="btn-group btn-group-sm mt-1">
+                                        <button class="btn btn-outline-warning"
+                                                onclick="editDescription({{ row.id }})">
+                                            <i class="bi bi-plus-square"></i> 説明追加
+                                        </button>
+                                        {% if row.content %}
+                                        <button class="btn btn-outline-success"
+                                                onclick="adminPreviewContent({{ row.id }})">
+                                            <i class="bi bi-eye"></i> 本文
+                                        </button>
+                                        <button class="btn btn-outline-secondary"
+                                                onclick="adminViewSource({{ row.id }})">
+                                            <i class="bi bi-code"></i> ソース
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if row.content %}
+                                    <span class="badge bg-success">完了（{{ row.content|length }}文字）</span>
+                                {% else %}
+                                    <span class="badge bg-warning">未作成</span>
+                                {% endif %}
+                            </td>
+
+
+                            <td style="min-width: 200px;">
+                                <div id="view-mode-{{ row.id }}" class="d-flex justify-content-between align-items-start">
+                                    <div class="text-break me-2">
+                                        {% if row.備考 %}
+                                            <span id="text-display-{{ row.id }}">{{ row.備考[:30] }}{% if row.備考|length > 30 %}...{% endif %}</span>
+                                        {% else %}
+                                            <span id="text-display-{{ row.id }}" class="text-muted">-</span>
+                                        {% endif %}
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary border-0 py-0"
+                                            onclick="enableInlineEdit({{ row.id }})"
+                                            title="この場で編集">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                </div>
+
+                                <div id="edit-mode-{{ row.id }}" style="display: none;">
+                                    <input type="hidden" id="edit-assignee-{{ row.id }}">
+                                    <input type="hidden" id="edit-desc-{{ row.id }}">
+
+                                    <textarea class="form-control form-control-sm mb-2"
+                                              id="input-remarks-{{ row.id }}"
+                                              rows="3"></textarea>
+
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <button class="btn btn-sm btn-secondary" onclick="cancelInlineEdit({{ row.id }})">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-primary" onclick="saveInlineEdit({{ row.id }})">
+                                            <i class="bi bi-check"></i> 保存
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <small>
+                                    {% if row.更新日時 %}
+                                        {{ row.更新日時.strftime('%m/%d %H:%M') }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </small>
+                            </td>
+
+                            <!-- 操作カラム: 執筆（自分の担当タスクのみ）＋削除 -->
+                            <td>
+                                {% if row.担当者アカウント == user_info.user_id %}
+                                <button class="btn btn-primary btn-sm mb-1 d-block"
+                                        onclick="writeContent({{ row.id }})"
+                                        title="このタスクの執筆画面を開く">
+                                    <i class="bi bi-pencil"></i> 執筆
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-sm"
+                                        onclick="deleteTask({{ row.id }})">
+                                    <i class="bi bi-trash"></i> 削除
+                                </button>
+                            </td>
+
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 3rem; color: #6c757d;"></i>
+            <h4 class="mt-3 text-muted">タスクがありません</h4>
+            <p class="text-muted">最初のタスクを追加してプロジェクトを開始しましょう。</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                <i class="bi bi-plus"></i> タスクを追加
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- モーダル: タスク追加 -->
+<div class="modal fade" id="addTaskModal" tabindex="-1" aria-labelledby="addTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTaskModalLabel">新規タスク追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addTaskForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="taskName" class="form-label">カラム名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="taskName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="assignee" class="form-label">担当者 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="assignee" required>
+                            <option value="">担当者を選択してください</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">説明</label>
+                        <textarea class="form-control" id="description" rows="3"
+                                  placeholder="作業内容の説明や注意点を入力してください"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">追加</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- モーダル: タスク編集 -->
+<div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editTaskModalLabel">タスク編集</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editTaskForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editTaskName" class="form-label">カラム名</label>
+                        <input type="text" class="form-control" id="editTaskName" readonly
+                               style="background-color: #f8f9fa;">
+                        <small class="text-muted">※カラム名は変更できません</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editAssignee" class="form-label">担当者 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="editAssignee" required>
+                            <option value="">担当者を選択してください</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDescription" class="form-label">説明</label>
+                        <textarea class="form-control" id="editDescription" rows="3"
+                                  placeholder="作業内容の説明や注意点を入力してください"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editRemarks" class="form-label">備考</label>
+                        <textarea class="form-control" id="editRemarks" rows="2"
+                                  placeholder="その他のメモや備考を入力してください"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- モーダル: 担当者変更 -->
+<div class="modal fade" id="editAssigneeModal" tabindex="-1" aria-labelledby="editAssigneeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editAssigneeModalLabel">担当者変更</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editAssigneeForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="quickAssignee" class="form-label">新しい担当者 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="quickAssignee" required>
+                            <option value="">担当者を選択してください</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">変更</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap JavaScript Bundle（必須！） -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// グローバル変数でモーダルインスタンスを管理
+const currentUserId = {{ user_info.user_id | tojson }};
+
+let addTaskModalInstance = null;
+let editTaskModalInstance = null;
+let editAssigneeModalInstance = null;
+let currentEditingTaskId = null;
+let currentEditingAssigneeTaskId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded: モーダルの初期化を開始します');
+
+    const addTaskModalEl = document.getElementById('addTaskModal');
+    if (addTaskModalEl) {
+        addTaskModalInstance = new bootstrap.Modal(addTaskModalEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        console.log('✅ addTaskModal が初期化されました');
+    }
+
+    const editTaskModalEl = document.getElementById('editTaskModal');
+    if (editTaskModalEl) {
+        editTaskModalInstance = new bootstrap.Modal(editTaskModalEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        console.log('✅ editTaskModal が初期化されました');
+    }
+
+    const editAssigneeModalEl = document.getElementById('editAssigneeModal');
+    if (editAssigneeModalEl) {
+        editAssigneeModalInstance = new bootstrap.Modal(editAssigneeModalEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        console.log('✅ editAssigneeModal が初期化されました');
+    }
+
+    // スタイルを追加
+    const style = document.createElement('style');
+    style.textContent = `
+        .content-status-compact {
+            text-align: center;
+            min-width: 80px;
+        }
+        .btn-group-vertical .btn {
+            font-size: 0.875rem;
+            padding: 0.375rem 0.5rem;
+            white-space: nowrap;
+        }
+        .btn-group-vertical {
+            min-width: 80px;
+        }
+    `;
+    document.head.appendChild(style);
+});
+
+// タスク追加フォーム送信処理
+document.addEventListener('DOMContentLoaded', function() {
+    const addTaskForm = document.getElementById('addTaskForm');
+    if (addTaskForm) {
+        addTaskForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('タスク追加フォーム送信');
+
+            const data = {
+                カラム名: document.getElementById('taskName').value.trim(),
+                担当者アカウント: document.getElementById('assignee').value,
+                説明: document.getElementById('description').value.trim()
+            };
+
+            if (!data.カラム名 || !data.担当者アカウント) {
+                alert('必須項目を入力してください');
+                return;
+            }
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '追加中...';
+
+            fetch(`/colrep/add_table_row/{{ project.id }}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(result => {
+                console.log('Result:', result);
+                if (result.success) {
+                    if (addTaskModalInstance) {
+                        addTaskModalInstance.hide();
+                    }
+                    setTimeout(() => {
+                        location.reload();
+                    }, 300);
+                } else {
+                    alert('エラー: ' + (result.error || '不明なエラーが発生しました'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('タスクの追加に失敗しました: ' + error.message);
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    }
+});
+
+// タスクIDからデータを取得して編集（★ 新しい関数）
+function editTaskFromId(taskId) {
+    console.log('タスクデータ取得開始: taskId =', taskId);
+
+    fetch(`/colrep/get_task_data/{{ project.id }}/${taskId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('取得したタスクデータ:', data);
+            if (data.success) {
+                editTask(
+                    data.task.id,
+                    data.task.カラム名,
+                    data.task.担当者アカウント,
+                    data.task.説明 || '',
+                    data.task.備考 || ''
+                );
+            } else {
+                alert('タスク情報の取得に失敗しました: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('タスク情報の取得に失敗しました: ' + error.message);
+        });
+}
+
+// タスク編集関数
+function editTask(taskId, taskName, assigneeId, description, remarks) {
+    console.log('editTask called:', { taskId, taskName, assigneeId, description, remarks });
+    currentEditingTaskId = taskId;
+
+    // フォームに現在の値を設定
+    document.getElementById('editTaskName').value = taskName;
+    document.getElementById('editAssignee').value = assigneeId;
+    document.getElementById('editDescription').value = description || '';
+    document.getElementById('editRemarks').value = remarks || '';
+
+    // モーダルを表示
+    if (editTaskModalInstance) {
+        editTaskModalInstance.show();
+    }
+}
+
+// タスク編集フォーム送信処理
+document.addEventListener('DOMContentLoaded', function() {
+    const editTaskForm = document.getElementById('editTaskForm');
+    if (editTaskForm) {
+        editTaskForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('タスク編集フォーム送信');
+
+            if (!currentEditingTaskId) {
+                alert('編集対象のタスクが特定できません');
+                return;
+            }
+
+            const data = {
+                担当者アカウント: document.getElementById('editAssignee').value,
+                説明: document.getElementById('editDescription').value.trim(),
+                備考: document.getElementById('editRemarks').value.trim()
+            };
+
+            if (!data.担当者アカウント) {
+                alert('担当者は必須項目です');
+                return;
+            }
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '保存中...';
+
+            fetch(`/colrep/update_task/{{ project.id }}/${currentEditingTaskId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(result => {
+                if (result.success) {
+                    if (editTaskModalInstance) {
+                        editTaskModalInstance.hide();
+                    }
+                    setTimeout(() => {
+                        location.reload();
+                    }, 300);
+                } else {
+                    alert('エラー: ' + (result.error || '不明なエラーが発生しました'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('タスクの更新に失敗しました: ' + error.message);
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+                currentEditingTaskId = null;
+            });
+        });
+    }
+});
+
+// タスク削除
+function deleteTask(taskId) {
+    if (confirm('このタスクを削除しますか？この操作は元に戻せません。')) {
+        fetch(`/colrep/delete_task/{{ project.id }}/${taskId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            } else {
+                alert('エラー: ' + (result.error || '不明なエラーが発生しました'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('タスクの削除に失敗しました: ' + error.message);
+        });
+    }
+}
+
+// ===== 自分の担当タスクの執筆画面を開く =====
+function writeContent(taskId) {
+    const uniqueWindowId = 'meditEditor_' + Date.now();
+    const editorWindow = window.open(
+        `/colrep/edit_content_external/{{ project.id }}/${taskId}`,
+        uniqueWindowId,
+        'width=1200,height=800,scrollbars=yes,resizable=yes'
+    );
+
+    if (!editorWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    // 保存/キャンセル時にタスク一覧を更新
+    window.editorCallback = function(result) {
+        if (result && result.success) {
+            location.reload();
+        } else if (result && result.aborted) {
+            console.log('編集が中断されました');
+        } else if (result) {
+            alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+        }
+        editorWindow.close();
+    };
+}
+
+
+// モーダルが閉じられたときにフォームをリセット
+document.addEventListener('DOMContentLoaded', function() {
+    const addTaskModalEl = document.getElementById('addTaskModal');
+    if (addTaskModalEl) {
+        addTaskModalEl.addEventListener('hidden.bs.modal', function () {
+            const form = document.getElementById('addTaskForm');
+            if (form) {
+                form.reset();
+            }
+        });
+    }
+
+    const editTaskModalEl = document.getElementById('editTaskModal');
+    if (editTaskModalEl) {
+        editTaskModalEl.addEventListener('hidden.bs.modal', function () {
+            const form = document.getElementById('editTaskForm');
+            if (form) {
+                form.reset();
+            }
+            currentEditingTaskId = null;
+        });
+    }
+});
+
+// 統合コンテンツプレビュー関数
+function previewIntegratedContent() {
+    const previewUrl = `/colrep/preview_integrated/{{ project.id }}`;
+
+    const previewWindow = window.open(
+        previewUrl,
+        'integratedPreview',
+        'width=900,height=600,scrollbars=yes,resizable=yes'
+    );
+
+    if (!previewWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    previewWindow.focus();
+}
+
+// Composer編集関数
+function editComposer() {
+    const editorUrl = `/colrep/edit_composer_external/{{ project.id }}`;
+
+    const editorWindow = window.open(
+        editorUrl,
+        'composerEditor',
+        'width=1200,height=800,scrollbars=yes,resizable=yes'
+    );
+
+    if (!editorWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    // 編集完了時のコールバック設定
+    window.composerCallback = function(result) {
+        if (result.success) {
+            window.location.reload();
+        } else if (result.aborted) {
+            console.log('Composer編集が中断されました');
+        } else {
+            alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+        }
+        editorWindow.close();
+    };
+}
+
+// 説明詳細編集関数
+function editDescription(taskId) {
+    const editorUrl = `/colrep/edit_description_external/{{ project.id }}/${taskId}`;
+
+    const editorWindow = window.open(
+        editorUrl,
+        'descriptionEditor',
+        'width=1200,height=800,scrollbars=yes,resizable=yes'
+    );
+
+    if (!editorWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    // 編集完了時のコールバック設定
+    window.descriptionCallback = function(result) {
+        if (result.success) {
+            window.location.reload();
+        } else if (result.aborted) {
+            console.log('説明編集が中断されました');
+        } else {
+            alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+        }
+        editorWindow.close();
+    };
+}
+
+// 説明プレビュー関数
+function previewDescription(taskId) {
+    const uniqueWindowId = 'descPreview_' + Date.now() + '_' + taskId;
+
+    fetch(`/colrep/get_task_description/{{ project.id }}/${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error);
+            }
+            return fetch('/colrep/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ markdown: data.description || '' })
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            const newWindow = window.open('', uniqueWindowId, 'width=1000,height=800,scrollbars=yes');
+            newWindow.document.open();
+            newWindow.document.write('<!DOCTYPE html>');
+            newWindow.document.write('<html lang="ja">');
+            newWindow.document.write('<head>');
+            newWindow.document.write('<meta charset="UTF-8">');
+            newWindow.document.write('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+            newWindow.document.write('<title>説明プレビュー</title>');
+            newWindow.document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">');
+            newWindow.document.write('<style>body { padding: 20px; }</style>');
+            newWindow.document.write('</head>');
+            newWindow.document.write('<body>');
+            newWindow.document.write(data.html);
+            newWindow.document.write('</body>');
+            newWindow.document.write('</html>');
+            newWindow.document.close();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('プレビューの取得に失敗しました: ' + error.message);
+        });
+}
+
+// 担当者変更関数
+function editAssignee(taskId, currentAssigneeId) {
+    currentEditingAssigneeTaskId = taskId;
+    document.getElementById('quickAssignee').value = currentAssigneeId;
+
+    if (editAssigneeModalInstance) {
+        editAssigneeModalInstance.show();
+    }
+}
+
+// 担当者変更フォーム送信処理
+document.addEventListener('DOMContentLoaded', function() {
+    const editAssigneeForm = document.getElementById('editAssigneeForm');
+    if (editAssigneeForm) {
+        editAssigneeForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!currentEditingAssigneeTaskId) {
+                alert('編集対象のタスクが特定できません');
+                return;
+            }
+
+            const newAssigneeId = document.getElementById('quickAssignee').value;
+
+            if (!newAssigneeId) {
+                alert('担当者を選択してください');
+                return;
+            }
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '変更中...';
+
+            fetch(`/colrep/update_task/{{ project.id }}/${currentEditingAssigneeTaskId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    担当者アカウント: newAssigneeId,
+                    説明: '',  // 空文字列を送信（変更なし）
+                    備考: ''   // 空文字列を送信（変更なし）
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(result => {
+                if (result.success) {
+                    if (editAssigneeModalInstance) {
+                        editAssigneeModalInstance.hide();
+                    }
+                    setTimeout(() => {
+                        location.reload();
+                    }, 300);
+                } else {
+                    alert('エラー: ' + (result.error || '不明なエラーが発生しました'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('担当者の変更に失敗しました: ' + error.message);
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+                currentEditingAssigneeTaskId = null;
+            });
+        });
+    }
+
+    // モーダルが閉じられたときにリセット
+    const editAssigneeModalEl = document.getElementById('editAssigneeModal');
+    if (editAssigneeModalEl) {
+        editAssigneeModalEl.addEventListener('hidden.bs.modal', function () {
+            const form = document.getElementById('editAssigneeForm');
+            if (form) {
+                form.reset();
+            }
+            currentEditingAssigneeTaskId = null;
+        });
+    }
+
+});
+// 1. インライン編集モードを開始（データを取得して表示切り替え）
+function enableInlineEdit(taskId) {
+    // 既存の入力欄があればリセットなどの処理を入れても良いですが、ここではシンプルに取得
+    fetch(`/colrep/get_task_data/{{ project.id }}/${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 隠しフィールドに保存時に必要なデータ（担当者・説明）を退避
+                document.getElementById(`edit-assignee-${taskId}`).value = data.task.担当者アカウント;
+                document.getElementById(`edit-desc-${taskId}`).value = data.task.説明 || '';
+
+                // テキストエリアに現在の備考をセット
+                document.getElementById(`input-remarks-${taskId}`).value = data.task.備考 || '';
+
+                // 表示切り替え
+                document.getElementById(`view-mode-${taskId}`).style.display = 'none';
+                document.getElementById(`edit-mode-${taskId}`).style.display = 'block';
+
+                // フォーカスを当てる
+                document.getElementById(`input-remarks-${taskId}`).focus();
+            } else {
+                alert('データ取得エラー: ' + data.error);
+            }
+        })
+        .catch(error => alert('通信エラー: ' + error));
+}
+
+// 2. 編集キャンセル（元に戻す）
+function cancelInlineEdit(taskId) {
+    document.getElementById(`edit-mode-${taskId}`).style.display = 'none';
+    document.getElementById(`view-mode-${taskId}`).style.display = 'flex';
+}
+
+// 3. 保存処理（APIを叩いてリロード）
+function saveInlineEdit(taskId) {
+    const btn = document.querySelector(`#edit-mode-${taskId} .btn-primary`);
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    // 隠しフィールドから値を再取得して送信データを作成
+    const data = {
+        担当者アカウント: document.getElementById(`edit-assignee-${taskId}`).value,
+        説明: document.getElementById(`edit-desc-${taskId}`).value,
+        備考: document.getElementById(`input-remarks-${taskId}`).value.trim()
+    };
+
+    fetch(`/colrep/update_task/{{ project.id }}/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            location.reload(); // 成功したら画面を更新して反映
+        } else {
+            alert('保存エラー: ' + result.error);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        alert('通信エラー: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
+
+// ===== 管理者用コンテンツ操作 =====
+function adminPreviewContent(taskId) {
+    fetch(`/colrep/get_task_content_admin/{{ project.id }}/${taskId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.error);
+            return fetch('/colrep/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ markdown: data.md_content })
+            });
+        })
+        .then(r => r.json())
+        .then(data => {
+            const w = window.open('', '_blank', 'width=1000,height=800,scrollbars=yes');
+            w.document.write(`<!DOCTYPE html><html lang="ja"><head>
+                <meta charset="UTF-8">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+                <style>body{padding:20px;}</style>
+                </head><body>${data.html}</body></html>`);
+            w.document.close();
+        })
+        .catch(e => alert('プレビュー取得失敗: ' + e.message));
+}
+
+function adminViewSource(taskId) {
+    fetch(`/colrep/get_task_content_admin/{{ project.id }}/${taskId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.error);
+            const escaped = data.md_content
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const w = window.open('', '_blank', 'width=1000,height=800,scrollbars=yes');
+            w.document.write(`<!DOCTYPE html><html lang="ja"><head>
+                <meta charset="UTF-8">
+                <style>body{padding:20px;font-family:monospace;}
+                pre{white-space:pre-wrap;background:#f5f5f5;padding:15px;border-radius:4px;}</style>
+                </head><body>
+                <h5>${data.task_title}（ソース）</h5>
+                <pre>${escaped}</pre></body></html>`);
+            w.document.close();
+        })
+        .catch(e => alert('ソース取得失敗: ' + e.message));
+}
+
+function adminEditContent(taskId, taskTitle) {
+    if (!confirm(`「${taskTitle}」の担当者をあなたに変更して編集しますか？`)) return;
+
+    fetch(`/colrep/update_task/{{ project.id }}/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 担当者アカウント: currentUserId, 説明: '', 備考: '' })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error);
+        window.open(
+            `/colrep/edit_content_external/{{ project.id }}/${taskId}`,
+            'editor_' + Date.now(),
+            'width=1200,height=800,scrollbars=yes'
+        );
+        location.reload();
+    })
+    .catch(e => alert('変更失敗: ' + e.message));
+}
+</script>
+</body>
+</html>

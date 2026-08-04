@@ -1,0 +1,139 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>
+{% if archive %}
+テーブル第{{ archive.archive_number }}号 - {{ archive.title }}
+{% else %}
+{{ page_title if page_title else 'テーブルが見つかりません' }}
+{% endif %}
+</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+       font-size: 14px; background: #f5f7fa; color: #2c2c2c; line-height: 1.6; }
+
+/* ===== ヘッダー ===== */
+.page-header { background: #1a3a5c; color: #fff; padding: 14px 24px; }
+.page-header .site-name { font-size: 12px; color: #aed6f1; margin-bottom: 2px; }
+.page-header .archive-id { font-size: 12px; color: #7fb3d3; font-weight: 400; }
+.page-header .page-title { font-size: 20px; font-weight: 700; margin-top: 2px; }
+
+/* ===== メインコンテンツ ===== */
+.container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+/* ===== メタ情報 ===== */
+.meta-box { background: #fff; border: 1px solid #e0e6ed; border-radius: 6px;
+            padding: 16px 20px; margin-bottom: 20px; }
+.meta-box .description { color: #555; font-size: 13px; line-height: 1.7;
+                          margin-bottom: 12px; }
+.meta-row { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: #888;
+            border-top: 1px solid #f0f0f0; padding-top: 10px; margin-top: 4px; }
+.meta-row span { display: flex; align-items: center; gap: 4px; }
+
+/* ===== テーブルコンテンツ ===== */
+.table-section { background: #fff; border: 1px solid #e0e6ed; border-radius: 6px;
+                 padding: 16px 20px; overflow-x: auto; }
+.table-section .section-title { font-size: 13px; font-weight: 600; color: #888;
+                                margin-bottom: 12px; border-bottom: 1px solid #eee;
+                                padding-bottom: 8px; display: flex;
+                                align-items: center; justify-content: space-between; }
+.table-content table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.table-content th { background: #2e6da4; color: #fff; padding: 7px 12px;
+                    text-align: left; white-space: nowrap; }
+.table-content td { padding: 6px 12px; border: 1px solid #ddd; }
+.table-content tr:nth-child(even) td { background: #f7fafd; }
+
+/* ===== エラー表示 ===== */
+.error-box { background: #fff; border: 1px solid #f5c6cb; border-radius: 6px;
+             padding: 30px; text-align: center; margin-top: 40px; }
+.error-box .error-code { font-size: 48px; color: #e74c3c; font-weight: 700; margin-bottom: 8px; }
+.error-box .error-msg  { color: #666; font-size: 15px; }
+
+/* ===== 印刷ボタン ===== */
+.action-bar { display: flex; gap: 8px; align-items: center; }
+.btn-print { padding: 4px 10px; background: #f0f0f0; border: 1px solid #ccc;
+             border-radius: 3px; cursor: pointer; font-size: 12px; color: #555; }
+.btn-print:hover { background: #e0e0e0; }
+
+/* ===== フッター ===== */
+.page-footer { text-align: center; padding: 20px; font-size: 11px; color: #bbb;
+               border-top: 1px solid #eee; margin-top: 30px; }
+
+@media print {
+  .page-header, .action-bar, .page-footer { display: none; }
+  .container { padding: 0; max-width: 100%; }
+  .meta-box, .table-section { border: none; box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+{% if archive %}
+<div class="page-header">
+  <div class="site-name">FUJIN-P データブック</div>
+  <div class="page-title">{{ archive.title }}</div>
+  <div class="archive-id">テーブル第{{ archive.archive_number }}号</div>
+</div>
+
+<div class="container">
+  <div class="meta-box">
+    {% if archive.description %}
+    <div class="description">{{ archive.description | safe }}</div>
+    {% endif %}
+    <div class="meta-row">
+      <span>📅 作成日時: {{ archive.created_at[:16].replace('T', ' ') if archive.created_at else '—' }}</span>
+      <span>🔄 更新日時: {{ archive.updated_at[:16].replace('T', ' ') if archive.updated_at else '—' }}</span>
+      {% if archive.created_by_name %}
+      <span>👤 作成者: {{ archive.created_by_name }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="section-title">
+      <span>📊 データ</span>
+      <div class="action-bar">
+        <button class="btn-print" onclick="window.print()">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="table-content">
+      {{ archive.html_content | safe }}
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="page-header">
+  <div class="site-name">FUJIN-P データブック</div>
+  <div class="page-title">{{ page_title if page_title else 'テーブルが見つかりません' }}</div>
+</div>
+<div class="container">
+  <div class="error-box">
+    <div class="error-code">{{ status_code if status_code else 404 }}</div>
+    <div class="error-msg">
+      {% if error %}
+        {{ error }}
+      {% else %}
+        このテーブルは存在しないか、閲覧できません。
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="page-footer">
+  FUJIN-P テーブルアーカイブ
+</div>
+
+</body>
+</html>

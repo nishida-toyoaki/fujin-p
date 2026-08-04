@@ -1,0 +1,649 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUJIN-P 管理ダッシュボード</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #3d4259;
+            --surface: #474d66;
+            --surface-2: #525872;
+            --surface-3: #5c637e;
+            --border: #6b7291;
+            --border-light: #7b82a0;
+            --text: #eceef5;
+            --text-dim: #b0b5cc;
+            --text-faint: #868ca8;
+            --accent: #6c8aff;
+            --accent-dim: rgba(108,138,255,0.15);
+            --green: #4ade80;
+            --green-dim: rgba(74,222,128,0.12);
+            --red: #f87171;
+            --red-dim: rgba(248,113,113,0.12);
+            --amber: #fbbf24;
+            --amber-dim: rgba(251,191,36,0.12);
+            --purple: #a78bfa;
+            --purple-dim: rgba(167,139,250,0.12);
+            --cyan: #22d3ee;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        /* ===== Top Bar ===== */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .topbar-brand { display: flex; align-items: center; gap: 12px; }
+        .topbar-logo {
+            width: 28px; height: 28px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.75rem; color: white;
+        }
+        .topbar-title { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.03em; }
+        .topbar-title span { color: var(--text-dim); font-weight: 400; }
+        .topbar-user { font-size: 0.82rem; color: var(--text-dim); }
+        .topbar-user strong { color: var(--text); }
+        /* ===== Stats Bar ===== */
+        .stats-bar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .stat-pill {
+            display: flex; align-items: center; gap: 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 16px;
+            min-width: 140px;
+        }
+        .stat-pill .stat-icon {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+        }
+        .stat-pill .stat-body .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1.2; }
+        .stat-pill .stat-body .stat-label { font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.02em; }
+
+        /* ===== Stat Cards（申請系リンクカード） ===== */
+        .stats-bar .stat-card {
+            position: relative;
+            flex: 1 1 200px;
+            max-width: 260px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px 16px 12px 20px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--surface-2), var(--surface));
+            color: var(--text);
+            text-decoration: none;
+            overflow: hidden;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .stats-bar .stat-card::before {
+            content: "";
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: var(--accent);
+        }
+        .stats-bar .stat-card::after {
+            content: "";
+            position: absolute;
+            right: -30px; top: -30px;
+            width: 90px; height: 90px;
+            border-radius: 50%;
+            background: var(--accent);
+            opacity: .07;
+            transition: opacity .18s ease;
+        }
+        .stats-bar .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--border-light);
+            box-shadow: 0 8px 20px rgba(0,0,0,.28);
+        }
+        .stats-bar .stat-card:hover::after { opacity: .16; }
+
+        .stats-bar .stat-card .stat-info h3 {
+            font-size: .72rem;
+            font-weight: 500;
+            color: var(--text-dim);
+            letter-spacing: .04em;
+            line-height: 1.4;
+        }
+        .stats-bar .stat-card .stat-info .number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            font-variant-numeric: tabular-nums;
+        }
+        .stats-bar .stat-card .stat-icon {
+            position: relative;
+            z-index: 1;
+            width: 38px; height: 38px;
+            flex-shrink: 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+        }
+
+        /* 種別ごとの色 */
+        .stats-bar .stat-pending::before,
+        .stats-bar .stat-pending::after { background: var(--amber); }
+        .stats-bar .stat-pending .number { color: var(--amber); }
+        .stats-bar .stat-pending .stat-icon { background: var(--amber-dim); color: var(--amber); }
+
+        .stats-bar .stat-approved::before,
+        .stats-bar .stat-approved::after { background: var(--green); }
+        .stats-bar .stat-approved .number { color: var(--green); }
+        .stats-bar .stat-approved .stat-icon { background: var(--green-dim); color: var(--green); }
+
+        .stats-bar .stat-blacklist::before,
+        .stats-bar .stat-blacklist::after { background: var(--red); }
+        .stats-bar .stat-blacklist .number { color: var(--red); }
+        .stats-bar .stat-blacklist .stat-icon { background: var(--red-dim); color: var(--red); }
+
+        @media (max-width: 768px) {
+            .stats-bar .stat-card { flex: 1 1 100%; max-width: none; }
+        }
+
+        #requests .section-body .btn { padding: 10px 18px; font-size: .88rem; border-radius: 8px; }
+        #requests .section-body .btn:hover { transform: translateY(-1px); }
+        /* ===== Tab Navigation ===== */
+        .tab-nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            display: flex;
+            gap: 0;
+            overflow-x: auto;
+        }
+        .tab-link {
+            padding: 14px 20px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: var(--text-dim);
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tab-link:hover { color: var(--text); background: var(--surface-2); }
+        .tab-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-badge {
+            background: var(--red);
+            color: white;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+        /* ===== Main Content ===== */
+        .main { padding: 24px; max-width: 1600px; margin: 0 auto; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        /* ===== Section ===== */
+        .section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-title { font-size: 0.95rem; font-weight: 600; }
+        .section-body { padding: 0; }
+        .section-body.padded { padding: 20px; }
+        /* ===== Flash Messages ===== */
+        .flash-messages { padding: 0 24px; padding-top: 16px; }
+        .flash-msg {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.88rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .flash-msg.success { background: var(--green-dim); border: 1px solid rgba(74,222,128,0.25); color: var(--green); }
+        .flash-msg.error { background: var(--red-dim); border: 1px solid rgba(248,113,113,0.25); color: var(--red); }
+        .flash-msg.info { background: var(--accent-dim); border: 1px solid rgba(108,138,255,0.25); color: var(--accent); }
+        /* ===== Tables ===== */
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            padding: 10px 16px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        td {
+            padding: 12px 16px;
+            font-size: 0.88rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(108,138,255,0.03); }
+        /* ===== Badges ===== */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .badge-admin { background: var(--accent-dim); color: var(--accent); }
+        .badge-student { background: var(--green-dim); color: var(--green); }
+        .badge-faculty { background: var(--amber-dim); color: var(--amber); }
+        .badge-staff { background: var(--purple-dim); color: var(--purple); }
+        .badge-external { background: rgba(148,163,184,0.12); color: #94a3b8; }
+        .badge-active { background: var(--green-dim); color: var(--green); }
+        .badge-inactive { background: var(--red-dim); color: var(--red); }
+        .badge-pending { background: var(--amber-dim); color: var(--amber); }
+        /* ===== Buttons ===== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+        .btn:hover { background: var(--surface-3); border-color: var(--border-light); }
+        .btn-accent { background: var(--accent); color: white; border-color: var(--accent); }
+        .btn-accent:hover { background: #5a7aef; }
+        .btn-danger { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); }
+        .btn-success { background: var(--green-dim); color: var(--green); border-color: rgba(74,222,128,0.3); }
+        .btn-success:hover { background: rgba(74,222,128,0.2); }
+        .btn-warning { background: var(--amber-dim); color: var(--amber); border-color: rgba(251,191,36,0.3); }
+        .btn-warning:hover { background: rgba(251,191,36,0.2); }
+        .btn-sm { padding: 4px 10px; font-size: 0.78rem; }
+        .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-return {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--red-dim); color: var(--red); font-weight: 600;
+            text-decoration: none; padding: 7px 16px; border-radius: 20px;
+            border: 1px solid rgba(248,113,113,0.3);
+            white-space: nowrap; transition: all 0.15s;
+        }
+        .btn-return:hover { background: rgba(248,113,113,0.2); color: var(--red); }
+        /* ===== Forms ===== */
+        .search-bar {
+            padding: 16px 20px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            border-bottom: 1px solid var(--border);
+        }
+        .field { display: flex; flex-direction: column; gap: 4px; }
+        .field label {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .field input, .field select {
+            padding: 7px 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.88rem;
+            font-family: inherit;
+            min-width: 160px;
+        }
+        .field input:focus, .field select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        .field select { cursor: pointer; }
+        .field select option { background: var(--surface); }
+        code {
+            font-family: "Source Code Pro", monospace;
+            font-size: 0.82rem;
+            background: var(--surface-2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: var(--cyan);
+        }
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--text-faint); }
+        .empty-state p { font-size: 0.9rem; }
+        /* ===== Responsive ===== */
+        @media (max-width: 768px) {
+            .topbar { padding: 0 16px; }
+            .main { padding: 16px; }
+            .stats-bar { padding: 12px 16px; }
+            .tab-nav { padding: 0 16px; }
+            .search-bar { flex-direction: column; }
+            .field input, .field select { min-width: 100%; }
+            table { font-size: 0.82rem; }
+            th, td { padding: 8px 10px; }
+        }
+        /* ===== Print ===== */
+        @media print {
+            .topbar, .tab-nav, .stats-bar, .btn, .search-bar { display: none; }
+            body { background: white; color: black; }
+            .section { border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body>
+<!-- Top Bar -->
+<div class="topbar">
+    <div class="topbar-brand">
+        <div class="topbar-logo">F</div>
+        <div class="topbar-title">FUJIN-P <span>Admin</span></div>
+    </div>
+    <div class="topbar-right" style="display:flex; align-items:center; gap:16px; margin-left:auto;">
+        <div class="topbar-user">
+            <strong>{{ user_name }}</strong> &middot; {{ user_email }}
+        </div>
+        <a href="{{ url_for('admin.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+</div>
+<!-- Stats Bar -->
+<div class="stats-bar">
+    <div class="stat-pill">
+        <div class="stat-icon" style="background: var(--accent-dim); color: var(--accent);">👤</div>
+        <div class="stat-body">
+            <div class="stat-value">{{ user_stats.total }}</div>
+            <div class="stat-label">ユーザ</div>
+        </div>
+    </div>
+
+            <a href="{{ url_for('admin.pending_requests') }}" class="stat-card stat-pending">
+                <div class="stat-info"><h3>承認待ち</h3><div class="number">{{ statistics.pending_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">⏳</div>
+            </a>
+            <a href="{{ url_for('admin.approved_users_list') }}" class="stat-card stat-approved">
+                <div class="stat-info"><h3>承認済み（未設定）</h3><div class="number">{{ statistics.approved_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">✓</div>
+            </a>
+            <a href="{{ url_for('admin.blacklisted_users') }}" class="stat-card stat-blacklist">
+                <div class="stat-info"><h3>ブラックリスト</h3><div class="number">{{ statistics.blacklisted_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">🚫</div>
+            </a>
+
+    {% if statistics.pending_count > 0 %}
+    <div class="stat-pill">
+        <div class="stat-icon" style="background: var(--amber-dim); color: var(--amber);">⏳</div>
+        <div class="stat-body">
+            <div class="stat-value">{{ statistics.pending_count }}</div>
+            <div class="stat-label">承認待ち</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+<!-- Tab Navigation -->
+<nav class="tab-nav">
+    <a href="#users" class="tab-link {% if tab == 'users' %}active{% endif %}" data-tab="users">
+        👤 ユーザ管理
+    </a>
+    <a href="#requests" class="tab-link {% if tab == 'requests' %}active{% endif %}" data-tab="requests">
+        📋 申請管理
+        {% if statistics.pending_count > 0 %}
+        <span class="tab-badge">{{ statistics.pending_count }}</span>
+        {% endif %}
+    </a>
+</nav>
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash-msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+{% endwith %}
+<div class="main">
+<!-- ============================================ -->
+<!-- TAB: ユーザ管理 -->
+<!-- ============================================ -->
+<div id="users" class="tab-panel {% if tab == 'users' %}active{% endif %}">
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">ユーザ一覧</div>
+            <div class="btn-group">
+                <a href="{{ url_for('admin.add_user') }}" class="btn btn-accent">+ ユーザ追加</a>
+                <a href="{{ url_for('admin.deleted_users') }}" class="btn">削除済み</a>
+            </div>
+        </div>
+        <!-- Search -->
+        <form method="GET" action="{{ url_for('admin.unified_dashboard') }}">
+            <input type="hidden" name="tab" value="users">
+            <div class="search-bar">
+                <div class="field">
+                    <label>メールアドレス</label>
+                    <input type="text" name="email" value="{{ request.args.get('email', '') }}" placeholder="部分一致">
+                </div>
+                <div class="field">
+                    <label>氏名</label>
+                    <input type="text" name="name" value="{{ request.args.get('name', '') }}" placeholder="部分一致">
+                </div>
+                <div class="field">
+                    <label>カテゴリ</label>
+                    <select name="category">
+                        <option value="">すべて</option>
+                        <option value="regular" {% if request.args.get('category') == 'regular' %}selected{% endif %}>構成員 (regular)</option>
+                        <option value="guest" {% if request.args.get('category') == 'guest' %}selected{% endif %}>ゲスト (guest)</option>
+                        <option value="admin" {% if request.args.get('category') == 'admin' %}selected{% endif %}>管理者 (admin)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-accent">検索</button>
+                <a href="{{ url_for('admin.unified_dashboard', tab='users') }}" class="btn">リセット</a>
+            </div>
+        </form>
+        <div class="section-body">
+            {% if users %}
+            <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>氏名</th>
+                        <th>メール</th>
+                        <th>カテゴリ</th>
+                        <th>所属</th>
+                        <th>状態</th>
+                        <th>作成日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td style="font-size: 0.82rem; color: var(--text-dim);">{{ user.id }}</td>
+                        <td style="font-weight: 500;">{{ user.full_name }}</td>
+                        <td style="font-size: 0.82rem; color: var(--text-dim);">{{ user.email }}</td>
+                        <td>
+                            {% if user.category == 'admin' %}
+                                <span class="badge badge-admin">{{ user.category }}</span>
+                            {% elif user.category == '学生' %}
+                                <span class="badge badge-student">{{ user.category }}</span>
+                            {% elif user.category in ['教員', '常勤役員'] %}
+                                <span class="badge badge-faculty">{{ user.category }}</span>
+                            {% elif user.category == '事務職員' %}
+                                <span class="badge badge-staff">{{ user.category }}</span>
+                            {% else %}
+                                <span class="badge badge-external">{{ user.category }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 0.82rem; color: var(--text-dim);">{{ user.affiliation or '—' }}</td>
+                        <td>
+                            {% if user.password_hash == 'PENDING_INVITATION' %}
+                                <span class="badge badge-pending">招待待ち</span>
+                            {% elif user.is_active %}
+                                <span class="badge badge-active">有効</span>
+                            {% else %}
+                                <span class="badge badge-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 0.78rem; color: var(--text-dim); white-space: nowrap;">
+                            {{ user.created_at[:10] if user.created_at else '—' }}
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm">編集</a>
+                                {% if user.password_hash == 'PENDING_INVITATION' %}
+                                <form action="{{ url_for('admin.send_invitation', user_id=user.id) }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-warning"
+                                            onclick="return confirm('{{ user.email }} に招待メールを送信しますか？')">招待</button>
+                                </form>
+                                {% endif %}
+                                {% if user.category != 'admin' or user.id != session.user_id %}
+                                <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-danger"
+                                            onclick="return confirm('{{ user.full_name }}さんを削除しますか？')">削除</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty-state"><p>ユーザが見つかりません</p></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<!-- ============================================ -->
+<!-- TAB: 申請管理 -->
+<!-- ============================================ -->
+<div id="requests" class="tab-panel {% if tab == 'requests' %}active{% endif %}">
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">申請管理</div>
+        </div>
+        <div class="section-body padded">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="{{ url_for('admin.pending_requests') }}" class="btn btn-accent">
+                    ⏳ 承認待ち
+                    {% if statistics.pending_count > 0 %}
+                    <span class="tab-badge">{{ statistics.pending_count }}</span>
+                    {% endif %}
+                </a>
+                <a href="{{ url_for('admin.approved_users_list') }}" class="btn btn-success">
+                    ✓ 承認済み（{{ statistics.approved_count }}件）
+                </a>
+                <a href="{{ url_for('admin.blacklisted_users') }}" class="btn btn-danger">
+                    🚫 ブラックリスト（{{ statistics.blacklisted_count }}件）
+                </a>
+            </div>
+        </div>
+    </div>
+    <!-- ポリシー文書リンク -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">ポリシー文書</div>
+        </div>
+        <div class="section-body padded">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="/static/alliance_regulation.html" target="_blank" class="btn">📄 アライアンス運用規程</a>
+                <a href="/static/terms_user.html" target="_blank" class="btn">📄 サイト利用規約</a>
+                <a href="/static/privacy_policy.html" target="_blank" class="btn">📄 プライバシーポリシー</a>
+                <a href="/static/terms_sommelier_consent.html" target="_blank" class="btn">📄 ソムリエ同意書</a>
+            </div>
+        </div>
+    </div>
+</div>
+</div><!-- /main -->
+<script>
+// Tab switching
+document.querySelectorAll('.tab-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const tabId = this.dataset.tab;
+        const url = new URL(window.location);
+        url.searchParams.set('tab', tabId);
+        window.history.pushState({}, '', url);
+        document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    });
+});
+// Handle back/forward
+window.addEventListener('popstate', function() {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || 'users';
+    document.querySelectorAll('.tab-link').forEach(l => {
+        l.classList.toggle('active', l.dataset.tab === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+        p.classList.toggle('active', p.id === tab);
+    });
+});
+</script>
+</body>
+</html>

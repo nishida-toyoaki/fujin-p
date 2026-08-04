@@ -1,0 +1,3427 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>テーブルマスター - データベーステーブル編集</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #e67e22;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .info-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #17a2b8;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .back-button:hover {
+            background-color: #138496;
+        }
+
+        /* ============================================
+           レイアウト
+           ============================================ */
+        .master-layout {
+            display: flex;
+            height: 700px;
+            gap: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+        }
+
+        /* ── 左パネル: テーブル一覧 ── */
+        .master-list-panel {
+            width: 320px;
+            min-width: 250px;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #ddd;
+            background: #fafbfc;
+        }
+        .master-list-header {
+            padding: 12px 14px 8px;
+            background: #e67e22;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .master-list-header input {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #d35400;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .master-list-count {
+            font-size: 11px;
+            color: #7f8c8d;
+            padding: 4px 14px;
+            flex-shrink: 0;
+        }
+        .master-table-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* グループ見出し */
+        .master-group-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            padding: 6px 14px;
+            background: #34495e;
+            color: #ecf0f1;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+
+        /* リスト項目 */
+        .master-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background 0.15s;
+            font-size: 13px;
+            position: relative;
+        }
+        .master-item:hover {
+            background: #fef5e7;
+        }
+        .master-item:hover .item-delete-btn {
+            display: block;
+        }
+        .master-item.selected {
+            background: #fde8cd;
+            border-left: 3px solid #e67e22;
+        }
+        .master-item .item-table {
+            font-weight: 600;
+            color: #2c3e50;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .master-item .item-rows {
+            font-size: 11px;
+            color: #95a5a6;
+            white-space: nowrap;
+        }
+        .master-item .item-delete-btn {
+            display: none;
+            padding: 2px 6px;
+            font-size: 10px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .master-item .item-delete-btn:hover {
+            background: #c0392b;
+        }
+
+        /* ── 右パネル: 編集グリッド ── */
+        .master-edit-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        /* プレスホルダー */
+        .edit-placeholder {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #aab;
+            font-size: 15px;
+            gap: 10px;
+        }
+        .edit-placeholder .placeholder-icon {
+            font-size: 40px;
+            opacity: 0.5;
+        }
+
+        /* ツールバー */
+        .edit-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: #ecf0f1;
+            border-bottom: 2px solid #ddd;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .edit-toolbar .toolbar-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #2c3e50;
+            flex: 1;
+        }
+        .edit-toolbar button {
+            padding: 7px 14px;
+            font-size: 13px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .edit-toolbar button:hover {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+        }
+        .btn-add {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-rename {
+            background: #f39c12;
+            color: white;
+        }
+        .btn-refresh {
+            background: #3498db;
+            color: white;
+        }
+        .btn-undo, .btn-redo {
+            background: #95a5a6;
+            color: white;
+        }
+        .btn-undo:disabled, .btn-redo:disabled {
+            background: #d5d8dc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* スクロールコンテナ */
+        .edit-scroll-container {
+            flex: 1;
+            overflow: auto;
+            min-height: 0;
+        }
+
+        /* 編集用テーブル */
+        .edit-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        }
+        .edit-table th {
+            background: #e67e22;
+            color: white;
+            padding: 10px 12px;
+            text-align: left;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border: 1px solid #d35400;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .edit-table th.row-no {
+            background: #34495e;
+            width: 50px;
+            text-align: center;
+        }
+        .edit-table th.actions-col {
+            width: 120px;
+            text-align: center;
+        }
+        .edit-table td {
+            padding: 8px 12px;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .edit-table td.editable {
+            cursor: text;
+            background: #fffef5;
+        }
+        .edit-table td.editable:hover {
+            background: #fef9e7;
+            box-shadow: inset 0 0 0 1px #f39c12;
+        }
+        .edit-table tr:nth-child(even) td {
+            background-color: #f9fafb;
+        }
+        .edit-table tr:hover td {
+            background-color: #fef5e7;
+        }
+        .edit-table .row-no {
+            background: #ecf0f1;
+            color: #7f8c8d;
+            text-align: center;
+            font-size: 11px;
+            user-select: none;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .edit-table .null-val {
+            color: #e74c3c;
+            font-style: italic;
+            opacity: 0.7;
+        }
+        .edit-table .actions-col {
+            text-align: center;
+            position: sticky;
+            right: 0;
+            background: #fafbfc;
+            border-left: 2px solid #ddd;
+        }
+        .edit-table tr:nth-child(even) .actions-col {
+            background-color: #f5f6f7;
+        }
+        .edit-table tr:hover .actions-col {
+            background-color: #fef5e7;
+        }
+
+        /* セル編集モード */
+        .edit-table td input {
+            width: 100%;
+            padding: 4px 8px;
+            border: 2px solid #e67e22;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+
+        /* アクションボタン */
+        .action-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 0 2px;
+        }
+        .btn-save {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-cancel {
+            background: #95a5a6;
+            color: white;
+        }
+        .btn-delete {
+            background: #e74c3c;
+            color: white;
+        }
+
+        /* ローディング */
+        .edit-loading {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e67e22;
+            font-size: 14px;
+            gap: 10px;
+        }
+        .edit-loading .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #ddd;
+            border-top-color: #e67e22;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* メッセージ表示 */
+        #result {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        #result.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        #result.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5vh auto;
+            padding: 0;
+            border: 1px solid #888;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .modal-header {
+            padding: 20px 20px 10px;
+            flex-shrink: 0;
+            cursor: move;
+            user-select: none;
+            background: linear-gradient(to bottom, #f5f5f5, #ffffff);
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .modal-header h3::before {
+            content: '⋮⋮';
+            color: #95a5a6;
+            font-size: 14px;
+            letter-spacing: -2px;
+        }
+        .modal-body {
+            padding: 10px 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
+            min-height: 0;
+        }
+        .modal-footer {
+            padding: 10px 20px 20px;
+            flex-shrink: 0;
+        }
+        .modal-content input,
+        .modal-content textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .modal-content label {
+            display: block;
+            margin-top: 10px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-confirm {
+            background: #e67e22;
+            color: white;
+        }
+        .btn-cancel-modal {
+            background: #95a5a6;
+            color: white;
+        }
+        .delete-table-modal .modal-content {
+            border: 3px solid #e74c3c;
+        }
+        .delete-table-modal .modal-header h3 {
+            color: #e74c3c;
+        }
+        .delete-warning {
+            background: #ffe5e5;
+            border: 2px solid #e74c3c;
+            color: #c0392b;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .delete-confirmation-input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid #e74c3c;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+        .btn-delete-confirm {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn-delete-confirm:disabled {
+            background: #d5d8dc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* 行追加モーダル専用 */
+        #add-row-fields {
+            max-height: 50vh;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        #add-row-fields input {
+            min-width: 250px;
+        }
+
+        /* SQLクエリモーダル */
+        .sql-query-modal .modal-content {
+            max-width: 800px;
+        }
+        .sql-query-textarea {
+            width: 100%;
+            min-height: 200px;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            resize: vertical;
+            line-height: 1.5;
+            color: #1a1a1a;
+        }
+        .sql-hint {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+            line-height: 1.6;
+        }
+
+        /* SQL結果モーダル */
+        .sql-result-modal .modal-content {
+            max-width: 95%;
+            max-height: 95vh;
+        }
+        .result-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 15px;
+        }
+        .result-tab {
+            padding: 10px 20px;
+            background: #ecf0f1;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            transition: all 0.2s;
+        }
+        .result-tab.active {
+            background: #e67e22;
+            color: white;
+        }
+        .result-tab:hover:not(.active) {
+            background: #d5d8dc;
+        }
+        .result-content {
+            display: none;
+        }
+        .result-content.active {
+            display: block;
+        }
+        .result-table-container {
+            max-height: 60vh;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .result-table th {
+            background: #34495e;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            white-space: nowrap;
+        }
+        .result-table td {
+            padding: 8px 10px;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+        }
+        .result-table tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        .result-table tr:hover {
+            background-color: #fef5e7;
+        }
+        .result-markdown {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 60vh;
+            overflow: auto;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 13px;
+            white-space: pre;
+            color: #1a1a1a;
+            line-height: 1.6;
+        }
+        .result-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+        .copy-btn {
+            padding: 6px 12px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .copy-btn:hover {
+            background: #2980b9;
+        }
+        .copy-btn.copied {
+            background: #27ae60;
+        }
+        .query-error {
+            background: #ffe5e5;
+            border: 2px solid #e74c3c;
+            color: #c0392b;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        /* HTML編集タブ */
+        .html-editor-toolbar {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .html-editor-toolbar button {
+            padding: 6px 12px;
+            border: 1px solid #bdc3c7;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .html-editor-toolbar button:hover {
+            background: #e8e8e8;
+        }
+        .html-editor-toolbar button.active {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+        .html-editor-toolbar input[type="number"] {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .html-editor-toolbar input[type="color"] {
+            width: 50px;
+            height: 30px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .html-editor-toolbar select {
+            padding: 4px 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            font-size: 12px;
+            background: white;
+        }
+        .html-editor-toolbar label {
+            font-size: 12px;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        .toolbar-separator {
+            width: 1px;
+            height: 25px;
+            background: #bdc3c7;
+        }
+        .html-editor-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 50vh;
+            overflow: auto;
+            margin-bottom: 10px;
+        }
+        .editable-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .editable-table th {
+            background: #34495e;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #2c3e50;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            position: relative;
+        }
+        .editable-table td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            cursor: text;
+            min-width: 50px;
+            position: relative;
+        }
+        .editable-table td ul,
+        .editable-table td ol {
+            margin: 0;
+            padding-left: 20px;
+            text-align: left;
+        }
+        .editable-table td blockquote {
+            margin: 0;
+            padding: 5px 10px;
+            border-left: 3px solid #ccc;
+            background: #f9f9f9;
+            font-style: italic;
+        }
+        .editable-table td ruby {
+            ruby-align: center;
+        }
+        .editable-table td rt {
+            font-size: 0.6em;
+            color: #555;
+        }
+        .editable-table td a {
+            color: #3498db;
+            text-decoration: underline;
+        }
+        .editable-table td a:hover {
+            color: #2980b9;
+        }
+        .editable-table td:focus {
+            outline: 2px solid #3498db;
+            background: #ebf5fb;
+        }
+        .editable-table td.selected {
+            background: #d6eaf8 !important;
+            outline: 2px solid #3498db;
+        }
+        .editable-table tr:nth-child(even) td {
+            background-color: #f9fafb;
+        }
+        .editable-table tr:nth-child(even) td.selected {
+            background: #d6eaf8 !important;
+        }
+
+        /* 列幅変更ハンドル */
+        .col-resize-handle {
+            position: absolute;
+            top: 0;
+            width: 8px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 3;
+        }
+        .col-resize-handle:hover {
+            background: rgba(52, 152, 219, 0.3);
+        }
+        .col-resize-handle.left {
+            left: 0;
+        }
+        .col-resize-handle.right {
+            right: 0;
+        }
+        .col-resize-handle:hover::before {
+            content: '⋮';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #3498db;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        /* テーブル全体のリサイズハンドル */
+        .table-resize-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .table-resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, #3498db 50%);
+            border-bottom-right-radius: 4px;
+            z-index: 10;
+        }
+        .table-resize-handle:hover {
+            background: linear-gradient(135deg, transparent 50%, #2980b9 50%);
+        }
+        .table-resize-handle::after {
+            content: '⇲';
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .html-code-container {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 30vh;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #1a1a1a;
+            user-select: text;
+            cursor: text;
+        }
+        .html-code-container::-moz-selection {
+            background: #b3d9ff;
+        }
+        .html-code-container::selection {
+            background: #b3d9ff;
+        }
+        .btn-return {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 14px; background: #ef4444; color: #fff;
+            border-radius: 4px; text-decoration: none; font-size: 13px;
+            font-weight: bold; white-space: nowrap;
+        }
+        .btn-return:hover { background: #dc2626; color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>📝 テーブルマスター</h1>
+    <p>データベーステーブルの閲覧・編集・管理システム
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="/table_master/projects/"
+           style="padding: 6px 14px; background: #8e44ad; color: #fff;
+                  border-radius: 4px; text-decoration: none; font-size: 13px;
+                  font-weight: bold;">
+            📁 プロジェクト
+        </a>
+        &nbsp;
+        <a href="/table_master/archive/"
+           style="padding: 6px 14px; background: #27ae60; color: #fff;
+                  border-radius: 4px; text-decoration: none; font-size: 13px;
+                  font-weight: bold;">
+            📦 アーカイブ管理
+        </a>
+        &nbsp;
+        <a href="/table_master/view_editor/"
+           style="padding: 6px 14px; background: #2e6da4; color: #fff;
+                  border-radius: 4px; text-decoration: none; font-size: 13px;
+                  font-weight: bold;">
+            📋 ビューエディタ
+        </a>
+        &nbsp;
+        <a href="{{ url_for('table_master.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </p>
+    <div class="info-box">
+        ⚠️ <strong>注意:</strong> このツールでテーブルのデータを直接編集できます。重要なデータの変更前にはバックアップを推奨します。
+    </div>
+
+    <div id="result"></div>
+
+    <div class="master-layout">
+        <!-- 左パネル: テーブル一覧 -->
+        <div class="master-list-panel">
+            <div class="master-list-header">
+                🗂️ テーブル一覧
+                <input type="text" id="master-search" placeholder="検索...">
+            </div>
+            <div class="master-list-count" id="master-count">読み込み中...</div>
+            <div class="master-table-list" id="master-table-list">
+                <!-- JS で描画 -->
+            </div>
+        </div>
+
+        <!-- 右パネル: 編集グリッド -->
+        <div class="master-edit-panel" id="master-edit-panel">
+            <div class="edit-placeholder">
+                <div class="placeholder-icon">📋</div>
+                <div>左側のリストからテーブルを選んでください</div>
+                <div style="font-size:12px;">データ編集が可能です</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- テーブル名変更モーダル -->
+    <div id="rename-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>テーブル名変更</h3>
+            </div>
+            <div class="modal-body">
+                <label>現在のテーブル名:</label>
+                <input type="text" id="rename-old-name" readonly style="background:#f5f5f5;">
+                <label>新しいテーブル名:</label>
+                <input type="text" id="rename-new-name" placeholder="新しいテーブル名を入力">
+                <label>変更理由（任意）:</label>
+                <textarea id="rename-reason" placeholder="変更の理由を記録" rows="3"></textarea>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-buttons">
+                    <button class="btn-confirm" id="rename-confirm">変更</button>
+                    <button class="btn-cancel-modal" id="rename-cancel">キャンセル</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 行追加モーダル -->
+    <div id="add-row-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新しい行を追加</h3>
+            </div>
+            <div class="modal-body">
+                <div id="add-row-fields"></div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-buttons">
+                    <button class="btn-confirm" id="add-row-confirm">追加</button>
+                    <button class="btn-cancel-modal" id="add-row-cancel">キャンセル</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- テーブル削除モーダル -->
+    <div id="delete-table-modal" class="modal delete-table-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚠️ テーブル削除 - 危険な操作</h3>
+            </div>
+            <div class="modal-body">
+                <div class="delete-warning">
+                    ⛔ この操作は取り消せません！<br>
+                    テーブルとその中の全データが完全に削除されます。<br>
+                    バックアップがない場合、データを二度と復元できません。
+                </div>
+                <label>削除するテーブル:</label>
+                <input type="text" id="delete-table-database" readonly style="background:#f5f5f5;">
+                <input type="text" id="delete-table-name" readonly style="background:#f5f5f5;">
+                <label>行数:</label>
+                <input type="text" id="delete-table-rows" readonly style="background:#f5f5f5;">
+                <label>確認のため、以下にテーブル名を正確に入力してください:</label>
+                <input type="text" id="delete-table-confirm-name" class="delete-confirmation-input" placeholder="テーブル名を入力">
+                <label>削除理由（記録に残ります）:</label>
+                <textarea id="delete-table-reason" placeholder="削除の理由を入力してください" rows="3"></textarea>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-buttons">
+                    <button class="btn-delete-confirm" id="delete-table-confirm" disabled>完全に削除する</button>
+                    <button class="btn-cancel-modal" id="delete-table-cancel">キャンセル</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQLクエリ実行モーダル -->
+    <div id="sql-query-modal" class="modal sql-query-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔍 SQLクエリ実行</h3>
+            </div>
+            <div class="modal-body">
+                <label>データベース・テーブル:</label>
+                <input type="text" id="sql-query-context" readonly style="background:#f5f5f5;">
+                <label>SQLクエリをここに入力:</label>
+                <textarea id="sql-query-text" class="sql-query-textarea" placeholder="SELECT * FROM `table_name` WHERE ...&#10;SHOW TABLES&#10;DESCRIBE `table_name`&#10;USE database_name; SHOW TABLES;"></textarea>
+                <div class="sql-hint">
+                    💡 SELECT、SHOW、DESCRIBE、EXPLAIN、USE文が使用可能です。<br>
+                    💡 複数のクエリをセミコロン(;)で区切って実行できます。<br>
+                    💡 他のテーブルやデータベースも参照できます（例: `database`.`table`形式）
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-buttons">
+                    <button class="btn-confirm" id="sql-query-execute">実行</button>
+                    <button class="btn-cancel-modal" id="sql-query-cancel">キャンセル</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQL結果表示モーダル -->
+    <div id="sql-result-modal" class="modal sql-result-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📊 クエリ結果</h3>
+            </div>
+            <div class="modal-body">
+                <div class="result-info">
+                    <span id="result-row-count"></span>
+                    <div>
+                        <button class="copy-btn" id="copy-markdown-btn" style="display:none;">📋 Markdownをコピー</button>
+                    </div>
+                </div>
+                <div class="result-tabs">
+                    <button class="result-tab active" data-tab="table">テーブル表示</button>
+                    <button class="result-tab" data-tab="markdown">Markdown表示</button>
+                    <button class="result-tab" data-tab="html">HTML編集</button>
+                </div>
+                <div class="result-content active" id="result-table-view">
+                    <div class="result-table-container">
+                        <table class="result-table" id="result-table"></table>
+                    </div>
+                </div>
+                <div class="result-content" id="result-markdown-view">
+                    <div class="result-markdown" id="result-markdown"></div>
+                </div>
+                <div class="result-content" id="result-html-view">
+                    <div class="html-editor-toolbar">
+                        <label>テーブル幅:</label>
+                        <input type="number" id="input-table-width" min="100" max="2000" step="50" placeholder="px">
+                        <select id="select-table-width-unit">
+                            <option value="px">px</option>
+                            <option value="%">%</option>
+                            <option value="auto">自動</option>
+                        </select>
+                        <button id="btn-apply-table-width">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <button id="btn-merge-cells" title="選択したセルを結合">🔗 結合</button>
+                        <button id="btn-unmerge-cells" title="セル結合を解除">⛓️‍💥 解除</button>
+                        <div class="toolbar-separator"></div>
+                        <label>水平:</label>
+                        <button id="btn-align-left" title="左寄せ">⬅️</button>
+                        <button id="btn-align-center" title="中央揃え">↔️</button>
+                        <button id="btn-align-right" title="右寄せ">➡️</button>
+                        <label>垂直:</label>
+                        <button id="btn-valign-top" title="上寄せ">⬆️</button>
+                        <button id="btn-valign-middle" title="中央">↕️</button>
+                        <button id="btn-valign-bottom" title="下寄せ">⬇️</button>
+                        <div class="toolbar-separator"></div>
+                        <label>文字装飾:</label>
+                        <button id="btn-text-bold" title="太字"><b>B</b></button>
+                        <button id="btn-text-underline" title="下線"><u>U</u></button>
+                        <button id="btn-text-sup" title="上付き">X<sup>2</sup></button>
+                        <button id="btn-text-sub" title="下付き">H<sub>2</sub>O</button>
+                        <label>色:</label>
+                        <input type="color" id="input-text-color" value="#000000">
+                        <button id="btn-apply-text-color" title="文字色を適用">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <label>ふりがな:</label>
+                        <input type="text" id="input-ruby-text" placeholder="よみがな" style="width:80px;">
+                        <button id="btn-apply-ruby" title="選択テキストにふりがな">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <label>リンク:</label>
+                        <input type="text" id="input-link-url" placeholder="https://..." style="width:150px;">
+                        <button id="btn-apply-link" title="選択テキストにリンク">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <label>MD変換:</label>
+                        <button id="btn-md-itemize" title="箇条書き (- で始まる行)">• リスト</button>
+                        <button id="btn-md-enumerate" title="番号付き (1. で始まる行)">1. 番号</button>
+                        <button id="btn-md-quote" title="引用 (> で始まる行)">❝ 引用</button>
+                        <button id="btn-md-clear" title="MD書式をクリア">✕ クリア</button>
+                        <div class="toolbar-separator"></div>
+                        <label>ぶら下げ:</label>
+                        <input type="number" id="input-hanging-indent" min="0" max="100" step="0.5" placeholder="em" value="1.5" style="width:60px;">
+                        <select id="select-hanging-unit">
+                            <option value="em">em</option>
+                            <option value="pt">pt</option>
+                        </select>
+                        <button id="btn-apply-hanging" title="テキストの1行目以降をインデント">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <label>背景色:</label>
+                        <input type="color" id="input-bg-color" value="#ffffff">
+                        <button id="btn-apply-bg-color" title="背景色を適用">適用</button>
+                        <button id="btn-clear-bg-color" title="背景色をクリア">✕</button>
+                        <div class="toolbar-separator"></div>
+                        <label>枠線:</label>
+                        <select id="select-border-style" title="選択中のセルに適用する枠線">
+                            <option value="1px solid #ddd">標準</option>
+                            <option value="none">なし</option>
+                            <option value="1px solid #000">細線(黒)</option>
+                            <option value="2px solid #000">太線(黒)</option>
+                            <option value="3px double #000">二重線</option>
+                            <option value="1px dashed #000">破線</option>
+                            <option value="1px dotted #000">点線</option>
+                        </select>
+                        <button id="btn-apply-border" title="選択中のセルに枠線を適用">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <label>列幅:</label>
+                        <input type="number" id="input-col-width" min="50" max="500" step="10" placeholder="px">
+                        <button id="btn-apply-col-width">適用</button>
+                        <label>行高:</label>
+                        <input type="number" id="input-row-height" min="20" max="200" step="5" placeholder="px">
+                        <button id="btn-apply-row-height">適用</button>
+                        <div class="toolbar-separator"></div>
+                        <button id="btn-reset-styles">🔄 リセット</button>
+                    </div>
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; margin-bottom: 10px; border-radius: 4px; font-size: 12px;">
+                        💡 <strong>文字装飾:</strong> セル内のテキストを選択 → 太字/下線/上付き/下付き/色ボタンをクリック<br>
+                        💡 <strong>ふりがな:</strong> 漢字などを選択 → ふりがな入力 → 「適用」（例：<ruby>漢字<rt>かんじ</rt></ruby>）<br>
+                        💡 <strong>リンク:</strong> テキストを選択 → URL入力 → 「適用」<br>
+                        💡 <strong>枠線:</strong> セルを選択 → 枠線の種類を選択 → 「適用」<br>
+                        💡 <strong>MD変換:</strong> セル内でテキスト編集 → セルを選択 → MD変換ボタン<br>
+                        💡 <strong>ぶら下げ:</strong>
+                        <span style="color: #d35400;">【方法1】</span>セル内のテキストをドラッグで選択 → インデント幅を指定 → 「適用」（選択部分のみ）<br>
+                        <span style="margin-left: 5em; color: #d35400;">【方法2】</span>セル全体を選択 → インデント幅を指定 → 「適用」（セル全体）<br>
+                        💡 <strong>テーブルサイズ:</strong> 右下の⇲ハンドルをドラッグで全体サイズ変更
+                    </div>
+                    <div class="html-editor-container">
+                        <div class="table-resize-wrapper" id="table-resize-wrapper">
+                            <table class="editable-table" id="editable-table"></table>
+                            <div class="table-resize-handle" id="table-resize-handle"></div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <button class="copy-btn" id="copy-html-btn-top" style="padding: 8px 20px; font-size: 14px; font-weight: bold;">
+                                📋 HTMLコードをクリップボードにコピー
+                            </button>
+                            <!-- ★ 追加ボタン -->
+                            <button id="btn-save-archive"
+                                onclick="openArchiveSaveDialog()"
+                                style="padding: 8px 20px; font-size: 14px; font-weight: bold;
+                                       background: #27ae60; color: #fff; border: none;
+                                       border-radius: 4px; cursor: pointer;">
+                                📦 アーカイブに保存
+                            </button>
+                        </div>
+                        <span style="color: #7f8c8d; font-size: 12px;">
+                            ※自動生成されたHTMLコード（編集すると即座に更新されます）
+                        </span>
+                    </div>
+                    <div style="font-weight: 600; margin-bottom: 5px; color: #2c3e50; font-size: 13px;">
+                        生成されたHTMLコード:
+                    </div>
+                    <div class="html-code-container" id="html-code"><!-- HTMLコードがここに表示されます --></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-buttons">
+                    <button class="btn-confirm" id="sql-result-requery">再度クエリ実行</button>
+                    <button class="btn-cancel-modal" id="sql-result-close">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ★ アーカイブ保存ダイアログ -->
+    <div id="archive-save-overlay"
+         style="display:none; position:fixed; inset:0;
+                background:rgba(0,0,0,.5); z-index:10000;"
+         onclick="closeArchiveSaveDialog()"></div>
+
+    <div id="archive-save-dialog"
+         style="display:none; position:fixed;
+                top:50%; left:50%; transform:translate(-50%,-50%);
+                width:440px; max-width:90vw;
+                background:#fff; border-radius:8px;
+                box-shadow:0 8px 32px rgba(0,0,0,.3); z-index:10001;
+                font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;">
+
+      <!-- ヘッダー -->
+      <div style="background:#1a3a5c; color:#fff; padding:12px 16px;
+                  border-radius:8px 8px 0 0; display:flex;
+                  align-items:center; justify-content:space-between;">
+        <span style="font-size:15px; font-weight:700;">📦 アーカイブに保存</span>
+        <button onclick="closeArchiveSaveDialog()"
+                style="background:none; border:none; color:#fff;
+                       font-size:20px; cursor:pointer; line-height:1;">✕</button>
+      </div>
+
+      <!-- フォーム -->
+      <div style="padding:20px;">
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:5px;">
+            タイトル <span style="color:#e74c3c">*</span>
+          </label>
+          <input type="text" id="archive-title-input"
+                 placeholder="例: 役員一覧 2024年度"
+                 style="width:100%; padding:8px 10px; border:1px solid #ccc;
+                        border-radius:4px; font-size:14px; box-sizing:border-box;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:5px;">
+            説明（任意）
+          </label>
+          <textarea id="archive-desc-input" rows="2"
+                    placeholder="出典・備考など..."
+                    style="width:100%; padding:8px 10px; border:1px solid #ccc;
+                           border-radius:4px; font-size:13px; box-sizing:border-box;
+                           resize:vertical;"></textarea>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:5px;">
+            公開設定
+          </label>
+          <select id="archive-public-select"
+                  style="padding:6px 10px; border:1px solid #ccc;
+                         border-radius:4px; font-size:13px;">
+            <option value="1">公開</option>
+            <option value="0">非公開（下書き）</option>
+          </select>
+        </div>
+
+        <!-- 保存後URL表示欄 -->
+        <div id="archive-save-result" style="display:none; margin-bottom:14px;
+             background:#eafaf1; border:1px solid #a9dfbf; border-radius:4px; padding:10px;">
+          <div style="font-size:12px; color:#1e8449; font-weight:600; margin-bottom:4px;">
+            ✓ 保存しました
+          </div>
+          <div style="font-size:12px; color:#555; margin-bottom:4px;">公開URL:</div>
+          <a id="archive-saved-url" href="#" target="_blank"
+             style="font-size:13px; color:#2e6da4; word-break:break-all;"></a>
+        </div>
+
+        <div id="archive-save-error" style="display:none; margin-bottom:14px;
+             background:#fdf2f2; border:1px solid #f5c6cb; border-radius:4px;
+             padding:10px; color:#c0392b; font-size:13px;"></div>
+
+      </div>
+
+      <!-- フッター -->
+      <div style="padding:10px 20px 16px; display:flex; gap:8px; justify-content:flex-end;">
+        <button onclick="closeArchiveSaveDialog()"
+                style="padding:8px 18px; background:#bdc3c7; color:#fff;
+                       border:none; border-radius:4px; cursor:pointer; font-size:13px;">
+          キャンセル
+        </button>
+        <button id="btn-do-archive-save" onclick="doArchiveSave()"
+                style="padding:8px 24px; background:#27ae60; color:#fff;
+                       border:none; border-radius:4px; cursor:pointer;
+                       font-size:14px; font-weight:700;">
+          💾 保存
+        </button>
+      </div>
+    </div>
+    {% if session.get('user_category') in ['admin'] %}
+        <a href="{{ url_for('admin.dashboard') }}" class="back-button">管理者ダッシュボードに戻る</a>
+    {% else %}
+        <a href="{{ url_for('guest.dashboard') }}" class="back-button">ダッシュボードに戻る</a>
+    {% endif %}
+
+    <script>
+    let currentTable = null;  // グローバルに昇格
+
+    $(document).ready(function() {
+        let allTables = [];
+        let currentData = null;
+        let editingCell = null;
+
+        // Undo/Redo履歴管理
+        const MAX_HISTORY = 10;
+        let undoStack = [];
+        let redoStack = [];
+
+        // ===========================================
+        // Undo/Redo 履歴管理
+        // ===========================================
+
+        function addToHistory(action) {
+            undoStack.push(action);
+            if (undoStack.length > MAX_HISTORY) {
+                undoStack.shift(); // 古い履歴を削除
+            }
+            redoStack = []; // 新しい操作でredoスタックをクリア
+            updateUndoRedoButtons();
+        }
+
+        function updateUndoRedoButtons() {
+            $('#btn-undo').prop('disabled', undoStack.length === 0);
+            $('#btn-redo').prop('disabled', redoStack.length === 0);
+        }
+
+        function clearHistory() {
+            undoStack = [];
+            redoStack = [];
+            updateUndoRedoButtons();
+        }
+
+        function performUndo() {
+            if (undoStack.length === 0) return;
+
+            const action = undoStack.pop();
+
+            // 現在の状態をredoスタックに保存
+            const currentState = {
+                type: 'REDO_' + action.type,
+                database: action.database,
+                table: action.table,
+                data: action.newData,
+                oldData: action.data,
+                whereClause: action.whereClause,
+                timestamp: new Date()
+            };
+            redoStack.push(currentState);
+
+            // Undo実行
+            executeUndoAction(action);
+            updateUndoRedoButtons();
+        }
+
+        function performRedo() {
+            if (redoStack.length === 0) return;
+
+            const action = redoStack.pop();
+
+            // 現在の状態をundoスタックに戻す
+            const currentState = {
+                type: action.type.replace('REDO_', ''),
+                database: action.database,
+                table: action.table,
+                data: action.oldData,
+                newData: action.data,
+                whereClause: action.whereClause,
+                timestamp: new Date()
+            };
+            undoStack.push(currentState);
+
+            // Redo実行
+            executeRedoAction(action);
+            updateUndoRedoButtons();
+        }
+
+        function executeUndoAction(action) {
+            if (action.type === 'UPDATE') {
+                // UPDATE操作のundo → 元の値に戻す
+                $.ajax({
+                    url: '{{ url_for("table_master.update_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        where_clause: action.whereClause,
+                        updates: action.data
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Undo: 更新を元に戻しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                        } else {
+                            showResult('Undo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Undo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            } else if (action.type === 'DELETE') {
+                // DELETE操作のundo → 行を復元
+                $.ajax({
+                    url: '{{ url_for("table_master.insert_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        row_data: action.data
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Undo: 削除を元に戻しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                            loadTableList(); // 件数更新
+                        } else {
+                            showResult('Undo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Undo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            } else if (action.type === 'INSERT') {
+                // INSERT操作のundo → 行を削除
+                $.ajax({
+                    url: '{{ url_for("table_master.delete_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        where_clause: action.whereClause
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Undo: 追加を取り消しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                            loadTableList(); // 件数更新
+                        } else {
+                            showResult('Undo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Undo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            }
+        }
+
+        function executeRedoAction(action) {
+            const actionType = action.type.replace('REDO_', '');
+
+            if (actionType === 'UPDATE') {
+                // UPDATE操作のredo
+                $.ajax({
+                    url: '{{ url_for("table_master.update_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        where_clause: action.whereClause,
+                        updates: action.data
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Redo: 更新を再実行しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                        } else {
+                            showResult('Redo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Redo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            } else if (actionType === 'DELETE') {
+                // DELETE操作のredo
+                $.ajax({
+                    url: '{{ url_for("table_master.delete_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        where_clause: action.whereClause
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Redo: 削除を再実行しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                            loadTableList(); // 件数更新
+                        } else {
+                            showResult('Redo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Redo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            } else if (actionType === 'INSERT') {
+                // INSERT操作のredo
+                $.ajax({
+                    url: '{{ url_for("table_master.insert_row") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        database: action.database,
+                        table_name: action.table,
+                        row_data: action.data
+                    }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            showResult('Redo: 追加を再実行しました', false);
+                            loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                            loadTableList(); // 件数更新
+                        } else {
+                            showResult('Redo失敗: ' + resp.error, true);
+                        }
+                    },
+                    error: function(xhr) {
+                        showResult('Redo失敗: ' + xhr.responseText, true);
+                    }
+                });
+            }
+        }
+
+        // Undo/Redoボタンのクリックイベント
+        $(document).on('click', '#btn-undo', performUndo);
+        $(document).on('click', '#btn-redo', performRedo);
+
+        // キーボードショートカット
+        $(document).keydown(function(e) {
+            // Ctrl+Z (Windows/Linux) または Cmd+Z (Mac)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                performUndo();
+            }
+            // Ctrl+Y (Windows/Linux) または Cmd+Shift+Z (Mac)
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+                e.preventDefault();
+                performRedo();
+            }
+        });
+
+        // ===========================================
+        // ユーティリティ
+        // ===========================================
+        function escapeHtml(s) {
+            return $('<span>').text(s).html();
+        }
+
+        function showResult(message, isError) {
+            const $result = $('#result');
+            $result.text(message)
+                   .removeClass('success error')
+                   .addClass(isError ? 'error' : 'success')
+                   .show();
+            setTimeout(() => $result.fadeOut(), 5000);
+        }
+
+        // ===========================================
+        // テーブル一覧読み込み
+        // ===========================================
+        function loadTableList() {
+            $('#master-table-list').html('<div style="padding:20px;color:#999;text-align:center;">読み込み中...</div>');
+            $.ajax({
+                url: '{{ url_for("table_master.get_all_tables") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        allTables = resp.tables;
+                        renderTableList();
+                    } else {
+                        showResult('テーブル一覧取得エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('テーブル一覧取得エラー: ' + xhr.responseText, true);
+                }
+            });
+
+        }
+
+        // テーブル一覧描画
+        function renderTableList() {
+            const kw = $('#master-search').val().toLowerCase();
+            const $list = $('#master-table-list');
+            $list.empty();
+
+            let filteredTables = allTables;
+            if (kw) {
+                filteredTables = allTables.filter(t =>
+                    t.table_name.toLowerCase().includes(kw) ||
+                    t.database.toLowerCase().includes(kw)
+                );
+            }
+
+            // データベースごとにグループ化
+            const byDb = {};
+            filteredTables.forEach(t => {
+                (byDb[t.database] = byDb[t.database] || []).push(t);
+            });
+
+            let total = 0;
+            Object.keys(byDb).sort().forEach(db => {
+                $list.append(`<div class="master-group-header">📁 ${escapeHtml(db)}</div>`);
+                byDb[db].sort((a,b) => a.table_name.localeCompare(b.table_name)).forEach(t => {
+                    const key = `${t.database}:${t.table_name}`;
+                    const selClass = (currentTable && currentTable.key === key) ? ' selected' : '';
+                    $list.append(`
+                        <div class="master-item${selClass}" data-key="${key}" data-database="${escapeHtml(t.database)}" data-table="${escapeHtml(t.table_name)}" data-rows="${t.row_count}">
+                            <span class="item-table">${escapeHtml(t.table_name)}</span>
+                            <span class="item-rows">${t.row_count}行</span>
+                            <button class="item-delete-btn" data-database="${escapeHtml(t.database)}" data-table="${escapeHtml(t.table_name)}" data-rows="${t.row_count}">🗑️</button>
+                        </div>
+                    `);
+                    total++;
+                });
+            });
+
+            $('#master-count').text(`${total} テーブル`);
+
+            if (total === 0) {
+                $list.append('<div style="padding:30px;color:#999;text-align:center;">該当テーブルはありません</div>');
+            }
+        }
+
+        // 検索
+        $('#master-search').on('input', renderTableList);
+
+        // テーブル選択
+        $(document).on('click', '.master-item', function(e) {
+            // 削除ボタンクリック時はテーブル選択しない
+            if ($(e.target).hasClass('item-delete-btn')) {
+                return;
+            }
+
+            const $item = $(this);
+            const key = $item.data('key');
+            const db = $item.data('database');
+            const table = $item.data('table');
+
+            $('.master-item').removeClass('selected');
+            $item.addClass('selected');
+
+            // 新しいテーブルを開く際、履歴をクリア
+            clearHistory();
+
+            loadTableData(db, table, key);
+        });
+
+        // ===========================================
+        // テーブル削除
+        // ===========================================
+        $(document).on('click', '.item-delete-btn', function(e) {
+            e.stopPropagation(); // 親の.master-itemクリックを防ぐ
+
+            const $btn = $(this);
+            const database = $btn.data('database');
+            const tableName = $btn.data('table');
+            const rowCount = $btn.data('rows');
+
+            // モーダル内容を設定
+            $('#delete-table-database').val(database);
+            $('#delete-table-name').val(tableName);
+            $('#delete-table-rows').val(rowCount + ' 行');
+            $('#delete-table-confirm-name').val('');
+            $('#delete-table-reason').val('');
+            $('#delete-table-confirm').prop('disabled', true);
+
+            $('#delete-table-modal').show();
+            makeModalDraggable();
+        });
+
+        // テーブル名入力確認
+        $('#delete-table-confirm-name').on('input', function() {
+            const inputName = $(this).val();
+            const targetName = $('#delete-table-name').val();
+            $('#delete-table-confirm').prop('disabled', inputName !== targetName);
+        });
+
+        // テーブル削除実行
+        $('#delete-table-confirm').click(function() {
+            const database = $('#delete-table-database').val();
+            const tableName = $('#delete-table-name').val();
+            const reason = $('#delete-table-reason').val().trim();
+
+            if (!reason) {
+                alert('削除理由を入力してください');
+                return;
+            }
+
+            // 最終確認
+            if (!confirm(`本当に「${database}.${tableName}」を削除しますか？\nこの操作は絶対に取り消せません！`)) {
+                return;
+            }
+
+            $.ajax({
+                url: '{{ url_for("table_master.delete_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: database,
+                    table_name: tableName,
+                    reason: reason
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        $('#delete-table-modal').hide();
+
+                        // 削除したテーブルが選択中だった場合、右パネルをクリア
+                        if (currentTable && currentTable.database === database && currentTable.tableName === tableName) {
+                            currentTable = null;
+                            $('#master-edit-panel').html(`
+                                <div class="edit-placeholder">
+                                    <div class="placeholder-icon">📋</div>
+                                    <div>左側のリストからテーブルを選んでください</div>
+                                    <div style="font-size:12px;">データ編集が可能です</div>
+                                </div>
+                            `);
+                        }
+
+                        // テーブルリストを更新
+                        loadTableList();
+                    } else {
+                        showResult('削除エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('削除エラー: ' + xhr.responseText, true);
+                }
+            });
+        });
+
+        $('#delete-table-cancel').click(function() {
+            $('#delete-table-modal').hide();
+            $('#delete-table-modal .modal-content').css({position: '', left: '', top: '', margin: ''});
+        });
+
+        // ===========================================
+        // テーブルデータ読み込み
+        // ===========================================
+        function loadTableData(database, tableName, key) {
+            currentTable = { key, database, tableName };
+
+            $('#master-edit-panel').html(`
+                <div class="edit-loading">
+                    <div class="spinner"></div>
+                    データを取得中...
+                </div>
+            `);
+
+            $.ajax({
+                url: '{{ url_for("table_master.get_table_data") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ database, table_name: tableName }),
+                success: function(resp) {
+                    if (resp.success) {
+                        currentData = resp;
+                        renderEditGrid();
+                    } else {
+                        showEditError(resp.error);
+                    }
+                },
+                error: function(xhr) {
+                    showEditError(xhr.responseJSON?.error || xhr.responseText);
+                }
+            });
+        }
+
+        function showEditError(msg) {
+            $('#master-edit-panel').html(`
+                <div class="edit-placeholder">
+                    <div style="color:#e74c3c;font-size:16px;">❌ エラー</div>
+                    <div>${escapeHtml(msg)}</div>
+                </div>
+            `);
+        }
+
+        // ===========================================
+        // 編集グリッド描画
+        // ===========================================
+        function renderEditGrid() {
+            const { columns, rows, total_count, fetched_count, primary_keys } = currentData;
+
+            // ツールバー
+            let toolbarHtml = `
+                <div class="edit-toolbar">
+                    <span class="toolbar-title">${escapeHtml(currentTable.database)}.${escapeHtml(currentTable.tableName)}</span>
+                    <span style="font-size:12px;color:#7f8c8d;">全 ${total_count} 行（表示 ${fetched_count} 行）</span>
+                    <button class="btn-undo" id="btn-undo" disabled>↩️ Undo</button>
+                    <button class="btn-redo" id="btn-redo" disabled>↪️ Redo</button>
+                    <button class="btn-add" id="btn-add-row">➕ 行を追加</button>
+                    <button class="btn-rename" id="btn-rename-table">✏️ テーブル名変更</button>
+                    <button class="btn-refresh" id="btn-refresh">🔄 再読込</button>
+                    <button style="background:#9b59b6;color:white;" id="btn-sql-query">🔍 SQLクエリ</button>
+                </div>
+            `;
+
+            // テーブルヘッダー
+            let thHtml = '<th class="row-no">#</th>';
+            columns.forEach(col => {
+                const isPK = primary_keys.includes(col);
+                thHtml += `<th>${escapeHtml(col)}${isPK ? ' 🔑' : ''}</th>`;
+            });
+            thHtml += '<th class="actions-col">操作</th>';
+
+            // テーブルボディ
+            let tbodyHtml = '';
+            rows.forEach((row, idx) => {
+                let tdHtml = `<td class="row-no">${idx + 1}</td>`;
+                columns.forEach(col => {
+                    const val = row[col];
+                    const isPK = primary_keys.includes(col);
+                    const editableClass = isPK ? '' : 'editable';
+
+                    if (val === null || val === undefined) {
+                        tdHtml += `<td class="${editableClass}" data-col="${escapeHtml(col)}" data-idx="${idx}"><span class="null-val">NULL</span></td>`;
+                    } else {
+                        const str = String(val);
+                        tdHtml += `<td class="${editableClass}" data-col="${escapeHtml(col)}" data-idx="${idx}">${escapeHtml(str)}</td>`;
+                    }
+                });
+                tdHtml += `<td class="actions-col"><button class="action-btn btn-delete" data-idx="${idx}">✕ 削除</button></td>`;
+                tbodyHtml += `<tr>${tdHtml}</tr>`;
+            });
+
+            $('#master-edit-panel').html(`
+                ${toolbarHtml}
+                <div class="edit-scroll-container">
+                    <table class="edit-table">
+                        <thead><tr>${thHtml}</tr></thead>
+                        <tbody>${tbodyHtml}</tbody>
+                    </table>
+                </div>
+            `);
+        }
+
+        // ===========================================
+        // セル編集
+        // ===========================================
+        $(document).on('dblclick', '.edit-table td.editable', function() {
+            if (editingCell) return; // 既に編集中なら無視
+
+            const $td = $(this);
+            editingCell = $td;
+
+            const originalValue = $td.text().trim() === 'NULL' ? '' : $td.text();
+            const col = $td.data('col');
+            const idx = $td.data('idx');
+
+            $td.html(`<input type="text" value="${escapeHtml(originalValue)}" data-original="${escapeHtml(originalValue)}">`);
+            $td.find('input').focus().select();
+        });
+
+        // Enter/Escapeキー
+        $(document).on('keydown', '.edit-table td input', function(e) {
+            if (e.key === 'Enter') {
+                saveCell($(this).closest('td'));
+            } else if (e.key === 'Escape') {
+                cancelCellEdit($(this).closest('td'));
+            }
+        });
+
+        // フォーカスアウト時に保存
+        $(document).on('blur', '.edit-table td input', function() {
+            saveCell($(this).closest('td'));
+        });
+
+        function saveCell($td) {
+            if (!editingCell) return;
+
+            const $input = $td.find('input');
+            const newValue = $input.val();
+            const originalValue = $input.data('original');
+
+            if (newValue === originalValue) {
+                // 変更なし
+                $td.html(escapeHtml(originalValue) || '<span class="null-val">NULL</span>');
+                editingCell = null;
+                return;
+            }
+
+            const col = $td.data('col');
+            const idx = $td.data('idx');
+            const row = currentData.rows[idx];
+
+            // WHERE句を構築（主キーを使用）
+            const whereClause = {};
+            currentData.primary_keys.forEach(pk => {
+                whereClause[pk] = row[pk];
+            });
+
+            if (Object.keys(whereClause).length === 0) {
+                showResult('主キーがないため更新できません', true);
+                cancelCellEdit($td);
+                return;
+            }
+
+            // 履歴に記録（更新前のデータ）
+            const historyAction = {
+                type: 'UPDATE',
+                database: currentTable.database,
+                table: currentTable.tableName,
+                data: { [col]: originalValue || null },  // 元の値
+                newData: { [col]: newValue || null },    // 新しい値
+                whereClause: whereClause,
+                timestamp: new Date()
+            };
+
+            // 更新実行
+            $.ajax({
+                url: '{{ url_for("table_master.update_row") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: currentTable.database,
+                    table_name: currentTable.tableName,
+                    where_clause: whereClause,
+                    updates: { [col]: newValue || null }
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        $td.html(escapeHtml(newValue) || '<span class="null-val">NULL</span>');
+                        row[col] = newValue || null; // ローカルデータ更新
+                        showResult('更新しました', false);
+
+                        // 履歴に追加
+                        addToHistory(historyAction);
+                    } else {
+                        showResult('更新エラー: ' + resp.error, true);
+                        cancelCellEdit($td);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('更新エラー: ' + xhr.responseText, true);
+                    cancelCellEdit($td);
+                }
+            });
+
+            editingCell = null;
+        }
+
+        function cancelCellEdit($td) {
+            const $input = $td.find('input');
+            const originalValue = $input.data('original');
+            $td.html(escapeHtml(originalValue) || '<span class="null-val">NULL</span>');
+            editingCell = null;
+        }
+
+        // ===========================================
+        // 行削除
+        // ===========================================
+        $(document).on('click', '.btn-delete', function() {
+            const idx = $(this).data('idx');
+            const row = currentData.rows[idx];
+
+            const whereClause = {};
+            currentData.primary_keys.forEach(pk => {
+                whereClause[pk] = row[pk];
+            });
+
+            if (Object.keys(whereClause).length === 0) {
+                showResult('主キーがないため削除できません', true);
+                return;
+            }
+
+            if (!confirm('この行を削除しますか？')) return;
+
+            // 履歴に記録（削除前のデータを完全保存）
+            const historyAction = {
+                type: 'DELETE',
+                database: currentTable.database,
+                table: currentTable.tableName,
+                data: {...row},  // 行全体をコピー
+                whereClause: whereClause,
+                timestamp: new Date()
+            };
+
+            $.ajax({
+                url: '{{ url_for("table_master.delete_row") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: currentTable.database,
+                    table_name: currentTable.tableName,
+                    where_clause: whereClause
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+
+                        // 履歴に追加
+                        addToHistory(historyAction);
+
+                        loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                        loadTableList(); // 件数更新
+                    } else {
+                        showResult('削除エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('削除エラー: ' + xhr.responseText, true);
+                }
+            });
+        });
+
+        // ===========================================
+        // 行追加
+        // ===========================================
+        $(document).on('click', '#btn-add-row', function() {
+            const { columns, columns_info, primary_keys } = currentData;
+
+            let fieldsHtml = '';
+            columns.forEach(col => {
+                const colInfo = columns_info.find(c => c.Field === col);
+                const isPK = primary_keys.includes(col);
+                const isAutoInc = colInfo && colInfo.Extra && colInfo.Extra.includes('auto_increment');
+
+                if (isAutoInc) {
+                    fieldsHtml += `
+                        <div style="margin-bottom: 15px;">
+                            <label>${escapeHtml(col)} <small>(自動採番)</small></label>
+                            <input type="text" data-col="${escapeHtml(col)}" value="AUTO" readonly style="background:#f5f5f5;">
+                        </div>
+                    `;
+                } else {
+                    fieldsHtml += `
+                        <div style="margin-bottom: 15px;">
+                            <label>${escapeHtml(col)}${isPK ? ' 🔑' : ''}</label>
+                            <input type="text" data-col="${escapeHtml(col)}" placeholder="値を入力">
+                        </div>
+                    `;
+                }
+            });
+
+            $('#add-row-fields').html(fieldsHtml);
+            $('#add-row-modal').show();
+            makeModalDraggable();
+        });
+
+        $('#add-row-confirm').click(function() {
+            const rowData = {};
+            $('#add-row-fields input').each(function() {
+                const col = $(this).data('col');
+                const val = $(this).val();
+                if (val !== 'AUTO') {
+                    rowData[col] = val || null;
+                }
+            });
+
+            $.ajax({
+                url: '{{ url_for("table_master.insert_row") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: currentTable.database,
+                    table_name: currentTable.tableName,
+                    row_data: rowData
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        $('#add-row-modal').hide();
+
+                        // 履歴に記録（追加された行を特定するため、主キーを含める）
+                        const whereClause = {};
+                        currentData.primary_keys.forEach(pk => {
+                            if (pk in rowData) {
+                                whereClause[pk] = rowData[pk];
+                            } else if (resp.inserted_id) {
+                                // AUTO_INCREMENTの場合
+                                whereClause[pk] = resp.inserted_id;
+                            }
+                        });
+
+                        const historyAction = {
+                            type: 'INSERT',
+                            database: currentTable.database,
+                            table: currentTable.tableName,
+                            data: {...rowData},
+                            whereClause: whereClause,
+                            timestamp: new Date()
+                        };
+                        addToHistory(historyAction);
+
+                        loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+                        loadTableList(); // 件数更新
+                    } else {
+                        showResult('追加エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('追加エラー: ' + xhr.responseText, true);
+                }
+            });
+        });
+
+        $('#add-row-cancel').click(function() {
+            $('#add-row-modal').hide();
+            $('#add-row-modal .modal-content').css({position: '', left: '', top: '', margin: ''});
+        });
+
+        // ===========================================
+        // テーブル名変更
+        // ===========================================
+        $(document).on('click', '#btn-rename-table', function() {
+            $('#rename-old-name').val(currentTable.tableName);
+            $('#rename-new-name').val('');
+            $('#rename-reason').val('');
+            $('#rename-modal').show();
+            makeModalDraggable();
+        });
+
+        $('#rename-confirm').click(function() {
+            const newName = $('#rename-new-name').val().trim();
+            const reason = $('#rename-reason').val().trim();
+
+            if (!newName) {
+                showResult('新しいテーブル名を入力してください', true);
+                return;
+            }
+
+            if (!confirm(`テーブル名を「${currentTable.tableName}」→「${newName}」に変更しますか？`)) return;
+
+            $.ajax({
+                url: '{{ url_for("table_master.rename_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: currentTable.database,
+                    old_table_name: currentTable.tableName,
+                    new_table_name: newName,
+                    reason: reason
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        $('#rename-modal').hide();
+
+                        // テーブル名を更新してリロード
+                        currentTable.tableName = newName;
+                        loadTableList();
+                        loadTableData(currentTable.database, newName, `${currentTable.database}:${newName}`);
+                    } else {
+                        showResult('変更エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('変更エラー: ' + xhr.responseText, true);
+                }
+            });
+        });
+
+        $('#rename-cancel').click(function() {
+            $('#rename-modal').hide();
+            $('#rename-modal .modal-content').css({position: '', left: '', top: '', margin: ''});
+        });
+
+        // ===========================================
+        // SQLクエリ実行
+        // ===========================================
+        $(document).on('click', '#btn-sql-query', function() {
+            if (!currentTable) return;
+
+            $('#sql-query-context').val(`${currentTable.database}.${currentTable.tableName}`);
+
+            // 全カラムを列挙したクエリを生成
+            const { columns, primary_keys } = currentData;
+            const columnList = columns.map(col => `\n    \`${col}\``).join(',');
+
+            // ORDER BY句（主キーがあればそれを使用、なければ最初のカラム）
+            const orderByCol = primary_keys.length > 0 ? primary_keys[0] : columns[0];
+
+            const defaultQuery = `SELECT${columnList}
+FROM \`${currentTable.tableName}\`
+ORDER BY \`${orderByCol}\`
+LIMIT 100;`;
+
+            $('#sql-query-text').val(defaultQuery);
+            $('#sql-query-modal').show();
+            makeModalDraggable();
+        });
+
+        $('#sql-query-execute').click(function() {
+            const query = $('#sql-query-text').val().trim();
+
+            if (!query) {
+                showResult('クエリを入力してください', true);
+                return;
+            }
+
+            // 許可する文のみ実行（複数クエリ対応）
+            const queries = query.split(';').map(q => q.trim()).filter(q => q);
+            const queryLower = queries.map(q => q.toLowerCase());
+            const allowedCommands = ['select', 'show', 'describe', 'desc', 'explain', 'use'];
+
+            for (let i = 0; i < queryLower.length; i++) {
+                const isAllowed = allowedCommands.some(cmd => queryLower[i].startsWith(cmd));
+                if (!isAllowed) {
+                    showResult('SELECT、SHOW、DESCRIBE、EXPLAIN、USE文のみ実行可能です', true);
+                    return;
+                }
+            }
+
+            // 実行
+            $.ajax({
+                url: '{{ url_for("table_master.execute_query") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: currentTable.database,
+                    query: query
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        $('#sql-query-modal').hide();
+                        displayQueryResult(resp, query);
+                    } else {
+                        showResult('クエリエラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    const errorMsg = xhr.responseJSON?.error || xhr.responseText;
+                    showResult('クエリエラー: ' + errorMsg, true);
+                }
+            });
+        });
+
+        $('#sql-query-cancel').click(function() {
+            $('#sql-query-modal').hide();
+            // 位置をリセット
+            $('#sql-query-modal .modal-content').css({position: '', left: '', top: '', margin: ''});
+        });
+
+        // 結果表示
+        function displayQueryResult(data, originalQuery) {
+            const { columns, rows, execution_time } = data;
+
+            // 行数情報
+            $('#result-row-count').text(`${rows.length} 行 (実行時間: ${execution_time}秒)`);
+
+            // テーブル表示
+            let tableHtml = '<thead><tr>';
+            columns.forEach(col => {
+                tableHtml += `<th>${escapeHtml(col)}</th>`;
+            });
+            tableHtml += '</tr></thead><tbody>';
+
+            rows.forEach(row => {
+                tableHtml += '<tr>';
+                columns.forEach(col => {
+                    const val = row[col];
+                    if (val === null || val === undefined) {
+                        tableHtml += '<td style="color:#e74c3c;font-style:italic;">NULL</td>';
+                    } else {
+                        tableHtml += `<td>${escapeHtml(String(val))}</td>`;
+                    }
+                });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody>';
+            $('#result-table').html(tableHtml);
+
+            // Markdown表示
+            const markdown = generateMarkdownTable(columns, rows);
+            $('#result-markdown').text(markdown);
+
+            // HTML編集テーブルを生成
+            generateEditableTable(columns, rows);
+
+            // モーダル表示
+            $('#sql-result-modal').show();
+            makeModalDraggable();
+
+            // HTMLコードを初回生成（即座に実行）
+            setTimeout(function() {
+                console.log('Generating initial HTML code...');
+                updateHtmlCode();
+            }, 100);
+
+            // 再クエリ用に保存
+            $('#sql-result-modal').data('last-query', originalQuery);
+        }
+
+        // 編集可能なテーブルを生成
+        function generateEditableTable(columns, rows) {
+            let html = '<thead><tr>';
+            columns.forEach((col, idx) => {
+                html += `<th data-col-idx="${idx}">
+                    <div class="col-resize-handle left" data-col-idx="${idx}"></div>
+                    ${escapeHtml(col)}
+                    <div class="col-resize-handle right" data-col-idx="${idx}"></div>
+                </th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            rows.forEach((row, rowIdx) => {
+                html += `<tr data-row-idx="${rowIdx}">`;
+                columns.forEach((col, colIdx) => {
+                    const val = row[col];
+                    const displayVal = (val === null || val === undefined) ? '' : escapeHtml(String(val));
+                    html += `<td contenteditable="true" data-row-idx="${rowIdx}" data-col-idx="${colIdx}">${displayVal}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+
+            $('#editable-table').html(html);
+
+            // セル選択機能を追加
+            setupCellSelection();
+
+            // 列幅変更ハンドルを設定
+            setupColumnResize();
+
+            // テーブル全体のリサイズを設定
+            setupTableResize();
+
+            // HTMLコード更新（内部でエラーハンドリング済み）
+            updateHtmlCode();
+        }
+
+        // テーブル全体のリサイズ機能
+        function setupTableResize() {
+            let isResizing = false;
+            let startX = 0;
+            let startY = 0;
+            let startWidth = 0;
+            let startHeight = 0;
+
+            $('#table-resize-handle').off('mousedown').on('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                isResizing = true;
+                const $table = $('#editable-table');
+
+                startX = e.pageX;
+                startY = e.pageY;
+                startWidth = $table.outerWidth();
+                startHeight = $table.outerHeight();
+
+                $(document).on('mousemove.tableresize', function(e) {
+                    if (!isResizing) return;
+
+                    const diffX = e.pageX - startX;
+                    const diffY = e.pageY - startY;
+
+                    let newWidth = startWidth + diffX;
+                    let newHeight = startHeight + diffY;
+
+                    // 最小サイズ
+                    if (newWidth < 200) newWidth = 200;
+                    if (newHeight < 100) newHeight = 100;
+
+                    $table.css({
+                        'width': newWidth + 'px',
+                        'height': newHeight + 'px'
+                    });
+                });
+
+                $(document).on('mouseup.tableresize', function() {
+                    if (isResizing) {
+                        isResizing = false;
+                        $(document).off('mousemove.tableresize mouseup.tableresize');
+                        updateHtmlCode();
+                    }
+                });
+            });
+        }
+
+        // セル選択機能
+        let selectedCells = [];
+
+        // 列幅変更機能
+        function setupColumnResize() {
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+            let $currentCol = null;
+            let colIdx = -1;
+
+            $('.col-resize-handle').off('mousedown').on('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                isResizing = true;
+                const $handle = $(this);
+                colIdx = parseInt($handle.data('col-idx'));
+                $currentCol = $(`#editable-table th[data-col-idx="${colIdx}"]`);
+
+                startX = e.pageX;
+                startWidth = $currentCol.outerWidth();
+
+                $(document).on('mousemove.colresize', function(e) {
+                    if (!isResizing) return;
+
+                    const diff = e.pageX - startX;
+                    let newWidth = startWidth + diff;
+
+                    // 最小幅を設定
+                    if (newWidth < 50) newWidth = 50;
+
+                    // 列全体に幅を適用
+                    $(`#editable-table th[data-col-idx="${colIdx}"]`).css('width', newWidth + 'px');
+                    $(`#editable-table td[data-col-idx="${colIdx}"]`).css('width', newWidth + 'px');
+                });
+
+                $(document).on('mouseup.colresize', function() {
+                    if (isResizing) {
+                        isResizing = false;
+                        $(document).off('mousemove.colresize mouseup.colresize');
+                        updateHtmlCode();
+                    }
+                });
+            });
+        }
+
+        function setupCellSelection() {
+            $('#editable-table td').off('click').on('click', function(e) {
+                const $cell = $(this);
+
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl/Cmd + クリック: 複数選択
+                    $cell.toggleClass('selected');
+                } else if (e.shiftKey && selectedCells.length > 0) {
+                    // Shift + クリック: 範囲選択
+                    const lastCell = selectedCells[selectedCells.length - 1];
+                    selectRange(lastCell, $cell);
+                } else {
+                    // 通常クリック: 単一選択
+                    $('#editable-table td').removeClass('selected');
+                    $cell.addClass('selected');
+                }
+
+                updateSelectedCells();
+            });
+
+            // ダブルクリックで編集モード（contenteditableを有効化）
+            $('#editable-table td').off('dblclick').on('dblclick', function(e) {
+                e.stopPropagation();
+                const $cell = $(this);
+                $cell.attr('contenteditable', 'true').focus();
+            });
+
+            // セル編集時の処理を改善
+            $('#editable-table td').off('blur').on('blur', function() {
+                // 編集完了時にHTMLコード更新
+                setTimeout(function() {
+                    updateHtmlCode();
+                }, 50);
+            });
+
+            // 入力時にHTMLコード更新
+            $('#editable-table td').off('input').on('input', function() {
+                // 少し遅延させて更新
+                clearTimeout(window.htmlUpdateTimer);
+                window.htmlUpdateTimer = setTimeout(function() {
+                    updateHtmlCode();
+                }, 300);
+            });
+        }
+
+        function updateSelectedCells() {
+            selectedCells = $('#editable-table td.selected').toArray();
+        }
+
+        function selectRange(cell1, cell2) {
+            const $cell1 = $(cell1);
+            const $cell2 = $(cell2);
+
+            const row1 = parseInt($cell1.data('row-idx'));
+            const row2 = parseInt($cell2.data('row-idx'));
+            const col1 = parseInt($cell1.data('col-idx'));
+            const col2 = parseInt($cell2.data('col-idx'));
+
+            const minRow = Math.min(row1, row2);
+            const maxRow = Math.max(row1, row2);
+            const minCol = Math.min(col1, col2);
+            const maxCol = Math.max(col1, col2);
+
+            $('#editable-table td').removeClass('selected');
+
+            for (let r = minRow; r <= maxRow; r++) {
+                for (let c = minCol; c <= maxCol; c++) {
+                    $(`#editable-table td[data-row-idx="${r}"][data-col-idx="${c}"]`).addClass('selected');
+                }
+            }
+        }
+
+        // ===========================================
+        // 文字装飾機能
+        // ===========================================
+
+        // 選択テキストにタグを適用する共通関数
+        function applyTagToSelection(tagName, attributes = {}) {
+            const selection = window.getSelection();
+
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                showResult('テキストを選択してください', true);
+                return false;
+            }
+
+            try {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+
+                // タグを作成
+                const tag = document.createElement(tagName);
+
+                // 属性を設定
+                for (let attr in attributes) {
+                    tag.setAttribute(attr, attributes[attr]);
+                }
+
+                tag.textContent = selectedText;
+
+                // 選択範囲を削除して新しいタグを挿入
+                range.deleteContents();
+                range.insertNode(tag);
+
+                // 選択を解除
+                selection.removeAllRanges();
+
+                updateHtmlCode();
+                return true;
+
+            } catch (error) {
+                console.error('applyTagToSelection error:', error);
+                showResult('テキスト装飾の適用に失敗しました', true);
+                return false;
+            }
+        }
+
+        // 太字
+        $('#btn-text-bold').click(function() {
+            if (applyTagToSelection('b')) {
+                showResult('太字を適用しました', false);
+            }
+        });
+
+        // 下線
+        $('#btn-text-underline').click(function() {
+            if (applyTagToSelection('u')) {
+                showResult('下線を適用しました', false);
+            }
+        });
+
+        // 上付き文字
+        $('#btn-text-sup').click(function() {
+            if (applyTagToSelection('sup')) {
+                showResult('上付き文字を適用しました', false);
+            }
+        });
+
+        // 下付き文字
+        $('#btn-text-sub').click(function() {
+            if (applyTagToSelection('sub')) {
+                showResult('下付き文字を適用しました', false);
+            }
+        });
+
+        // 文字色
+        $('#btn-apply-text-color').click(function() {
+            const color = $('#input-text-color').val();
+            if (applyTagToSelection('span', {'style': 'color: ' + color})) {
+                showResult('文字色を適用しました', false);
+            }
+        });
+
+        // ふりがな（ルビ）
+        $('#btn-apply-ruby').click(function() {
+            const rubyText = $('#input-ruby-text').val().trim();
+
+            if (!rubyText) {
+                showResult('ふりがなを入力してください', true);
+                return;
+            }
+
+            const selection = window.getSelection();
+
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                showResult('テキストを選択してください', true);
+                return;
+            }
+
+            try {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+
+                // <ruby>タグを作成
+                const ruby = document.createElement('ruby');
+                ruby.textContent = selectedText;
+
+                const rt = document.createElement('rt');
+                rt.textContent = rubyText;
+                ruby.appendChild(rt);
+
+                // 選択範囲を削除して新しいタグを挿入
+                range.deleteContents();
+                range.insertNode(ruby);
+
+                // 選択を解除
+                selection.removeAllRanges();
+
+                // 入力欄をクリア
+                $('#input-ruby-text').val('');
+
+                updateHtmlCode();
+                showResult('ふりがなを適用しました', false);
+
+            } catch (error) {
+                console.error('Ruby application error:', error);
+                showResult('ふりがなの適用に失敗しました', true);
+            }
+        });
+
+        // リンク
+        $('#btn-apply-link').click(function() {
+            const url = $('#input-link-url').val().trim();
+
+            if (!url) {
+                showResult('URLを入力してください', true);
+                return;
+            }
+
+            if (applyTagToSelection('a', {'href': url, 'target': '_blank'})) {
+                showResult('リンクを適用しました', false);
+                // 入力欄をクリア
+                $('#input-link-url').val('');
+            }
+        });
+
+        // ===========================================
+        // HTML編集機能
+        // ===========================================
+
+        // テーブル幅設定
+        $('#btn-apply-table-width').click(function() {
+            const width = $('#input-table-width').val();
+            const unit = $('#select-table-width-unit').val();
+
+            const $table = $('#editable-table');
+
+            if (unit === 'auto') {
+                $table.css('width', 'auto');
+            } else if (width) {
+                $table.css('width', width + unit);
+            } else {
+                showResult('幅を入力してください', true);
+                return;
+            }
+
+            updateHtmlCode();
+        });
+
+        // セル結合
+        $('#btn-merge-cells').click(function() {
+            if (selectedCells.length < 2) {
+                showResult('2つ以上のセルを選択してください', true);
+                return;
+            }
+
+            // 選択範囲を計算
+            const rows = selectedCells.map(c => parseInt($(c).data('row-idx')));
+            const cols = selectedCells.map(c => parseInt($(c).data('col-idx')));
+
+            const minRow = Math.min(...rows);
+            const maxRow = Math.max(...rows);
+            const minCol = Math.min(...cols);
+            const maxCol = Math.max(...cols);
+
+            const rowspan = maxRow - minRow + 1;
+            const colspan = maxCol - minCol + 1;
+
+            // 最初のセルにrowspan/colspanを設定
+            const $firstCell = $(`#editable-table td[data-row-idx="${minRow}"][data-col-idx="${minCol}"]`);
+
+            if (rowspan > 1) $firstCell.attr('rowspan', rowspan);
+            if (colspan > 1) $firstCell.attr('colspan', colspan);
+
+            // 他のセルを非表示
+            selectedCells.forEach(cell => {
+                const $cell = $(cell);
+                const r = parseInt($cell.data('row-idx'));
+                const c = parseInt($cell.data('col-idx'));
+
+                if (r !== minRow || c !== minCol) {
+                    $cell.hide().attr('data-merged', 'true');
+                }
+            });
+
+            $('#editable-table td').removeClass('selected');
+            updateHtmlCode();
+        });
+
+        // セル結合解除
+        $('#btn-unmerge-cells').click(function() {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            selectedCells.forEach(cell => {
+                const $cell = $(cell);
+                $cell.removeAttr('rowspan').removeAttr('colspan');
+            });
+
+            // 非表示セルを再表示
+            $('#editable-table td[data-merged="true"]').show().removeAttr('data-merged');
+
+            updateHtmlCode();
+        });
+
+        // 配置設定
+        $('#btn-align-left').click(function() {
+            applyAlignment('left');
+        });
+
+        $('#btn-align-center').click(function() {
+            applyAlignment('center');
+        });
+
+        $('#btn-align-right').click(function() {
+            applyAlignment('right');
+        });
+
+        // 垂直配置
+        $('#btn-valign-top').click(function() {
+            applyVerticalAlignment('top');
+        });
+
+        $('#btn-valign-middle').click(function() {
+            applyVerticalAlignment('middle');
+        });
+
+        $('#btn-valign-bottom').click(function() {
+            applyVerticalAlignment('bottom');
+        });
+
+        function applyAlignment(align) {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            selectedCells.forEach(cell => {
+                $(cell).css('text-align', align);
+            });
+
+            updateHtmlCode();
+        }
+
+        function applyVerticalAlignment(valign) {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            selectedCells.forEach(cell => {
+                $(cell).css('vertical-align', valign);
+            });
+
+            updateHtmlCode();
+        }
+
+        // Markdown変換機能
+        $('#btn-md-itemize').click(function() {
+            applyMarkdownFormat('itemize');
+        });
+
+        $('#btn-md-enumerate').click(function() {
+            applyMarkdownFormat('enumerate');
+        });
+        $('#btn-md-clear').click(function() {
+            applyMarkdownFormat('clear');
+        });
+
+        // ぶら下げインデント
+        $('#btn-apply-hanging').click(function() {
+            const indent = $('#input-hanging-indent').val();
+            const unit = $('#select-hanging-unit').val();
+
+            if (!indent || parseFloat(indent) <= 0) {
+                showResult('インデント幅を入力してください', true);
+                return;
+            }
+
+            const indentValue = indent + unit;
+
+            // テキスト選択を確認
+            const selection = window.getSelection();
+
+            if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+                // テキストが選択されている場合：選択範囲のみに適用
+                try {
+                    const range = selection.getRangeAt(0);
+
+                    // 選択されたテキストを取得
+                    const selectedText = range.toString();
+
+                    // 改行で分割して各段落に字下げを適用
+                    const paragraphs = selectedText.split('\n').filter(p => p.trim());
+                    const html = paragraphs.map(para =>
+                        `<div style="text-indent: -${indentValue}; padding-left: ${indentValue}; margin-bottom: 0;">${escapeHtml(para.trim())}</div>`
+                    ).join('');
+
+                    // 選択範囲を削除して新しいHTMLを挿入
+                    range.deleteContents();
+                    const fragment = range.createContextualFragment(html);
+                    range.insertNode(fragment);
+
+                    // 選択を解除
+                    selection.removeAllRanges();
+
+                    updateHtmlCode();
+                    showResult('選択したテキストに字下げを適用しました', false);
+
+                } catch (error) {
+                    console.error('Text selection hanging indent error:', error);
+                    showResult('テキスト選択での適用に失敗しました', true);
+                }
+
+            } else if (selectedCells.length > 0) {
+                // セルが選択されている場合：セル全体に適用（従来の動作）
+                selectedCells.forEach(cell => {
+                    const $cell = $(cell);
+                    const text = $cell.text().trim();
+
+                    // 改行で分割して段落ごとに処理
+                    const paragraphs = text.split('\n').filter(p => p.trim());
+
+                    if (paragraphs.length === 0) {
+                        return;
+                    }
+
+                    // 各段落をdivで囲み、ぶら下げインデントを適用
+                    const html = paragraphs.map(para => {
+                        return `<div style="text-indent: -${indentValue}; padding-left: ${indentValue}; margin-bottom: 0;">${escapeHtml(para)}</div>`;
+                    }).join('');
+
+                    $cell.html(html);
+                });
+
+                updateHtmlCode();
+                showResult('セル全体に字下げを適用しました', false);
+
+            } else {
+                showResult('セルを選択するか、セル内のテキストを選択してください', true);
+                return;
+            }
+        });
+
+        function applyMarkdownFormat(format) {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            selectedCells.forEach(cell => {
+                const $cell = $(cell);
+                const text = $cell.text().trim();
+
+                if (format === 'clear') {
+                    // HTML要素を削除してテキストのみに
+                    $cell.html(escapeHtml(text));
+                } else if (format === 'itemize') {
+                    // 箇条書きに変換
+                    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                    const items = lines.map(line => {
+                        // "- " や "* " で始まる場合は除去
+                        return line.replace(/^[-*]\s+/, '');
+                    });
+                    const html = '<ul>' + items.map(item => `<li>${escapeHtml(item)}</li>`).join('') + '</ul>';
+                    $cell.html(html);
+                } else if (format === 'enumerate') {
+                    // 番号付きリストに変換
+                    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                    const items = lines.map(line => {
+                        // "1. " などで始まる場合は除去
+                        return line.replace(/^\d+\.\s+/, '');
+                    });
+                    const html = '<ol>' + items.map(item => `<li>${escapeHtml(item)}</li>`).join('') + '</ol>';
+                    $cell.html(html);
+                } else if (format === 'quote') {
+                    // 引用に変換
+                    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                    const content = lines.map(line => {
+                        // "> " で始まる場合は除去
+                        return line.replace(/^>\s+/, '');
+                    }).join('<br>');
+                    const html = `<blockquote>${content}</blockquote>`;
+                    $cell.html(html);
+                }
+            });
+
+            updateHtmlCode();
+        }
+
+        // 背景色設定
+        $('#btn-apply-bg-color').click(function() {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            const color = $('#input-bg-color').val();
+
+            selectedCells.forEach(cell => {
+                $(cell).css('background-color', color);
+            });
+
+            updateHtmlCode();
+        });
+
+        // 背景色クリア
+        $('#btn-clear-bg-color').click(function() {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            selectedCells.forEach(cell => {
+                $(cell).css('background-color', '');
+            });
+
+            updateHtmlCode();
+        });
+
+        // 枠線設定
+        $('#btn-apply-border').click(function() {
+            if (selectedCells.length === 0) {
+                showResult('セルを選択してください', true);
+                return;
+            }
+
+            const borderStyle = $('#select-border-style').val();
+
+            selectedCells.forEach(cell => {
+                $(cell).css('border', borderStyle);
+            });
+
+            updateHtmlCode();
+        });
+
+        // カラム幅設定
+        $('#btn-apply-col-width').click(function() {
+            const width = $('#input-col-width').val();
+
+            if (!width || selectedCells.length === 0) {
+                showResult('セルを選択して幅を入力してください', true);
+                return;
+            }
+
+            // 選択されたセルの列を取得
+            const cols = [...new Set(selectedCells.map(c => parseInt($(c).data('col-idx'))))];
+
+            cols.forEach(colIdx => {
+                $(`#editable-table td[data-col-idx="${colIdx}"]`).css('width', width + 'px');
+                $(`#editable-table th[data-col-idx="${colIdx}"]`).css('width', width + 'px');
+            });
+
+            updateHtmlCode();
+        });
+
+        // 行高さ設定
+        $('#btn-apply-row-height').click(function() {
+            const height = $('#input-row-height').val();
+
+            if (!height || selectedCells.length === 0) {
+                showResult('セルを選択して高さを入力してください', true);
+                return;
+            }
+
+            // 選択されたセルの行を取得
+            const rows = [...new Set(selectedCells.map(c => parseInt($(c).data('row-idx'))))];
+
+            rows.forEach(rowIdx => {
+                $(`#editable-table tr[data-row-idx="${rowIdx}"] td`).css('height', height + 'px');
+            });
+
+            updateHtmlCode();
+        });
+
+        // スタイルリセット
+        $('#btn-reset-styles').click(function() {
+            if (!confirm('すべてのスタイルと書式をリセットしますか？\n（テキスト内容は保持されます）')) return;
+
+            $('#editable-table td, #editable-table th').each(function() {
+                const $cell = $(this);
+                // テキストのみを抽出
+                const text = $cell.text();
+                // スタイルと属性をクリア
+                $cell.removeAttr('style rowspan colspan data-merged').show();
+                // テキストのみに戻す
+                $cell.text(text);
+            });
+
+            // テーブルの幅もリセット
+            $('#editable-table').removeAttr('style');
+
+            updateHtmlCode();
+        });
+
+        // HTMLコード生成と表示（シンプル版）
+        function updateHtmlCode() {
+            console.log('=== updateHtmlCode called ===');
+
+            const $htmlCode = $('#html-code');
+            if ($htmlCode.length === 0) {
+                console.error('HTML code container not found!');
+                return;
+            }
+
+            const $table = $('#editable-table');
+            if ($table.length === 0) {
+                console.warn('Table not found');
+                $htmlCode.text('<!-- テーブルがまだ生成されていません -->');
+                return;
+            }
+
+            try {
+                // テーブル要素を直接コピー
+                const tableElement = $table[0];
+
+                // outerHTMLを取得
+                let html = tableElement.outerHTML;
+
+                if (!html) {
+                    $htmlCode.text('<!-- HTML取得エラー -->');
+                    return;
+                }
+
+                // 不要な属性を正規表現で削除
+                html = html.replace(/\s*contenteditable="[^"]*"/g, '');
+                html = html.replace(/\s*data-[a-z-]+="[^"]*"/g, '');
+                html = html.replace(/\s*class="selected[^"]*"/g, '');
+
+                // リサイズハンドルのdivを削除
+                html = html.replace(/<div class="col-resize-handle[^>]*>.*?<\/div>/g, '');
+
+                // 改行を追加して見やすく
+                html = html.replace(/></g, '>\n<');
+
+                // インデント追加（シンプル版）
+                const lines = html.split('\n');
+                let formatted = '';
+                let indent = 0;
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
+
+                    if (line.startsWith('</')) {
+                        indent = Math.max(0, indent - 1);
+                    }
+
+                    formatted += '  '.repeat(indent) + line + '\n';
+
+                    if (line.startsWith('<') && !line.startsWith('</') && !line.endsWith('/>') && !line.includes('</')) {
+                        indent++;
+                    }
+                }
+
+                // 表示
+                $htmlCode.text(formatted.trim());
+                console.log('HTML code updated successfully, length:', formatted.length);
+
+            } catch (error) {
+                console.error('Error in updateHtmlCode:', error);
+                $htmlCode.text('<!-- エラー: ' + error.message + ' -->');
+            }
+        }
+
+        // HTML整形（エラーセーフ）
+        function formatHtml(html) {
+            try {
+                if (!html) return '';
+
+                let formatted = '';
+                let indent = 0;
+                const lines = html.split('\n');
+
+                lines.forEach(line => {
+                    line = line.trim();
+                    if (!line) return;
+
+                    // 閉じタグの場合、インデントを減らす
+                    if (line.startsWith('</')) {
+                        indent = Math.max(0, indent - 1);
+                    }
+
+                    // インデントを追加
+                    formatted += '  '.repeat(indent) + line + '\n';
+
+                    // 開きタグの場合
+                    if (line.startsWith('<') && !line.startsWith('</') && !line.endsWith('/>') && !line.includes('</')) {
+                        // 自己閉じタグや同じ行に閉じタグがない場合、インデントを増やす
+                        indent++;
+                    }
+                });
+
+                return formatted.trim();
+            } catch (e) {
+                console.error('formatHtml error:', e);
+                return html; // エラー時は元のHTMLをそのまま返す
+            }
+        }
+
+        // HTMLコードをクリップボードにコピー
+        $('#copy-html-btn-top').click(function() {
+            copyHtmlToClipboard($(this));
+        });
+
+        // HTMLコピー処理
+        function copyHtmlToClipboard($btn) {
+            const html = $('#html-code').text();
+
+            console.log('Copying HTML, length:', html ? html.length : 0);
+
+            if (!html || html.trim() === '' || html.startsWith('エラー') || html.startsWith('<!--')) {
+                showResult('コピーするHTMLがありません', true);
+                return;
+            }
+
+            // まずクリップボードAPIを試す
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(html).then(() => {
+                    $btn.addClass('copied').text('✓ コピー完了');
+                    setTimeout(() => {
+                        $btn.removeClass('copied').text('📋 HTMLコードをクリップボードにコピー');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    // フォールバック
+                    fallbackCopyHtml(html, $btn);
+                });
+            } else {
+                // フォールバック
+                fallbackCopyHtml(html, $btn);
+            }
+        }
+
+        // フォールバックコピー関数
+        function fallbackCopyHtml(text, $btn) {
+            const $temp = $('<textarea>');
+            $temp.css({
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '2em',
+                height: '2em',
+                padding: 0,
+                border: 'none',
+                outline: 'none',
+                boxShadow: 'none',
+                background: 'transparent'
+            });
+            $('body').append($temp);
+            $temp.val(text).select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    $btn.addClass('copied').text('✓ コピー完了');
+                    setTimeout(() => {
+                        $btn.removeClass('copied').text('📋 HTMLコードをクリップボードにコピー');
+                    }, 2000);
+                } else {
+                    showResult('コピーに失敗しました', true);
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                showResult('コピーに失敗しました', true);
+            }
+
+            $temp.remove();
+        }
+
+        // Markdownテーブル生成
+        function generateMarkdownTable(columns, rows) {
+            if (columns.length === 0) {
+                return 'データがありません';
+            }
+
+            // ヘッダー行
+            let md = '| ' + columns.join(' | ') + ' |\n';
+
+            // セパレータ行
+            md += '|' + columns.map(() => ' --- ').join('|') + '|\n';
+
+            // データ行
+            rows.forEach(row => {
+                const values = columns.map(col => {
+                    const val = row[col];
+                    if (val === null || val === undefined) {
+                        return 'NULL';
+                    }
+                    // Markdown特殊文字のエスケープ
+                    return String(val).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+                });
+                md += '| ' + values.join(' | ') + ' |\n';
+            });
+
+            return md;
+        }
+
+        // タブ切り替え
+        $(document).on('click', '.result-tab', function() {
+            const tab = $(this).data('tab');
+
+            $('.result-tab').removeClass('active');
+            $(this).addClass('active');
+
+            $('.result-content').removeClass('active');
+            $(`#result-${tab}-view`).addClass('active');
+
+            // コピーボタンの表示切り替え
+            if (tab === 'markdown') {
+                $('#copy-markdown-btn').show();
+            } else {
+                $('#copy-markdown-btn').hide();
+            }
+
+            // HTML編集タブに切り替えたときにHTMLコードを更新
+            if (tab === 'html') {
+                // 即座に更新
+                console.log('Tab switched to HTML, updating code...');
+                updateHtmlCode();
+            }
+        });
+
+        // Markdownコピー
+        $('#copy-markdown-btn').click(function() {
+            const markdown = $('#result-markdown').text();
+
+            navigator.clipboard.writeText(markdown).then(() => {
+                const $btn = $(this);
+                $btn.addClass('copied').text('✓ コピー完了');
+                setTimeout(() => {
+                    $btn.removeClass('copied').text('📋 Markdownをコピー');
+                }, 2000);
+            }).catch(err => {
+                showResult('コピーに失敗しました', true);
+            });
+        });
+
+        // 再クエリ実行
+        $('#sql-result-requery').click(function() {
+            const lastQuery = $('#sql-result-modal').data('last-query');
+            if (lastQuery) {
+                $('#sql-result-modal').hide();
+                $('#sql-query-text').val(lastQuery);
+                $('#sql-query-modal').show();
+            }
+        });
+
+        $('#sql-result-close').click(function() {
+            $('#sql-result-modal').hide();
+            $('#sql-result-modal .modal-content').css({position: '', left: '', top: '', margin: ''});
+
+            // 選択状態をリセット
+            selectedCells = [];
+            $('#editable-table td').removeClass('selected');
+
+            // タブを最初に戻す
+            $('.result-tab').removeClass('active');
+            $('.result-tab[data-tab="table"]').addClass('active');
+            $('.result-content').removeClass('active');
+            $('#result-table-view').addClass('active');
+            $('#copy-markdown-btn').hide();
+        });
+
+        // ===========================================
+        // 再読込
+        // ===========================================
+        $(document).on('click', '#btn-refresh', function() {
+            if (currentTable) {
+                loadTableData(currentTable.database, currentTable.tableName, currentTable.key);
+            }
+        });
+
+        // ===========================================
+        // モーダルのドラッグ機能
+        // ===========================================
+        function makeModalDraggable() {
+            $('.modal-header').off('mousedown').on('mousedown', function(e) {
+                const $modal = $(this).closest('.modal-content');
+                const $modalParent = $modal.parent();
+
+                // モーダルを絶対配置に変更（初回のみ）
+                if ($modal.css('position') !== 'absolute') {
+                    const rect = $modal[0].getBoundingClientRect();
+                    $modal.css({
+                        position: 'absolute',
+                        left: rect.left + 'px',
+                        top: rect.top + 'px',
+                        margin: 0
+                    });
+                }
+
+                const startX = e.pageX - parseInt($modal.css('left'));
+                const startY = e.pageY - parseInt($modal.css('top'));
+
+                function handleMouseMove(e) {
+                    $modal.css({
+                        left: (e.pageX - startX) + 'px',
+                        top: (e.pageY - startY) + 'px'
+                    });
+                }
+
+                function handleMouseUp() {
+                    $(document).off('mousemove', handleMouseMove);
+                    $(document).off('mouseup', handleMouseUp);
+                }
+
+                $(document).on('mousemove', handleMouseMove);
+                $(document).on('mouseup', handleMouseUp);
+
+                e.preventDefault();
+            });
+        }
+
+        // ===========================================
+        // 初期化
+        // ===========================================
+        loadTableList();
+
+        // ★ Enterキーはここ（ready内の末尾）に1回だけ
+        $('#archive-title-input').on('keydown', function(e) {
+            if (e.key === 'Enter') doArchiveSave();
+        });
+    });
+
+    // ===== アーカイブ保存 =====
+
+    function openArchiveSaveDialog() {
+        const html = $('#html-code').text().trim();
+        if (!html || html === '<!-- HTMLコードがここに表示されます -->') {
+            alert('HTMLコードがありません。先にクエリを実行してHTML編集タブを開いてください。');
+            return;
+        }
+        $('#archive-title-input').val('');
+        $('#archive-desc-input').val('');
+        $('#archive-public-select').val('1');
+        $('#archive-save-result').hide();
+        $('#archive-save-error').hide();
+        $('#btn-do-archive-save').prop('disabled', false).text('💾 保存');
+        $('#archive-save-overlay, #archive-save-dialog').show();
+        setTimeout(() => $('#archive-title-input').focus(), 100);
+    }
+
+    function closeArchiveSaveDialog() {
+        $('#archive-save-overlay, #archive-save-dialog').hide();
+    }
+
+    function doArchiveSave() {
+        const title = $('#archive-title-input').val().trim();
+        if (!title) {
+            $('#archive-title-input').css('border-color', '#e74c3c').focus();
+            setTimeout(() => $('#archive-title-input').css('border-color', '#ccc'), 2000);
+            return;
+        }
+        const html      = $('#html-code').text().trim();
+        const desc      = $('#archive-desc-input').val().trim();
+        const isPublic  = $('#archive-public-select').val() === '1';
+        const sourceDb = (typeof currentTable !== 'undefined' && currentTable)
+                         ? currentTable.database : '';
+        const sourceQ  = $('#sql-result-modal').data('last-query') || '';
+
+        $('#btn-do-archive-save').prop('disabled', true).text('保存中...');
+        $('#archive-save-error').hide();
+
+        $.ajax({
+            url: '/table_master/archive/save',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                id:              null,
+                title:           title,
+                description:     desc,
+                source_view_id:  null,
+                source_database: sourceDb,
+                source_query:    sourceQ,
+                html_content:    html,
+                is_public:       isPublic
+            }),
+            success: function(res) {
+                if (res.success) {
+                    const url = window.location.origin + '/table_master/archive/' + res.archive_number;
+                    $('#archive-saved-url').attr('href', url).text(url);
+                    $('#archive-save-result').show();
+                    $('#btn-do-archive-save').prop('disabled', true).text('✓ 保存済み');
+                } else {
+                    $('#archive-save-error').text('エラー: ' + res.error).show();
+                    $('#btn-do-archive-save').prop('disabled', false).text('💾 保存');
+                }
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON?.error || '通信エラーが発生しました';
+                $('#archive-save-error').text(msg).show();
+                $('#btn-do-archive-save').prop('disabled', false).text('💾 保存');
+            }
+        });
+
+    }
+
+    </script>
+</body>
+</html>

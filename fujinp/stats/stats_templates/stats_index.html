@@ -1,0 +1,2081 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>利用統計 - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 8vw, 4rem);
+            color: white;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            font-weight: 800;
+        }
+
+        .subtitle {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0.5rem;
+        }
+
+        .user-greeting {
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .info-banner {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            line-height: 1.6;
+        }
+
+        .info-banner strong {
+            color: #ffd700;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #764ba2;
+            margin: 0.5rem 0;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .active-users-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s;
+        }
+
+        .user-item:hover {
+            background: #f8f9fa;
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .user-category {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        .category-admin {
+            background: #ffd700;
+            color: #333;
+        }
+
+        .category-guest {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .user-time {
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .chart-container {
+            margin-top: 1rem;
+            height: 200px;
+        }
+
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            height: 150px;
+            gap: 4px;
+        }
+
+        .bar {
+            flex: 1;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            transition: all 0.3s ease;
+            min-height: 2px;
+        }
+
+        .bar:hover {
+            opacity: 0.8;
+            transform: scaleY(1.05);
+        }
+
+        .bar-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.7rem;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .bar-value {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #764ba2;
+            white-space: nowrap;
+        }
+
+        .badges-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin-top: 1rem;
+        }
+
+        .badge {
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            padding: 0.6rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #333;
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+            animation: bounce 0.5s ease-out;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .badge-desc {
+            font-size: 0.75rem;
+            font-weight: normal;
+            opacity: 0.8;
+        }
+
+        .ranking-table {
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .ranking-table th {
+            text-align: left;
+            padding: 0.8rem;
+            background: #f8f9fa;
+            color: #667eea;
+            font-weight: 600;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .ranking-table td {
+            padding: 0.8rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .ranking-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .rank-number {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: #764ba2;
+            width: 50px;
+            text-align: center;
+        }
+
+        .rank-medal {
+            font-size: 1.5rem;
+        }
+
+        .close-button {
+            display: inline-block;
+            padding: 15px 40px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin-top: 2rem;
+        }
+
+        .close-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            background: #f8f9fa;
+        }
+
+        .button-container {
+            text-align: center;
+            margin-top: 3rem;
+        }
+
+        .weekday-chart {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 150px;
+            margin-top: 1rem;
+            gap: 8px;
+        }
+
+        .weekday-bar {
+            flex: 1;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 8px 8px 0 0;
+            position: relative;
+            min-height: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .weekday-bar:hover {
+            opacity: 0.8;
+        }
+
+        .weekday-label {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .event-type-list {
+            margin-top: 1rem;
+        }
+
+        .event-type-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .event-type-item:last-child {
+            border-bottom: none;
+        }
+
+        .event-type-name {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .event-type-count {
+            font-weight: 800;
+            color: #764ba2;
+        }
+
+        .daily-chart {
+            margin-top: 1rem;
+        }
+
+        .daily-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.8rem;
+        }
+
+        .daily-date {
+            width: 100px;
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .daily-bar {
+            flex: 1;
+            height: 30px;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            border-radius: 15px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .daily-bar:hover {
+            transform: scaleX(1.02);
+            opacity: 0.9;
+        }
+
+        .daily-count {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .admin-section {
+            margin-top: 3rem;
+            padding-top: 3rem;
+            border-top: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .admin-badge {
+            display: inline-block;
+            background: #ffd700;
+            color: #333;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .ip-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .ip-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.6rem;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+
+        .ip-address {
+            font-family: monospace;
+            color: #667eea;
+        }
+
+        .ip-count {
+            font-weight: 700;
+            color: #764ba2;
+        }
+
+        /* ===== アプリ規模可視化 ===== */
+        .app-size-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            justify-content: space-around;
+            padding: 1rem 0 1.5rem 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 1rem;
+        }
+
+        .app-size-summary-item {
+            text-align: center;
+        }
+
+        .app-size-summary-num {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .app-size-summary-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.2rem;
+        }
+
+        .app-size-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+            margin-top: 0.5rem;
+        }
+
+        .app-size-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 1.4fr) 3fr minmax(80px, auto);
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .app-size-name {
+            font-weight: 600;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .app-size-bar-track {
+            position: relative;
+            background: #f0f0f5;
+            border-radius: 6px;
+            height: 22px;
+            overflow: hidden;
+        }
+
+        .app-size-bar-fill {
+            display: flex;
+            height: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+            transition: width 0.6s ease;
+        }
+
+        .app-size-bar-py {
+            background: linear-gradient(90deg, #667eea, #5568d3);
+            height: 100%;
+        }
+
+        .app-size-bar-html {
+            background: linear-gradient(90deg, #ee9ca7, #ee7752);
+            height: 100%;
+        }
+
+        .app-size-total {
+            font-weight: 700;
+            color: #764ba2;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .app-size-detail {
+            font-size: 0.78rem;
+            color: #888;
+            font-weight: 400;
+            margin-left: 0.4rem;
+        }
+
+        .app-size-legend {
+            display: flex;
+            gap: 1.2rem;
+            justify-content: flex-end;
+            font-size: 0.85rem;
+            color: #555;
+            margin-bottom: 0.8rem;
+        }
+
+        .app-size-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .app-size-legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+        }
+
+        .app-size-legend-py { background: linear-gradient(90deg, #667eea, #5568d3); }
+        .app-size-legend-html { background: linear-gradient(90deg, #ee9ca7, #ee7752); }
+
+        /* Admin: ファイル一覧テーブル */
+        .file-size-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+            font-size: 0.92rem;
+        }
+
+        .file-size-table th {
+            background: #f7f7fb;
+            padding: 0.6rem;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #e0e0eb;
+            font-size: 0.85rem;
+        }
+
+        .file-size-table td {
+            padding: 0.5rem 0.6rem;
+            border-bottom: 1px solid #f0f0f5;
+        }
+
+        .file-size-table tr:hover td {
+            background: #fafaff;
+        }
+
+        .file-size-ext {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .file-size-ext-py {
+            background: #e8eaff;
+            color: #5568d3;
+        }
+
+        .file-size-ext-html {
+            background: #ffeae2;
+            color: #c25a3a;
+        }
+
+        .file-size-lines {
+            font-weight: 700;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: #764ba2;
+        }
+
+        .file-size-subsection-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #555;
+            margin: 1.2rem 0 0.4rem 0;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-size-subsection-title:first-child {
+            margin-top: 0;
+        }
+
+        .file-size-empty {
+            color: #999;
+            font-style: italic;
+            padding: 0.8rem 0;
+            text-align: center;
+        }
+
+        .file-size-table-wrapper {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        /* ===== データベース統計 ===== */
+        .db-stat-block {
+            margin-bottom: 1.8rem;
+        }
+
+        .db-stat-block:last-child {
+            margin-bottom: 0;
+        }
+
+        .db-stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.8rem;
+            border-bottom: 2px solid #e0e0eb;
+        }
+
+        .db-stat-schema {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #5568d3;
+        }
+
+        .db-stat-summary {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .db-stat-summary strong {
+            color: #764ba2;
+            font-weight: 700;
+        }
+
+        .db-table-row {
+            display: grid;
+            grid-template-columns: minmax(140px, 1.4fr) 3fr minmax(110px, auto);
+            align-items: center;
+            gap: 0.8rem;
+            padding: 0.4rem 0;
+        }
+
+        .db-table-row + .db-table-row {
+            border-top: 1px solid #f5f5fa;
+        }
+
+        .db-table-name {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.92rem;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .db-table-bar-track {
+            position: relative;
+            background: #f0f0f5;
+            border-radius: 5px;
+            height: 18px;
+            overflow: hidden;
+        }
+
+        .db-table-bar-fill {
+            background: linear-gradient(90deg, #43cea2, #185a9d);
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.6s ease;
+        }
+
+        .db-table-bar-fill.empty {
+            background: #d8d8e0;
+            min-width: 2px;
+        }
+
+        .db-table-count {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            color: #185a9d;
+        }
+
+        .db-table-size {
+            font-size: 0.75rem;
+            color: #999;
+            font-weight: 400;
+            margin-left: 0.4rem;
+        }
+
+        .db-stat-empty {
+            color: #999;
+            font-style: italic;
+            padding: 1rem 0;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        /* ===== ユーザー別アクセス頻度グラフ ===== */
+        .uaf-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+            margin: 0.5rem 0 1rem 0;
+        }
+
+        .uaf-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .uaf-search {
+            width: 100%;
+            padding: 0.6rem 0.9rem;
+            border: 1px solid #d8d8e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .uaf-search:focus {
+            border-color: #667eea;
+        }
+
+        .uaf-user-list {
+            max-height: 220px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .uaf-list-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #555;
+            margin: 1.4rem 0 0.5rem 0;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .uaf-user-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid #f0f0f5;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-size: 0.92rem;
+        }
+
+        .uaf-user-item:last-child {
+            border-bottom: none;
+        }
+
+        .uaf-user-item:hover {
+            background: #fafaff;
+        }
+
+        .uaf-user-item.hidden {
+            display: none;
+        }
+
+        .uaf-user-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .uaf-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .uaf-user-name {
+            font-weight: 600;
+            color: #333;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .uaf-user-total {
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            color: #764ba2;
+            font-size: 0.85rem;
+        }
+
+        .uaf-zoom-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .uaf-zoom-wrap input[type="range"] {
+            width: 160px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+
+        .uaf-chart-wrap {
+            overflow-x: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #fcfcfe;
+            padding: 0.5rem;
+        }
+
+        .uaf-canvas {
+            display: block;
+            height: 260px;
+        }
+
+        .uaf-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem 1.4rem;
+            margin-top: 1rem;
+        }
+
+        .uaf-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.88rem;
+        }
+
+        .uaf-legend-swatch {
+            width: 16px;
+            height: 4px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .uaf-legend-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .uaf-legend-total {
+            font-weight: 700;
+            color: #764ba2;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .uaf-empty {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 2.5rem 0;
+            font-size: 0.92rem;
+        }
+
+        .uaf-hint {
+            font-size: 0.82rem;
+            color: #888;
+            margin-bottom: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .uaf-clear-btn {
+            padding: 0.45rem 0.9rem;
+            border: 1px solid #d8d8e0;
+            background: white;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .uaf-clear-btn:hover {
+            background: #f8f8fb;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        /* ===== 直近アクセス記録 ===== */
+        .ral-period-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin: 0.5rem 0 1rem 0;
+            flex-wrap: wrap;
+        }
+
+        .ral-period-tab {
+            padding: 0.45rem 1rem;
+            border: 1px solid #d8d8e0;
+            background: white;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .ral-period-tab:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .ral-period-tab.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-color: transparent;
+            color: white;
+            font-weight: 600;
+        }
+
+        .ral-meta {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 0.8rem;
+        }
+
+        .ral-meta strong {
+            color: #764ba2;
+        }
+
+        .ral-list {
+            max-height: 480px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        .ral-row {
+            display: grid;
+            grid-template-columns: 2.2rem minmax(0, 1fr) auto 3.5rem 7.5rem;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.55rem 0.9rem;
+            border-bottom: 1px solid #f0f0f5;
+            font-size: 0.92rem;
+        }
+
+        .ral-row:last-child {
+            border-bottom: none;
+        }
+
+        .ral-row:hover {
+            background: #fafaff;
+        }
+
+        .ral-rank {
+            font-weight: 700;
+            color: #999;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        .ral-name {
+            font-weight: 600;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ral-count {
+            font-weight: 800;
+            color: #764ba2;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            text-align: right;
+        }
+
+        .ral-last {
+            font-size: 0.8rem;
+            color: #999;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        .ral-empty {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 2rem 0;
+            font-size: 0.9rem;
+        }
+
+        .ral-loading {
+            color: #888;
+            text-align: center;
+            padding: 2rem 0;
+            font-size: 0.9rem;
+        }
+        .btn-return {
+            padding: 8px 14px;
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+            transition: 0.2s;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        .btn-return:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="{{ url_for('stats.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <div class="header">
+            <h1>📊 利用統計</h1>
+            <p class="subtitle">FUJIN-P システム統計</p>
+            <p class="user-greeting">{{ user_name }}さん、ようこそ</p>
+        </div>
+
+        <div class="info-banner">
+            ℹ️ <strong>「現在ログイン中」の定義：</strong>
+            最終アクティビティから30分以内のユーザーをアクティブとみなします。
+            これはGoogle Analytics、AWS等の主要Webサービスが採用する標準的な指標です。
+        </div>
+
+        <!-- 全体統計 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h2>📈 総アクセス数</h2>
+                <div class="stat-number">{{ total_stats.total_events | default(0) | int }}</div>
+                <div class="stat-label">Total Events</div>
+            </div>
+
+            <div class="stat-card">
+                <h2>👥 総ユーザー数</h2>
+                <div class="stat-number">{{ total_stats.total_users | default(0) | int }}</div>
+                <div class="stat-label">Active Users</div>
+            </div>
+
+            <div class="stat-card">
+                <h2>📅 今日のアクセス</h2>
+                <div class="stat-number">{{ total_stats.today_events | default(0) | int }}</div>
+                <div class="stat-label">Today's Events</div>
+            </div>
+
+            <div class="stat-card">
+                <h2>📊 今週のアクセス</h2>
+                <div class="stat-number">{{ total_stats.week_events | default(0) | int }}</div>
+                <div class="stat-label">This Week</div>
+            </div>
+        </div>
+
+        <!-- 現在ログイン中のユーザー -->
+        <div class="stat-card">
+            <h2>🟢 現在アクティブ（{{ active_users | length }}名）</h2>
+            {% if active_users %}
+            <div class="active-users-list">
+                {% for user in active_users %}
+                <div class="user-item">
+                    <div>
+                        <span class="user-category category-{{ user.category }}">{{ user.category }}</span>
+                        <span class="user-name">{{ user.full_name }}</span>
+                    </div>
+                    <span class="user-time">{{ user.last_activity.strftime('%H:%M') }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color: #999; margin-top: 1rem;">現在アクティブなユーザーはいません</p>
+            {% endif %}
+        </div>
+
+        <!-- あなたのバッジ -->
+        {% if user_badges %}
+        <div class="stat-card">
+            <h2>🏆 あなたの獲得バッジ</h2>
+            <div class="badges-container">
+                {% for badge in user_badges %}
+                <div class="badge">
+                    {{ badge.name }}
+                    <div class="badge-desc">{{ badge.desc }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 時間帯別分布 -->
+        <div class="stat-card">
+            <h2>🕐 時間帯別アクセス（ピーク: {{ peak_hour }}時）</h2>
+            <div class="chart-container">
+                <div class="bar-chart">
+                    {% for hour in range(24) %}
+                    {% set height = (hourly_dist[hour] / (hourly_dist | max | default(1))) * 100 %}
+                    <div class="bar" style="height: {{ height if height > 0 else 2 }}%">
+                        {% if hourly_dist[hour] > 0 %}
+                        <span class="bar-value">{{ hourly_dist[hour] }}</span>
+                        {% endif %}
+                        {% if hour % 3 == 0 %}
+                        <span class="bar-label">{{ hour }}h</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 曜日別分布 -->
+        <div class="stat-card">
+            <h2>📆 曜日別アクセス分布</h2>
+            <div class="chart-container">
+                <div class="weekday-chart">
+                    {% set max_count = weekday_dist | map(attribute=1) | max | default(1) %}
+                    {% for day_name, count in weekday_dist %}
+                    {% set height = (count / max_count) * 100 %}
+                    <div class="weekday-bar" style="height: {{ height if height > 0 else 5 }}%">
+                        <span class="weekday-label">{{ day_name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 過去7日間の推移 -->
+        <div class="stat-card">
+            <h2>📈 過去7日間のアクセス推移</h2>
+            <div class="daily-chart">
+                {% if daily_stats %}
+                {% set max_daily = daily_stats | map(attribute='count') | max | default(1) %}
+                {% for day in daily_stats %}
+                <div class="daily-item">
+                    <div class="daily-date">{{ day.date.strftime('%m/%d') }}</div>
+                    <div class="daily-bar" style="width: {{ (day.count / max_daily * 100) }}%">
+                        <span class="daily-count">{{ day.count }}件</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p style="color: #999;">データがありません</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- イベントタイプ別分布 -->
+        <div class="stat-card">
+            <h2>🎯 イベントタイプ別分布</h2>
+            <div class="event-type-list">
+                {% for event in event_types %}
+                <div class="event-type-item">
+                    <span class="event-type-name">{{ event.event_type }}</span>
+                    <span class="event-type-count">{{ event.count }}回</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- アプリ規模（コード行数） -->
+        <div class="stat-card">
+            <h2>📦 アプリ規模ランキング（コード行数）</h2>
+            {% if app_sizes %}
+            <div class="app-size-summary">
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ app_sizes|length }}</div>
+                    <div class="app-size-summary-label">アプリ数</div>
+                </div>
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ "{:,}".format(app_sizes_total) }}</div>
+                    <div class="app-size-summary-label">総行数</div>
+                </div>
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ "{:,}".format(app_sizes|sum(attribute='py_lines')) }}</div>
+                    <div class="app-size-summary-label">.py 行数</div>
+                </div>
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ "{:,}".format(app_sizes|sum(attribute='html_lines')) }}</div>
+                    <div class="app-size-summary-label">.html 行数</div>
+                </div>
+            </div>
+
+            <div class="app-size-legend">
+                <div class="app-size-legend-item">
+                    <div class="app-size-legend-swatch app-size-legend-py"></div>
+                    <span>.py</span>
+                </div>
+                <div class="app-size-legend-item">
+                    <div class="app-size-legend-swatch app-size-legend-html"></div>
+                    <span>.html</span>
+                </div>
+            </div>
+
+            <div class="app-size-list">
+                {% for app in app_sizes %}
+                {% set bar_width = (app.total_lines * 100 / app_sizes_max)|round(2) %}
+                {% set py_share = (app.py_lines * 100 / app.total_lines) if app.total_lines > 0 else 0 %}
+                {% set html_share = 100 - py_share %}
+                <div class="app-size-row">
+                    <div class="app-size-name" title="{{ app.name }}">{{ app.name }}</div>
+                    <div class="app-size-bar-track">
+                        <div class="app-size-bar-fill" style="width: {{ bar_width }}%;">
+                            <div class="app-size-bar-py" style="width: {{ py_share }}%;"
+                                 title=".py: {{ app.py_lines }}行 / {{ app.py_files }}ファイル"></div>
+                            <div class="app-size-bar-html" style="width: {{ html_share }}%;"
+                                 title=".html: {{ app.html_lines }}行 / {{ app.html_files }}ファイル"></div>
+                        </div>
+                    </div>
+                    <div class="app-size-total">
+                        {{ "{:,}".format(app.total_lines) }}
+                        <span class="app-size-detail">({{ app.total_files }}f)</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="file-size-empty">
+                {{ '/home/nishida/fujinp' }} にアプリディレクトリが見つかりません。
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- データベース統計（テーブル一覧と行数） -->
+        <div class="stat-card">
+            <h2>🗄️ データベース統計（MySQL テーブルと行数）</h2>
+            {% if db_stats %}
+            <div class="app-size-summary">
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ db_stats|length }}</div>
+                    <div class="app-size-summary-label">データベース数</div>
+                </div>
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ "{:,}".format(db_stats|sum(attribute='totals.table_count')) }}</div>
+                    <div class="app-size-summary-label">総テーブル数</div>
+                </div>
+                <div class="app-size-summary-item">
+                    <div class="app-size-summary-num">{{ "{:,}".format(db_stats|sum(attribute='totals.total_rows')) }}</div>
+                    <div class="app-size-summary-label">総タプル数</div>
+                </div>
+            </div>
+
+            {% for db in db_stats %}
+            <div class="db-stat-block">
+                <div class="db-stat-header">
+                    <span class="db-stat-schema">{{ db.schema }}</span>
+                    <span class="db-stat-summary">
+                        <strong>{{ db.totals.table_count }}</strong> テーブル /
+                        <strong>{{ "{:,}".format(db.totals.total_rows) }}</strong> 行 /
+                        <strong>{{ db.totals.total_bytes_display }}</strong>
+                    </span>
+                </div>
+
+                {% if db.tables %}
+                {% for tbl in db.tables %}
+                {% set bar_pct = (tbl.row_count * 100 / db_stats_max_rows) if db_stats_max_rows > 0 else 0 %}
+                <div class="db-table-row">
+                    <div class="db-table-name" title="{{ tbl.name }}{% if tbl.engine %} ({{ tbl.engine }}){% endif %}">
+                        {{ tbl.name }}
+                    </div>
+                    <div class="db-table-bar-track">
+                        <div class="db-table-bar-fill {% if tbl.row_count == 0 %}empty{% endif %}"
+                             style="width: {{ bar_pct if bar_pct > 0 else 0.3 }}%;"
+                             title="{{ '{:,}'.format(tbl.row_count) }} 行"></div>
+                    </div>
+                    <div class="db-table-count">
+                        {% if tbl.count_failed %}
+                        <span style="color:#c25a3a;">取得失敗</span>
+                        {% else %}
+                        {{ "{:,}".format(tbl.row_count) }}
+                        {% endif %}
+                        <span class="db-table-size">{{ tbl.total_bytes_display }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="db-stat-empty">テーブルが見つかりません</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="db-stat-empty">データベース情報を取得できませんでした</div>
+            {% endif %}
+        </div>
+
+        <!-- Admin専用セクション -->
+        {% if user_category == 'admin' and admin_data %}
+        <div class="admin-section">
+            <div class="admin-badge">🔒 ADMIN専用データ</div>
+
+            <!-- ユーザーランキング -->
+            <div class="stat-card">
+                <h2>🏅 ユーザー別アクセスランキング TOP20</h2>
+                <table class="ranking-table">
+                    <thead>
+                        <tr>
+                            <th>順位</th>
+                            <th>ユーザー名</th>
+                            <th>カテゴリ</th>
+                            <th>アクセス数</th>
+                            <th>最終アクセス</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in admin_data.user_rankings %}
+                        <tr>
+                            <td class="rank-number">
+                                {% if loop.index == 1 %}🥇
+                                {% elif loop.index == 2 %}🥈
+                                {% elif loop.index == 3 %}🥉
+                                {% else %}{{ loop.index }}
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ user.full_name }}</strong></td>
+                            <td><span class="user-category category-{{ user.category }}">{{ user.category }}</span></td>
+                            <td><strong>{{ user.event_count }}</strong>回</td>
+                            <td>{{ user.last_seen.strftime('%Y-%m-%d %H:%M') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- IPアドレス統計 -->
+            <div class="stat-card">
+                <h2>🌐 IPアドレス別アクセス TOP20</h2>
+                <div class="ip-list">
+                    {% for ip_data in admin_data.ip_stats %}
+                    <div class="ip-item">
+                        <span class="ip-address">{{ ip_data.ip_address }}</span>
+                        <span class="ip-count">{{ ip_data.count }}回</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- ユーザー別アクセス頻度（全期間・時系列） -->
+            <div class="stat-card">
+                <h2>📅 ユーザー別アクセス頻度（全期間）</h2>
+                <div class="uaf-hint">
+                    各日のアクセス総数を積み上げ面グラフで表示します。
+                    初期状態ではアクセス総数の多い上位ユーザーを表示しています。
+                    縦軸は実数のアクセス総数。選択したユーザーをオプトイン順に下から色分けして積み、未選択分は「その他」（グレー）として積みます。
+                    横軸は日単位で、スライダーで伸縮できます。一覧のチェックで表示するユーザーを増減できます。
+                </div>
+
+                {% if admin_data.all_users_freq %}
+                <div class="uaf-controls">
+                    <div class="uaf-search-wrap">
+                        <input type="text" class="uaf-search" id="uafSearch"
+                               placeholder="ユーザー名で絞り込み...">
+                    </div>
+                    <button type="button" class="uaf-clear-btn" id="uafTopBtn">上位を再表示</button>
+                    <button type="button" class="uaf-clear-btn" id="uafClearBtn">選択をクリア</button>
+                    <div class="uaf-zoom-wrap">
+                        <span>横軸：</span>
+                        <input type="range" id="uafZoom" min="2" max="40" value="8" step="1">
+                        <span id="uafZoomLabel">8 px/日</span>
+                    </div>
+                </div>
+
+                <div class="uaf-chart-wrap">
+                    <canvas class="uaf-canvas" id="uafCanvas"></canvas>
+                </div>
+                <div class="uaf-empty" id="uafEmpty">ユーザーを選択するとグラフが表示されます。</div>
+                <div class="uaf-legend" id="uafLegend"></div>
+
+                <div class="uaf-list-title">ユーザー一覧（アクセス総数の多い順／チェックで表示）</div>
+                <div class="uaf-user-list" id="uafUserList">
+                    {% for u in admin_data.all_users_freq %}
+                    <label class="uaf-user-item" data-name="{{ u.full_name | lower }}">
+                        <input type="checkbox" class="uaf-user-cb"
+                               value="{{ u.id }}"
+                               data-name="{{ u.full_name }}"
+                               data-total="{{ u.total }}">
+                        <span class="uaf-swatch" data-uid="{{ u.id }}"></span>
+                        <span class="uaf-user-name">{{ u.full_name }}</span>
+                        <span class="user-category category-{{ u.category }}">{{ u.category }}</span>
+                        <span class="uaf-user-total">{{ "{:,}".format(u.total) }}回</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="uaf-empty">アクセス記録のあるユーザーがいません。</div>
+                {% endif %}
+            </div>
+
+            <!-- 直近アクセス記録（全員・打ち切りなし） -->
+            <div class="stat-card">
+                <h2>🕒 直近アクセス記録（ユーザー別・全員）</h2>
+                <div class="uaf-hint">
+                    指定期間内にアクセスしたユーザーを、アクセス回数の多い順に全員表示します（打ち切りなし）。
+                    新機能を組み込むタイミングを計る際の、直近の利用状況の確認用です。
+                </div>
+
+                {% if admin_data.recent_access %}
+                <div class="ral-period-tabs" id="ralTabs">
+                    {% for label, hrs in admin_data.recent_access_periods %}
+                    <button type="button"
+                            class="ral-period-tab{% if hrs == admin_data.recent_access.hours %} active{% endif %}"
+                            data-hours="{{ hrs }}">直近{{ label }}</button>
+                    {% endfor %}
+                </div>
+
+                <div class="ral-meta" id="ralMeta">
+                    <strong id="ralUserCount">{{ admin_data.recent_access.users | length }}</strong> 人がアクセス
+                    ／ 集計起点：<span id="ralCutoff">{{ admin_data.recent_access.cutoff }}</span> 以降
+                </div>
+
+                <div class="ral-loading" id="ralLoading" style="display:none;">読み込み中...</div>
+
+                <div class="ral-list" id="ralList">
+                    {% if admin_data.recent_access.users %}
+                    {% for u in admin_data.recent_access.users %}
+                    <div class="ral-row">
+                        <span class="ral-rank">{{ loop.index }}</span>
+                        <span class="ral-name">{{ u.full_name }}</span>
+                        <span class="user-category category-{{ u.category }}">{{ u.category }}</span>
+                        <span class="ral-count">{{ u.count }}回</span>
+                        <span class="ral-last">{{ u.last_access }}</span>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="ral-empty">この期間内のアクセスはありません。</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="ral-empty">アクセス記録を取得できませんでした。</div>
+                {% endif %}
+            </div>
+
+            <!-- 管理ファイル規模（/home/nishida 直下 + templates/） -->
+            {% if admin_data.admin_files %}
+            <div class="stat-card">
+                <h2>🗂️ 管理ファイル規模（/home/nishida）</h2>
+                <div class="app-size-summary">
+                    <div class="app-size-summary-item">
+                        <div class="app-size-summary-num">{{ admin_data.admin_files.totals.home_total_files }}</div>
+                        <div class="app-size-summary-label">直下ファイル数</div>
+                    </div>
+                    <div class="app-size-summary-item">
+                        <div class="app-size-summary-num">{{ "{:,}".format(admin_data.admin_files.totals.home_total_lines) }}</div>
+                        <div class="app-size-summary-label">直下行数</div>
+                    </div>
+                    <div class="app-size-summary-item">
+                        <div class="app-size-summary-num">{{ admin_data.admin_files.totals.templates_total_files }}</div>
+                        <div class="app-size-summary-label">templates/ ファイル数</div>
+                    </div>
+                    <div class="app-size-summary-item">
+                        <div class="app-size-summary-num">{{ "{:,}".format(admin_data.admin_files.totals.templates_total_lines) }}</div>
+                        <div class="app-size-summary-label">templates/ 行数</div>
+                    </div>
+                </div>
+
+                <div class="file-size-subsection-title">📁 /home/nishida/ 直下</div>
+                {% if admin_data.admin_files.home_files %}
+                <div class="file-size-table-wrapper">
+                    <table class="file-size-table">
+                        <thead>
+                            <tr>
+                                <th>種別</th>
+                                <th>ファイル名</th>
+                                <th style="text-align: right;">行数</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in admin_data.admin_files.home_files %}
+                            <tr>
+                                <td>
+                                    {% if f.ext == '.py' %}
+                                    <span class="file-size-ext file-size-ext-py">PY</span>
+                                    {% else %}
+                                    <span class="file-size-ext file-size-ext-html">HTML</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ f.name }}</td>
+                                <td class="file-size-lines">{{ "{:,}".format(f.lines) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="file-size-empty">該当ファイルなし</div>
+                {% endif %}
+
+                <div class="file-size-subsection-title">📁 /home/nishida/templates/（再帰）</div>
+                {% if admin_data.admin_files.templates_files %}
+                <div class="file-size-table-wrapper">
+                    <table class="file-size-table">
+                        <thead>
+                            <tr>
+                                <th>種別</th>
+                                <th>相対パス</th>
+                                <th style="text-align: right;">行数</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in admin_data.admin_files.templates_files %}
+                            <tr>
+                                <td>
+                                    {% if f.ext == '.py' %}
+                                    <span class="file-size-ext file-size-ext-py">PY</span>
+                                    {% else %}
+                                    <span class="file-size-ext file-size-ext-html">HTML</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ f.name }}</td>
+                                <td class="file-size-lines">{{ "{:,}".format(f.lines) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="file-size-empty">該当ファイルなし</div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    </div>
+
+    {% if admin_data %}
+    <script>
+    (function () {
+        var userList = document.getElementById('uafUserList');
+        if (!userList) { return; }  // ユーザーがいない場合は何もしない
+
+        var canvas    = document.getElementById('uafCanvas');
+        var ctx       = canvas.getContext('2d');
+        var chartWrap = canvas.parentElement;
+        var emptyMsg  = document.getElementById('uafEmpty');
+        var legendBox = document.getElementById('uafLegend');
+        var searchBox = document.getElementById('uafSearch');
+        var zoomInput = document.getElementById('uafZoom');
+        var zoomLabel = document.getElementById('uafZoomLabel');
+        var clearBtn  = document.getElementById('uafClearBtn');
+
+        // 取得済みデータのキャッシュ: user_id -> {total, byDate:{'YYYY-MM-DD':count}, max}
+        var cache = {};
+        // 現在選択中の user_id 一覧（選択順）。この順で下から積む。
+        var selected = [];
+
+        // 日別の全体アクセス数（「その他」算出用の母数）。サーバーから受領。
+        var dailyTotalRaw = {{ admin_data.daily_total_access | tojson }};
+        var dailyTotalByDate = {};
+        (dailyTotalRaw.series || []).forEach(function (pt) {
+            dailyTotalByDate[pt.date] = pt.count;
+        });
+
+        // ---- ユーザーごとの色（決定的に生成。100人超でも破綻しないようHSVで分散）----
+        function colorFor(uid) {
+            // 黄金角ベースで色相を散らす。彩度・明度は固定で見やすく。
+            var hue = (uid * 137.508) % 360;
+            return 'hsl(' + hue.toFixed(1) + ', 65%, 48%)';
+        }
+
+        // 各 swatch に色を付ける
+        var swatches = userList.querySelectorAll('.uaf-swatch');
+        for (var i = 0; i < swatches.length; i++) {
+            var uid = parseInt(swatches[i].getAttribute('data-uid'), 10);
+            swatches[i].style.background = colorFor(uid);
+        }
+
+        // ---- 日付ユーティリティ ----
+        function parseDate(s) {
+            var p = s.split('-');
+            return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+        }
+        function fmtDate(d) {
+            var m = ('0' + (d.getMonth()+1)).slice(-2);
+            var day = ('0' + d.getDate()).slice(-2);
+            return d.getFullYear() + '-' + m + '-' + day;
+        }
+        function addDays(d, n) {
+            var r = new Date(d.getTime());
+            r.setDate(r.getDate() + n);
+            return r;
+        }
+        function dayDiff(a, b) {
+            return Math.round((b.getTime() - a.getTime()) / 86400000);
+        }
+
+        // ---- データ取得（キャッシュ付き）----
+        function fetchUser(uid, cb) {
+            if (cache[uid]) { cb(); return; }
+            fetch('{{ url_for("stats.user_access_freq") }}?user_id=' + uid, {
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var byDate = {};
+                var max = 0;
+                (data.series || []).forEach(function (pt) {
+                    byDate[pt.date] = pt.count;
+                    if (pt.count > max) { max = pt.count; }
+                });
+                cache[uid] = {
+                    total: data.total || 0,
+                    byDate: byDate,
+                    series: data.series || [],
+                    max: max
+                };
+                cb();
+            })
+            .catch(function () {
+                cache[uid] = { total: 0, byDate: {}, series: [], max: 0, error: true };
+                cb();
+            });
+        }
+
+        // ---- 描画（積み上げ面）----
+        function render() {
+            // 日付範囲を決定。選択ユーザーの範囲＋全体データの範囲を統合。
+            // 選択ゼロでも全体（その他のみ）を描くため、全体データの範囲を必ず含める。
+            var minDate = null, maxDate = null;
+            selected.forEach(function (uid) {
+                var c = cache[uid];
+                if (!c || c.series.length === 0) { return; }
+                var first = parseDate(c.series[0].date);
+                var last  = parseDate(c.series[c.series.length - 1].date);
+                if (minDate === null || first < minDate) { minDate = first; }
+                if (maxDate === null || last  > maxDate) { maxDate = last; }
+            });
+            if (dailyTotalRaw.series && dailyTotalRaw.series.length) {
+                var tf = parseDate(dailyTotalRaw.series[0].date);
+                var tl = parseDate(dailyTotalRaw.series[dailyTotalRaw.series.length - 1].date);
+                if (minDate === null || tf < minDate) { minDate = tf; }
+                if (maxDate === null || tl > maxDate) { maxDate = tl; }
+            }
+
+            if (minDate === null) {
+                // 全体データすら無い（アクセス記録ゼロ）
+                chartWrap.style.display = 'none';
+                emptyMsg.style.display = 'block';
+                emptyMsg.textContent = 'アクセス記録がありません。';
+                legendBox.innerHTML = '';
+                return;
+            }
+
+            chartWrap.style.display = 'block';
+            emptyMsg.style.display = 'none';
+
+            var totalDays = dayDiff(minDate, maxDate) + 1;
+            var pxPerDay  = parseInt(zoomInput.value, 10);
+
+            var padL = 56, padR = 16, padT = 16, padB = 44;
+            var plotW = Math.max(totalDays * pxPerDay, 200);
+            var plotH = 200;
+            var cssW  = plotW + padL + padR;
+            var cssH  = plotH + padT + padB;
+
+            var dpr = window.devicePixelRatio || 1;
+            canvas.width  = cssW * dpr;
+            canvas.height = cssH * dpr;
+            canvas.style.width  = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, cssW, cssH);
+
+            var geom = {
+                minDate: minDate, totalDays: totalDays, pxPerDay: pxPerDay,
+                padL: padL, padT: padT, plotW: plotW, plotH: plotH,
+                xFor: function (dayIndex) { return padL + dayIndex * pxPerDay; }
+            };
+
+            renderStack(geom);
+            buildLegend();
+        }
+
+        // 日付ラベルと縦グリッドを描く
+        function drawDateAxis(geom) {
+            var labelStep = Math.max(1, Math.ceil(70 / geom.pxPerDay));
+            ctx.font = '11px -apple-system, sans-serif';
+            for (var d = 0; d < geom.totalDays; d += labelStep) {
+                var x = geom.xFor(d);
+                ctx.strokeStyle = '#f0f0f5';
+                ctx.beginPath();
+                ctx.moveTo(x, geom.padT);
+                ctx.lineTo(x, geom.padT + geom.plotH);
+                ctx.stroke();
+                var dateStr = fmtDate(addDays(geom.minDate, d));
+                ctx.fillStyle = '#999';
+                ctx.save();
+                ctx.translate(x, geom.padT + geom.plotH + 6);
+                ctx.rotate(-Math.PI / 4);
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                ctx.fillText(dateStr, 0, 0);
+                ctx.restore();
+            }
+            // 軸線
+            ctx.strokeStyle = '#c8c8d4';
+            ctx.beginPath();
+            ctx.moveTo(geom.padL, geom.padT);
+            ctx.lineTo(geom.padL, geom.padT + geom.plotH);
+            ctx.lineTo(geom.padL + geom.plotW, geom.padT + geom.plotH);
+            ctx.stroke();
+        }
+
+        var OTHER_COLOR = '#c4c4cc';  // 「その他」のグレー
+
+        // ---- 積み上げ面モード（縦軸＝実数のアクセス総数）----
+        function renderStack(geom) {
+            var padL = geom.padL, padT = geom.padT, plotH = geom.plotH, plotW = geom.plotW;
+            var totalDays = geom.totalDays;
+
+            // 各日の「全体」アクセス数の最大値を縦軸スケールに使う。
+            // 全体データが無い日は、選択ユーザー合計で代替（その他=0）。
+            var yMax = 0;
+            var dayTotals = [];   // 各日の全体数
+            var daySel = [];      // 各日の選択ユーザー合計
+            for (var d = 0; d < totalDays; d++) {
+                var ds = fmtDate(addDays(geom.minDate, d));
+                var selSum = 0;
+                selected.forEach(function (uid) {
+                    var c = cache[uid];
+                    if (c) { selSum += (c.byDate[ds] || 0); }
+                });
+                var whole = dailyTotalByDate[ds];
+                if (whole === undefined) { whole = selSum; }
+                // 念のため：選択合計が全体を超える異常時は全体を選択合計に合わせる
+                if (selSum > whole) { whole = selSum; }
+                dayTotals.push(whole);
+                daySel.push(selSum);
+                if (whole > yMax) { yMax = whole; }
+            }
+            if (yMax <= 0) { yMax = 1; }
+
+            function yFor(val) { return padT + plotH - (val / yMax) * plotH; }
+
+            // 横グリッド＋実数ラベル（5段階、見やすい刻みに丸め）
+            var step = niceStep(yMax / 4);
+            ctx.strokeStyle = '#e2e2ec';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#999';
+            ctx.font = '11px -apple-system, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (var g = 0; g <= yMax + 0.5; g += step) {
+                var y = yFor(g);
+                ctx.beginPath();
+                ctx.moveTo(padL, y);
+                ctx.lineTo(padL + plotW, y);
+                ctx.stroke();
+                ctx.fillText(String(Math.round(g)), padL - 6, y);
+            }
+
+            drawDateAxis(geom);
+
+            // 積み上げ：下から selected の順に各ユーザー、最後に「その他」を上へ。
+            // 各層について、全日のポリゴンを一括で塗る。
+            var layers = selected.slice();   // 下から積む順＝オプトイン順
+            // baseline[d] = その日までに積んだ高さ（実数）
+            var baseline = [];
+            for (var d2 = 0; d2 < totalDays; d2++) { baseline.push(0); }
+
+            function fillLayer(valueAt, color) {
+                // 下端（baseline）と上端（baseline+value）で閉じたポリゴンを塗る
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                // 上端を左→右
+                for (var d = 0; d < totalDays; d++) {
+                    var topVal = baseline[d] + valueAt(d);
+                    var x = geom.xFor(d);
+                    var y = yFor(topVal);
+                    if (d === 0) { ctx.moveTo(x, y); }
+                    else         { ctx.lineTo(x, y); }
+                }
+                // 下端を右→左
+                for (var d3 = totalDays - 1; d3 >= 0; d3--) {
+                    ctx.lineTo(geom.xFor(d3), yFor(baseline[d3]));
+                }
+                ctx.closePath();
+                ctx.fill();
+                // baseline を更新
+                for (var d4 = 0; d4 < totalDays; d4++) {
+                    baseline[d4] += valueAt(d4);
+                }
+            }
+
+            // 選択ユーザーの層
+            layers.forEach(function (uid) {
+                var c = cache[uid];
+                fillLayer(function (d) {
+                    var ds = fmtDate(addDays(geom.minDate, d));
+                    return (c && c.byDate[ds]) ? c.byDate[ds] : 0;
+                }, colorFor(uid));
+            });
+
+            // 「その他」層（全体 − 選択合計）。動的に決まる残余。
+            fillLayer(function (d) {
+                var other = dayTotals[d] - daySel[d];
+                return other > 0 ? other : 0;
+            }, OTHER_COLOR);
+
+            // 層の境界を薄い白線で（見やすさ向上）
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 0.6;
+        }
+
+        // 目盛り刻みを「1,2,5×10^n」のきれいな値に丸める
+        function niceStep(raw) {
+            if (raw <= 0) { return 1; }
+            var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+            var norm = raw / mag;
+            var nice;
+            if (norm < 1.5)      { nice = 1; }
+            else if (norm < 3)   { nice = 2; }
+            else if (norm < 7)   { nice = 5; }
+            else                 { nice = 10; }
+            return Math.max(1, nice * mag);
+        }
+
+        // ---- 凡例（積み上げ順とアクセス総数を表示）----
+        function buildLegend() {
+            legendBox.innerHTML = '';
+            // 「下から」の並びが分かるよう、選択順のまま表示
+            selected.forEach(function (uid, idx) {
+                var cb = userList.querySelector('.uaf-user-cb[value="' + uid + '"]');
+                if (!cb) { return; }
+                var name  = cb.getAttribute('data-name');
+                var c     = cache[uid];
+                var total = c ? c.total : parseInt(cb.getAttribute('data-total'), 10);
+
+                var item = document.createElement('div');
+                item.className = 'uaf-legend-item';
+
+                var sw = document.createElement('span');
+                sw.className = 'uaf-legend-swatch';
+                sw.style.background = colorFor(uid);
+                sw.style.height = '14px';
+                sw.style.borderRadius = '3px';
+
+                var nm = document.createElement('span');
+                nm.className = 'uaf-legend-name';
+                // 積み順（下から何番目か）を頭に付ける
+                nm.textContent = '▾' + (idx + 1) + ' ' + name;
+
+                var tot = document.createElement('span');
+                tot.className = 'uaf-legend-total';
+                tot.textContent = '総数 ' + total.toLocaleString() + '回';
+
+                item.appendChild(sw);
+                item.appendChild(nm);
+                item.appendChild(tot);
+                legendBox.appendChild(item);
+            });
+
+            // 「その他」の凡例を最上段の層として末尾に追加（選択ゼロでも表示）
+            var oItem = document.createElement('div');
+            oItem.className = 'uaf-legend-item';
+            var oSw = document.createElement('span');
+            oSw.className = 'uaf-legend-swatch';
+            oSw.style.background = OTHER_COLOR;
+            oSw.style.height = '14px';
+            oSw.style.borderRadius = '3px';
+            var oNm = document.createElement('span');
+            oNm.className = 'uaf-legend-name';
+            oNm.textContent = 'その他（未選択ユーザー）';
+            oNm.style.color = '#888';
+            var oTot = document.createElement('span');
+            oTot.className = 'uaf-legend-total';
+            oTot.style.color = '#888';
+            oTot.textContent = '全体 ' + (dailyTotalRaw.total || 0).toLocaleString() + '回';
+            oItem.appendChild(oSw);
+            oItem.appendChild(oNm);
+            oItem.appendChild(oTot);
+            legendBox.appendChild(oItem);
+        }
+
+        // ---- チェックボックス操作 ----
+        userList.addEventListener('change', function (e) {
+            var cb = e.target;
+            if (!cb.classList.contains('uaf-user-cb')) { return; }
+            var uid = parseInt(cb.value, 10);
+            if (cb.checked) {
+                if (selected.indexOf(uid) === -1) { selected.push(uid); }
+                fetchUser(uid, render);
+            } else {
+                var idx = selected.indexOf(uid);
+                if (idx !== -1) { selected.splice(idx, 1); }
+                render();
+            }
+        });
+
+        // ---- 選択クリア（クリア後は全体＝その他のみのグラフを表示）----
+        clearBtn.addEventListener('click', function () {
+            selected = [];
+            var cbs = userList.querySelectorAll('.uaf-user-cb');
+            for (var i = 0; i < cbs.length; i++) { cbs[i].checked = false; }
+            render();
+        });
+
+        // ---- ズーム（横軸伸縮）----
+        zoomInput.addEventListener('input', function () {
+            zoomLabel.textContent = zoomInput.value + ' px/日';
+            render();
+        });
+
+        // ---- 検索フィルタ ----
+        searchBox.addEventListener('input', function () {
+            var q = searchBox.value.toLowerCase().trim();
+            var items = userList.querySelectorAll('.uaf-user-item');
+            for (var i = 0; i < items.length; i++) {
+                var nm = items[i].getAttribute('data-name') || '';
+                if (q === '' || nm.indexOf(q) !== -1) {
+                    items[i].classList.remove('hidden');
+                } else {
+                    items[i].classList.add('hidden');
+                }
+            }
+        });
+
+        // ---- 上位N人を選択する（初期表示・再表示で共用）----
+        var TOP_N = 5;  // 初期表示するヘビーユーザー数
+        function selectTopUsers() {
+            selected = [];
+            var cbs = userList.querySelectorAll('.uaf-user-cb');
+            for (var i = 0; i < cbs.length; i++) { cbs[i].checked = false; }
+            // 一覧はアクセス総数降順で並んでいるので先頭から TOP_N 件
+            var topCbs = [];
+            for (var j = 0; j < cbs.length && j < TOP_N; j++) {
+                topCbs.push(cbs[j]);
+                cbs[j].checked = true;
+                selected.push(parseInt(cbs[j].value, 10));
+            }
+            var remaining = topCbs.length;
+            if (remaining === 0) { render(); return; }
+            topCbs.forEach(function (cb) {
+                fetchUser(parseInt(cb.value, 10), function () {
+                    remaining--;
+                    if (remaining === 0) { render(); }
+                });
+            });
+        }
+
+        // ---- 「上位を再表示」ボタン ----
+        var topBtn = document.getElementById('uafTopBtn');
+        if (topBtn) {
+            topBtn.addEventListener('click', function () {
+                selectTopUsers();
+            });
+        }
+
+        // 初期表示：アクセス総数上位ユーザーを自動表示
+        selectTopUsers();
+    })();
+
+    // ===== 直近アクセス記録：期間切替 =====
+    (function () {
+        var tabs = document.getElementById('ralTabs');
+        if (!tabs) { return; }  // admin以外・要素なしなら何もしない
+
+        var listBox    = document.getElementById('ralList');
+        var loading    = document.getElementById('ralLoading');
+        var userCount  = document.getElementById('ralUserCount');
+        var cutoffSpan = document.getElementById('ralCutoff');
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, function (c) {
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            });
+        }
+
+        function renderList(data) {
+            userCount.textContent  = data.users.length;
+            cutoffSpan.textContent = data.cutoff;
+
+            if (!data.users.length) {
+                listBox.innerHTML = '<div class="ral-empty">この期間内のアクセスはありません。</div>';
+                return;
+            }
+            var html = '';
+            data.users.forEach(function (u, i) {
+                html += '<div class="ral-row">'
+                      + '<span class="ral-rank">' + (i + 1) + '</span>'
+                      + '<span class="ral-name">' + escapeHtml(u.full_name) + '</span>'
+                      + '<span class="user-category category-' + escapeHtml(u.category) + '">'
+                      + escapeHtml(u.category) + '</span>'
+                      + '<span class="ral-count">' + u.count + '回</span>'
+                      + '<span class="ral-last">' + escapeHtml(u.last_access) + '</span>'
+                      + '</div>';
+            });
+            listBox.innerHTML = html;
+        }
+
+        function loadPeriod(hours) {
+            loading.style.display = 'block';
+            listBox.style.display = 'none';
+            fetch('{{ url_for("stats.recent_access") }}?hours=' + hours, {
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && data.users) { renderList(data); }
+            })
+            .catch(function () {
+                listBox.innerHTML = '<div class="ral-empty">取得に失敗しました。</div>';
+            })
+            .then(function () {
+                loading.style.display = 'none';
+                listBox.style.display = 'block';
+            });
+        }
+
+        tabs.addEventListener('click', function (e) {
+            var btn = e.target;
+            if (!btn.classList.contains('ral-period-tab')) { return; }
+            var all = tabs.querySelectorAll('.ral-period-tab');
+            for (var i = 0; i < all.length; i++) { all[i].classList.remove('active'); }
+            btn.classList.add('active');
+            loadPeriod(parseInt(btn.getAttribute('data-hours'), 10));
+        });
+        // 初期表示はサーバー側で描画済み（既定24時間）。再取得は不要。
+    })();
+
+    </script>
+    {% endif %}
+</body>
+</html>

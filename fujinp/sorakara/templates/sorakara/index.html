@@ -1,0 +1,165 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>そらから - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif;
+            background: linear-gradient(180deg, #0b2545 0%, #13315c 60%, #1d4e89 100%);
+            min-height: 100vh; color: #eef4fa;
+        }
+        .container { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
+        .header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+        .back-btn {
+            color: #9fc5e8; text-decoration: none; font-size: 0.9rem;
+            padding: 6px 12px; border: 1px solid #3a6ea5; border-radius: 6px;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.08); }
+        h1 { font-size: 1.6rem; }
+        .subtitle { color: #9fc5e8; margin-bottom: 24px; font-size: 0.92rem; }
+        #result {
+            display: none; padding: 10px 16px; border-radius: 8px; margin-bottom: 16px;
+        }
+        #result.success { background: #1e5631; }
+        #result.error { background: #7a1f2b; }
+
+        .quality-bar {
+            display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+            background: rgba(255,255,255,0.06); padding: 12px 16px; border-radius: 10px;
+        }
+        .quality-bar label { cursor: pointer; font-size: 0.92rem; }
+        .quality-bar input { margin-right: 5px; }
+        .quality-note { color: #9fc5e8; font-size: 0.8rem; margin-left: auto; }
+
+        .region-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px; margin-bottom: 30px;
+        }
+        .region-card {
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px; padding: 18px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .region-card h3 { font-size: 1.05rem; }
+        .region-card .desc { color: #c9dcee; font-size: 0.85rem; flex: 1; }
+        .region-card .coords { color: #8fb3d9; font-size: 0.75rem; font-family: monospace; }
+        .go-btn {
+            margin-top: 6px; padding: 10px; border: none; border-radius: 8px;
+            background: linear-gradient(135deg, #2e86de, #54a0ff); color: white;
+            font-size: 1rem; font-weight: 700; cursor: pointer; letter-spacing: 2px;
+        }
+        .go-btn:hover { filter: brightness(1.15); }
+
+        .add-region {
+            background: rgba(255,255,255,0.06); border-radius: 12px; padding: 18px;
+        }
+        .add-region h2 { font-size: 1.05rem; margin-bottom: 12px; }
+        .add-region .row { display: flex; flex-wrap: wrap; gap: 10px; }
+        .add-region input {
+            padding: 8px 10px; border-radius: 6px; border: 1px solid #3a6ea5;
+            background: #0b2545; color: #eef4fa; font-size: 0.9rem;
+        }
+        .add-region input.wide { flex: 1; min-width: 180px; }
+        .add-region input.num { width: 130px; }
+        .add-btn {
+            padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer;
+            background: #3a6ea5; color: white; font-size: 0.9rem;
+        }
+        .add-btn:hover { filter: brightness(1.2); }
+        .footnote { margin-top: 24px; color: #7fa8cc; font-size: 0.75rem; }
+        .footnote a { color: #9fc5e8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="{{ url_for('guest.dashboard') }}" class="back-btn">← 戻る</a>
+            <h1>🛩️ そらから <span style="font-size:0.75rem;color:#9fc5e8;">Skywalker (stub)</span></h1>
+        </div>
+        <p class="subtitle">国土地理院の標高データで再現した地形の上空をフライトします。地域を選んで GO！（当面は福知山市周辺）</p>
+
+        <div id="result"></div>
+
+        <div class="quality-bar">
+            <strong style="font-size:0.9rem;">解像度:</strong>
+            <label><input type="radio" name="quality" value="std" checked>標準（5×5タイル・約40km四方）</label>
+            <label><input type="radio" name="quality" value="low">低（3×3タイル・軽量）</label>
+            <span class="quality-note">動作が重い場合は「低」を選択</span>
+        </div>
+
+        <div class="region-grid">
+            {% for r in regions %}
+            <div class="region-card">
+                <h3>⛰️ {{ r.name }}</h3>
+                <p class="desc">{{ r.description }}</p>
+                <p class="coords">N {{ r.lat }} / E {{ r.lon }}（z{{ r.zoom }}）</p>
+                <button class="go-btn" data-id="{{ r.id }}">GO ▶</button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="add-region">
+            <h2>＋ カスタム地域を追加（要 schema.sql 適用）</h2>
+            <div class="row">
+                <input type="text" id="new-name" class="wide" placeholder="地域名（例: 舞鶴湾）">
+                <input type="text" id="new-lat" class="num" placeholder="緯度 35.29">
+                <input type="text" id="new-lon" class="num" placeholder="経度 135.12">
+                <button class="add-btn" id="add-btn">追加</button>
+            </div>
+        </div>
+
+        <p class="footnote">
+            地図データ出典：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院（標高タイル・全国最新写真）</a>
+        </p>
+    </div>
+
+    <script>
+        function showResult(message, isError) {
+            const $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(() => $r.fadeOut(), 5000);
+        }
+
+        $('.go-btn').on('click', function() {
+            const id = $(this).data('id');
+            const q = $('input[name="quality"]:checked').val();
+            window.location.href = '{{ url_for("sorakara.flight") }}' +
+                '?region_id=' + encodeURIComponent(id) + '&quality=' + encodeURIComponent(q);
+        });
+
+        $('#add-btn').on('click', function() {
+            const payload = {
+                name: $('#new-name').val(),
+                lat: $('#new-lat').val(),
+                lon: $('#new-lon').val()
+            };
+            $.ajax({
+                url: '{{ url_for("sorakara.api_save_region") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(resp) {
+                    if (resp.success) { location.reload(); }
+                    else showResult('エラー: ' + resp.error, true);
+                },
+                error: function(xhr) {
+                    const msg = (xhr.responseJSON && xhr.responseJSON.error) || '通信エラー';
+                    showResult('エラー: ' + msg, true);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

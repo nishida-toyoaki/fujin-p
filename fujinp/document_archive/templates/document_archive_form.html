@@ -1,0 +1,150 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{% extends "document_archive_base.html" %}
+{% block title %}文書編集{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">{% if document %}文書の編集{% else %}新規文書作成{% endif %}</h4>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('document_archive.save_document') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if document %}
+                <input type="hidden" name="id" value="{{ document.id }}">
+                {% endif %}
+
+                <div class="mb-3">
+                    <label class="form-label">タイトル <span class="text-danger">*</span></label>
+                    <input type="text" name="title" class="form-control" value="{{ document.title if document else '' }}" required>
+                </div>
+
+                <div class="card mb-4 border-info">
+                    <div class="card-header bg-info text-dark">
+                        <h6 class="mb-0"><i class="fas fa-shield-alt"></i> 公開範囲設定</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="access_policy" id="policy_private" value="private"
+                                    {% if not document or document.access_policy == 'private' %}checked{% endif %}
+                                    onchange="toggleGroupSelect()">
+                                <label class="form-check-label" for="policy_private">
+                                    <i class="fas fa-lock"></i> 自分のみ（非公開）
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="access_policy" id="policy_group" value="group"
+                                    {% if document and document.access_policy == 'group' %}checked{% endif %}
+                                    onchange="toggleGroupSelect()">
+                                <label class="form-check-label" for="policy_group">
+                                    <i class="fas fa-users"></i> 指定グループのみ
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="access_policy" id="policy_domestic" value="domestic"
+                                    {% if document and document.access_policy == 'domestic' %}checked{% endif %}
+                                    onchange="toggleGroupSelect()">
+                                <label class="form-check-label" for="policy_domestic">
+                                    <i class="fas fa-building"></i> 学内公開（regularユーザ）
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="access_policy" id="policy_domestic_group" value="domestic_group"
+                                    {% if document and document.access_policy == 'domestic_group' %}checked{% endif %}
+                                    onchange="toggleGroupSelect()">
+                                <label class="form-check-label" for="policy_domestic_group">
+                                    <i class="fas fa-building"></i><i class="fas fa-plus mx-1"></i><i class="fas fa-users"></i> 学内公開＋指定グループ
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="access_policy" id="policy_public" value="public"
+                                    {% if document and document.access_policy == 'public' %}checked{% endif %}
+                                    onchange="toggleGroupSelect()">
+                                <label class="form-check-label" for="policy_public">
+                                    <i class="fas fa-globe"></i> 一般公開（全ログインユーザ）
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="group_select_area" style="display: none; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            <label class="form-label mb-2">閲覧を許可するグループを選択:</label>
+                            <div id="domestic_group_note" class="form-text text-muted mb-2" style="display: none;">
+                                <i class="fas fa-info-circle"></i>
+                                「学内公開＋指定グループ」では、regularユーザ <strong>または</strong> 選択したグループの所属者が閲覧できます。
+                            </div>
+                            <div class="row">
+                                {% for group in groups %}
+                                <div class="col-md-4 col-sm-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="group_ids" value="{{ group.id }}" id="g_{{ group.id }}"
+                                            {% if document and group.id in document.allowed_group_ids %}checked{% endif %}>
+                                        <label class="form-check-label" for="g_{{ group.id }}">{{ group.name }}</label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">説明 (Markdown)</label>
+                    <textarea name="public_description" class="form-control" rows="3">{{ document.public_description if document else '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">自分用メモ (Markdown)</label>
+                    <textarea name="owner_memo" class="form-control" rows="3">{{ document.owner_memo if document else '' }}</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">コンテンツ (手動入力またはファイルアップロード)</label>
+                    {% if session.get('user_category') == 'admin' %}
+                    <input type="file" name="html_file" class="form-control mb-2"
+                        accept=".html,.htm,.pdf,.svg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.ico,.txt,.mp4,video/mp4">
+                    <div class="form-text text-muted mb-2">
+                        <i class="fas fa-info-circle"></i>
+                        アップロード可能: HTML / PDF / SVG / 画像（PNG・JPG・GIF・WebP・BMP・ICO）/ テキスト / 動画（MP4）
+                    </div>
+                    {% else %}
+                    <input type="file" name="html_file" class="form-control mb-2" accept=".html,.htm">
+                    <div class="form-text text-muted mb-2">
+                        <i class="fas fa-info-circle"></i>
+                        アップロード可能: HTML のみ
+                    </div>
+                    {% endif %}
+                    <textarea name="content" class="form-control" rows="10">{{ document.content if document else '' }}</textarea>
+                    {% if document and document.file_path %}
+                    <div class="alert alert-info mt-2 mb-0 py-2">
+                        <i class="fas fa-paperclip"></i>
+                        この文書には <span class="badge bg-dark">{{ document.file_type }}</span> のファイルが登録されています。
+                        <strong>ファイルを選択しなければ現在の内容がそのまま保持されます。</strong>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                <a href="{{ url_for('document_archive.dashboard') }}" class="btn btn-secondary">キャンセル</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleGroupSelect() {
+        const isGroup = document.getElementById('policy_group').checked;
+        const isDomesticGroup = document.getElementById('policy_domestic_group').checked;
+        const showArea = isGroup || isDomesticGroup;
+        document.getElementById('group_select_area').style.display = showArea ? 'block' : 'none';
+        document.getElementById('domestic_group_note').style.display = isDomesticGroup ? 'block' : 'none';
+    }
+    // 初期表示時の実行
+    toggleGroupSelect();
+</script>
+{% endblock %}

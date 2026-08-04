@@ -1,0 +1,326 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>元データ閲覧</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#f0f2f5;color:#333;height:100vh;display:flex;flex-direction:column}
+
+#header{background:#1a3a5c;color:#fff;padding:10px 16px;
+        display:flex;align-items:center;gap:12px;flex-shrink:0}
+#header h1{font-size:16px;font-weight:600}
+.nav-links{margin-left:auto;display:flex;gap:8px}
+.nav-links a{color:#aed6f1;text-decoration:none;font-size:12px;
+             padding:4px 8px;border:1px solid #2e6da4;border-radius:3px}
+.nav-links a:hover{background:#2e6da4}
+
+/* 2ペインレイアウト */
+#layout{display:flex;flex:1;overflow:hidden;gap:0}
+
+/* 左ペイン：テーブル一覧 */
+#left-pane{width:280px;min-width:200px;background:#fff;
+           border-right:2px solid #ddd;display:flex;flex-direction:column;flex-shrink:0}
+#left-header{background:#2c3e50;color:#fff;padding:10px 12px;font-size:13px;font-weight:600}
+#left-header small{display:block;font-size:10px;color:#aed6f1;margin-top:2px;font-weight:normal}
+#table-list{flex:1;overflow-y:auto}
+.tbl-item{padding:9px 14px;cursor:pointer;border-bottom:1px solid #eee;
+          display:flex;justify-content:space-between;align-items:center;transition:background .12s}
+.tbl-item:hover{background:#f0f7ff}
+.tbl-item.active{background:#dbeafe;border-left:3px solid #2e6da4}
+.tbl-name{font-size:12px;font-weight:600;color:#1a3a5c;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.tbl-rows{font-size:10px;color:#aaa;white-space:nowrap;margin-left:6px}
+.tbl-disp{font-size:10px;color:#666;margin-top:1px;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 右ペイン：データビューア */
+#right-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* プレースホルダー */
+#placeholder{flex:1;display:flex;align-items:center;justify-content:center;
+             color:#bbb;font-size:14px;flex-direction:column;gap:8px}
+
+/* ツールバー */
+#viewer-toolbar{display:none;align-items:center;gap:10px;
+                padding:8px 14px;background:#ecf0f1;border-bottom:1px solid #ddd;flex-shrink:0}
+#viewer-title{font-weight:700;font-size:13px;color:#1a3a5c;flex:1}
+.readonly-badge{background:#27ae60;color:#fff;font-size:10px;
+                padding:1px 7px;border-radius:8px;font-weight:600}
+#viewer-count{font-size:11px;color:#888}
+#search-input{padding:5px 9px;border:1px solid #ccc;border-radius:3px;
+              font-size:12px;width:200px}
+#viewer-toolbar a:hover{opacity:.85}
+/* データテーブル */
+#viewer-scroll{flex:1;overflow:auto;min-height:0}
+#data-table{border-collapse:collapse;font-size:12px;width:100%}
+#data-table thead th{background:#1a3a5c;color:#fff;padding:8px 11px;
+                     text-align:left;white-space:nowrap;
+                     position:sticky;top:0;z-index:1;font-weight:600}
+#data-table thead th.rn{background:#2c3e50;width:42px;text-align:center}
+#data-table tbody tr{border-bottom:1px solid #eee}
+#data-table tbody tr:nth-child(even){background:#f9fafb}
+#data-table tbody tr:hover{background:#f0f7ff}
+#data-table td{padding:6px 11px;white-space:nowrap;
+               max-width:280px;overflow:hidden;text-overflow:ellipsis}
+#data-table td.rn{background:#ecf0f1;color:#999;text-align:center;
+                  font-size:10px;position:sticky;left:0}
+#data-table tbody tr:nth-child(even) td.rn{background:#e5e8ea}
+.null-v{color:#e74c3c;font-style:italic;opacity:.7}
+
+/* ページャー */
+#pager{display:none;align-items:center;gap:6px;padding:6px 12px;
+       background:#f8f9fa;border-top:1px solid #ddd;flex-shrink:0;flex-wrap:wrap}
+.pg-btn{padding:3px 9px;border:1px solid #ddd;border-radius:3px;
+        cursor:pointer;font-size:11px;background:#fff}
+.pg-btn.active{background:#2e6da4;color:#fff;border-color:#2e6da4;font-weight:bold}
+.pg-btn:disabled{opacity:.4;cursor:not-allowed}
+#pager-info{font-size:11px;color:#888;margin-left:4px}
+
+.loading-msg{color:#aaa;padding:40px;text-align:center;font-style:italic}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>📊 データセンター &nbsp;／&nbsp; 📂 元データ閲覧</h1>
+  <div class="nav-links">
+    <a href="{{ url_for('data_center.index') }}">◀ ストーリー一覧</a>
+  </div>
+</div>
+
+<div id="layout">
+
+  <!-- 左ペイン -->
+  <div id="left-pane">
+    <div id="left-header">
+      📁 テーブル一覧
+      <small id="project-name">読み込み中...</small>
+    </div>
+    <div id="table-list">
+      <div class="loading-msg">取得中...</div>
+    </div>
+  </div>
+
+  <!-- 右ペイン -->
+  <div id="right-pane">
+
+    <div id="placeholder">
+      <div style="font-size:36px">📋</div>
+      <div>左のリストからテーブルを選んでください</div>
+      <div style="font-size:11px">読み取り専用で閲覧できます</div>
+    </div>
+
+    <div id="viewer-toolbar">
+      <span id="viewer-title"></span>
+      <span class="readonly-badge">🔒 読み取り専用</span>
+      <span id="viewer-count"></span>
+      <input id="search-input" type="text" placeholder="絞り込み検索...">
+      <a id="dl-btn" href="#"
+         style="display:none;padding:5px 12px;background:#27ae60;color:#fff;
+                text-decoration:none;border-radius:3px;font-size:12px;
+                font-weight:600;white-space:nowrap;">
+        ⬇️ XLSX
+      </a>
+    </div>
+
+    <div id="viewer-scroll" style="display:none">
+      <table id="data-table">
+        <thead id="data-thead"></thead>
+        <tbody id="data-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="pager"></div>
+
+  </div>
+</div>
+
+<script>
+const PAGE_SIZE = 500;
+let allRows    = [];
+let allColumns = [];
+let currentTable = '';
+let currentTotal = 0;
+let currentOffset = 0;
+
+function esc(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============================================================
+// テーブル一覧
+// ============================================================
+function loadTableList(){
+  $.get('{{ url_for("data_center.api_source_tables") }}', function(data){
+    if(!data.success){
+      $('#table-list').html('<div class="loading-msg" style="color:#e74c3c">'+esc(data.error)+'</div>');
+      return;
+    }
+    $('#project-name').text(data.project);
+    const $list = $('#table-list').empty();
+    if(!data.tables.length){
+      $list.html('<div class="loading-msg">テーブルがありません</div>');
+      return;
+    }
+    data.tables.forEach(function(t){
+      const $item = $('<div class="tbl-item">')
+        .attr('data-table', t.table_name)
+        .attr('data-database', t.database_name);
+      const dispName = t.display_name || t.table_name;
+      const rowStr   = t.row_count !== null ? t.row_count+'行' : '?';
+      const $names = $('<div>').css({flex:'1', minWidth:'0'});
+      $('<div class="tbl-name">').attr('title', t.table_name)
+        .text(dispName).appendTo($names);
+      if(t.display_name){
+        $('<div class="tbl-disp">').text(t.table_name).appendTo($names);
+      }
+      $item.append($names, $('<span class="tbl-rows">').text(rowStr));
+      $item.on('click', function(){
+        $('.tbl-item').removeClass('active');
+        $item.addClass('active');
+        loadTableData(t.database_name, t.table_name, 0);
+      });
+      $list.append($item);
+    });
+  }).fail(function(xhr){
+    $('#table-list').html('<div class="loading-msg" style="color:#e74c3c">取得失敗</div>');
+  });
+}
+
+// ============================================================
+// テーブルデータ
+// ============================================================
+function loadTableData(databaseName, tableName, offset){
+  currentTable  = tableName;
+  currentOffset = offset;
+
+  $('#placeholder').hide();
+  $('#viewer-toolbar').css('display','flex');
+  $('#viewer-scroll').show();
+  $('#viewer-title').text(tableName);
+  $('#viewer-count').text('読み込み中...');
+  $('#data-tbody').html('<tr><td class="loading-msg" colspan="999">取得中...</td></tr>');
+  $('#pager').hide().empty();
+
+  $.get('{{ url_for("data_center.api_source_data") }}', {
+    table: tableName,
+    database: databaseName,
+    limit: PAGE_SIZE,
+    offset: offset
+  }, function(data){
+    if(!data.success){
+      $('#data-tbody').html(
+        '<tr><td class="loading-msg" style="color:#e74c3c" colspan="999">'+
+        esc(data.error)+'</td></tr>');
+      return;
+    }
+    allColumns    = data.columns;
+    allRows       = data.rows;
+    currentTotal  = data.total_count;
+
+    // ヘッダー
+    let ths = '<th class="rn">#</th>';
+    allColumns.forEach(function(c){ ths += '<th>'+esc(c)+'</th>'; });
+    $('#data-thead').html('<tr>'+ths+'</tr>');
+
+    $('#viewer-count').text(
+      (offset+1)+'〜'+(offset+data.fetched_count)+' 件 ／ 全'+data.total_count+'件');
+
+    // ダウンロードボタンのURL更新
+    $('#dl-btn')
+        .attr('href', '/data_center/api/source/download?table='
+                      + encodeURIComponent(tableName)
+                      + '&database=' + encodeURIComponent(databaseName))
+        .show();
+
+    renderRows(allRows, offset);
+    renderPager(data.total_count, offset, databaseName, tableName);
+  }).fail(function(xhr){
+    $('#data-tbody').html(
+      '<tr><td class="loading-msg" style="color:#e74c3c" colspan="999">通信エラー</td></tr>');
+  });
+}
+
+function renderRows(rows, baseOffset){
+  const $tbody = $('#data-tbody').empty();
+  if(!rows.length){
+    $tbody.html('<tr><td class="loading-msg" colspan="'+(allColumns.length+1)+
+                '">データがありません</td></tr>');
+    return;
+  }
+  rows.forEach(function(row, i){
+    let tds = '<td class="rn">'+(baseOffset+i+1)+'</td>';
+    allColumns.forEach(function(col){
+      const v = row[col];
+      if(v===null||v===undefined){
+        tds += '<td><span class="null-v">NULL</span></td>';
+      } else {
+        const $td = $('<td>').attr('title', String(v)).text(String(v));
+        tds += $td.prop('outerHTML');
+      }
+    });
+    $tbody.append('<tr>'+tds+'</tr>');
+  });
+}
+
+// ページャー
+function renderPager(total, offset, databaseName, tableName){
+  const $pg = $('#pager').empty();
+  if(total <= PAGE_SIZE){ $pg.hide(); return; }
+  $pg.css('display','flex');
+
+  const totalPages  = Math.ceil(total / PAGE_SIZE);
+  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+
+  function mkBtn(label, page, disabled, active){
+    const $b = $('<button class="pg-btn">').text(label)
+      .prop('disabled', disabled)
+      .toggleClass('active', active);
+    if(!disabled) $b.on('click', function(){
+      loadTableData(databaseName, tableName, (page-1)*PAGE_SIZE);
+    });
+    return $b;
+  }
+
+  $pg.append(mkBtn('«', 1, currentPage===1, false));
+  $pg.append(mkBtn('‹', currentPage-1, currentPage===1, false));
+
+  const start = Math.max(1, currentPage-3);
+  const end   = Math.min(totalPages, start+6);
+  for(let p=start; p<=end; p++){
+    $pg.append(mkBtn(p, p, false, p===currentPage));
+  }
+  $pg.append(mkBtn('›', currentPage+1, currentPage===totalPages, false));
+  $pg.append(mkBtn('»', totalPages, currentPage===totalPages, false));
+  $pg.append($('<span id="pager-info">').text(
+    currentPage+'ページ ／ 全'+totalPages+'ページ（'+total+'件）'));
+}
+
+// 絞り込み（現在ページ内のみ）
+$('#search-input').on('input', function(){
+  const kw = $(this).val().toLowerCase();
+  if(!kw){ renderRows(allRows, currentOffset); return; }
+  const filtered = allRows.filter(function(row){
+    return allColumns.some(function(col){
+      const v = row[col];
+      return v!==null && v!==undefined && String(v).toLowerCase().includes(kw);
+    });
+  });
+  renderRows(filtered, currentOffset);
+});
+
+$(function(){ loadTableList(); });
+</script>
+</body>
+</html>
+

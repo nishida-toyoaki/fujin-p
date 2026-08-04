@@ -1,0 +1,568 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoRePo - Collaborative RePort composer</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- フォント (Noto Sans JP) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- アイコン (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        /* モーダル用スタイル */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* トーストアニメーション */
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.hiding {
+            animation: slideOut 0.3s ease-in forwards;
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-blue-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-2 max-w-7xl flex items-center justify-between">
+            <a href="{{ url_for('colrep.index') }}" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+                <i data-lucide="file-text" class="h-6 w-6"></i>
+                <span class="text-xl font-semibold">CoRePo</span>
+            </a>
+            <a href="{{ url_for('colrep.return_to_fujin') }}" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded shadow transition-colors flex items-center">
+                <i data-lucide="layout-dashboard" class="w-4 h-4 mr-1"></i>
+                FUJINダッシュボードに戻る
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8 max-w-7xl">
+
+        <!-- Page Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold flex items-center text-gray-800">
+                    <i data-lucide="file-text" class="w-8 h-8 mr-3 text-gray-600"></i>
+                    CoRePo Dashboard
+                </h1>
+                <p class="text-gray-500 mt-1 ml-11">Collaborative Report Composer - プロジェクト管理</p>
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center">
+                <!-- 新規プロジェクト作成: 総管理者またはCoRePo管理者 -->
+                {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
+                <a href="{{ url_for('colrep.create_project') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow flex items-center transition-colors">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> 新規プロジェクト
+                </a>
+                {% endif %}
+
+                <!-- インポート: 総管理者またはCoRePo管理者 -->
+                {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
+                <button onclick="openModal('importJsonModal')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow flex items-center transition-colors">
+                    <i data-lucide="upload" class="w-4 h-4 mr-1"></i> インポート (JSON)
+                </button>
+                <button onclick="openModal('importModal')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow flex items-center transition-colors">
+                    <i data-lucide="upload" class="w-4 h-4 mr-1"></i> インポート (EXCEL)
+                </button>
+                {% endif %}
+
+                <!-- バッジ表示 -->
+                {% if permissions.is_colrep_admin %}
+                    <span class="bg-green-600 text-white text-sm px-3 py-1.5 rounded-full">colrep総管理者</span>
+                {% elif permissions.is_colrep_manager %}
+                    <span class="bg-cyan-500 text-white text-sm px-3 py-1.5 rounded-full">CoRePo管理者</span>
+                {% else %}
+                    <span class="bg-gray-500 text-white text-sm px-3 py-1.5 rounded-full">非管理者</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded" role="alert">
+            <div class="flex items-center">
+                <i data-lucide="alert-circle" class="w-5 h-5 mr-2"></i>
+                <span>{{ error }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="bg-{{ 'blue' if category == 'info' else category }}-50 border-l-4 border-{{ 'blue' if category == 'info' else category }}-500 text-{{ 'blue' if category == 'info' else category }}-700 p-4 mb-4 rounded" role="alert">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- 統計情報 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- Stats -->
+            <div class="bg-white rounded-lg shadow p-6 flex items-center justify-around border border-gray-200">
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-blue-600">{{ stats.total_projects }}</div>
+                    <div class="text-xs text-gray-500 mt-1">総プロジェクト数</div>
+                </div>
+                <div class="h-10 w-px bg-gray-200"></div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-green-600">{{ stats.recent_projects }}</div>
+                    <div class="text-xs text-gray-500 mt-1">最近1週間の更新</div>
+                </div>
+            </div>
+
+            <!-- System Info -->
+            <div class="bg-gray-50 rounded-lg border border-gray-200 p-6 flex flex-col items-center justify-center text-center">
+                <div class="flex items-center text-gray-700 font-semibold mb-2">
+                    <i data-lucide="info" class="w-4 h-4 mr-1"></i> システム情報
+                </div>
+                <div class="text-sm text-gray-600">
+                    データベース: {{ system_info.database }}
+                </div>
+                <div class="text-sm text-gray-600">
+                    テーブル: {{ system_info.table }}
+                </div>
+            </div>
+        </div>
+
+        <!-- プロジェクト一覧 -->
+        {% if projects %}
+        <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+            <!-- Table Header -->
+            <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                <div class="flex items-center font-semibold text-gray-700">
+                    <i data-lucide="menu" class="w-4 h-4 mr-2"></i> プロジェクト一覧
+                </div>
+                {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
+                <div class="text-sm text-gray-500">
+                    {{ projects|length }} 件
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Table Body -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse table-auto">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-700 text-sm font-bold border-b border-gray-200">
+                            <th class="p-3 w-16 text-center whitespace-nowrap">ID</th>
+                            <th class="p-3 w-auto min-w-[120px]">プロジェクト名</th>
+                            <th class="p-3 whitespace-nowrap text-center max-w-[7rem]">責任者</th>
+                            <th class="p-3 whitespace-nowrap text-gray-600">更新日時</th>
+                            <th class="p-3 whitespace-nowrap w-[1px]">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm divide-y divide-gray-100">
+                        {% for project in projects %}
+
+                        {# --- 権限判定ロジック：元のスタイルを維持しつつ判定条件だけ追加 --- #}
+                        {% set is_system_admin = (session.get('user_category') == 'admin') %}
+                        {% set is_owner = (project.責任者 == permissions.user_info.user_id) %}
+                        {# システムadmin、CoRePo総管理者、責任者のいずれかであれば管理可能 #}
+                        {% set can_manage_all = (is_system_admin or permissions.is_colrep_admin or is_owner) %}
+
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="p-3 text-center">
+                                <span class="bg-gray-500 text-white text-xs px-2 py-0.5 rounded">#{{ project.id }}</span>
+                            </td>
+                            <td class="p-3 font-medium text-gray-800">
+                                {{ project.プロジェクト名 }}
+                            </td>
+                            <td class="p-3 text-center max-w-[7rem]">
+                                {% if project.責任者名 %}
+                                    {% if is_owner %}
+                                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full inline-flex items-center">
+                                            <i data-lucide="user" class="w-3 h-3 mr-1"></i> 自分
+                                        </span>
+                                    {% else %}
+                                        <span class="text-gray-700 inline-flex items-start max-w-[6.5rem] text-left" title="{{ project.責任者名 }}">
+                                            <i data-lucide="user" class="w-3 h-3 mr-1 mt-0.5 flex-shrink-0"></i>
+                                            <span class="break-all">{{ project.責任者名[:30] }}{% if project.責任者名|length > 30 %}…{% endif %}</span>
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-gray-400">未設定</span>
+                                {% endif %}
+                            </td>
+                            <td class="p-3 text-gray-600 whitespace-nowrap">
+                                {% if project.更新日時 %}
+                                    {{ project.更新日時.strftime('%m/%d %H:%M') }}
+                                {% else %}
+                                    <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="p-3 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="showProjectPreview({{ project.id }})" class="flex items-center text-cyan-500 border border-cyan-500 hover:bg-cyan-50 px-2 py-1 rounded text-xs transition-colors">
+                                        <i data-lucide="eye" class="w-3 h-3 mr-1"></i> プレビュー
+                                    </button>
+
+                                    {% if can_manage_all %}
+                                        <a href="{{ url_for('colrep.edit_project', project_id=project.id) }}" class="flex items-center text-blue-500 border border-blue-500 hover:bg-blue-50 px-2 py-1 rounded text-xs transition-colors">
+                                            <i data-lucide="edit" class="w-3 h-3 mr-1"></i> 設定と操作
+                                        </a>
+
+                                        <button onclick="confirmDelete({{ project.id }}, '{{ project.プロジェクト名 }}')" class="flex items-center text-red-500 border border-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs transition-colors">
+                                            <i data-lucide="trash-2" class="w-3 h-3 mr-1"></i> 削除
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-12 text-center">
+            <i data-lucide="folder-x" class="w-16 h-16 mx-auto text-gray-400 mb-4"></i>
+            <h4 class="text-xl font-semibold text-gray-600 mb-2">プロジェクトがありません</h4>
+            <p class="text-gray-500 mb-6">CoRePoプロジェクトはまだ作成されていません。</p>
+            {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
+            <a href="{{ url_for('colrep.create_project') }}" class="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded shadow transition-colors">
+                <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i> 最初のプロジェクトを作成
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- インポートモーダル -->
+    {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
+    <div class="modal" id="importModal">
+        <div class="modal-content bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center rounded-t-lg">
+                <h5 class="text-lg font-semibold text-gray-800 flex items-center">
+                    <i data-lucide="upload" class="w-5 h-5 mr-2"></i> プロジェクトのインポート
+                </h5>
+                <button onclick="closeModal('importModal')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="POST" action="{{ url_for('colrep.import_project') }}" enctype="multipart/form-data">
+                <div class="p-6">
+                    <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-4 rounded">
+                        <div class="flex items-start">
+                            <i data-lucide="info" class="w-5 h-5 mr-2 mt-0.5 flex-shrink-0"></i>
+                            <div>
+                                <strong>エクスポートしたExcelファイル(.xlsx)をアップロードしてください。</strong>
+                                <ul class="mt-2 mb-0 ml-4 list-disc text-sm">
+                                    <li>プロジェクト名が重複する場合は自動的に番号が付加されます</li>
+                                    <li>インポートしたユーザーが責任者として設定されます</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="excelFile" class="block text-sm font-medium text-gray-700 mb-2">Excelファイル (.xlsx)</label>
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-300 rounded cursor-pointer" id="excelFile" name="excel_file" accept=".xlsx" required>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2 rounded-b-lg">
+                    <button type="button" onclick="closeModal('importModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors flex items-center">
+                        <i data-lucide="upload" class="w-4 h-4 mr-1"></i> インポート
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- インポートモーダル (JSON) -->
+    <div class="modal" id="importJsonModal">
+        <div class="modal-content bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center rounded-t-lg">
+                <h5 class="text-lg font-semibold text-gray-800 flex items-center">
+                    <i data-lucide="upload" class="w-5 h-5 mr-2"></i> プロジェクトのインポート (JSON)
+                </h5>
+                <button onclick="closeModal('importJsonModal')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="POST" action="{{ url_for('colrep.import_project_json') }}" enctype="multipart/form-data">
+                <div class="p-6">
+                    <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-4 rounded">
+                        <div class="flex items-start">
+                            <i data-lucide="info" class="w-5 h-5 mr-2 mt-0.5 flex-shrink-0"></i>
+                            <div>
+                                <strong>エクスポートしたJSONファイル(.json)をアップロードしてください。</strong>
+                                <ul class="mt-2 mb-0 ml-4 list-disc text-sm">
+                                    <li>プロジェクト名が重複する場合は自動的に番号が付加されます</li>
+                                    <li>インポートしたユーザーが責任者として設定されます</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="jsonFile" class="block text-sm font-medium text-gray-700 mb-2">JSONファイル (.json)</label>
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-300 rounded cursor-pointer" id="jsonFile" name="json_file" accept=".json" required>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2 rounded-b-lg">
+                    <button type="button" onclick="closeModal('importJsonModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors flex items-center">
+                        <i data-lucide="upload" class="w-4 h-4 mr-1"></i> インポート
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 削除確認モーダル -->
+    <div class="modal" id="deleteModal">
+        <div class="modal-content bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center rounded-t-lg">
+                <h5 class="text-lg font-semibold text-gray-800">プロジェクト削除の確認</h5>
+                <button onclick="closeModal('deleteModal')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <p class="text-gray-700 mb-4">本当にプロジェクト「<span id="deleteProjectName" class="font-semibold"></span>」を削除しますか?</p>
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded flex items-start">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 mt-0.5 flex-shrink-0"></i>
+                    <span>この操作は取り消せません。</span>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2 rounded-b-lg">
+                <button type="button" onclick="closeModal('deleteModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors">
+                    キャンセル
+                </button>
+                <button type="button" id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors">
+                    削除する
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- トースト通知用のコンテナ -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <script>
+        // ページ読み込み完了時にLucideアイコンを初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+
+        // モーダル関数
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.add('show');
+                // アイコンを再初期化
+                lucide.createIcons({ root: modal });
+            }
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        // モーダル外クリックで閉じる
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('show');
+            }
+        }
+
+        // トースト通知
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            let bgClass = 'bg-gray-800';
+            if (type === 'error') bgClass = 'bg-red-600';
+            if (type === 'success') bgClass = 'bg-green-600';
+
+            toast.className = `toast ${bgClass} text-white px-4 py-3 rounded shadow-lg flex items-center gap-2 text-sm`;
+            toast.innerHTML = `
+                <i data-lucide="${type === 'error' ? 'alert-circle' : type === 'success' ? 'check-circle' : 'info'}" class="w-4 h-4"></i>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+
+            setTimeout(() => {
+                toast.classList.add('hiding');
+                toast.addEventListener('animationend', () => {
+                    toast.remove();
+                });
+            }, 3000);
+        }
+
+        // プロジェクト機能
+        function showProjectPreview(projectId) {
+            // URLアクセス可能な共有プレビューを新規タブで開く（あわなら参照バーが出る）
+            window.open('/colrep/shared_preview/' + projectId, '_blank');
+        }
+
+        // [2026-07-25 改修] 削除: toggleProjectAccess()
+        // 呼び出し元が無く、サーバ側の /colrep/toggle_project_access も削除したため除去。
+        // 公開/限定の切り替えは「設定と操作」（/colrep/edit_project）から行う。
+        function exportProjectData(projectId, projectName) {
+            const btn = event.target.closest('button');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="hourglass" class="w-3 h-3 mr-1"></i> エクスポート中...';
+            lucide.createIcons({ root: btn });
+
+            fetch(`/colrep/export_project_data/${projectId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('エクスポートに失敗しました');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+
+                    const now = new Date();
+                    const dateStr = now.getFullYear() +
+                                   String(now.getMonth() + 1).padStart(2, '0') +
+                                   String(now.getDate()).padStart(2, '0') + '_' +
+                                   String(now.getHours()).padStart(2, '0') +
+                                   String(now.getMinutes()).padStart(2, '0');
+                    a.download = `${projectName}_${dateStr}.xlsx`;
+
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons({ root: btn });
+                    showToast('エクスポートが完了しました', 'success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('エクスポートに失敗しました: ' + error.message, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons({ root: btn });
+                });
+        }
+
+        let deleteProjectId = null;
+
+        function confirmDelete(projectId, projectName) {
+            deleteProjectId = projectId;
+            document.getElementById('deleteProjectName').textContent = projectName;
+            openModal('deleteModal');
+        }
+
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            if (deleteProjectId) {
+                fetch(`/colrep/delete_project/${deleteProjectId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        showToast('エラー: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    showToast('エラーが発生しました: ' + error, 'error');
+                });
+            }
+
+            closeModal('deleteModal');
+        });
+    </script>
+</body>
+</html>

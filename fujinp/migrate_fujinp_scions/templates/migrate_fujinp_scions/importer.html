@@ -1,0 +1,322 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>インポーター - さいまる</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         "Hiragino Sans", "Yu Gothic UI", sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            min-height: 100vh;
+            padding: 15px;
+            color: #1e293b;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        .header {
+            background: white;
+            padding: 18px 25px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header h1 { font-size: 1.3rem; color: #1e293b; }
+        .header .subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .back-btn {
+            padding: 8px 16px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .back-btn:hover { background: #4f46e5; }
+
+        #toast {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            padding: 12px 20px; border-radius: 8px;
+            font-weight: 600; font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: none; max-width: 400px;
+        }
+        #toast.success { background: #d1fae5; color: #065f46; border-left: 4px solid #10b981; }
+        #toast.error   { background: #fee2e2; color: #991b1b; border-left: 4px solid #ef4444; }
+        #toast.info    { background: #dbeafe; color: #1e40af; border-left: 4px solid #3b82f6; }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 18px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .hint { font-size: 0.82rem; color: #94a3b8; line-height: 1.6; }
+
+        .pkg-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .pkg-table th, .pkg-table td {
+            padding: 11px 12px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+            vertical-align: top;
+        }
+        .pkg-table th { background: #f1f5f9; font-weight: 600; color: #475569; }
+        .pkg-table tr:hover td { background: #f8fafc; }
+        .pkg-table code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 0.85em; }
+        .pkg-desc { color: #334155; line-height: 1.6; }
+        .pkg-meta { font-size: 0.78rem; color: #64748b; margin-top: 4px; }
+        .badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.82rem;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover:not(:disabled) { background: #059669; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #dc2626; }
+        .btn-row { display: flex; gap: 8px; }
+
+        .empty {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            padding: 40px 20px;
+        }
+
+        .notice-admin {
+            background: #eef2ff;
+            border-left: 4px solid #6366f1;
+            color: #3730a3;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-bottom: 14px;
+        }
+        .notice-admin code {
+            background: #e0e7ff; padding: 1px 5px; border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <span style="font-size:1.8rem">📥</span>
+            <div>
+                <h1>インポーター</h1>
+                <div class="subtitle">登録済みエクスポートパッケージのダウンロード</div>
+            </div>
+        </div>
+        <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="back-btn">← さいまる</a>
+    </div>
+
+    <!-- パッケージ一覧 -->
+    <div class="card">
+        <div class="card-title">📦 登録済みパッケージ</div>
+        <div class="hint" style="margin-bottom:14px">
+            エクスポーターで登録されたパッケージの一覧です。
+            「⬇ ダウンロード」で ZIP をお使いの PC に保存できます。
+        </div>
+        {% if not allow_guest_download %}
+        <div class="notice-admin">
+            🔒 パッケージにはサイト全体のソースコードと全テーブルの構造が
+            含まれるため、一覧とダウンロードは <strong>admin 限定</strong>です。
+            配布範囲を広げる場合は <code>routes.py</code> の
+            <code>ALLOW_GUEST_DOWNLOAD</code> を <code>True</code> にしてください。
+        </div>
+        {% endif %}
+        <div id="list-loading" style="color:#64748b;font-size:0.9rem;">読み込み中...</div>
+        <div id="list-body" style="display:none">
+            <table class="pkg-table">
+                <thead>
+                    <tr>
+                        <th style="width:38%">説明</th>
+                        <th style="width:14%">作成元</th>
+                        <th style="width:16%">登録日時</th>
+                        <th style="width:12%">サイズ</th>
+                        <th style="width:20%">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="pkg-tbody"></tbody>
+            </table>
+        </div>
+        <div id="list-empty" class="empty" style="display:none">
+            登録済みのパッケージはまだありません。<br>
+            エクスポーターでパッケージを作成・登録してください。
+        </div>
+    </div>
+
+</div>
+
+<script>
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+
+// ===== CSRF 対策 =====
+// サーバ側（csrf_guard）はカスタムヘッダ X-Requested-With を必須にしている。
+// このヘッダはクロスオリジンの <form> 送信では付けられないため、
+// フォーム送信型の CSRF（特に削除）を防げる。
+$.ajaxSetup({
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+});
+
+function showToast(msg, type) {
+    const $t = $('#toast');
+    $t.text(msg).removeClass('success error info').addClass(type || 'info').show();
+    setTimeout(() => $t.fadeOut(), 4000);
+}
+
+function fmtSize(bytes) {
+    if (!bytes) return '-';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024).toLocaleString() + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// ' も含めてエスケープする（属性値に埋め込むため）
+function escapeHtml(s) {
+    return String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function loadList() {
+    $.ajax({
+        url: '{{ url_for("migrate_fujinp_scions.api_import_list") }}',
+        method: 'GET',
+        success: function(r) {
+            if (!r.success) {
+                $('#list-loading').text('エラー: ' + r.error).css('color','#ef4444');
+                return;
+            }
+            $('#list-loading').hide();
+            if (!r.packages || r.packages.length === 0) {
+                $('#list-empty').show();
+                return;
+            }
+            const $tbody = $('#pkg-tbody').empty();
+            r.packages.forEach(p => {
+                const dlUrl = '{{ url_for("migrate_fujinp_scions.api_import_download", pkg_id=0) }}'
+                    .replace('/0', '/' + p.id);
+                const dbBadge = p.included_dbs
+                    ? `<span class="badge">schema: ${escapeHtml(p.included_dbs)}</span>`
+                    : '<span class="badge" style="background:#f1f5f9;color:#64748b">schema 同梱なし</span>';
+                const delBtn = IS_ADMIN
+                    ? `<button class="btn btn-danger btn-del" data-id="${p.id}"
+                          data-name="${escapeHtml(p.filename)}">🗑 削除</button>`
+                    : '';
+                $tbody.append(`
+                    <tr>
+                        <td>
+                            <div class="pkg-desc">${escapeHtml(p.description) || '<em style="color:#94a3b8">（説明なし）</em>'}</div>
+                            <div class="pkg-meta">
+                                <code>${escapeHtml(p.filename)}</code><br>
+                                ${p.file_count} ファイル ・ ${dbBadge}
+                            </div>
+                        </td>
+                        <td>${escapeHtml(p.source_owner)}</td>
+                        <td>${escapeHtml(p.created_at)}</td>
+                        <td>${fmtSize(p.size_bytes)}</td>
+                        <td>
+                            <div class="btn-row">
+                                <a href="${dlUrl}" class="btn btn-success">⬇ ダウンロード</a>
+                                ${delBtn}
+                            </div>
+                        </td>
+                    </tr>
+                `);
+            });
+            $('#list-body').show();
+        },
+        error: function() {
+            $('#list-loading').text('一覧の取得に失敗しました').css('color','#ef4444');
+        }
+    });
+}
+
+// 削除
+$(document).on('click', '.btn-del', function() {
+    const id = $(this).data('id');
+    const name = $(this).data('name');
+    if (!confirm(`パッケージ「${name}」を削除します。\nZIP ファイルとメタ情報の両方が削除されます。よろしいですか？`)) {
+        return;
+    }
+    const $btn = $(this).prop('disabled', true);
+    $.ajax({
+        url: '{{ url_for("migrate_fujinp_scions.api_import_delete", pkg_id=0) }}'
+            .replace('/0', '/' + id),
+        method: 'POST',
+        success: function(r) {
+            if (r.success) {
+                showToast('パッケージを削除しました', 'success');
+                loadList();
+            } else {
+                showToast('削除失敗: ' + r.error, 'error');
+                $btn.prop('disabled', false);
+            }
+        },
+        error: function(xhr) {
+            const r = xhr.responseJSON;
+            showToast(r && r.error ? '削除に失敗しました: ' + r.error
+                                   : '削除に失敗しました', 'error');
+            $btn.prop('disabled', false);
+        }
+    });
+});
+
+$(document).ready(function() { loadList(); });
+</script>
+</body>
+</html>

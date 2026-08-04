@@ -1,0 +1,248 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>データマイグレーション - まいあし管理</title>
+    <style>
+        :root {
+            --primary-color: #6a1b9a;
+            --danger-color: #f44336;
+            --success-color: #4caf50;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        #header {
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary-color), #ab47bc);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        #header h1 {
+            font-size: 22px;
+            margin: 0;
+            font-weight: 600;
+        }
+        .header-nav a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: 0.2s;
+            margin-left: 10px;
+        }
+        .header-nav a:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        #main-container {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            margin: 0 0 20px 0;
+            color: var(--primary-color);
+            font-size: 20px;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .warning-box h3 {
+            margin: 0 0 10px 0;
+            color: #856404;
+            font-size: 16px;
+        }
+        .warning-box ul {
+            margin: 10px 0;
+            padding-left: 20px;
+            color: #856404;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #1565c0;
+        }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: 0.2s;
+            display: inline-block;
+        }
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        .btn-danger:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #migration-log {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            display: none;
+        }
+        #migration-log.active {
+            display: block;
+        }
+        .log-success { color: #4caf50; }
+        .log-error { color: #f44336; }
+        .log-info { color: #2196f3; }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f0f0f0;
+            border-top-color: var(--danger-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>🔧 データマイグレーション管理</h1>
+    <div class="header-nav">
+        <a href="/migration_assistant/admin_panel">📊 管理パネル</a>
+        <a href="/migration_assistant">🏠 メインページ</a>
+    </div>
+</div>
+
+<div id="main-container">
+    <div class="card">
+        <h2>⚠️ 旧システム → 新システム データ転写</h2>
+        
+        <div class="warning-box">
+            <h3>🚨 注意事項</h3>
+            <ul>
+                <li>このボタンは<strong>開発期間中のみ</strong>使用します</li>
+                <li>実行すると旧システムのコンテンツを新テーブルに<strong>上書き転写</strong>します</li>
+                <li>何度でも実行可能です（コンテンツ開発を旧システムで継続するため）</li>
+                <li>改修完了後、このページは削除されます</li>
+            </ul>
+        </div>
+
+        <div class="info-box">
+            <p><strong>転写対象:</strong></p>
+            <p>✓ Phase/Stage/Step コンテンツ（全師匠分）</p>
+            <p>✓ 師匠-弟子の受講関係</p>
+            <p>✓ 進捗データ</p>
+        </div>
+
+        <button id="btn-migrate" class="btn btn-danger" onclick="executeMigration()">
+            🔄 データマイグレーション実行
+        </button>
+        
+        <div id="migration-log"></div>
+    </div>
+</div>
+
+<script>
+let isRunning = false;
+
+async function executeMigration() {
+    if (isRunning) {
+        alert('マイグレーション実行中です。しばらくお待ちください。');
+        return;
+    }
+
+    if (!confirm('旧システムのコンテンツを新テーブルに転写します。\n\n既存の新テーブルデータは上書きされます。\n\n実行しますか？')) {
+        return;
+    }
+
+    isRunning = true;
+    const btn = document.getElementById('btn-migrate');
+    const log = document.getElementById('migration-log');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 実行中...';
+    
+    log.classList.add('active');
+    log.innerHTML = '<span class="log-info">[開始] マイグレーションを開始します...</span>\n';
+
+    try {
+        const response = await fetch('/migration_assistant/api/admin/migrate_to_courses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            log.innerHTML += '<span class="log-success">[成功] マイグレーションが完了しました</span>\n\n';
+            log.innerHTML += '<span class="log-info">--- 詳細 ---</span>\n';
+            log.innerHTML += data.log.join('\n');
+            alert('✅ マイグレーションが完了しました');
+        } else {
+            log.innerHTML += '<span class="log-error">[エラー] ' + data.error + '</span>\n';
+            if (data.log) {
+                log.innerHTML += data.log.join('\n');
+            }
+            alert('❌ エラーが発生しました:\n' + data.error);
+        }
+    } catch (error) {
+        log.innerHTML += '<span class="log-error">[エラー] ' + error.message + '</span>\n';
+        alert('❌ エラーが発生しました:\n' + error.message);
+    } finally {
+        isRunning = false;
+        btn.disabled = false;
+        btn.innerHTML = '🔄 データマイグレーション実行';
+        log.scrollTop = log.scrollHeight;
+    }
+}
+</script>
+
+</body>
+</html>

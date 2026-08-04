@@ -1,0 +1,850 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoRePo - Collaborative RePort composer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<style>
+.form-section {
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.form-check {
+    padding: 15px;
+    background-color: white;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.form-check-label {
+    cursor: pointer;
+    user-select: none;
+}
+
+/* 操作ボタンのスタイリング */
+.operation-button {
+    width: 100%;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.operation-button i {
+    margin-right: 8px;
+}
+
+/* ★追加: 共有設定モーダルの公開範囲バッジ */
+.policy-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 2px;
+}
+.policy-item:hover { background: #eef2f6; }
+.pbadge {
+    display: inline-block;
+    min-width: 128px;
+    text-align: center;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: .9em;
+}
+.pb-public   { background: #2e8b57; }
+.pb-domestic { background: #35618f; }
+.pb-private  { background: #6c757d; }
+.pb-group    { background: #3aa6b9; }
+.pb-domgroup { background: #35618f; box-shadow: inset 0 0 0 2px #3aa6b9; }
+.pdesc { color: #7a8694; font-size: .88em; }
+
+/* ★追加: 許可グループのチェックボックスリスト */
+.share-group-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 0;
+    font-size: .95em;
+    user-select: none;
+}
+.share-group-item:hover { background: #eef2f6; }
+.share-group-item input { margin: 0; }
+</style>
+
+<div class="container mt-4">
+    <!-- ヘッダー部分 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-pencil"></i> プロジェクト編集</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('colrep.index') }}">CoRePo</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('colrep.view_project', project_id=project.id) }}">{{ project.プロジェクト名 }}</a></li>
+                    <li class="breadcrumb-item active">編集</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{{ url_for('colrep.index') }}" class="btn btn-danger">
+                <i class="bi bi-x-circle"></i> キャンセル
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}" role="alert">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- プロジェクト編集フォーム -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square"></i> プロジェクト情報編集</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="editProjectForm">
+                        <!-- プロジェクト名 -->
+                        <div class="mb-3">
+                            <label for="project_name" class="form-label">プロジェクト名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="project_name" name="project_name"
+                                   value="{{ project.プロジェクト名 }}" required maxlength="255">
+                            <div class="form-text">プロジェクトを識別する名前を入力してください。</div>
+                        </div>
+
+                        <!-- 責任者 -->
+                        <div class="mb-3">
+                            <label for="responsible_user" class="form-label">責任者 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="responsible_user" name="responsible_user" required>
+                                <option value="">責任者を選択してください</option>
+                                {% for user in users %}
+                                <option value="{{ user.id }}" {% if user.id == project.責任者 %}selected{% endif %}>
+                                    {{ user.full_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">プロジェクトの責任者を選択してください。</div>
+                        </div>
+
+                        <!-- テーブル名 -->
+                        <div class="mb-3">
+                            <label for="table_name" class="form-label">テーブル名 <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">nishida$fujinp.</span>
+                                <input type="text" class="form-control" id="table_name" name="table_name"
+                                       value="{{ project.テーブル名 }}" required maxlength="64"
+                                       pattern="^[a-zA-Z][a-zA-Z0-9_]*$">
+                            </div>
+                            <div class="form-text">
+                                英字で始まり、英数字とアンダースコアのみ使用可能です。
+                                <br><strong>注意:</strong> テーブル名の変更は既存データに影響する可能性があります。
+                            </div>
+                            <div class="invalid-feedback">
+                                テーブル名は英字で始まり、英数字とアンダースコアのみ使用してください。
+                            </div>
+                        </div>
+
+                        <!-- Composer -->
+                        <div class="mb-4">
+                            <label for="composer" class="form-label">Composer設定</label>
+                            <textarea class="form-control" id="composer" name="composer" rows="8">{{ project.Composer or '' }}</textarea>
+                            <div class="form-text">
+                                レポート生成に関する設定や説明を記述してください（任意）。
+                                現在の文字数: <span id="composer-count">{{ (project.Composer or '')|length }}</span> 文字
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h5 class="mb-3"><i class="bi bi-globe"></i> プロジェクト公開設定</h5>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="is_public"
+                                               id="isPublic" value="on"
+                                               {% if project.is_public %}checked{% endif %}>
+                                        <label class="form-check-label" for="isPublic">
+                                            <strong>公開プロジェクト</strong>
+                                            <small class="d-block text-muted mt-1">
+                                                全ユーザーがプレビューとComposerソースを閲覧可能
+                                            </small>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="is_public"
+                                               id="isPrivate" value="off"
+                                               {% if not project.is_public %}checked{% endif %}>
+                                        <label class="form-check-label" for="isPrivate">
+                                            <strong>限定プロジェクト</strong>
+                                            <small class="d-block text-muted mt-1">
+                                                責任者と執筆者のみがプレビューとComposerソースを閲覧可能
+                                            </small>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info mt-3">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>説明：</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li><strong>公開プロジェクト：</strong> Composerの統合コンテンツとComposerソースコードが全ユーザーに公開されます</li>
+                                    <li><strong>限定プロジェクト：</strong> プロジェクト責任者と実際にコンテンツを執筆したユーザーのみが閲覧可能です</li>
+                                    <li>限定プロジェクトのまま特定の範囲にプレビューを見せたい場合は、右の<strong>「共有設定」</strong>を使ってください</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 送信ボタン -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('colrep.index') }}" class="btn btn-danger">
+                                <i class="bi bi-x-circle"></i> キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> 変更を保存
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- 現在の情報カード -->
+            <div class="card bg-light mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> 現在の情報</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row small">
+                        <dt class="col-sm-5">プロジェクトID:</dt>
+                        <dd class="col-sm-7">
+                            <span class="badge bg-secondary">#{{ project.id }}</span>
+                        </dd>
+
+                        <dt class="col-sm-5">作成日時:</dt>
+                        <dd class="col-sm-7">
+                            {% if project.更新日時 %}
+                            {{ project.更新日時.strftime('%Y/%m/%d %H:%M') }}
+                            {% else %}
+                            <span class="text-muted">未設定</span>
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-5">現在の責任者:</dt>
+                        <dd class="col-sm-7">
+                            <i class="bi bi-person"></i> {{ project.責任者名 }}
+                        </dd>
+
+                        <dt class="col-sm-5">現在のテーブル:</dt>
+                        <dd class="col-sm-7">
+                            <code>{{ project.テーブル名 }}</code>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- 操作カード（プロジェクト詳細ページから移動） -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-gear"></i> 操作</h6>
+                </div>
+                <div class="card-body">
+                    <!-- 統合ビュー表示ボタン -->
+                    <button class="btn btn-success operation-button" onclick="previewIntegratedContent()">
+                        <i class="bi bi-eye"></i> 統合ビュー表示
+                    </button>
+
+                    <!-- ★追加: 共有設定ボタン -->
+                    <button class="btn btn-secondary operation-button" onclick="openShareSettings()">
+                        <i class="bi bi-share"></i> 共有設定
+                    </button>
+
+                    <!-- タスク管理ボタン -->
+                    <a href="{{ url_for('colrep.manage_project_table', project_id=project.id) }}"
+                       class="btn btn-primary operation-button">
+                        <i class="bi bi-list-task"></i> タスク管理
+                    </a>
+
+                    <!-- Composer編集ボタン -->
+                    <button class="btn btn-info operation-button" onclick="editComposer()">
+                        <i class="bi bi-file-earmark-text"></i> Composer編集
+                    </button>
+
+                    <!-- アーカイブに保存ボタン -->
+                    <button type="button" class="btn btn-warning operation-button" data-bs-toggle="modal" data-bs-target="#archiveProjectModal">
+                        <i class="fas fa-archive"></i> アーカイブに保存
+                    </button>
+
+                    <!-- ✅ エクスポートボタン (Excel) -->
+                    <button class="btn btn-success operation-button" onclick="exportProjectData({{ project.id }}, '{{ project.プロジェクト名 }}')">
+                        <i class="bi bi-file-earmark-excel"></i> エクスポート (Excel)
+                    </button>
+
+                    <!-- ✅ 追加: エクスポートボタン (JSON) -->
+                    <button class="btn btn-info operation-button" onclick="exportProjectDataJson({{ project.id }}, '{{ project.プロジェクト名 }}')">
+                        <i class="bi bi-filetype-json"></i> エクスポート (JSON)
+                    </button>
+
+                    <!-- プロジェクト削除ボタン -->
+                    <button class="btn btn-outline-danger operation-button" onclick="deleteProject()">
+                        <i class="bi bi-trash"></i> プロジェクト削除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ★追加: 共有設定モーダル -->
+<div class="modal fade" id="shareSettingsModal" tabindex="-1" aria-labelledby="shareSettingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="shareSettingsModalLabel">
+                    <i class="bi bi-share me-2"></i>共有設定 — プレビューの公開範囲
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    プレビュー（統合ビュー）を閲覧できる範囲を設定します（文書アーカイブと同じ区分）。
+                    <strong>編集はこれまでどおり責任者のみ</strong>です。閲覧にはFUJIN-Pへのログインが必要です。
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">公開範囲</label>
+                    <div>
+                        <label class="policy-item">
+                            <input type="radio" name="sharePolicy" value="private" checked>
+                            <span class="pbadge pb-private">🔒 非公開</span>
+                            <span class="pdesc">責任者・担当者とadminのみ（既定）</span>
+                        </label>
+                        <label class="policy-item">
+                            <input type="radio" name="sharePolicy" value="public">
+                            <span class="pbadge pb-public">🌐 一般公開</span>
+                            <span class="pdesc">ログイン済みユーザなら誰でも</span>
+                        </label>
+                        <label class="policy-item">
+                            <input type="radio" name="sharePolicy" value="domestic">
+                            <span class="pbadge pb-domestic">🏢 学内公開</span>
+                            <span class="pdesc">regularユーザ（学内者）のみ</span>
+                        </label>
+                        <label class="policy-item">
+                            <input type="radio" name="sharePolicy" value="group">
+                            <span class="pbadge pb-group">👥 グループ</span>
+                            <span class="pdesc">指定グループの所属者（カテゴリ不問）</span>
+                        </label>
+                        <label class="policy-item">
+                            <input type="radio" name="sharePolicy" value="domestic_group">
+                            <span class="pbadge pb-domgroup">🏢＋👥 学内＋グループ</span>
+                            <span class="pdesc">regularユーザ、または指定グループの所属者</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3" id="shareGroupBox" style="display:none;">
+                    <label class="form-label fw-bold">許可するグループ（チェックを入れたグループの所属者に公開）</label>
+                    <div id="shareGroups" class="border rounded p-2 bg-white"
+                         style="max-height: 220px; overflow-y: auto;"></div>
+                </div>
+
+                <hr>
+
+                <div class="mb-2">
+                    <label for="sharePreviewUrl" class="form-label fw-bold">
+                        <i class="bi bi-link-45deg"></i> 共有URL（閲覧を許可した人に伝える）
+                    </label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="sharePreviewUrl" readonly>
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="copyShareUrl('sharePreviewUrl', this)">
+                            <i class="bi bi-clipboard"></i> コピー
+                        </button>
+                    </div>
+                    <div class="form-text">
+                        閲覧者にはプレビューが表示されます。責任者・adminが開くと画面上部に
+                        「プロジェクト編集」ボタンが表示され、そのまま編集に進めます。
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3 mb-0 small">
+                    <i class="bi bi-info-circle"></i>
+                    「公開プロジェクト（is_public）」がONの場合は、この設定に関わらず全ログインユーザーが閲覧できます。
+                    責任者・担当者・adminは設定に関わらず常に閲覧できます。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="shareSaveBtn" onclick="saveShareSettings()">
+                    <i class="bi bi-check-circle"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- アーカイブモーダル -->
+<div class="modal fade" id="archiveProjectModal" tabindex="-1" aria-labelledby="archiveProjectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="archiveProjectModalLabel">
+                    <i class="fas fa-archive me-2"></i>プロジェクトをアーカイブに保存
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form method="POST" action="{{ url_for('colrep.archive_project', project_id=project.id) }}">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        このプロジェクトの情報をアーカイブシステムに保存します。
+                    </div>
+
+                    <!-- アーカイブタイトル -->
+                    <div class="mb-3">
+                        <label for="archive_title" class="form-label">
+                            <strong>アーカイブタイトル <span class="text-danger">*</span></strong>
+                        </label>
+                        <input type="text" class="form-control" id="archive_title" name="archive_title"
+                               value="{{ project.プロジェクト名 }}_プロジェクト詳細" required>
+                    </div>
+
+                    <!-- パブリック説明 -->
+                    <div class="mb-3">
+                        <label for="public_description" class="form-label">
+                            <strong>パブリック説明</strong>
+                        </label>
+                        <textarea class="form-control" id="public_description" name="public_description" rows="3">{{ project.プロジェクト名 }}のプロジェクト詳細情報です。
+
+**プロジェクト情報**:
+- 責任者: {{ project.責任者名 }}
+- テーブル名: {{ project.テーブル名 }}
+- 更新日時: {{ project.更新日時.strftime('%Y年%m月%d日') if project.更新日時 else '不明' }}</textarea>
+                    </div>
+
+                    <!-- オーナーメモ -->
+                    <div class="mb-3">
+                        <label for="owner_memo" class="form-label">
+                            <strong>オーナーメモ</strong>
+                        </label>
+                        <textarea class="form-control" id="owner_memo" name="owner_memo" rows="4">**プロジェクト詳細アーカイブ**:
+- プロジェクト名: {{ project.プロジェクト名 }}
+- プロジェクトID: {{ project.id }}
+- 責任者: {{ project.責任者名 }} (ID: {{ project.責任者 }})
+- テーブル名: {{ project.テーブル名 }}
+- 更新日時: {{ project.更新日時.strftime('%Y年%m月%d日 %H:%M') if project.更新日時 else '不明' }}
+- ソース: CoRePoプロジェクト編集ページ</textarea>
+                    </div>
+
+                    <!-- プレビュー情報 -->
+                    <div class="card bg-light">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-eye me-1"></i>アーカイブ対象情報
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small><strong>プロジェクト名:</strong> {{ project.プロジェクト名 }}</small><br>
+                                    <small><strong>責任者:</strong> {{ project.責任者名 }}</small><br>
+                                    <small><strong>テーブル:</strong> {{ project.テーブル名 }}</small><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <small><strong>保存形式:</strong> HTML</small><br>
+                                    <small><strong>保存先:</strong> public_documents テーブル</small><br>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>キャンセル
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-archive me-1"></i>アーカイブに保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // フォームバリデーション
+    const form = document.getElementById('editProjectForm');
+    const tableNameInput = document.getElementById('table_name');
+    const composerTextarea = document.getElementById('composer');
+    const composerCount = document.getElementById('composer-count');
+
+    // テーブル名の入力チェック
+    tableNameInput.addEventListener('input', function() {
+        const value = this.value;
+        const pattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
+        if (value && !pattern.test(value)) {
+            this.classList.add('is-invalid');
+        } else {
+            this.classList.remove('is-invalid');
+        }
+    });
+
+    // Composer文字数カウント
+    composerTextarea.addEventListener('input', function() {
+        composerCount.textContent = this.value.length;
+    });
+
+    // フォーム送信時の最終チェック
+    form.addEventListener('submit', function(e) {
+        const tableNameValue = tableNameInput.value;
+        const pattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
+        if (!pattern.test(tableNameValue)) {
+            e.preventDefault();
+            tableNameInput.classList.add('is-invalid');
+            alert('テーブル名は英字で始まり、英数字とアンダースコアのみ使用してください。');
+            return false;
+        }
+
+        // テーブル名が変更された場合の確認
+        const originalTableName = "{{ project.テーブル名 }}";
+        if (tableNameValue !== originalTableName) {
+            const confirmed = confirm(
+                'テーブル名を変更しようとしています。\n' +
+                '元のテーブル: ' + originalTableName + '\n' +
+                '新しいテーブル: ' + tableNameValue + '\n\n' +
+                'この変更により既存データとの整合性に問題が生じる可能性があります。\n' +
+                '本当に変更しますか？'
+            );
+
+            if (!confirmed) {
+                e.preventDefault();
+                return false;
+            }
+        }
+    });
+
+    // ★追加: 共有設定の公開範囲ラジオ切り替えでグループ選択欄を出し入れ
+    document.querySelectorAll('input[name="sharePolicy"]').forEach(r => {
+        r.addEventListener('change', toggleShareGroupBox);
+    });
+});
+
+// ===== 操作関数 =====
+
+// ★追加: 共有設定関連
+function toggleShareGroupBox() {
+    const checked = document.querySelector('input[name="sharePolicy"]:checked');
+    const p = checked ? checked.value : 'private';
+    document.getElementById('shareGroupBox').style.display =
+        (p === 'group' || p === 'domestic_group') ? '' : 'none';
+}
+
+function openShareSettings() {
+    // 共有URLをセット（1本化：閲覧者はプレビュー、責任者には編集ボタンが出る）
+    document.getElementById('sharePreviewUrl').value =
+        location.origin + '/colrep/shared_preview/{{ project.id }}';
+
+    // 現在の設定を取得してモーダルを開く
+    fetch(`/colrep/get_share_settings/{{ project.id }}`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                alert('共有設定の取得に失敗しました: ' + (data.error || '不明なエラー'));
+                return;
+            }
+            const radio = document.querySelector(
+                `input[name="sharePolicy"][value="${data.access_policy}"]`);
+            if (radio) radio.checked = true;
+
+            // ★チェックボックス式（opt-in）でグループ一覧を構築
+            const box = document.getElementById('shareGroups');
+            box.innerHTML = '';
+            (data.groups || []).forEach(g => {
+                const label = document.createElement('label');
+                label.className = 'share-group-item';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'form-check-input';
+                cb.value = g.id;
+                if ((data.group_ids || []).includes(g.id)) cb.checked = true;
+
+                const span = document.createElement('span');
+                span.textContent = g.name;
+
+                label.appendChild(cb);
+                label.appendChild(span);
+                box.appendChild(label);
+            });
+
+            toggleShareGroupBox();
+            new bootstrap.Modal(document.getElementById('shareSettingsModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('共有設定の取得中にエラーが発生しました: ' + error.message);
+        });
+}
+
+function saveShareSettings() {
+    const checked = document.querySelector('input[name="sharePolicy"]:checked');
+    const policy = checked ? checked.value : 'private';
+    const groupIds = Array.from(
+        document.querySelectorAll('#shareGroups input[type="checkbox"]:checked')
+    ).map(o => parseInt(o.value, 10));
+
+    if ((policy === 'group' || policy === 'domestic_group') && groupIds.length === 0) {
+        alert('グループ公開では、許可するグループを1つ以上選んでください。');
+        return;
+    }
+
+    const btn = document.getElementById('shareSaveBtn');
+    btn.disabled = true;
+
+    fetch(`/colrep/save_share_settings/{{ project.id }}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            access_policy: policy,
+            access_group_ids: groupIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+            const modal = bootstrap.Modal.getInstance(
+                document.getElementById('shareSettingsModal'));
+            if (modal) modal.hide();
+            alert('共有設定を保存しました。');
+        } else {
+            alert('保存に失敗しました: ' + (data.error || '不明なエラー'));
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        console.error('Error:', error);
+        alert('保存中にエラーが発生しました: ' + error.message);
+    });
+}
+
+function copyShareUrl(inputId, btn) {
+    const input = document.getElementById(inputId);
+    navigator.clipboard.writeText(input.value)
+        .then(() => {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check"></i> コピーしました';
+            setTimeout(() => { btn.innerHTML = original; }, 1500);
+        })
+        .catch(() => {
+            // フォールバック（選択状態にしてユーザーに任せる）
+            input.select();
+            alert('コピーできませんでした。選択状態にしたので Ctrl+C でコピーしてください。');
+        });
+}
+
+// Composer編集関数
+function editComposer() {
+    // ✅ 追加：責任者チェック
+    const userCategory = "{{ session.get('user_category') }}"; // セッションからカテゴリ取得
+    const currentUserId = {{ session.get('user_id') }};
+    const responsibleUserId = {{ project.責任者 }};
+
+    // ★改修：admin もしくは 責任者本人のみ許可
+    if (userCategory !== 'admin' && currentUserId !== responsibleUserId) {
+        alert('Composer編集はプロジェクト責任者のみ実行可能です。');
+        return;
+    }
+
+    const editorUrl = `/colrep/edit_composer_external/{{ project.id }}`;
+
+    const editorWindow = window.open(
+        editorUrl,
+        'composerEditor',
+        'width=1200,height=800,scrollbars=yes,resizable=yes'
+    );
+
+    if (!editorWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    // 編集完了時のコールバック設定
+    window.composerCallback = function(result) {
+        if (result.success) {
+            window.location.reload();
+        } else if (result.aborted) {
+            console.log('Composer編集が中断されました');
+        } else {
+            alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+        }
+        editorWindow.close();
+    };
+}
+
+// 統合コンテンツプレビュー関数
+function previewIntegratedContent() {
+    const previewUrl = `/colrep/preview_integrated/{{ project.id }}`;
+
+    const previewWindow = window.open(
+        previewUrl,
+        'integratedPreview',
+        'width=900,height=700,scrollbars=yes,resizable=yes'
+    );
+
+    if (!previewWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    previewWindow.focus();
+}
+
+// プロジェクト削除関数
+function deleteProject() {
+    if (confirm('プロジェクトを削除しますか？この操作は元に戻せません。')) {
+        fetch(`/colrep/delete_project/{{ project.id }}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.href = data.redirect_url;
+            } else {
+                alert('エラー: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('プロジェクト削除に失敗しました');
+        });
+    }
+}
+// エクスポート関数
+function exportProjectData(projectId, projectName) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> エクスポート中...';
+
+    fetch(`/colrep/export_project_data/${projectId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('エクスポートに失敗しました');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+
+            const now = new Date();
+            const dateStr = now.getFullYear() +
+                           String(now.getMonth() + 1).padStart(2, '0') +
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') +
+                           String(now.getMinutes()).padStart(2, '0');
+            a.download = `${projectName}_${dateStr}.xlsx`;
+
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('エクスポートに失敗しました: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+}
+
+// エクスポート関数 (JSON)
+function exportProjectDataJson(projectId, projectName) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> エクスポート中...';
+
+    fetch(`/colrep/export_project_data_json/${projectId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('エクスポートに失敗しました');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+
+            const now = new Date();
+            const dateStr = now.getFullYear() +
+                           String(now.getMonth() + 1).padStart(2, '0') +
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') +
+                           String(now.getMinutes()).padStart(2, '0');
+            a.download = `${projectName}_${dateStr}.json`;
+
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('エクスポートに失敗しました: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  FUJIN-P 配布雛形 / Distribution template
+  ------------------------------------------------------------
+  このファイルは雛形です。自サイトで公開する前に、下記の
+  プレースホルダを自組織の情報に置き換えてください。
+  置き換えないまま公開すると、他組織の名称・連絡先を掲示する
+  ことになります。
+
+    {{ORGANIZATION}}       アライアンス運営主体の組織名（例: ○○大学、○○市）
+    {{SITE_NAME}}          本サイトの名称
+    {{SITE_URL}}           本サイトのURL
+    {{ENACTED_DATE}}       制定日（例: 2026年4月1日）
+
+  置き換え漏れは、二重波括弧に囲まれた記号が画面にそのまま残ります。
+  ブラウザで開いて、二重波括弧が残っていないことを確認してください。
+
+  本雛形は FUJIN-P の一部として AGPL v3 のもとで配布されます。
+  文面はそのまま使用せず、自組織の法務確認を経て用いてください。
+  Copyright (C) 2026 Toyoaki Nishida
+  ============================================================
+-->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ORGANIZATION}}におけるFUJIN-Pアライアンス：サイト利用規約</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a2e;
+            --paper: #fafaf7;
+            --accent: #2c5f7c;
+            --accent-light: #e8f0f4;
+            --border: #c8c8be;
+            --subtle: #6b6b60;
+            --highlight: #f5f0e0;
+            --level1: #2c7c5f;
+            --level2: #2c5f7c;
+            --level3: #5f4b8b;
+            --level4: #8b3a3a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(135deg, #e8e6e0 0%, #d8d6d0 100%);
+            font-family: "Noto Sans JP", sans-serif;
+            color: var(--ink);
+            line-height: 1.85;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .document {
+            max-width: 780px;
+            margin: 0 auto;
+            background: var(--paper);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+            padding: 3.5rem 3rem;
+            position: relative;
+        }
+
+        .document::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent), #4a8fa8, var(--accent));
+        }
+
+        .doc-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .doc-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 0.2rem 0.8rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .doc-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.3rem;
+        }
+
+        .doc-subtitle {
+            font-size: 0.88rem;
+            color: var(--subtle);
+            font-weight: 300;
+        }
+
+        .preamble {
+            background: var(--accent-light);
+            border-left: 4px solid var(--accent);
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 0.92rem;
+        }
+
+        .site-declaration {
+            background: var(--highlight);
+            border: 1px solid #ddd6b8;
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 0.92rem;
+            text-align: center;
+        }
+
+        .site-declaration .site-name {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .article {
+            margin-bottom: 1.8rem;
+        }
+
+        .article-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            padding-left: 0.8rem;
+            border-left: 3px solid var(--accent);
+        }
+
+        .article p, .article li {
+            font-size: 0.92rem;
+            margin-bottom: 0.4rem;
+            text-align: justify;
+        }
+
+        .article ol {
+            padding-left: 1.8rem;
+        }
+
+        .article ol li {
+            padding-left: 0.3rem;
+        }
+
+        .level-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.6rem;
+            margin: 1rem 0;
+        }
+
+        .level-card {
+            padding: 0.8rem 1.2rem;
+            border-left: 4px solid;
+            background: #f8f8f5;
+            font-size: 0.88rem;
+        }
+
+        .level-card.l1 { border-color: var(--level1); }
+        .level-card.l2 { border-color: var(--level2); }
+        .level-card.l3 { border-color: var(--level3); }
+        .level-card.l4 { border-color: var(--level4); }
+
+        .level-card .level-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .level-card.l1 .level-name { color: var(--level1); }
+        .level-card.l2 .level-name { color: var(--level2); }
+        .level-card.l3 .level-name { color: var(--level3); }
+        .level-card.l4 .level-name { color: var(--level4); }
+
+        .service-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+        }
+
+        .service-table th {
+            background: var(--accent);
+            color: white;
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+            font-weight: 500;
+            font-size: 0.82rem;
+            letter-spacing: 0.03em;
+        }
+
+        .service-table td {
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid #e0e0d8;
+        }
+
+        .service-table tr:hover td {
+            background: #f5f5f0;
+        }
+
+        .doc-footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .doc-footer .date-line {
+            text-align: right;
+            font-size: 0.85rem;
+            color: var(--subtle);
+            margin-bottom: 0.3rem;
+        }
+
+        .nav-links {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            font-size: 0.82rem;
+            color: var(--accent);
+            text-decoration: none;
+            border: 1px solid var(--accent);
+            padding: 0.3rem 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: var(--accent);
+            color: white;
+        }
+
+        @media (max-width: 640px) {
+            .document { padding: 2rem 1.5rem; }
+            .doc-title { font-size: 1.3rem; }
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .document { box-shadow: none; border: none; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="document">
+    <header class="doc-header">
+        <div class="doc-badge">{{ORGANIZATION}}におけるFUJIN-P Alliance</div>
+        <h1 class="doc-title">FUJIN-Pサイト利用規約</h1>
+        <p class="doc-subtitle">{{ORGANIZATION}}におけるFUJIN-Pアライアンス</p>
+    </header>
+
+    <!-- ▼ サイト掲示時に具体名を埋める宣言ブロック ▼ -->
+    <div class="site-declaration">
+        本サイト <span class="site-name">{{SITE_NAME}}</span><br>
+        <span style="font-size:0.85rem; color:#6b6b60;">{{SITE_URL}}</span><br>
+        は、{{ORGANIZATION}}におけるFUJIN-Pアライアンスに所属する<br>
+        FUJIN-Pソムリエが構築・運営するFUJIN-Pサイトです。
+    </div>
+
+    <div class="preamble">
+        本規約は、{{ORGANIZATION}}におけるFUJIN-Pアライアンスに参加するFUJIN-Pサイト（以下「本サイト」）の利用に関する条件を定めるものです。本サイトへの登録をもって、利用者は本規約のすべての条項に同意したものとみなされます。
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第1条（サービスの仕組みの理解）</h2>
+        <ol>
+            <li>本サイトは、FUJIN-P基盤上に構築されたWebアプリケーション群であり、FUJIN-Pアライアンスの一部として運営されています。</li>
+            <li>本サイトの管理責任者は、「FUJIN-Pソムリエ」と呼ばれる個人であり、アライアンス全体の運営主体やシステム開発者とは異なります。利用者は、サービス提供に関する一次的な責任がソムリエに帰属することを理解するものとします。</li>
+            <li>FUJIN-Pアライアンスは、複数のFUJIN-Pソムリエが自律的に運営するサイトの連合体です。各サイトは独立して運営されますが、シングルサインオン（SSO）等の連携機能を通じて相互に接続される場合があります。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第2条（提供されるサービス）</h2>
+        <p>本サイトでは、以下の分類に基づくサービスが提供されます。ただし、サイトごとに提供される機能は異なります。</p>
+        <table class="service-table">
+            <thead>
+                <tr>
+                    <th>区分</th>
+                    <th>サービス名称（例）</th>
+                    <th>概要</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>人的資源管理</td>
+                    <td>まいぐる、あくまね</td>
+                    <td>グループ構成管理、スケジュール管理</td>
+                </tr>
+                <tr>
+                    <td>アセット管理</td>
+                    <td>アプシャ、テーシャ</td>
+                    <td>アプリケーション共有、SQLテーブル共有</td>
+                </tr>
+                <tr>
+                    <td>基本情報管理</td>
+                    <td>コレポ、マイノート、テーブルマスター</td>
+                    <td>文書管理、テーブルデータ管理</td>
+                </tr>
+                <tr>
+                    <td>領域依存アプリ</td>
+                    <td>けいこく年度、まいあし 等</td>
+                    <td>年度計画管理、マニュアル・研修管理</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第3条（取り扱いデータのレベル定義）</h2>
+        <p>本アライアンスにおける情報は、以下の4段階のレベルに分類して管理されます。</p>
+        <div class="level-grid">
+            <div class="level-card l1">
+                <p class="level-name">レベル1：パブリック共有</p>
+                <p>社会に周知されている、またはアライアンス外に広く公開される情報。</p>
+            </div>
+            <div class="level-card l2">
+                <p class="level-name">レベル2：アライアンス間共有</p>
+                <p>SSO、アプシャ、テーシャ等の連携のために、アライアンス内の複数サイト間で共有される情報。</p>
+            </div>
+            <div class="level-card l3">
+                <p class="level-name">レベル3：コミュニティ内限定</p>
+                <p>利用者が所属する特定のFUJIN-Pサイト内でのみ共有される情報。</p>
+            </div>
+            <div class="level-card l4">
+                <p class="level-name">レベル4：業務・役割限定</p>
+                <p>業務上の関係者にのみ限定して開示される高機密情報。</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第4条（アカウントとシングルサインオン）</h2>
+        <ol>
+            <li>利用者は、本サイトの利用にあたり、所定の方法によりアカウント登録を行うものとします。</li>
+            <li>アライアンス内のサイト間連携のため、Google認証等を用いたシングルサインオン（SSO）が導入される場合があります。SSOを利用する場合、利用者の基本的な属性情報（氏名、メールアドレス、所属等）がアライアンス内の連携先サイトに共有されることがあります。</li>
+            <li>利用者は、自身のアカウント情報を適切に管理し、第三者に利用させてはなりません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第5条（禁止事項）</h2>
+        <ol>
+            <li>本サイトを通じて取得したレベル2～4の情報を、許可なくアライアンスまたはコミュニティ外に開示・漏洩すること。</li>
+            <li>本サイトの運営を妨害する行為、または他の利用者の利用を著しく阻害する行為。</li>
+            <li>虚偽の情報を登録すること。</li>
+            <li>本サイトのセキュリティを意図的に回避・破壊する行為。</li>
+            <li>法令または公序良俗に反する行為。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第6条（免責事項）</h2>
+        <ol>
+            <li>本サイトの利用によって生じたいかなる損害についても、FUJIN-P基盤の開発者、アライアンスの運営主体、および本サイトのソムリエは、故意または重過失の場合を除き責任を負いません。</li>
+            <li>システムの保守・障害・天災等により、予告なくサービスが中断・停止される場合があります。</li>
+            <li>利用者が登録したデータの消失・毀損について、運営側は合理的なバックアップ体制を整えるよう努めますが、完全な復旧を保証するものではありません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第7条（利用の停止・終了）</h2>
+        <ol>
+            <li>ソムリエは、第5条に違反した利用者に対し、警告、一時停止、またはアカウント削除の措置をとることができます。</li>
+            <li>利用者は、いつでもアカウントの削除を求めることができます。削除に伴うデータの取り扱いについては、プライバシーポリシーに従います。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第8条（規約の改定）</h2>
+        <p>本規約は、本サイトのソムリエまたはアライアンスの運営主体により改定されることがあります。改定された規約は、本サイト上に掲示された時点で効力を生じるものとし、掲示後に本サイトを継続して利用した場合、利用者は改定に同意したものとみなされます。</p>
+    </section>
+
+    <footer class="doc-footer">
+        <p class="date-line">制定：{{ENACTED_DATE}}</p>
+
+        <nav class="nav-links">
+            <a href="/static/alliance_regulation.html">アライアンス運用規程</a>
+            <a href="/static/privacy_policy.html">プライバシーポリシー</a>
+        </nav>
+    </footer>
+</div>
+</body>
+</html>

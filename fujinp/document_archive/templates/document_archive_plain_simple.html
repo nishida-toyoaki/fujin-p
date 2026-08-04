@@ -1,0 +1,42 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ document.title }} - プレーン表示</title>
+    <style>
+        /* 最小限のスタイル調整のみ */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: auto !important;
+        }
+        
+        /* 横スクロールが必要な場合のための調整 */
+        * {
+            box-sizing: border-box;
+        }
+        
+        /* テーブルなど幅の広い要素の横スクロール対応 */
+        table {
+            min-width: max-content !important;
+        }
+        
+        pre {
+            overflow-x: auto !important;
+            white-space: pre !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- アーカイブされたHTMLコンテンツをそのまま表示 -->
+    {{ content_html|safe }}
+</body>
+</html>

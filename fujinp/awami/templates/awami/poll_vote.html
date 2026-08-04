@@ -1,0 +1,179 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投票 - あわみ</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.6; padding: 18px; }
+h1 { font-size: 1.15em; margin-bottom: 4px; }
+.sub { color: #7a8694; font-size: .82em; margin-bottom: 14px; }
+.card { background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+        padding: 16px 18px; margin-bottom: 12px; }
+.btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
+       background: #35618f; color: #fff; font-size: .95em; cursor: pointer; }
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+.btn.big { font-size: 1.1em; padding: 12px 26px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: .85em; color: #5a6672; margin-bottom: 4px; }
+.form-row input[type=text], .form-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccd4dc; border-radius: 6px;
+    font-size: .95em; font-family: inherit; }
+.form-row textarea { min-height: 110px; resize: vertical; }
+#result { display: none; padding: 9px 13px; border-radius: 6px; margin-bottom: 12px; font-size: .9em; }
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+.chip { display: inline-block; font-size: .76em; padding: 2px 10px; border-radius: 10px; }
+.chip.open { background: #e4f3e8; color: #21663a; }
+.chip.closed { background: #fbe4e4; color: #8f2323; }
+.q { font-size: 1.02em; font-weight: bold; margin-bottom: 8px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.bar-label { width: 32%; min-width: 110px; font-size: .92em; text-align: right; }
+.bar-track { flex: 1; background: #eef2f6; border-radius: 5px; height: 22px; position: relative; }
+.bar-fill { background: #4a7ebb; height: 100%; border-radius: 5px;
+            transition: width .4s; min-width: 2px; }
+.bar-count { width: 46px; font-size: .95em; font-weight: bold; }
+.wi-item { border-top: 1px solid #eef2f6; padding: 8px 2px; }
+.wi-meta { color: #98a3ae; font-size: .76em; margin-bottom: 2px; }
+.wi-body { white-space: pre-wrap; font-size: .95em; }
+.muted { color: #98a3ae; font-size: .85em; }
+
+.opt-btn { display: block; width: 100%; text-align: left; margin-bottom: 8px;
+           padding: 12px 14px; border: 2px solid #ccd4dc; border-radius: 8px;
+           background: #fff; font-size: 1em; cursor: pointer; font-family: inherit; }
+.opt-btn:hover { background: #eef2f6; }
+.opt-btn.sel { border-color: #35618f; background: #eaf1f8; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>🗳 投票　<span class="chip {{ poll.status }}" id="statusChip">{{ '受付中' if poll.status == 'open' else '締切' }}</span></h1>
+<div class="sub">{{ poll.canvas_name }}</div>
+<div id="result"></div>
+
+{% if poll.choice_question %}
+<div class="card">
+    <div class="q">{{ poll.choice_question }}</div>
+    {% for o in options %}
+    <button class="opt-btn" data-index="{{ o.opt_index }}">{{ loop.index }}. {{ o.label }}</button>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if poll.writein_question %}
+<div class="card">
+    <div class="q">{{ poll.writein_question }}</div>
+    <div class="form-row">
+        <textarea id="writein" placeholder="Markdownで記入できます"></textarea>
+    </div>
+</div>
+{% endif %}
+
+<button class="btn big" id="btnVote">投票</button>
+<div class="muted" style="margin-top:6px;">選択とwrite-inは片方だけでも投票できます。選択は最新の投票で上書き、write-inは追記されます。</div>
+
+<div style="margin-top:14px;"></div>
+<div class="card" id="choiceBlock" style="display:none;">
+    <div class="q" id="choiceQ"></div>
+    <div id="bars"></div>
+    <div class="muted" id="totalVotes"></div>
+</div>
+<div class="card" id="writeinBlock" style="display:none;">
+    <div class="q" id="writeinQ"></div>
+    <div id="wiList"></div>
+</div>
+
+<script>
+const TOKEN = '{{ poll.token }}';
+let selected = null;
+function showResult(m, e) {
+    $('#result').text(m).removeClass('success error')
+        .addClass(e ? 'error' : 'success').show();
+    setTimeout(() => $('#result').fadeOut(), 5000);
+}
+$('.opt-btn').on('click', function() {
+    $('.opt-btn').removeClass('sel');
+    $(this).addClass('sel');
+    selected = parseInt($(this).data('index'));
+});
+$('#btnVote').on('click', function() {
+    const w = ($('#writein').val() || '').trim();
+    if (selected === null && !w) {
+        showResult('選択かwrite-inのどちらかを入力してください', true); return;
+    }
+    $.ajax({
+        url: '/awami/api/vote/' + TOKEN, method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ opt_index: selected, writein: w }),
+        success: function(resp) {
+            if (!resp.success) { showResult('エラー: ' + resp.error, true); return; }
+            let m = '投票を受け付けました';
+            if (resp.writein_no) m += '（write-in #' + resp.writein_no + '）';
+            showResult(m, false);
+            $('#writein').val('');
+            pollResults();
+        },
+        error: function(xhr) {
+            let d = '';
+            try { d = JSON.parse(xhr.responseText).error; } catch (e) {}
+            showResult('エラー（HTTP ' + xhr.status + '）: ' + (d || '失敗しました'), true);
+        }
+    });
+});
+
+function renderResults(d) {
+    const $c = $('#choiceBlock');
+    if (d.choice_question) {
+        $c.show();
+        $('#choiceQ').text(d.choice_question);
+        const maxN = Math.max.apply(null, d.options.map(o => o.count).concat([1]));
+        const $bars = $('#bars').empty();
+        d.options.forEach(function(o) {
+            const pct = Math.round(o.count / maxN * 100);
+            $bars.append(
+                $('<div class="bar-row">')
+                    .append($('<div class="bar-label">').text(o.label))
+                    .append($('<div class="bar-track">')
+                        .append($('<div class="bar-fill">').css('width', pct + '%')))
+                    .append($('<div class="bar-count">').text(o.count)));
+        });
+        $('#totalVotes').text('投票数：' + d.total_votes);
+    } else { $c.hide(); }
+    const $w = $('#writeinBlock');
+    if (d.writein_question) {
+        $w.show();
+        $('#writeinQ').text(d.writein_question);
+        const $list = $('#wiList').empty();
+        if (d.writeins.length === 0) {
+            $list.append($('<div class="muted">').text('まだ投稿はありません'));
+        }
+        d.writeins.forEach(function(x) {
+            $list.append($('<div class="wi-item">')
+                .append($('<div class="wi-meta">').text('#' + x.no + '　' + x.time))
+                .append($('<div class="wi-body">').text(x.content)));
+        });
+    } else { $w.hide(); }
+    $('#statusChip').text(d.status === 'open' ? '受付中' : '締切')
+        .removeClass('open closed').addClass(d.status);
+}
+function pollResults() {
+    $.getJSON('/awami/api/poll/' + TOKEN + '/results', function(d) {
+        if (d && d.success) renderResults(d);
+    });
+}
+
+pollResults();
+setInterval(pollResults, 3000);
+</script>
+</body>
+</html>

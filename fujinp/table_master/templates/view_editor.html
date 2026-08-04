@@ -1,0 +1,402 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ビューエディタ - テーブルマスター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+/* ===== レイアウト ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+       font-size: 13px; background: #f0f2f5; color: #333; height: 100vh;
+       display: flex; flex-direction: column; }
+
+/* ===== ヘッダー ===== */
+#header { background: #1a3a5c; color: #fff; padding: 10px 16px;
+          display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+#header h1 { font-size: 16px; font-weight: 600; }
+#header .nav-links { margin-left: auto; display: flex; gap: 8px; }
+#header a { color: #aed6f1; text-decoration: none; font-size: 12px; padding: 4px 8px;
+            border: 1px solid #2e6da4; border-radius: 3px; }
+#header a:hover { background: #2e6da4; }
+
+/* ===== メインレイアウト ===== */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* ===== 左パネル: ビュー一覧 ===== */
+#left-panel { width: 260px; flex-shrink: 0; background: #fff; border-right: 1px solid #ddd;
+              display: flex; flex-direction: column; }
+#left-panel .panel-title { background: #2e6da4; color: #fff; padding: 8px 12px;
+                            font-size: 12px; font-weight: 600; display: flex;
+                            align-items: center; justify-content: space-between; }
+#view-search { padding: 8px; border-bottom: 1px solid #eee; }
+#view-search input { width: 100%; padding: 5px 8px; border: 1px solid #ccc;
+                     border-radius: 3px; font-size: 12px; }
+#view-list { flex: 1; overflow-y: auto; }
+.view-item { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer;
+             display: flex; flex-direction: column; gap: 2px; }
+.view-item:hover { background: #eef4fb; }
+.view-item.active { background: #dbeafe; border-left: 3px solid #2e6da4; }
+.view-item .vname { font-size: 13px; font-weight: 600; color: #1a3a5c; }
+.view-item .vdb   { font-size: 11px; color: #888; }
+.view-item .vdesc { font-size: 11px; color: #666; white-space: nowrap;
+                    overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== 右パネル: エディタ ===== */
+#right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ===== エディタ上部 ===== */
+#editor-area { background: #fff; border-bottom: 1px solid #ddd; padding: 12px 16px;
+               flex-shrink: 0; }
+#editor-toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+                  align-items: center; }
+#editor-toolbar .toolbar-title { font-size: 13px; font-weight: 600; color: #1a3a5c;
+                                  flex: 1; }
+.btn { padding: 5px 12px; border: none; border-radius: 3px; cursor: pointer;
+       font-size: 12px; font-weight: 500; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-primary  { background: #2e6da4; color: #fff; }
+.btn-success  { background: #27ae60; color: #fff; }
+.btn-danger   { background: #e74c3c; color: #fff; }
+.btn-warning  { background: #f39c12; color: #fff; }
+.btn-secondary{ background: #7f8c8d; color: #fff; }
+.btn-new      { background: #1a3a5c; color: #fff; }
+
+#meta-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+#meta-form .full-width { grid-column: 1 / -1; }
+label { font-size: 11px; color: #666; display: block; margin-bottom: 3px; }
+input[type=text], select, textarea {
+    width: 100%; padding: 5px 8px; border: 1px solid #ccc; border-radius: 3px;
+    font-size: 12px; font-family: inherit; }
+textarea { resize: vertical; }
+#query-textarea { font-family: 'Courier New', monospace; font-size: 12px;
+                  background: #f8f9fa; min-height: 80px; }
+
+/* ===== プレビューエリア ===== */
+#preview-area { flex: 1; overflow-y: auto; padding: 12px 16px; }
+#preview-status { margin-bottom: 8px; font-size: 12px; color: #666; }
+#preview-status .status-ok  { color: #27ae60; font-weight: 600; }
+#preview-status .status-err { color: #e74c3c; font-weight: 600; }
+#preview-table-wrap { overflow-x: auto; }
+#preview-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+#preview-table th { background: #2e6da4; color: #fff; padding: 6px 10px;
+                    text-align: left; white-space: nowrap; border: 1px solid #1a5276; }
+#preview-table td { padding: 5px 10px; border: 1px solid #ddd;
+                    white-space: nowrap; max-width: 300px;
+                    overflow: hidden; text-overflow: ellipsis; }
+#preview-table tr:nth-child(even) td { background: #f7fafd; }
+
+/* ===== トースト通知 ===== */
+#toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+         border-radius: 4px; color: #fff; font-size: 13px; z-index: 9999;
+         display: none; max-width: 320px; }
+#toast.ok  { background: #27ae60; }
+#toast.err { background: #e74c3c; }
+
+/* ===== ローディング ===== */
+.loading { color: #888; font-style: italic; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div id="header">
+  <h1>📋 ビューエディタ</h1>
+  <div class="nav-links">
+    <a href="/table_master/archive/">📦 アーカイブ管理</a>
+    <a href="/table_master/">← テーブルマスター</a>
+  </div>
+</div>
+
+<!-- メインレイアウト -->
+<div id="main">
+
+  <!-- 左: ビュー一覧 -->
+  <div id="left-panel">
+    <div class="panel-title">
+      <span>保存済みビュー</span>
+      <button class="btn btn-new" style="padding:2px 8px;font-size:11px;" onclick="newView()">＋ 新規</button>
+    </div>
+    <div id="view-search">
+      <input type="text" id="search-input" placeholder="ビュー名で絞り込み..." oninput="filterViews()">
+    </div>
+    <div id="view-list">
+      <div class="loading">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- 右: エディタ + プレビュー -->
+  <div id="right-panel">
+
+    <!-- エディタ -->
+    <div id="editor-area">
+      <div id="editor-toolbar">
+        <span class="toolbar-title" id="editor-title">ビューを選択または新規作成</span>
+        <button class="btn btn-warning" onclick="previewQuery()">▶ プレビュー</button>
+        <button class="btn btn-success" onclick="saveView()">💾 保存</button>
+        <button class="btn btn-danger"  onclick="deleteView()" id="btn-delete" style="display:none">🗑 削除</button>
+        <button class="btn btn-primary" onclick="sendToArchive()" id="btn-archive" style="display:none">📦 アーカイブへ</button>
+      </div>
+      <div id="meta-form">
+        <input type="hidden" id="view-id">
+        <div>
+          <label>ビュー名（英数字・アンダースコア）</label>
+          <input type="text" id="field-view-name" placeholder="例: sales_monthly_2026">
+        </div>
+        <div>
+          <label>表示名</label>
+          <input type="text" id="field-display-name" placeholder="例: 月別売上集計 2026年">
+        </div>
+        <div>
+          <label>対象データベース</label>
+          <select id="field-database">
+            <option value="">DB選択...</option>
+          </select>
+        </div>
+        <div>
+          <label>説明・メモ</label>
+          <input type="text" id="field-description" placeholder="このビューの用途・メモ">
+        </div>
+        <div class="full-width">
+          <label>SQLクエリ（SELECT / SHOW / DESCRIBE / EXPLAIN）</label>
+          <textarea id="query-textarea" rows="4"
+            placeholder="SELECT * FROM table_name WHERE ..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- プレビュー -->
+    <div id="preview-area">
+      <div id="preview-status"></div>
+      <div id="preview-table-wrap"></div>
+    </div>
+
+  </div><!-- /right-panel -->
+</div><!-- /main -->
+
+<div id="toast"></div>
+
+<script>
+// ===== 状態 =====
+let allViews = [];
+let currentViewId = null;
+let lastPreviewResult = null; // アーカイブ送信用
+
+// ===== 起動 =====
+$(function() {
+  loadDatabases();
+  loadViews();
+});
+
+// ===== DB一覧取得 =====
+function loadDatabases() {
+  $.get('/table_master/get_all_tables', function(data) {
+    if (!data.tables) return;
+    const dbs = [...new Set(data.tables.map(t => t.database))].sort();
+    const $sel = $('#field-database');
+    dbs.forEach(db => $sel.append(`<option value="${esc(db)}">${esc(db)}</option>`));
+  });
+}
+
+// ===== ビュー一覧 =====
+function loadViews() {
+  $.get('/table_master/view_editor/list', function(data) {
+    if (data.success) {
+      allViews = data.views;
+      renderViewList(allViews);
+    }
+  });
+}
+
+function renderViewList(views) {
+  const $list = $('#view-list').empty();
+  if (!views.length) {
+    $list.html('<div class="loading" style="color:#aaa">ビューがありません</div>');
+    return;
+  }
+  views.forEach(v => {
+    const $item = $(`
+      <div class="view-item ${v.id == currentViewId ? 'active' : ''}" data-id="${v.id}">
+        <div class="vname">${esc(v.display_name)}</div>
+        <div class="vdb">${esc(v.source_database)} / <code>${esc(v.view_name)}</code></div>
+        <div class="vdesc">${esc(v.description || '(説明なし)')}</div>
+      </div>
+    `).on('click', () => selectView(v.id));
+    $list.append($item);
+  });
+}
+
+function filterViews() {
+  const q = $('#search-input').val().toLowerCase();
+  renderViewList(allViews.filter(v =>
+    (v.view_name + v.display_name + (v.description||'')).toLowerCase().includes(q)
+  ));
+}
+
+// ===== ビュー選択 =====
+function selectView(id) {
+  const v = allViews.find(x => x.id == id);
+  if (!v) return;
+  currentViewId = id;
+  lastPreviewResult = null;
+  $('#view-id').val(v.id);
+  $('#field-view-name').val(v.view_name);
+  $('#field-display-name').val(v.display_name);
+  $('#field-description').val(v.description || '');
+  $('#field-database').val(v.source_database);
+  $('#query-textarea').val(v.query_text);
+  $('#editor-title').text(v.display_name);
+  $('#btn-delete').show();
+  $('#btn-archive').hide();
+  $('#preview-status').html('');
+  $('#preview-table-wrap').empty();
+  renderViewList(allViews); // active更新
+}
+
+// ===== 新規 =====
+function newView() {
+  currentViewId = null;
+  lastPreviewResult = null;
+  $('#view-id').val('');
+  $('#field-view-name').val('');
+  $('#field-display-name').val('');
+  $('#field-description').val('');
+  $('#field-database').val('');
+  $('#query-textarea').val('');
+  $('#editor-title').text('新規ビュー');
+  $('#btn-delete').hide();
+  $('#btn-archive').hide();
+  $('#preview-status').html('');
+  $('#preview-table-wrap').empty();
+  renderViewList(allViews);
+}
+
+// ===== プレビュー =====
+function previewQuery() {
+  const db = $('#field-database').val();
+  const q  = $('#query-textarea').val().trim();
+  if (!db || !q) { toast('データベースとクエリを入力してください', 'err'); return; }
+
+  $('#preview-status').html('<span style="color:#888">実行中...</span>');
+  $('#preview-table-wrap').empty();
+
+  $.ajax({
+    url: '/table_master/view_editor/preview',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ source_database: db, query_text: q }),
+    success: function(res) {
+      if (!res.success) {
+        $('#preview-status').html(`<span class="status-err">エラー: ${esc(res.error)}</span>`);
+        return;
+      }
+      lastPreviewResult = res;
+      $('#preview-status').html(
+        `<span class="status-ok">✓ ${res.row_count}行</span>` +
+        ` &nbsp; 実行時間: ${res.execution_time}秒` +
+        ` &nbsp; <small style="color:#aaa">(最大1000行表示)</small>`
+      );
+      renderPreviewTable(res.columns, res.rows);
+      $('#btn-archive').show();
+    },
+    error: function(xhr) {
+      const msg = xhr.responseJSON?.error || '通信エラー';
+      $('#preview-status').html(`<span class="status-err">エラー: ${esc(msg)}</span>`);
+    }
+  });
+}
+
+function renderPreviewTable(columns, rows) {
+  let html = '<table id="preview-table"><thead><tr>';
+  columns.forEach(c => { html += `<th>${esc(c)}</th>`; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
+    columns.forEach(c => { html += `<td>${esc(row[c] ?? '')}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  $('#preview-table-wrap').html(html);
+}
+
+// ===== 保存 =====
+function saveView() {
+  const payload = {
+    id:              $('#view-id').val() || null,
+    view_name:       $('#field-view-name').val().trim(),
+    display_name:    $('#field-display-name').val().trim(),
+    description:     $('#field-description').val().trim(),
+    source_database: $('#field-database').val(),
+    query_text:      $('#query-textarea').val().trim()
+  };
+  if (!payload.view_name || !payload.display_name || !payload.source_database || !payload.query_text) {
+    toast('必須項目をすべて入力してください', 'err'); return;
+  }
+  $.ajax({
+    url: '/table_master/view_editor/save',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify(payload),
+    success: function(res) {
+      if (res.success) {
+        toast(res.message, 'ok');
+        currentViewId = res.id;
+        $('#view-id').val(res.id);
+        $('#btn-delete').show();
+        loadViews();
+      } else {
+        toast(res.error, 'err');
+      }
+    },
+    error: function(xhr) { toast(xhr.responseJSON?.error || '保存エラー', 'err'); }
+  });
+}
+
+// ===== 削除 =====
+function deleteView() {
+  const id = $('#view-id').val();
+  if (!id) return;
+  const name = $('#field-display-name').val();
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  $.ajax({
+    url: '/table_master/view_editor/delete',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ id }),
+    success: function(res) {
+      if (res.success) { toast(res.message, 'ok'); newView(); loadViews(); }
+      else toast(res.error, 'err');
+    }
+  });
+}
+
+// ===== アーカイブへ送信 =====
+function sendToArchive() {
+  if (!lastPreviewResult) { toast('先にプレビューを実行してください', 'err'); return; }
+  // アーカイブ管理画面にパラメータを渡して遷移
+  const params = new URLSearchParams({
+    from_view:  currentViewId || '',
+    db:         $('#field-database').val(),
+    query:      $('#query-textarea').val().trim(),
+    title:      $('#field-display-name').val().trim()
+  });
+  window.location.href = '/table_master/archive/?' + params.toString();
+}
+
+// ===== ユーティリティ =====
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function toast(msg, type='ok') {
+  $('#toast').attr('class', type).text(msg).fadeIn(200);
+  setTimeout(() => $('#toast').fadeOut(400), 3000);
+}
+</script>
+</body>
+</html>

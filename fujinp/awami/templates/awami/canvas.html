@@ -1,0 +1,1698 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ canvas.name }} - あわみ - FUJIN-P</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: #f4f6f8; color: #2b3440; overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: #fff; border-bottom: 1px solid #dde3ea;
+    flex-shrink: 0; flex-wrap: wrap;
+}
+.topbar h1 { font-size: 1.05em; }
+.topbar .chip {
+    font-size: .72em; padding: 2px 8px; border-radius: 10px;
+    background: #eef2f6; color: #5a6672;
+}
+.topbar .chip.ro { background: #fdf0dc; color: #8a6420; }
+.topbar .hint { font-size: .76em; color: #98a3ae; margin-left: auto; }
+.back-btn {
+    display: inline-block; padding: 4px 10px; background: #fff;
+    border: 1px solid #ccd4dc; border-radius: 6px; color: #2b3440;
+    text-decoration: none; font-size: .84em;
+}
+.back-btn:hover { background: #eef2f6; }
+.locate-box { display: inline-flex; align-items: center; gap: 4px; }
+.locate-box input {
+    width: 220px; max-width: 40vw; padding: 5px 9px;
+    border: 1px solid #ccd4dc; border-radius: 6px;
+    font-size: .84em; font-family: inherit;
+}
+.locate-box input:focus { outline: none; border-color: #35618f; }
+.btn {
+    display: inline-block; padding: 5px 12px; border: none; border-radius: 6px;
+    background: #35618f; color: #fff; font-size: .84em; cursor: pointer;
+}
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+.btn.danger { background: #a53d3d; }
+.btn:disabled { opacity: .55; cursor: default; }
+#result {
+    display: none; position: fixed; top: 54px; left: 50%;
+    transform: translateX(-50%); z-index: 300;
+    padding: 8px 16px; border-radius: 6px; font-size: .88em;
+    box-shadow: 0 2px 8px rgba(20,28,36,.2);
+}
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+#stage { flex: 1; position: relative; overflow: hidden; }
+#graph { width: 100%; height: 100%; display: block; cursor: grab; }
+#graph.panning { cursor: grabbing; }
+.node-box { cursor: pointer; }
+.node-box rect {
+    fill: #ffffff; stroke: #9fb0c0; stroke-width: 1.4;
+    filter: drop-shadow(0 1px 2px rgba(30,40,50,.18));
+}
+.node-box:hover rect { stroke: #35618f; }
+.node-box.in-sel rect { stroke: #2e8b57; stroke-width: 3; }
+.node-box.out-sel rect { stroke: #b0752c; stroke-width: 3; }
+.node-box.locate-flash rect {
+    stroke: #d1662c; stroke-width: 3.5;
+    animation: locatePulse 1.6s ease-out;
+}
+@keyframes locatePulse {
+    0%   { stroke: #d1662c; }
+    40%  { stroke: #f0a35a; }
+    100% { stroke: #9fb0c0; stroke-width: 1.4; }
+}
+.node-box.merge-sel rect { stroke: #6a4fa3; stroke-width: 3; }
+.node-box text {
+    font-size: 14px; fill: #2b3440; text-anchor: middle;
+    dominant-baseline: central; pointer-events: none;
+    font-family: inherit;
+}
+/* 結合子の[ラベル]箱：キャンバス上の第一級オブジェクト（ドラッグ・右クリック可） */
+.edge-box rect {
+    fill: #ffffff; stroke-width: 1.6;
+    filter: drop-shadow(0 1px 2px rgba(30,40,50,.15));
+}
+.edge-box { cursor: move; }
+.edge-box:hover rect { stroke-width: 2.6; }
+.edge-box.link-editing rect { stroke-width: 3.2; }
+.edge-box text {
+    font-size: 11px; text-anchor: middle; dominant-baseline: central;
+    pointer-events: none; font-family: inherit;
+}
+.edge-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+/* 結合子作成パネル・リンク編集パネル・ノード統合パネル */
+#edgePanel, #mergePanel, #linkPanel {
+    display: none; position: absolute; top: 10px; left: 50%;
+    transform: translateX(-50%); z-index: 120;
+    background: #fff; border: 1px solid #ccd4dc; border-radius: 8px;
+    padding: 10px 14px; box-shadow: 0 3px 12px rgba(20,28,36,.2);
+    font-size: .86em; max-width: 92%;
+}
+#edgePanel .row, #mergePanel .row, #linkPanel .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#edgePanel select, #edgePanel input, #mergePanel input {
+    padding: 4px 8px; border: 1px solid #ccd4dc; border-radius: 5px;
+    font-size: .95em; font-family: inherit;
+}
+#edgePanel .status, #mergePanel .status, #linkPanel .status { color: #5a6672; }
+#edgeNodeStep, #edgeLabelStep { display: inline-flex; align-items: center; gap: 8px; }
+.side-btn.active { background: #35618f; color: #fff; border-color: #35618f; }
+.side-btn.active:hover { background: #2a4d72; }
+/* 凡例 */
+#legend {
+    position: absolute; left: 10px; bottom: 10px; z-index: 90;
+    background: rgba(255,255,255,.92); border: 1px solid #dde3ea;
+    border-radius: 8px; padding: 8px 10px; font-size: .72em; color: #5a6672;
+    max-width: 300px;
+}
+#legend .cat { display: inline-flex; align-items: center; gap: 4px; margin: 2px 8px 2px 0; }
+#legend .sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+/* コンテキストメニュー */
+#ctxMenu {
+    display: none; position: fixed; z-index: 200; background: #fff;
+    border: 1px solid #ccd4dc; border-radius: 8px; min-width: 180px;
+    box-shadow: 0 4px 14px rgba(20,28,36,.25); overflow: hidden; font-size: .9em;
+}
+#ctxMenu .item { padding: 8px 14px; cursor: pointer; }
+#ctxMenu .item:hover { background: #eef2f6; }
+#ctxMenu .item.danger { color: #a53d3d; }
+#ctxMenu .sep { border-top: 1px solid #eef2f6; }
+/* モーダル */
+.modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(20,28,36,.45);
+    z-index: 250;
+}
+.modal {
+    background: #fff; border-radius: 10px; width: min(560px, 92vw);
+    margin: 7vh auto 0; padding: 20px 24px; max-height: 84vh; overflow-y: auto;
+}
+.modal h2 { font-size: 1.05em; margin-bottom: 12px; }
+.form-row { margin-bottom: 11px; }
+.form-row label { display: block; font-size: .82em; color: #5a6672; margin-bottom: 3px; }
+.form-row input[type=text], .form-row textarea, .form-row select {
+    width: 100%; padding: 7px 10px; border: 1px solid #ccd4dc;
+    border-radius: 6px; font-size: .94em; font-family: inherit;
+}
+.form-row textarea { min-height: 54px; resize: vertical; }
+.form-row .subhint { font-size: .76em; color: #98a3ae; margin-top: 3px; }
+.acl-box {
+    border: 1px solid #dde3ea; border-radius: 6px; padding: 9px 11px;
+    background: #f9fafc;
+}
+.policy-list { display: flex; flex-direction: column; gap: 4px; }
+.policy-item {
+    display: flex; align-items: center; gap: 8px; font-size: .86em;
+    padding: 3px 4px; border-radius: 5px; cursor: pointer;
+}
+.policy-item:hover { background: #eef2f6; }
+.pbadge {
+    display: inline-block; min-width: 128px; text-align: center;
+    padding: 2px 8px; border-radius: 10px; color: #fff; font-size: .92em;
+}
+.pb-inherit { background: #8a94a0; }
+.pb-public { background: #2e8b57; }      /* 文書アーカイブ: bg-success */
+.pb-domestic { background: #35618f; }    /* bg-primary */
+.pb-private { background: #6c757d; }     /* bg-secondary */
+.pb-group { background: #3aa6b9; }       /* bg-info */
+.pb-domgroup { background: #35618f; box-shadow: inset 0 0 0 2px #3aa6b9; }
+.pdesc { color: #7a8694; font-size: .9em; }
+.acl-box .hint { font-size: .76em; color: #98a3ae; margin-top: 5px; }
+.acl-cats label { display: inline-block; margin-right: 13px; font-size: .88em; }
+.acl-groups select { width: 100%; min-height: 70px; margin-top: 4px; }
+.group-checklist {
+    margin-top: 4px; max-height: 160px; overflow-y: auto;
+    border: 1px solid #ccd4dc; border-radius: 6px; background: #fff;
+    padding: 4px 2px;
+}
+.group-checklist label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px; font-size: .9em; color: #2b3440;
+    cursor: pointer; border-radius: 4px;
+}
+.group-checklist label:hover { background: #eef2f6; }
+.group-checklist input { width: 15px; height: 15px; flex-shrink: 0; }
+.modal-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.detail-field { margin-bottom: 9px; }
+.detail-field .k { font-size: .76em; color: #98a3ae; }
+.detail-field .v { font-size: .94em; word-break: break-all; }
+.detail-field .v a { color: #35618f; }
+</style>
+</head>
+<body>
+<div class="topbar">
+    <a href="{{ url_for('our_meeting.index') }}" class="back-btn">← 一覧へ</a>
+    <h1>🕸 {{ canvas.name }}</h1>
+    {% if is_owner %}
+    <span class="chip">あなたのキャンバス</span>
+    <button class="btn" id="btnPlan" style="background:#3a7d5c;">📋 プレゼン計画</button>
+    <button class="btn" id="btnPollNew" style="background:#b0752c;">📢 意見募集</button>
+    <button class="btn" id="btnRecords" style="background:#35618f;">🗂 記録</button>
+    <button class="btn" id="btnMerge" style="background:#6a4fa3;">🧩 ノード統合文書生成</button>
+    <button class="btn" id="btnEdgeNew" style="background:#3aa6b9;">🕸 リンク張り</button>
+    {% else %}
+    <span class="chip ro">閲覧専用（権限のあるノードのみ表示）</span>
+    {% endif %}
+    <button class="btn secondary" id="btnFit">全体表示</button>
+    <button class="btn secondary" id="btnReload">再読込</button>
+    <button class="btn secondary" id="btnFlow">💬 討論の展開</button>
+    <button class="btn secondary" id="btnResults">📊 投票結果</button>
+    {% if is_admin %}
+    <button class="btn secondary" id="btnTypes">🏷 ラベル管理</button>
+    {% endif %}
+    <button class="btn secondary" id="btnExport" title="表示中のノードと結合子（ラベル）関係をメタデータ付きJSONでダウンロード">💾 JSONエクスポート</button>
+    {% if is_owner %}
+    <button class="btn secondary" id="btnImport" title="エクスポートしたJSONをこのキャンバスに新規追加（既存には触れません）">📥 JSON取込</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
+    {% endif %}
+    <span class="locate-box">
+        <input type="text" id="locateUrl" placeholder="実体URLで中心へ（locate）">
+        <button class="btn secondary" id="btnLocate">中心へ</button>
+    </span>
+    <span class="hint">
+        {% if is_owner %}ダブルクリック：ノード作成 ／ 右クリック：操作メニュー ／ ドラッグ：移動・パン ／ Shift＋ドラッグ：下流ごと移動 ／ ホイール：ズーム
+        {% else %}右クリック：詳細 ／ ドラッグ：パン ／ ホイール：ズーム{% endif %}
+    </span>
+</div>
+<div id="result"></div>
+<div id="stage">
+    <svg id="graph" xmlns="http://www.w3.org/2000/svg">
+        <defs id="defs">
+            <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+                <circle cx="1.2" cy="1.2" r="1.2" fill="#d4dae2"></circle>
+            </pattern>
+        </defs>
+        <g id="world">
+            <rect id="bgRect" x="-50000" y="-50000" width="100000" height="100000" fill="url(#dots)"></rect>
+            <g id="axisLayer">
+                <line x1="-50000" y1="0" x2="50000" y2="0" stroke="#b9c2cc" stroke-width="1"></line>
+                <line x1="0" y1="-50000" x2="0" y2="50000" stroke="#b9c2cc" stroke-width="1"></line>
+                <circle cx="0" cy="0" r="3" fill="#8a94a0"></circle>
+                <text x="8" y="-8" font-size="12" fill="#98a3ae" font-family="inherit">(0, 0)</text>
+            </g>
+            <g id="edgeLayer"></g>
+            <g id="nodeLayer"></g>
+            <g id="mergeLayer"></g>
+        </g>
+    </svg>
+    <div id="edgePanel">
+        <div class="row">
+            <span class="status" id="edgeStatus"></span>
+            <span id="edgeNodeStep">
+                <button class="btn secondary side-btn" id="sideIn">⬅ 入力ノード選択</button>
+                <button class="btn secondary side-btn" id="sideOut">➡ 出力ノード選択</button>
+                <button class="btn" id="edgeToLabel">ラベル選択</button>
+            </span>
+            <span id="edgeLabelStep" style="display:none;">
+                <select id="edgeTypeSel"></select>
+                <input type="text" id="edgeNote" placeholder="注記（任意）" size="14">
+                <button class="btn" id="edgeConfirm">完了</button>
+            </span>
+            <button class="btn secondary" id="edgeCancel">キャンセル</button>
+        </div>
+    </div>
+    <div id="linkPanel">
+        <div class="row">
+            <span class="status" id="linkStatus"></span>
+            <button class="btn secondary side-btn" id="linkSideIn">⬅ 入力側</button>
+            <button class="btn secondary side-btn" id="linkSideOut">➡ 出力側</button>
+            <button class="btn" id="linkDone">完了</button>
+        </div>
+    </div>
+    <div id="mergePanel">
+        <div class="row">
+            <span class="status" id="mergeStatus"></span>
+            <input type="text" id="mergeName" size="26" maxlength="100"
+                   placeholder="統合文書名（CoRePoプロジェクト名）">
+            <button class="btn danger" id="mergeDoneDelete">選択したノードを消去して完了</button>
+            <button class="btn" id="mergeDoneKeep">そのまま完了</button>
+            <button class="btn secondary" id="mergeCancel">キャンセル</button>
+        </div>
+    </div>
+    <div id="legend"></div>
+</div>
+<div id="ctxMenu"></div>
+<!-- ノード作成／編集モーダル -->
+<div class="modal-bg" id="nodeModalBg">
+    <div class="modal">
+        <h2 id="nodeModalTitle">ノード（ナラティブ素）</h2>
+        <div class="form-row">
+            <label>ラベル（ナラティブ素名・必須）</label>
+            <input type="text" id="ndLabel" maxlength="200">
+        </div>
+        <div class="form-row">
+            <label>実体URL（MD文書等．例：/document_archive/plain/77）</label>
+            <input type="text" id="ndUrl" maxlength="500">
+            <div class="subhint" id="ndCreateDocHint">
+                既存文書にリンクする場合はURLを入力して「保存」．空欄のまま
+                「📄 新規文書を生成してリンク」を押すと，CoRePoに新規プロジェクトを
+                作成し，別タブで本文の執筆を開始できます（ラベル＝プロジェクト名）．
+            </div>
+        </div>
+        <div class="form-row">
+            <label>注記</label>
+            <textarea id="ndNote"></textarea>
+        </div>
+        <div class="form-row">
+            <label>公開範囲（文書アーカイブと同じ区分）</label>
+            <div class="acl-box">
+                <div class="policy-list">
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="inherit" checked>
+                        <span class="pbadge pb-inherit">↰ キャンバスに従う</span>
+                        <span class="pdesc">このキャンバスを開ける人には見えます（既定）</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="public">
+                        <span class="pbadge pb-public">🌐 一般公開</span>
+                        <span class="pdesc">ログイン済みユーザなら誰でも</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="domestic">
+                        <span class="pbadge pb-domestic">🏢 学内公開</span>
+                        <span class="pdesc">regularユーザ（学内者）のみ</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="private">
+                        <span class="pbadge pb-private">🔒 非公開</span>
+                        <span class="pdesc">作成者とadminのみ</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="group">
+                        <span class="pbadge pb-group">👥 グループ</span>
+                        <span class="pdesc">指定グループの所属者（カテゴリ不問）</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="ndPolicy" value="domestic_group">
+                        <span class="pbadge pb-domgroup">🏢＋👥 学内＋グループ</span>
+                        <span class="pdesc">regularユーザ，または指定グループの所属者</span>
+                    </label>
+                </div>
+                <div class="acl-groups" id="ndGroupBox" style="display:none;">
+                    <label style="font-size:.78em;color:#5a6672;">許可するまいぐるグループ（複数選択可）</label>
+                    <div id="ndGroups" class="group-checklist"></div>
+                </div>
+                <div class="hint">作成者とadminには公開範囲によらず常に表示されます．</div>
+            </div>
+        </div>
+        <div class="modal-ops">
+            <button class="btn secondary" id="ndCancel">キャンセル</button>
+            <button class="btn" id="ndCreateDoc" style="background:#3a7d5c;">📄 新規文書を生成してリンク</button>
+            <button class="btn" id="ndSave">保存</button>
+        </div>
+    </div>
+</div>
+<!-- 詳細表示モーダル（ノード／エッジ共用） -->
+<div class="modal-bg" id="detailModalBg">
+    <div class="modal">
+        <h2 id="detailTitle">詳細</h2>
+        <div id="detailBody"></div>
+        <div class="modal-ops">
+            <button class="btn secondary" id="detailClose">閉じる</button>
+        </div>
+    </div>
+</div>
+<!-- エッジ編集モーダル -->
+<div class="modal-bg" id="edgeModalBg">
+    <div class="modal">
+        <h2>結合子の編集</h2>
+        <div class="form-row">
+            <label>結合子タイプ</label>
+            <select id="egTypeSel"></select>
+        </div>
+        <div class="form-row">
+            <label>注記</label>
+            <textarea id="egNote"></textarea>
+        </div>
+        <div class="modal-ops">
+            <button class="btn secondary" id="egCancel">キャンセル</button>
+            <button class="btn" id="egSave">保存</button>
+        </div>
+    </div>
+</div>
+<script>
+const CANVAS_ID = {{ canvas.id }};
+const IS_OWNER = {{ 'true' if is_owner else 'false' }};
+const API_BASE = '{{ url_for("our_meeting.index") }}api/';
+const SVGNS = 'http://www.w3.org/2000/svg';
+// CoRePo連携（新規文書ノード）用：キャンバス自身の公開範囲
+// 「↰ キャンバスに従う」のノードを新規文書化する際，CoRePo側に同期する値として使う
+const CANVAS_POLICY = '{{ canvas.access_policy or "private" }}';
+const CANVAS_GROUP_IDS = {{ (canvas_group_ids or []) | tojson }};
+const CANVAS_NAME = {{ canvas.name | tojson }};
+const COLREP_CREATE_URL = '/colrep/awami_create_project';
+const CAT_COLORS = {
+    '時間': '#4a7ebb', '因果': '#c0504d', '意図': '#8064a2',
+    '対立': '#d1662c', '展開': '#4e9a6c', '解釈': '#3aa6b9',
+    '感情': '#d67ab1', '仮想': '#8f8f5a', 'メタ': '#6b6b6b', '具体': '#a67c52'
+};
+const DEFAULT_COLOR = '#8a94a0';
+let state = {
+    nodes: {},          // id -> {id,label,url,note,x,y,acl?,w,h}
+    edges: [],
+    types: [],
+    groups: [],
+    view: { tx: 0, ty: 0, scale: 1 }
+};
+let editingNodeId = null;   // null=新規
+let pendingXY = null;       // 新規ノードのキャンバス座標
+let editingEdge = null;
+let edgeMode = null;        // {inputs:[], outputs:[], side:'in'|'out'} 結合子作成モード
+let linkMode = null;        // {edgeId, role:'in'|'out'} 既存結合子のリンク編集モード
+let mergeMode = null;       // {order:[nodeId,...]} ノード統合文書生成の選択モード
+function showResult(message, isError) {
+    const $r = $('#result');
+    $r.text(message).removeClass('success error')
+      .addClass(isError ? 'error' : 'success').show();
+    setTimeout(() => $r.fadeOut(), 5000);
+}
+function describeResponse(xhr, resp) {
+    // 想定外の応答を診断可能な文言にする
+    if (resp && typeof resp === 'object') {
+        return resp.error || resp.message ||
+               JSON.stringify(resp).slice(0, 160);
+    }
+    const text = (typeof resp === 'string' ? resp : (xhr.responseText || ''));
+    const plain = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/login|ログイン/i.test(text)) {
+        return 'JSONでない応答（ログインページの可能性）．再ログインしてください．';
+    }
+    return 'JSONでない応答: ' + (plain.slice(0, 160) || '（空）');
+}
+function apiPost(path, payload, cb) {
+    $.ajax({
+        url: API_BASE + path, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify(payload || {}),
+        success: function(resp, st, xhr) {
+            if (resp && typeof resp === 'object' && resp.success) { cb && cb(resp); return; }
+            showResult('エラー（HTTP ' + xhr.status + '）: ' + describeResponse(xhr, resp), true);
+        },
+        error: function(xhr) {
+            let detail;
+            try { detail = describeResponse(xhr, JSON.parse(xhr.responseText)); }
+            catch (e) { detail = describeResponse(xhr, null); }
+            showResult('エラー（HTTP ' + (xhr.status || '応答なし') + '）: ' + detail, true);
+        }
+    });
+}
+// =============== 座標変換 ===============
+function applyView() {
+    const v = state.view;
+    document.getElementById('world').setAttribute(
+        'transform', 'translate(' + v.tx + ',' + v.ty + ') scale(' + v.scale + ')');
+    // 軸の線幅・原点マーカー・ラベルはズームに依らず一定に見せる
+    const inv = 1 / v.scale;
+    document.querySelectorAll('#axisLayer line').forEach(function(l) {
+        l.setAttribute('stroke-width', inv);
+    });
+    const dot = document.querySelector('#axisLayer circle');
+    if (dot) dot.setAttribute('r', 3 * inv);
+    const lbl = document.querySelector('#axisLayer text');
+    if (lbl) {
+        lbl.setAttribute('font-size', 12 * inv);
+        lbl.setAttribute('x', 8 * inv);
+        lbl.setAttribute('y', -8 * inv);
+    }
+}
+function screenToWorld(sx, sy) {
+    const r = document.getElementById('graph').getBoundingClientRect();
+    const v = state.view;
+    return { x: (sx - r.left - v.tx) / v.scale, y: (sy - r.top - v.ty) / v.scale };
+}
+// =============== 描画 ===============
+function ensureMarker(color) {
+    const id = 'arw' + color.replace('#', '');
+    if (!document.getElementById(id)) {
+        const m = document.createElementNS(SVGNS, 'marker');
+        m.setAttribute('id', id);
+        m.setAttribute('viewBox', '0 0 10 10');
+        m.setAttribute('refX', '9'); m.setAttribute('refY', '5');
+        m.setAttribute('markerWidth', '7'); m.setAttribute('markerHeight', '7');
+        m.setAttribute('orient', 'auto-start-reverse');
+        const p = document.createElementNS(SVGNS, 'path');
+        p.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        p.setAttribute('fill', color);
+        m.appendChild(p);
+        document.getElementById('defs').appendChild(m);
+    }
+    return id;
+}
+// ノード矩形の境界上で，中心から(tx,ty)方向へ出る点
+function borderPoint(node, tx, ty) {
+    const dx = tx - node.x, dy = ty - node.y;
+    const hw = node.w / 2 + 3, hh = node.h / 2 + 3;
+    if (dx === 0 && dy === 0) return { x: node.x, y: node.y };
+    const s = Math.min(
+        Math.abs(dx) > 1e-9 ? hw / Math.abs(dx) : Infinity,
+        Math.abs(dy) > 1e-9 ? hh / Math.abs(dy) : Infinity);
+    return { x: node.x + dx * s, y: node.y + dy * s };
+}
+function render() {
+    const edgeLayer = document.getElementById('edgeLayer');
+    const nodeLayer = document.getElementById('nodeLayer');
+    edgeLayer.innerHTML = '';
+    nodeLayer.innerHTML = '';
+    // --- ノード（先に作って寸法を測る）---
+    Object.values(state.nodes).forEach(function(n) {
+        const g = document.createElementNS(SVGNS, 'g');
+        g.setAttribute('class', 'node-box');
+        g.setAttribute('data-id', n.id);
+        g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
+        const rect = document.createElementNS(SVGNS, 'rect');
+        const text = document.createElementNS(SVGNS, 'text');
+        text.textContent = n.label;
+        g.appendChild(rect); g.appendChild(text);
+        nodeLayer.appendChild(g);
+        const bb = text.getBBox();
+        n.w = Math.max(bb.width + 26, 60);
+        n.h = 34;
+        rect.setAttribute('x', -n.w / 2); rect.setAttribute('y', -n.h / 2);
+        rect.setAttribute('width', n.w); rect.setAttribute('height', n.h);
+        rect.setAttribute('rx', 8);
+    });
+    // --- エッジ（m入力→[ラベル]→n出力のハイパーエッジ）---
+    // [ラベル]箱はキャンバス上の第一級オブジェクト：保存座標（label_x/y）が
+    // あればそこに固定，無ければ端点群の重心に自動配置（ノード移動に追従）。
+    function mkLine(p1, p2, color, arrow, markerId) {
+        const line = document.createElementNS(SVGNS, 'line');
+        line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y);
+        line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', 2);
+        if (arrow) line.setAttribute('marker-end', 'url(#' + markerId + ')');
+        return line;
+    }
+    function mkHit(p1, p2, edgeId) {
+        const hit = document.createElementNS(SVGNS, 'line');
+        hit.setAttribute('x1', p1.x); hit.setAttribute('y1', p1.y);
+        hit.setAttribute('x2', p2.x); hit.setAttribute('y2', p2.y);
+        hit.setAttribute('class', 'edge-hit');
+        hit.setAttribute('data-edge', edgeId);
+        return hit;
+    }
+    state.edges.forEach(function(e) {
+        const color = CAT_COLORS[e.type_category] || DEFAULT_COLOR;
+        const markerId = ensureMarker(color);
+        const ins = e.inputs.map(id => state.nodes[id]).filter(Boolean);
+        const outs = e.outputs.map(id => state.nodes[id]).filter(Boolean);
+        if (ins.length === 0 || outs.length === 0) return;
+        let lx = e.label_x, ly = e.label_y;
+        if (lx === null || lx === undefined || ly === null || ly === undefined) {
+            // 自動配置＝入力群の重心と出力群の重心を結んだ線分の中央
+            let ix = 0, iy = 0, ox = 0, oy = 0;
+            ins.forEach(function(n) { ix += n.x; iy += n.y; });
+            outs.forEach(function(n) { ox += n.x; oy += n.y; });
+            lx = (ix / ins.length + ox / outs.length) / 2;
+            ly = (iy / ins.length + oy / outs.length) / 2;
+        }
+        e._lx = lx; e._ly = ly;      // 描画・ドラッグ用キャッシュ
+        // [ラベル]箱を先に作って寸法を測る
+        const lg = document.createElementNS(SVGNS, 'g');
+        lg.setAttribute('class', 'edge-box');
+        lg.setAttribute('data-edge', e.id);
+        lg.setAttribute('transform', 'translate(' + lx + ',' + ly + ')');
+        const lrect = document.createElementNS(SVGNS, 'rect');
+        const ltext = document.createElementNS(SVGNS, 'text');
+        ltext.textContent = e.type_name;
+        ltext.setAttribute('fill', color);
+        lg.appendChild(lrect); lg.appendChild(ltext);
+        edgeLayer.appendChild(lg);
+        const lb = ltext.getBBox();
+        const lw = Math.max(lb.width + 16, 36), lh = 22;
+        e._lw = lw; e._lh = lh;
+        lrect.setAttribute('x', -lw / 2); lrect.setAttribute('y', -lh / 2);
+        lrect.setAttribute('width', lw); lrect.setAttribute('height', lh);
+        lrect.setAttribute('rx', 11);
+        lrect.setAttribute('stroke', color);
+        const labelBox = { x: lx, y: ly, w: lw, h: lh };
+        const eg = document.createElementNS(SVGNS, 'g');
+        // 入力ノード → [ラベル]（矢印なし）
+        ins.forEach(function(n) {
+            const p1 = borderPoint(n, lx, ly);
+            const p2 = borderPoint(labelBox, n.x, n.y);
+            eg.appendChild(mkLine(p1, p2, color, false, markerId));
+            eg.appendChild(mkHit(p1, p2, e.id));
+        });
+        // [ラベル] → 出力ノード（向きありタイプは矢印つき）
+        outs.forEach(function(n) {
+            const p1 = borderPoint(labelBox, n.x, n.y);
+            const p2 = borderPoint(n, lx, ly);
+            eg.appendChild(mkLine(p1, p2, color, e.directed, markerId));
+            eg.appendChild(mkHit(p1, p2, e.id));
+        });
+        // 線を[ラベル]箱の下に敷く
+        edgeLayer.insertBefore(eg, lg);
+    });
+    updateEdgeModeHighlights();
+    updateLinkModeHighlights();
+    updateMergeHighlights();
+    renderLegend();
+}
+function renderLegend() {
+    const cats = {};
+    state.edges.forEach(e => cats[e.type_category] = true);
+    const keys = Object.keys(CAT_COLORS).filter(c => cats[c]);
+    const el = document.getElementById('legend');
+    if (keys.length === 0) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.innerHTML = keys.map(c =>
+        '<span class="cat"><span class="sw" style="background:' +
+        CAT_COLORS[c] + '"></span>' + c + '</span>').join('');
+}
+// =============== データ読込 ===============
+function loadData(fit, onDone) {
+    $.getJSON(API_BASE + 'canvas/' + CANVAS_ID + '/data', function(resp) {
+        if (!resp || !resp.success) {
+            showResult('読込エラー: ' + describeResponse({ responseText: '' }, resp), true);
+            return;
+        }
+        state.nodes = {};
+        resp.nodes.forEach(n => state.nodes[n.id] = n);
+        state.edges = resp.edges;
+        state.types = resp.connector_types;
+        state.groups = resp.groups || [];
+        fillTypeSelect($('#edgeTypeSel'));
+        fillTypeSelect($('#egTypeSel'));
+        fillGroupSelect();
+        render();
+        if (fit) fitView();
+        if (typeof onDone === 'function') onDone();
+    }).fail(() => showResult('データの読込に失敗しました', true));
+}
+// URLクエリ ?locate=<実体URL> があれば、初回読込後にそのノードを中心へ
+function getQueryParam(name) {
+    const m = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+}
+function fillTypeSelect($sel) {
+    $sel.empty();
+    let cat = null, $og = null;
+    state.types.forEach(function(t) {
+        if (t.category !== cat) {
+            cat = t.category;
+            $og = $('<optgroup>').attr('label', cat);
+            $sel.append($og);
+        }
+        $og.append($('<option>').val(t.id)
+            .text(t.name + (t.directed ? '（入力→出力）' : '')));
+    });
+}
+function fillGroupSelect() {
+    const $g = $('#ndGroups').empty();
+    state.groups.forEach(function(g) {
+        $g.append(
+            $('<label>').append(
+                $('<input type="checkbox" class="ndGroupChk">').val(g.id),
+                $('<span>').text(g.name)));
+    });
+}
+function fitView() {
+    const ns = Object.values(state.nodes);
+    const svg = document.getElementById('graph').getBoundingClientRect();
+    if (ns.length === 0) {
+        state.view = { tx: svg.width / 2, ty: svg.height / 2, scale: 1 };
+        applyView(); return;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    ns.forEach(function(n) {
+        minX = Math.min(minX, n.x - 80); maxX = Math.max(maxX, n.x + 80);
+        minY = Math.min(minY, n.y - 50); maxY = Math.max(maxY, n.y + 50);
+    });
+    const scale = Math.min(2, Math.max(0.1,
+        Math.min(svg.width / (maxX - minX), svg.height / (maxY - minY))));
+    state.view.scale = scale;
+    state.view.tx = svg.width / 2 - (minX + maxX) / 2 * scale;
+    state.view.ty = svg.height / 2 - (minY + maxY) / 2 * scale;
+    applyView();
+}
+// URLの表記ゆれを吸収して比較用に正規化する
+function normalizeUrl(u) {
+    let s = (u || '').trim();
+    if (!s) return '';
+    // 末尾スラッシュを除去
+    s = s.replace(/\/+$/, '');
+    // スキーム＋ホストを外してパスだけにする（相対・絶対どちらでも一致させる）
+    s = s.replace(/^https?:\/\/[^/]+/i, '');
+    // クエリ・フラグメントは残す（同一文書の別ページを区別するため）
+    return s.toLowerCase();
+}
+// 指定URLのノードを画面中心へ（倍率は変えない）。なければメッセージを出して戻る
+function locateNode(rawUrl) {
+    const q = normalizeUrl(rawUrl);
+    if (!q) { showResult('URLを入力してください', true); return; }
+    const hit = Object.values(state.nodes).find(function(n) {
+        return n.url && normalizeUrl(n.url) === q;
+    });
+    if (!hit) {
+        showResult('そのURLのノードは、いま読み込まれているキャンバスには見つかりませんでした', true);
+        return;
+    }
+    const svg = document.getElementById('graph').getBoundingClientRect();
+    const s = state.view.scale;                 // 倍率は維持
+    state.view.tx = svg.width / 2 - hit.x * s;
+    state.view.ty = svg.height / 2 - hit.y * s;
+    applyView();
+    // 一瞬だけ強調して位置を知らせる
+    const $g = $('.node-box[data-id="' + hit.id + '"]');
+    $g.addClass('locate-flash');
+    setTimeout(() => $g.removeClass('locate-flash'), 1600);
+    showResult('「' + hit.label + '」を中心に表示しました', false);
+}
+// =============== パン・ズーム・ドラッグ ===============
+let dragCtx = null;
+// 下流閉包：起点ノードからリンクの向き（入力→出力）に辿れる全ノードの集合。
+// あるエッジの入力のどれかが集合に入っていれば，その出力を全部加える——を
+// 変化がなくなるまで繰り返す（循環があっても停止する）。
+function downstreamSet(startId) {
+    const set = new Set([startId]);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        state.edges.forEach(function(e) {
+            if (e.inputs.some(id => set.has(id))) {
+                e.outputs.forEach(function(id) {
+                    if (!set.has(id)) { set.add(id); changed = true; }
+                });
+            }
+        });
+    }
+    return set;
+}
+$('#graph').on('mousedown', function(ev) {
+    if (ev.button !== 0) return;
+    const nodeG = $(ev.target).closest('.node-box');
+    const edgeG = $(ev.target).closest('.edge-box');
+    if (edgeG.length && IS_OWNER && !edgeMode && !mergeMode && !linkMode) {
+        // [ラベル]箱のドラッグ（位置はエッジに保存される）
+        const eid = parseInt(edgeG.attr('data-edge'));
+        const e = state.edges.find(x => x.id === eid);
+        if (e) {
+            const w = screenToWorld(ev.clientX, ev.clientY);
+            dragCtx = { kind: 'edgeLabel', edge: e,
+                        dx: e._lx - w.x, dy: e._ly - w.y, moved: false };
+        }
+    } else if (nodeG.length && IS_OWNER && !edgeMode && !mergeMode && !linkMode) {
+        const id = parseInt(nodeG.attr('data-id'));
+        const w = screenToWorld(ev.clientX, ev.clientY);
+        if (ev.shiftKey) {
+            // Shift＋ドラッグ：下流サブグラフごと移動（他に親がいる下流ノードも動かす）
+            const ids = Array.from(downstreamSet(id)).filter(i => state.nodes[i]);
+            const orig = {};
+            ids.forEach(i => orig[i] = { x: state.nodes[i].x, y: state.nodes[i].y });
+            // 端点がすべて移動集合に含まれる「位置固定ラベル」も一緒に動かす
+            // （自動配置ラベルは重心追従なので何もしなくてよい）
+            const edgeOrig = {};
+            state.edges.forEach(function(e) {
+                if (e.label_x !== null && e.label_x !== undefined &&
+                    e.inputs.concat(e.outputs).every(i => orig[i] !== undefined)) {
+                    edgeOrig[e.id] = { x: e.label_x, y: e.label_y };
+                }
+            });
+            dragCtx = { kind: 'group', ids: ids, orig: orig, edgeOrig: edgeOrig,
+                        sx: w.x, sy: w.y, moved: false };
+        } else {
+            const n = state.nodes[id];
+            dragCtx = { kind: 'node', id: id, dx: n.x - w.x, dy: n.y - w.y, moved: false };
+        }
+    } else if (!nodeG.length && !edgeG.length) {
+        dragCtx = { kind: 'pan', sx: ev.clientX, sy: ev.clientY,
+                    tx: state.view.tx, ty: state.view.ty, moved: false };
+        $('#graph').addClass('panning');
+    }
+});
+$(document).on('mousemove', function(ev) {
+    if (!dragCtx) return;
+    if (dragCtx.kind === 'pan') {
+        state.view.tx = dragCtx.tx + (ev.clientX - dragCtx.sx);
+        state.view.ty = dragCtx.ty + (ev.clientY - dragCtx.sy);
+        dragCtx.moved = true;
+        applyView();
+    } else if (dragCtx.kind === 'node') {
+        const w = screenToWorld(ev.clientX, ev.clientY);
+        const n = state.nodes[dragCtx.id];
+        n.x = w.x + dragCtx.dx; n.y = w.y + dragCtx.dy;
+        dragCtx.moved = true;
+        render();
+    } else if (dragCtx.kind === 'edgeLabel') {
+        const w = screenToWorld(ev.clientX, ev.clientY);
+        dragCtx.edge.label_x = w.x + dragCtx.dx;
+        dragCtx.edge.label_y = w.y + dragCtx.dy;
+        dragCtx.moved = true;
+        render();
+    } else if (dragCtx.kind === 'group') {
+        const w = screenToWorld(ev.clientX, ev.clientY);
+        const dx = w.x - dragCtx.sx, dy = w.y - dragCtx.sy;
+        dragCtx.ids.forEach(function(i) {
+            const n = state.nodes[i];
+            if (n) { n.x = dragCtx.orig[i].x + dx; n.y = dragCtx.orig[i].y + dy; }
+        });
+        Object.keys(dragCtx.edgeOrig).forEach(function(eid) {
+            const e = state.edges.find(x => x.id === parseInt(eid));
+            if (e) {
+                e.label_x = dragCtx.edgeOrig[eid].x + dx;
+                e.label_y = dragCtx.edgeOrig[eid].y + dy;
+            }
+        });
+        dragCtx.moved = true;
+        render();
+    }
+});
+$(document).on('mouseup', function() {
+    if (!dragCtx) return;
+    if (dragCtx.kind === 'node' && dragCtx.moved) {
+        const n = state.nodes[dragCtx.id];
+        apiPost('node/' + n.id + '/move', { x: n.x, y: n.y });
+    } else if (dragCtx.kind === 'edgeLabel' && dragCtx.moved) {
+        const e = dragCtx.edge;
+        apiPost('edge/' + e.id + '/label_move', { x: e.label_x, y: e.label_y });
+    } else if (dragCtx.kind === 'group' && dragCtx.moved) {
+        dragCtx.ids.forEach(function(i) {
+            const n = state.nodes[i];
+            if (n) apiPost('node/' + i + '/move', { x: n.x, y: n.y });
+        });
+        Object.keys(dragCtx.edgeOrig).forEach(function(eid) {
+            const e = state.edges.find(x => x.id === parseInt(eid));
+            if (e) apiPost('edge/' + e.id + '/label_move',
+                           { x: e.label_x, y: e.label_y });
+        });
+        showResult('下流の' + dragCtx.ids.length + '個のノードを一緒に移動しました', false);
+    }
+    $('#graph').removeClass('panning');
+    dragCtx = null;
+});
+document.getElementById('graph').addEventListener('wheel', function(ev) {
+    ev.preventDefault();
+    const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const v = state.view;
+    const ns = Math.min(4, Math.max(0.08, v.scale * factor));
+    const r = this.getBoundingClientRect();
+    const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    v.tx = mx - (mx - v.tx) * (ns / v.scale);
+    v.ty = my - (my - v.ty) * (ns / v.scale);
+    v.scale = ns;
+    applyView();
+}, { passive: false });
+// クリック（結合子作成モード／リンク編集モード／ノード統合モードの選択）
+$('#graph').on('click', function(ev) {
+    if (mergeMode) {
+        const nodeG = $(ev.target).closest('.node-box');
+        if (!nodeG.length) return;
+        const id = parseInt(nodeG.attr('data-id'));
+        const i = mergeMode.order.indexOf(id);
+        if (i >= 0) mergeMode.order.splice(i, 1);
+        else mergeMode.order.push(id);
+        updateMergeHighlights();
+        return;
+    }
+    if (linkMode) {
+        // 既存結合子の入力／出力リンクをトグル（サーバが各側≥1を保証）
+        const nodeG = $(ev.target).closest('.node-box');
+        if (!nodeG.length) return;
+        const id = parseInt(nodeG.attr('data-id'));
+        apiPost('edge/' + linkMode.edgeId + '/toggle_member',
+                { node_id: id, role: linkMode.role },
+                function() { loadData(false); });
+        return;
+    }
+    if (!edgeMode || edgeMode.phase !== 'nodes') return;
+    const nodeG = $(ev.target).closest('.node-box');
+    if (!nodeG.length) return;
+    const id = parseInt(nodeG.attr('data-id'));
+    const inIdx = edgeMode.inputs.indexOf(id);
+    const outIdx = edgeMode.outputs.indexOf(id);
+    if (edgeMode.side === 'in') {
+        if (inIdx >= 0) edgeMode.inputs.splice(inIdx, 1);
+        else {
+            if (outIdx >= 0) edgeMode.outputs.splice(outIdx, 1);
+            edgeMode.inputs.push(id);
+        }
+    } else {
+        if (outIdx >= 0) edgeMode.outputs.splice(outIdx, 1);
+        else {
+            if (inIdx >= 0) edgeMode.inputs.splice(inIdx, 1);
+            edgeMode.outputs.push(id);
+        }
+    }
+    updateEdgeModeHighlights();
+});
+function clearSelHighlights() {
+    $('.node-box').removeClass('in-sel out-sel');
+    $('.edge-box').removeClass('link-editing');
+}
+function updateEdgeModeHighlights() {
+    if (!edgeMode) { $('#edgePanel').hide(); return; }
+    clearSelHighlights();
+    edgeMode.inputs.forEach(id =>
+        $('.node-box[data-id="' + id + '"]').addClass('in-sel'));
+    edgeMode.outputs.forEach(id =>
+        $('.node-box[data-id="' + id + '"]').addClass('out-sel'));
+    const m = edgeMode.inputs.length, n = edgeMode.outputs.length;
+    if (edgeMode.phase === 'nodes') {
+        // 第1段階：ノード選択（入力／出力を切り替えつつクリックでトグル）
+        $('#edgeNodeStep').css('display', 'inline-flex');
+        $('#edgeLabelStep').css('display', 'none');
+        $('#sideIn').toggleClass('active', edgeMode.side === 'in');
+        $('#sideOut').toggleClass('active', edgeMode.side === 'out');
+        $('#edgeToLabel').prop('disabled', m < 1 || n < 1);
+        $('#edgeStatus').text('リンク張り　入力：' + m + '個　出力：' + n +
+            '個（クリックで選択／再クリックで解除）');
+    } else {
+        // 第2段階：ラベル（結合子タイプ）を選んで完了
+        $('#edgeNodeStep').css('display', 'none');
+        $('#edgeLabelStep').css('display', 'inline-flex');
+        $('#edgeStatus').text('リンク張り　入力：' + m + '個　出力：' + n +
+            '個 — ラベルを選んで「完了」（位置は入力重心と出力重心の中央）');
+    }
+    $('#edgePanel').show();
+}
+// ---- 既存結合子のリンク編集モード ----
+function startLinkMode(e, role) {
+    edgeMode = null; mergeMode = null;
+    clearSelHighlights();
+    updateEdgeModeHighlights(); updateMergeHighlights();
+    linkMode = { edgeId: e.id, role: role };
+    updateLinkModeHighlights();
+}
+function updateLinkModeHighlights() {
+    if (!linkMode) { $('#linkPanel').hide(); return; }
+    const e = state.edges.find(x => x.id === linkMode.edgeId);
+    if (!e) {   // エッジが消えた（削除等）ならモード終了
+        linkMode = null; clearSelHighlights(); $('#linkPanel').hide(); return;
+    }
+    clearSelHighlights();
+    e.inputs.forEach(id =>
+        $('.node-box[data-id="' + id + '"]').addClass('in-sel'));
+    e.outputs.forEach(id =>
+        $('.node-box[data-id="' + id + '"]').addClass('out-sel'));
+    $('.edge-box[data-edge="' + e.id + '"]').addClass('link-editing');
+    $('#linkSideIn').toggleClass('active', linkMode.role === 'in');
+    $('#linkSideOut').toggleClass('active', linkMode.role === 'out');
+    $('#linkStatus').text('［' + e.type_name + '］の' +
+        (linkMode.role === 'in' ? '入力' : '出力') +
+        'リンク編集：ノードをクリックで追加／解除（入力' + e.inputs.length +
+        '・出力' + e.outputs.length + '）');
+    $('#linkPanel').show();
+}
+$('#linkSideIn').on('click', function() {
+    if (linkMode) { linkMode.role = 'in'; updateLinkModeHighlights(); }
+});
+$('#linkSideOut').on('click', function() {
+    if (linkMode) { linkMode.role = 'out'; updateLinkModeHighlights(); }
+});
+$('#linkDone').on('click', function() {
+    linkMode = null; clearSelHighlights(); updateLinkModeHighlights();
+});
+$('#sideIn').on('click', function() {
+    if (edgeMode) { edgeMode.side = 'in'; updateEdgeModeHighlights(); }
+});
+$('#sideOut').on('click', function() {
+    if (edgeMode) { edgeMode.side = 'out'; updateEdgeModeHighlights(); }
+});
+// ツールバーの「🕸 リンク張り」：空の選択からm:nリンクを張る（トグルで解除）
+$('#btnEdgeNew').on('click', function() {
+    if (!IS_OWNER) return;
+    if (edgeMode) {
+        edgeMode = null; clearSelHighlights(); updateEdgeModeHighlights(); return;
+    }
+    linkMode = null; mergeMode = null; clearSelHighlights();
+    updateLinkModeHighlights(); updateMergeHighlights();
+    edgeMode = { inputs: [], outputs: [], side: 'in', phase: 'nodes' };
+    updateEdgeModeHighlights();
+});
+// 「ラベル選択」：ノード選択を締めてラベル（結合子タイプ）選択の段階へ
+$('#edgeToLabel').on('click', function() {
+    if (!edgeMode) return;
+    if (edgeMode.inputs.length < 1 || edgeMode.outputs.length < 1) {
+        showResult('入力・出力それぞれ1つ以上のノードを選んでください', true); return;
+    }
+    edgeMode.phase = 'label';
+    updateEdgeModeHighlights();
+});
+// ダブルクリックでノード作成（ownerのみ）
+$('#graph').on('dblclick', function(ev) {
+    if (!IS_OWNER || edgeMode || mergeMode || linkMode) return;
+    if ($(ev.target).closest('.node-box').length) return;
+    pendingXY = screenToWorld(ev.clientX, ev.clientY);
+    openNodeModal(null);
+});
+// =============== コンテキストメニュー ===============
+function showMenu(x, y, items) {
+    const $m = $('#ctxMenu').empty();
+    items.forEach(function(it) {
+        if (it.sep) { $m.append($('<div class="sep">')); return; }
+        $('<div class="item">').addClass(it.danger ? 'danger' : '')
+            .text(it.label).on('click', function() { hideMenu(); it.fn(); })
+            .appendTo($m);
+    });
+    $m.css({ left: Math.min(x, window.innerWidth - 200),
+             top: Math.min(y, window.innerHeight - items.length * 38) }).show();
+}
+function hideMenu() { $('#ctxMenu').hide(); }
+$(document).on('mousedown', function(ev) {
+    if (!$(ev.target).closest('#ctxMenu').length) hideMenu();
+});
+document.getElementById('graph').addEventListener('contextmenu', function(ev) {
+    ev.preventDefault();
+    const nodeG = $(ev.target).closest('.node-box');
+    const edgeHit = $(ev.target).closest('.edge-hit, .edge-box');
+    if (nodeG.length) {
+        const id = parseInt(nodeG.attr('data-id'));
+        const n = state.nodes[id];
+        const items = [];
+        if (n.url) items.push({ label: '🔗 開く（実体URL）',
+            fn: function() {
+                // 討論の展開に記録してから開く（記録失敗でも開くのは妨げない）
+                $.ajax({ url: API_BASE + 'canvas/' + CANVAS_ID + '/node_open',
+                         method: 'POST', contentType: 'application/json',
+                         data: JSON.stringify({ node_id: n.id }) });
+                window.open(n.url, '_blank');
+            } });
+        if (IS_OWNER) items.push({ label: '📋 プレゼン計画に追加',
+            fn: function() { addNodeToPlan(n); } });
+        if (IS_OWNER) {
+            items.push({ sep: true });
+            items.push({ label: '✏️ 編集', fn: () => openNodeModal(n) });
+            items.push({ sep: true });
+            items.push({ label: '🗑 削除', danger: true, fn: function() {
+                if (confirm('ノード「' + n.label + '」を削除します．このノードを端点とするエッジも調整されます．よろしいですか？'))
+                    apiPost('node/' + id + '/delete', {}, () => loadData(false));
+            }});
+        }
+        if (items.length) showMenu(ev.clientX, ev.clientY, items);
+    } else if (edgeHit.length) {
+        const eid = parseInt(edgeHit.attr('data-edge'));
+        const e = state.edges.find(x => x.id === eid);
+        if (!e) return;
+        const items = [{ label: '📄 詳細表示', fn: () => showEdgeDetail(e) }];
+        if (IS_OWNER) {
+            items.push({ sep: true });
+            items.push({ label: '⬅ 入力リンクの追加・削除',
+                fn: () => startLinkMode(e, 'in') });
+            items.push({ label: '➡ 出力リンクの追加・削除',
+                fn: () => startLinkMode(e, 'out') });
+            items.push({ sep: true });
+            items.push({ label: '✏️ 編集（タイプ・注記）', fn: () => openEdgeModal(e) });
+            items.push({ label: '📍 ラベル位置を自動配置に戻す', fn: function() {
+                apiPost('edge/' + eid + '/label_move', { x: null, y: null },
+                        () => loadData(false));
+            }});
+            items.push({ sep: true });
+            items.push({ label: '🗑 削除', danger: true, fn: function() {
+                if (confirm('この結合子（' + e.type_name + '）を削除しますか？'))
+                    apiPost('edge/' + eid + '/delete', {}, () => loadData(false));
+            }});
+        }
+        showMenu(ev.clientX, ev.clientY, items);
+    } else if (IS_OWNER && !edgeMode && !mergeMode && !linkMode) {
+        pendingXY = screenToWorld(ev.clientX, ev.clientY);
+        showMenu(ev.clientX, ev.clientY, [
+            { label: '＋ ここにノードを作成', fn: () => openNodeModal(null) }
+        ]);
+    }
+});
+// =============== ノードモーダル ===============
+const POLICY_LABELS = {
+    'inherit': '↰ キャンバスに従う', 'public': '🌐 一般公開',
+    'domestic': '🏢 学内公開', 'private': '🔒 非公開',
+    'group': '👥 グループ', 'domestic_group': '🏢＋👥 学内＋グループ'
+};
+function toggleGroupBox() {
+    const p = $('input[name=ndPolicy]:checked').val();
+    $('#ndGroupBox').toggle(p === 'group' || p === 'domestic_group');
+}
+$(document).on('change', 'input[name=ndPolicy]', toggleGroupBox);
+function openNodeModal(n) {
+    editingNodeId = n ? n.id : null;
+    $('#nodeModalTitle').text(n ? 'ノードの編集' : '新しいノード（ナラティブ素）');
+    $('#ndLabel').val(n ? n.label : '');
+    $('#ndUrl').val(n ? n.url : '');
+    $('#ndNote').val(n ? n.note : '');
+    const policy = (n && n.access_policy) ? n.access_policy : 'inherit';
+    $('input[name=ndPolicy][value="' + policy + '"]').prop('checked', true);
+    $('.ndGroupChk').prop('checked', false);
+    if (n && n.access_group_ids) {
+        n.access_group_ids.forEach(g =>
+            $('.ndGroupChk[value="' + g + '"]').prop('checked', true));
+    }
+    toggleGroupBox();
+    // 「新規文書を生成してリンク」は新規作成時のみ（既存文書へのリンク行為とは別動線）
+    setCreateDocBusy(false);
+    $('#ndCreateDoc, #ndCreateDocHint').toggle(!n);
+    $('#nodeModalBg').show();
+    $('#ndLabel').focus();
+}
+$('#ndCancel').on('click', () => $('#nodeModalBg').hide());
+$('#ndSave').on('click', function() {
+    const label = $('#ndLabel').val().trim();
+    if (!label) { showResult('ラベルは必須です', true); return; }
+    const policy = $('input[name=ndPolicy]:checked').val();
+    const groupIds = $('.ndGroupChk:checked')
+        .map((i, e) => parseInt(e.value)).get();
+    if ((policy === 'group' || policy === 'domestic_group') && groupIds.length === 0) {
+        showResult('グループ公開では，許可するグループを1つ以上選んでください', true);
+        return;
+    }
+    const payload = {
+        label: label, url: $('#ndUrl').val().trim(), note: $('#ndNote').val(),
+        access_policy: policy === 'inherit' ? null : policy,
+        access_group_ids: groupIds
+    };
+    if (editingNodeId) {
+        apiPost('node/' + editingNodeId + '/update', payload, function() {
+            $('#nodeModalBg').hide(); loadData(false);
+        });
+    } else {
+        payload.x = pendingXY ? pendingXY.x : 0;
+        payload.y = pendingXY ? pendingXY.y : 0;
+        apiPost('canvas/' + CANVAS_ID + '/node/create', payload, function() {
+            $('#nodeModalBg').hide(); loadData(false);
+        });
+    }
+});
+// =============== 新規文書を生成してリンク（CoRePo連携） ===============
+// 既存の「保存」＝既存文書へのリンク行為はそのまま。こちらは新規文書がまだ
+// 無い場合の動線：CoRePoに新規プロジェクトを作成（作成者＝責任者兼担当者）し、
+// 公開範囲を同期し、共有プレビューURLを実体URLとするノードをその場に作り、
+// 外部入力画面（エディタ）を別タブで開いて本文の執筆を開始できるようにする。
+function setCreateDocBusy(busy) {
+    $('#ndCreateDoc').prop('disabled', busy)
+        .text(busy ? '⏳ CoRePoに作成中…' : '📄 新規文書を生成してリンク');
+}
+$('#ndCreateDoc').on('click', function() {
+    const label = $('#ndLabel').val().trim();
+    if (!label) { showResult('ラベルは必須です（プロジェクト名になります）', true); return; }
+    if ($('#ndUrl').val().trim()) {
+        showResult('実体URL欄に入力があります．新規文書を生成する場合は空欄にしてください', true);
+        return;
+    }
+    const policy = $('input[name=ndPolicy]:checked').val();
+    const groupIds = $('.ndGroupChk:checked')
+        .map((i, e) => parseInt(e.value)).get();
+    if ((policy === 'group' || policy === 'domestic_group') && groupIds.length === 0) {
+        showResult('グループ公開では，許可するグループを1つ以上選んでください', true);
+        return;
+    }
+    // CoRePo側に同期する公開範囲：「↰ キャンバスに従う」はキャンバスの範囲に読み替える
+    const effPolicy = (policy === 'inherit') ? CANVAS_POLICY : policy;
+    const effGroups = (policy === 'inherit') ? CANVAS_GROUP_IDS : groupIds;
+    // ポップアップブロック対策：クリックと同期して先に空タブを確保しておく
+    const editorWin = window.open('', '_blank');
+    setCreateDocBusy(true);
+    $.ajax({
+        url: COLREP_CREATE_URL, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            project_name: label,
+            access_policy: effPolicy,
+            access_group_ids: effGroups
+        }),
+        success: function(resp) {
+            if (!resp || !resp.success) {
+                if (editorWin) editorWin.close();
+                setCreateDocBusy(false);
+                showResult('CoRePoエラー: ' + ((resp && resp.error) || '作成に失敗しました'), true);
+                return;
+            }
+            // すぐ執筆を始められるよう，先にエディタ（外部入力画面）へ遷移させる
+            if (editorWin) editorWin.location = resp.editor_url;
+            // 生成された文書URLをフォームにも反映しておく
+            // （万一ノード作成に失敗しても「保存」で作成をやり直せる）
+            $('#ndUrl').val(resp.entity_url);
+            const payload = {
+                label: label, url: resp.entity_url, note: $('#ndNote').val(),
+                access_policy: policy === 'inherit' ? null : policy,
+                access_group_ids: groupIds,
+                x: pendingXY ? pendingXY.x : 0,
+                y: pendingXY ? pendingXY.y : 0
+            };
+            apiPost('canvas/' + CANVAS_ID + '/node/create', payload, function() {
+                $('#nodeModalBg').hide();
+                loadData(false);
+                showResult('CoRePoプロジェクト「' + resp.project_name +
+                           '」を作成し，ノードをリンクしました．別タブで本文の執筆を開始できます', false);
+            });
+            // ノード作成に失敗した場合は apiPost がエラー表示する．モーダルは
+            // 開いたまま・実体URL欄に文書URLが残るので「保存」で復旧できる．
+            setCreateDocBusy(false);
+        },
+        error: function(xhr) {
+            if (editorWin) editorWin.close();
+            setCreateDocBusy(false);
+            let resp = null;
+            try { resp = JSON.parse(xhr.responseText); } catch (e) {}
+            if (resp && resp.error_code === 'duplicate_name') {
+                showResult('同名のCoRePoプロジェクトが既にあります．ラベルを変えてください', true);
+            } else if (xhr.status === 403) {
+                showResult('CoRePoのプロジェクト作成権限（コレポ管理者以上）が必要です', true);
+            } else {
+                showResult('CoRePoエラー（HTTP ' + (xhr.status || '応答なし') + '）: ' +
+                           ((resp && resp.error) || '作成に失敗しました'), true);
+            }
+        }
+    });
+});
+// =============== ノード統合文書生成（CoRePo連携） ===============
+// 画面上の複数ノードを選択順に番号づけし，CoRePoに統合文書プロジェクトを
+// 新規作成（「本文」タスク・initial_content にノード別リンク一覧を注入）して
+// 外部入力画面を別タブで開く。「選択したノードを消去して完了」なら選択ノードを
+// キャンバスから削除する（空間的なメモ書き→構造的な記述への移行を支援）。
+function updateMergeHighlights() {
+    $('.node-box').removeClass('merge-sel');
+    const layer = document.getElementById('mergeLayer');
+    layer.innerHTML = '';
+    if (!mergeMode) { $('#mergePanel').hide(); return; }
+    // 再読込等で消えたノードは選択から外す
+    mergeMode.order = mergeMode.order.filter(id => state.nodes[id]);
+    mergeMode.order.forEach(function(id, i) {
+        const n = state.nodes[id];
+        $('.node-box[data-id="' + id + '"]').addClass('merge-sel');
+        // ノード左上に選択順の番号バッジを描く
+        const bx = n.x - n.w / 2, by = n.y - n.h / 2;
+        const c = document.createElementNS(SVGNS, 'circle');
+        c.setAttribute('cx', bx); c.setAttribute('cy', by); c.setAttribute('r', 11);
+        c.setAttribute('fill', '#6a4fa3');
+        c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', 1.5);
+        c.setAttribute('pointer-events', 'none');
+        const t = document.createElementNS(SVGNS, 'text');
+        t.setAttribute('x', bx); t.setAttribute('y', by);
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'central');
+        t.setAttribute('font-size', '12'); t.setAttribute('fill', '#fff');
+        t.setAttribute('font-family', 'inherit');
+        t.setAttribute('pointer-events', 'none');
+        t.textContent = String(i + 1);
+        layer.appendChild(c); layer.appendChild(t);
+    });
+    $('#mergeStatus').text('🧩 選択：' + mergeMode.order.length +
+        '個（クリックで選択順に番号づけ／再クリックで解除）');
+    $('#mergePanel').show();
+}
+function pad2(v) { return (v < 10 ? '0' : '') + v; }
+function defaultMergeName() {
+    const d = new Date();
+    return CANVAS_NAME + ' 統合 ' + d.getFullYear() + '-' +
+           pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+           pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+$('#btnMerge').on('click', function() {
+    if (!IS_OWNER) return;
+    if (mergeMode) { mergeMode = null; updateMergeHighlights(); return; }  // トグルで解除
+    edgeMode = null; linkMode = null; clearSelHighlights();
+    updateEdgeModeHighlights(); updateLinkModeHighlights();
+    mergeMode = { order: [] };
+    $('#mergeName').val(defaultMergeName());
+    updateMergeHighlights();
+});
+$('#mergeCancel').on('click', function() {
+    mergeMode = null; updateMergeHighlights();
+});
+function setMergeBusy(busy) {
+    $('#mergeDoneDelete, #mergeDoneKeep, #mergeCancel').prop('disabled', busy);
+    if (busy) $('#mergeStatus').text('⏳ CoRePoに統合文書を作成中…');
+}
+// 選択順に「1. [ラベル](URL)」の並びを作る（URL無しノードはリンクなしの行）
+function buildMergeContent(ids) {
+    return ids.map(function(id, i) {
+        const n = state.nodes[id];
+        const label = (n.label || ('ノード#' + id)).replace(/([\[\]])/g, '\\$1');
+        if (n.url) return (i + 1) + '. [' + label + '](' + n.url + ')';
+        return (i + 1) + '. ' + label + '（リンクなし）';
+    }).join('\n') + '\n';
+}
+// 1個ずつ順に削除（各削除でエッジ端点の調整が走るため並行にしない）
+function deleteNodesSequentially(ids, failed, done) {
+    if (!ids.length) { done(failed); return; }
+    const id = ids.shift();
+    $.ajax({
+        url: API_BASE + 'node/' + id + '/delete', method: 'POST',
+        contentType: 'application/json', data: '{}',
+        success: function(resp) {
+            if (!resp || !resp.success) failed.push(id);
+            deleteNodesSequentially(ids, failed, done);
+        },
+        error: function() {
+            failed.push(id);
+            deleteNodesSequentially(ids, failed, done);
+        }
+    });
+}
+function finishMerge(deleteNodes) {
+    if (!mergeMode) return;
+    const ids = mergeMode.order.filter(id => state.nodes[id]);
+    if (ids.length < 1) {
+        showResult('統合するノードをクリックで1つ以上選んでください', true); return;
+    }
+    const name = $('#mergeName').val().trim();
+    if (!name) {
+        showResult('統合文書名を入力してください（CoRePoプロジェクト名になります）', true);
+        $('#mergeName').focus(); return;
+    }
+    const content = buildMergeContent(ids);
+    // 統合ノードの生成位置＝選択ノード群の重心（消去前に計算しておく）
+    let cx = 0, cy = 0;
+    ids.forEach(function(id) { cx += state.nodes[id].x; cy += state.nodes[id].y; });
+    cx /= ids.length; cy /= ids.length;
+    // ポップアップブロック対策：クリックと同期して先に空タブを確保しておく
+    const editorWin = window.open('', '_blank');
+    setMergeBusy(true);
+    $.ajax({
+        url: COLREP_CREATE_URL, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            project_name: name,
+            access_policy: CANVAS_POLICY,          // 公開範囲はキャンバスに合わせる
+            access_group_ids: CANVAS_GROUP_IDS,
+            initial_content: content
+        }),
+        success: function(resp) {
+            if (!resp || !resp.success) {
+                if (editorWin) editorWin.close();
+                setMergeBusy(false); updateMergeHighlights();
+                showResult('CoRePoエラー: ' + ((resp && resp.error) || '作成に失敗しました'), true);
+                return;
+            }
+            // すぐ編集を始められるよう，先にエディタ（外部入力画面）へ遷移させる
+            if (editorWin) editorWin.location = resp.editor_url;
+            const finish = function(mergeNodeFailed, failed) {
+                mergeMode = null;
+                setMergeBusy(false);
+                updateMergeHighlights();
+                loadData(false);
+                let msg = '統合文書「' + resp.project_name +
+                          '」を作成し，統合ノードを重心位置に置きました．別タブで本文を編集できます';
+                if (mergeNodeFailed) {
+                    msg = '統合文書「' + resp.project_name +
+                          '」は作成しましたが，統合ノードの作成に失敗しました．' +
+                          '実体URL ' + resp.entity_url + ' で手動作成してください';
+                }
+                if (deleteNodes) {
+                    msg += (failed && failed.length)
+                        ? '（ノード消去：' + (ids.length - failed.length) + '個成功／' +
+                          failed.length + '個失敗）'
+                        : '（選択した' + ids.length + '個のノードを消去しました）';
+                }
+                showResult(msg, !!mergeNodeFailed);
+            };
+            // 統合ノード（実体URL＝共有プレビュー）を選択ノード群の重心に作成。
+            // 公開範囲は「↰ キャンバスに従う」（文書側もキャンバスの範囲に同期済みで整合）
+            $.ajax({
+                url: API_BASE + 'canvas/' + CANVAS_ID + '/node/create',
+                method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({
+                    label: name, url: resp.entity_url, note: '',
+                    access_policy: null, access_group_ids: [],
+                    x: cx, y: cy
+                }),
+                success: function(r) {
+                    const ok = r && r.success;
+                    if (deleteNodes) deleteNodesSequentially(ids.slice(), [], f => finish(!ok, f));
+                    else finish(!ok, null);
+                },
+                error: function() {
+                    if (deleteNodes) deleteNodesSequentially(ids.slice(), [], f => finish(true, f));
+                    else finish(true, null);
+                }
+            });
+        },
+        error: function(xhr) {
+            if (editorWin) editorWin.close();
+            setMergeBusy(false); updateMergeHighlights();
+            let resp = null;
+            try { resp = JSON.parse(xhr.responseText); } catch (e) {}
+            if (resp && resp.error_code === 'duplicate_name') {
+                showResult('同名のCoRePoプロジェクトが既にあります．統合文書名を変えてください', true);
+                $('#mergeName').focus();
+            } else if (xhr.status === 403) {
+                showResult('CoRePoのプロジェクト作成権限（コレポ管理者以上）が必要です', true);
+            } else {
+                showResult('CoRePoエラー（HTTP ' + (xhr.status || '応答なし') + '）: ' +
+                           ((resp && resp.error) || '作成に失敗しました'), true);
+            }
+        }
+    });
+}
+$('#mergeDoneDelete').on('click', function() {
+    finishMerge(true);
+});
+$('#mergeDoneKeep').on('click', function() {
+    finishMerge(false);
+});
+// =============== 詳細表示 ===============
+function esc(s) { return $('<div>').text(s || '').html(); }
+function showNodeDetail(n) {
+    $('#detailTitle').text('ナラティブ素：' + n.label);
+    let html = '';
+    if (n.url) html += '<div class="detail-field"><div class="k">実体URL</div>' +
+        '<div class="v"><a href="' + esc(n.url) + '" target="_blank">' + esc(n.url) + '</a></div></div>';
+    if (n.note) html += '<div class="detail-field"><div class="k">注記</div><div class="v">' +
+        esc(n.note).replace(/\n/g, '<br>') + '</div></div>';
+    if ('access_policy' in n) {   // owner / admin のみ提供される
+        const p = n.access_policy || 'inherit';
+        let v = POLICY_LABELS[p] || p;
+        if ((p === 'group' || p === 'domestic_group') && n.access_group_ids) {
+            const names = n.access_group_ids.map(function(gid) {
+                const g = state.groups.find(x => x.id === gid);
+                return g ? g.name : ('#' + gid);
+            });
+            if (names.length) v += '（' + names.join('，') + '）';
+        }
+        html += '<div class="detail-field"><div class="k">公開範囲</div><div class="v">' +
+            esc(v) + '</div></div>';
+    }
+    if (!html) html = '<div class="detail-field"><div class="v">追加情報はありません．</div></div>';
+    $('#detailBody').html(html);
+    $('#detailModalBg').show();
+}
+function showEdgeDetail(e) {
+    $('#detailTitle').text('結合子：' + e.type_category + '／' + e.type_name);
+    const nm = id => esc(state.nodes[id] ? state.nodes[id].label : '?');
+    let html = '<div class="detail-field"><div class="k">入力（' +
+        e.inputs.length + '）</div><div class="v">' +
+        e.inputs.map(nm).join('<br>') + '</div></div>' +
+        '<div class="detail-field"><div class="k">出力（' +
+        e.outputs.length + '）</div><div class="v">' +
+        e.outputs.map(nm).join('<br>') + '</div></div>';
+    if (e.note) html += '<div class="detail-field"><div class="k">注記</div><div class="v">' +
+        esc(e.note).replace(/\n/g, '<br>') + '</div></div>';
+    $('#detailBody').html(html);
+    $('#detailModalBg').show();
+}
+$('#detailClose').on('click', () => $('#detailModalBg').hide());
+// =============== エッジ作成・編集 ===============
+$('#edgeCancel').on('click', function() {
+    edgeMode = null; clearSelHighlights(); updateEdgeModeHighlights();
+});
+$('#edgeConfirm').on('click', function() {
+    if (!edgeMode || edgeMode.inputs.length < 1 || edgeMode.outputs.length < 1) {
+        showResult('入力・出力それぞれ1つ以上のノードを選んでください' +
+                   '（「⬅ 入力を選ぶ」「➡ 出力を選ぶ」で切り替え）', true);
+        return;
+    }
+    apiPost('canvas/' + CANVAS_ID + '/edge/create', {
+        connector_type_id: parseInt($('#edgeTypeSel').val()),
+        input_ids: edgeMode.inputs,
+        output_ids: edgeMode.outputs,
+        note: $('#edgeNote').val()
+    }, function() {
+        edgeMode = null; $('#edgeNote').val('');
+        clearSelHighlights(); updateEdgeModeHighlights(); loadData(false);
+    });
+});
+function openEdgeModal(e) {
+    editingEdge = e;
+    $('#egTypeSel').val(e.type_id);
+    $('#egNote').val(e.note);
+    $('#edgeModalBg').show();
+}
+$('#egCancel').on('click', () => $('#edgeModalBg').hide());
+$('#egSave').on('click', function() {
+    apiPost('edge/' + editingEdge.id + '/update', {
+        connector_type_id: parseInt($('#egTypeSel').val()),
+        note: $('#egNote').val()
+    }, function() { $('#edgeModalBg').hide(); loadData(false); });
+});
+// =============== その他 ===============
+$('#btnReload').on('click', () => loadData(false));
+$('#btnFit').on('click', fitView);
+// =============== JSONエクスポート ===============
+// いま読み込まれているキャンバスのノードと結合子（ラベル）関係を，
+// メタデータ付きのJSONにまとめてダウンロードする。
+// ・閲覧専用ユーザの場合は「権限のあるノードのみ」が対象（画面表示と同じ範囲）
+// ・edges[].label が結合子の[ラベル]（タイプ名・カテゴリ・向き）
+// ・inputs/outputs には参照整合性検査やグラフ処理がしやすいよう
+//   node_id と（可読性のため）ラベル文字列の両方を入れる
+function buildExportJson() {
+    const nodes = Object.values(state.nodes).map(function(n) {
+        const o = { id: n.id, label: n.label, url: n.url || null,
+                    note: n.note || null, x: n.x, y: n.y };
+        if ('access_policy' in n) {   // owner / admin のみ提供される
+            o.access_policy = n.access_policy || 'inherit';
+            if (n.access_group_ids && n.access_group_ids.length) {
+                o.access_groups = n.access_group_ids.map(function(gid) {
+                    const g = state.groups.find(x => x.id === gid);
+                    return { id: gid, name: g ? g.name : null };
+                });
+            }
+        }
+        return o;
+    });
+    const nodeLabel = id => state.nodes[id] ? state.nodes[id].label : null;
+    const edges = state.edges.map(function(e) {
+        return {
+            id: e.id,
+            label: {
+                type_id: e.type_id,
+                name: e.type_name,
+                category: e.type_category,
+                directed: !!e.directed
+            },
+            note: e.note || null,
+            inputs: e.inputs.map(id => ({ node_id: id, label: nodeLabel(id) })),
+            outputs: e.outputs.map(id => ({ node_id: id, label: nodeLabel(id) })),
+            // null＝自動配置（入力重心と出力重心の中央）
+            label_position: (e.label_x !== null && e.label_x !== undefined &&
+                             e.label_y !== null && e.label_y !== undefined)
+                ? { x: e.label_x, y: e.label_y } : null
+        };
+    });
+    // このキャンバスで実際に使われている結合子タイプのみ収録
+    const usedTypeIds = {};
+    state.edges.forEach(e => usedTypeIds[e.type_id] = true);
+    const connectorTypes = state.types
+        .filter(t => usedTypeIds[t.id])
+        .map(t => ({ id: t.id, name: t.name, category: t.category,
+                     directed: !!t.directed }));
+    return {
+        format: 'awami-canvas-export',
+        version: 1,
+        metadata: {
+            canvas_id: CANVAS_ID,
+            canvas_name: CANVAS_NAME,
+            exported_at: new Date().toISOString(),
+            exported_by_role: IS_OWNER ? 'owner' : 'viewer',
+            node_count: nodes.length,
+            edge_count: edges.length,
+            coordinate_system: 'キャンバス座標（原点(0,0)基準・y軸下向き）',
+            scope: IS_OWNER ? '全ノード・全結合子'
+                            : '閲覧権限のあるノードと，その範囲で見える結合子のみ'
+        },
+        nodes: nodes,
+        edges: edges,
+        connector_types: connectorTypes
+    };
+}
+function exportFileName() {
+    const d = new Date();
+    const stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
+                  '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+    // ファイル名に使えない文字と空白を _ に置換（長すぎる名前は切り詰め）
+    const safeName = (CANVAS_NAME || 'canvas')
+        .replace(/[\\\/:*?"<>|\s]+/g, '_').slice(0, 40);
+    return 'awami_' + safeName + '_c' + CANVAS_ID + '_' + stamp + '.json';
+}
+$('#btnExport').on('click', function() {
+    const data = buildExportJson();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportFileName();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showResult('JSONをダウンロードしました（ノード' + data.metadata.node_count +
+               '個・結合子' + data.metadata.edge_count + '個）', false);
+});
+// =============== JSONインポート（取込・owner専用） ===============
+// エクスポートしたJSONをこのキャンバスに「新規追加」する。
+// ・💾 JSONエクスポート形式（awami-canvas-export）と
+//   サーバ書出形式（awami-canvas-json）の両方を受け付ける
+// ・IDはすべてサーバ側で新規発番。既存のノード・結合子には一切触れない
+$('#btnImport').on('click', function() { $('#importFile').trigger('click'); });
+$('#importFile').on('change', function() {
+    const f = this.files && this.files[0];
+    this.value = '';    // 同じファイルを続けて選び直せるように
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = function() {
+        let data;
+        try { data = JSON.parse(reader.result); }
+        catch (e) { showResult('JSONとして読めませんでした: ' + e, true); return; }
+        const fmt = data && data.format;
+        if (fmt !== 'awami-canvas-export' && fmt !== 'awami-canvas-json') {
+            showResult('あわみのJSONエクスポート形式ではありません', true);
+            return;
+        }
+        const nn = (data.nodes || []).length, ne = (data.edges || []).length;
+        const srcName = (data.metadata && data.metadata.canvas_name) ||
+                        (data.canvas && data.canvas.name) || '';
+        if (!confirm('JSON' + (srcName ? '「' + srcName + '」' : '') +
+                     ' からノード' + nn + '個・結合子' + ne +
+                     '本を，このキャンバスに新規追加します．\n' +
+                     '既存のノード・結合子には触れません（IDはすべて新規発番）．' +
+                     'よろしいですか？')) return;
+        apiPost('canvas/' + CANVAS_ID + '/import', data, function(resp) {
+            loadData(false);
+            showResult('取込完了：ノード' + resp.imported_nodes + '個・結合子' +
+                resp.imported_edges + '本' +
+                (resp.added_connector_types
+                    ? '・ラベル' + resp.added_connector_types + '種を自動追加' : '') +
+                (resp.skipped_edges
+                    ? '（端点不備で' + resp.skipped_edges + '本スキップ）' : ''),
+                false);
+        });
+    };
+    reader.readAsText(f, 'utf-8');
+});
+// =============== 意見募集・プレゼン計画・記録 ===============
+let PLANS = [];
+function loadPlans(cb) {
+    $.getJSON(API_BASE + 'canvas/' + CANVAS_ID + '/plans', function(d) {
+        if (d && d.success) { PLANS = d.plans; if (cb) cb(); }
+    });
+}
+{% if is_owner %}
+function addNodeToPlan(n) {
+    loadPlans(function() {
+        if (PLANS.length === 0) {
+            const name = prompt('計画がありません。新しい計画の名前は？', '計画 1');
+            if (name === null) return;
+            $.ajax({ url: API_BASE + 'canvas/' + CANVAS_ID + '/plans/create',
+                method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ name: name }),
+                success: function(resp) {
+                    if (resp.success) doPlanAdd(n, resp.id, resp.name);
+                } });
+            return;
+        }
+        let target = PLANS[0];
+        if (PLANS.length > 1) {
+            const msg = 'どの計画に追加しますか？番号を入力:\n' +
+                PLANS.map((p, i) => (i + 1) + '. ' + p.name).join('\n');
+            const pick = prompt(msg, '1');
+            if (pick === null) return;
+            const idx = parseInt(pick) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= PLANS.length) return;
+            target = PLANS[idx];
+        }
+        doPlanAdd(n, target.id, target.name);
+    });
+}
+function doPlanAdd(n, planId, planName) {
+    $.ajax({ url: API_BASE + 'canvas/' + CANVAS_ID + '/plan/add',
+        method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ node_id: n.id, plan_id: planId }),
+        success: function(resp) {
+            if (resp.success) showResult('計画「' + planName + '」の最後（' + resp.position + '番目）に「' + resp.label + '」を追加しました', false);
+            else showResult('エラー: ' + resp.error, true);
+        } });
+}
+$('#btnPlan').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/plans',
+                'awamiPlans' + CANVAS_ID, 'width=760,height=820');
+});
+$('#btnRecords').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/records',
+                'awamiRecords' + CANVAS_ID, 'width=820,height=820');
+});
+$('#btnPollNew').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/poll/new',
+                'awamiPollNew' + CANVAS_ID, 'width=680,height=860');
+});
+{% endif %}
+$('#btnFlow').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/flow',
+                'awamiFlow' + CANVAS_ID, 'width=720,height=860');
+});
+$('#btnResults').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/results',
+                'awamiResults' + CANVAS_ID, 'width=760,height=860');
+});
+// ラベル管理（結合子タイプ・admin専用。ボタンはadminのみ描画される）
+$('#btnTypes').on('click', function() {
+    window.open('/awami/connector_types', 'awamiTypes', 'width=900,height=920');
+});
+$('#btnLocate').on('click', () => locateNode($('#locateUrl').val()));
+$('#locateUrl').on('keydown', function(ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); locateNode($(this).val()); }
+});
+$(window).on('keydown', function(ev) {
+    if (ev.key === 'Escape') {
+        if (edgeMode) { edgeMode = null; clearSelHighlights(); updateEdgeModeHighlights(); }
+        if (linkMode) { linkMode = null; clearSelHighlights(); updateLinkModeHighlights(); }
+        if (mergeMode) { mergeMode = null; updateMergeHighlights(); }
+        $('.modal-bg').hide(); hideMenu();
+    }
+});
+(function initialLoad() {
+    const locateTarget = getQueryParam('locate');
+    if (locateTarget) {
+        // locate指定時は全体表示せず、対象を中心に据える（倍率は既定1.0のまま）
+        $('#locateUrl').val(locateTarget);
+        loadData(false, function() { locateNode(locateTarget); });
+    } else {
+        loadData(true);
+    }
+})();
+</script>
+</body>
+</html>

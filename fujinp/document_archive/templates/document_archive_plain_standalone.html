@@ -1,0 +1,262 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ document.title }} - プレーン表示</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+        }
+        .combined-view {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+        .document-section {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .document-section:last-child {
+            border-bottom: none;
+        }
+        .document-title {
+            color: #1a237e;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px dashed #ccc;
+        }
+        .document-title .section-number {
+            margin-right: 8px;
+            font-weight: 600;
+            color: #3949ab;
+        }
+        .document-content {
+            overflow-wrap: break-word;
+        }
+        .document-content h1, .document-content h2, .document-content h3 {
+            color: #283593;
+            margin-top: 1.2rem;
+            margin-bottom: 0.8rem;
+        }
+        .document-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            min-width: max-content;
+        }
+        .document-content table th, .document-content table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        .document-content table th {
+            background-color: #f5f5f5;
+        }
+        .document-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .document-content pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 30px;
+        }
+        .toc-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc-list ul {
+            list-style-type: none;
+            padding-left: 15px;
+        }
+        .toc-link {
+            display: block;
+            padding: 3px 0;
+            color: #495057;
+            text-decoration: none;
+        }
+        .toc-link:hover {
+            color: #007bff;
+            text-decoration: underline;
+        }
+        .toc-link .section-number {
+            margin-right: 5px;
+            font-weight: 600;
+            color: #3949ab;
+        }
+        .md-source {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .hidden-section {
+            font-style: italic;
+            color: #6c757d;
+        }
+        .special-section {
+            color: #2196F3;
+            font-weight: 500;
+        }
+        .index-page {
+            margin: 20px 0;
+        }
+        .index-description {
+            margin-bottom: 15px;
+            color: #666;
+        }
+        .index-list {
+            list-style-type: none;
+            padding-left: 0;
+            margin-bottom: 20px;
+        }
+        .index-item {
+            margin-bottom: 0;
+            padding: 2px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .index-item:hover {
+            background-color: #f5f5f5;
+        }
+        .index-link {
+            display: block;
+            color: #1a237e;
+            text-decoration: none;
+        }
+        .index-link:hover {
+            text-decoration: underline;
+        }
+        .index-empty-message {
+            color: #757575;
+            font-style: italic;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .page-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .page-footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #777;
+            font-size: 0.9em;
+        }
+        /* 2カラムレイアウト対応 */
+        .sidebar-toc {
+            width: 250px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            z-index: 1000;
+        }
+
+        .main-content {
+            margin-left: 270px;
+        }
+
+        @media print {
+            .sidebar-toc {
+                display: none;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- combined_view.htmlと同じ2カラム構造 -->
+    <div style="display: flex;">
+        <!-- 左側の目次部分 -->
+        <div class="sidebar-toc">
+            <h3>目次</h3>
+            <div class="toc-list" id="tocList">
+                <!-- JavaScriptで目次を生成 -->
+            </div>
+        </div>
+
+        <!-- メインコンテンツ部分 -->
+        <div class="main-content">
+            <div class="combined-view">
+                <!-- アーカイブされたコンテンツをそのまま表示 -->
+                {{ content_html|safe }}
+
+                <div class="page-footer">
+                    <p>このドキュメントは文書アーカイブから表示されています</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- combined_view.htmlと同じJavaScript -->
+    <script>
+        // ページ読み込み時に処理を実行
+        document.addEventListener('DOMContentLoaded', function() {
+            // タイトルを処理して番号付けを適用
+            processTitlesAndNumbering();
+            // 目次を生成
+            generateTableOfContents();
+        });
+
+        // combined_view.htmlと同じJavaScript関数群をここにコピー
+        function processTitlesAndNumbering() {
+            // combined_view.htmlのJavaScriptと同じ処理
+            const sections = document.querySelectorAll('.document-section');
+            // ... (combined_view.htmlのJavaScriptをコピー)
+        }
+
+        function generateTableOfContents() {
+            // combined_view.htmlのJavaScriptと同じ処理
+            const sections = document.querySelectorAll('.document-section');
+            const tocList = document.getElementById('tocList');
+            // ... (combined_view.htmlのJavaScriptをコピー)
+        }
+    </script>
+</body>
+</html>

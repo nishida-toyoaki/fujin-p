@@ -1,0 +1,401 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>結合子タイプ（ラベルセット）の管理 - あわみ - FUJIN-P</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: #f4f6f8; color: #2b3440; padding: 16px 18px;
+}
+h1 { font-size: 1.1em; margin-bottom: 4px; }
+.note { font-size: .8em; color: #5a6672; margin-bottom: 12px; line-height: 1.6; }
+.ops { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.btn {
+    display: inline-block; padding: 6px 14px; border: none; border-radius: 6px;
+    background: #35618f; color: #fff; font-size: .86em; cursor: pointer;
+}
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+.btn.danger { background: #a53d3d; }
+.btn.small { padding: 3px 9px; font-size: .8em; }
+.btn:disabled { opacity: .55; cursor: default; }
+#result {
+    display: none; position: fixed; top: 10px; left: 50%;
+    transform: translateX(-50%); z-index: 300;
+    padding: 8px 16px; border-radius: 6px; font-size: .88em;
+    box-shadow: 0 2px 8px rgba(20,28,36,.2);
+}
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+#diag {
+    display: none; margin: 0 0 12px; padding: 8px 12px; border-radius: 6px;
+    background: #fbe4e4; color: #8f2323; font-size: .82em; white-space: pre-wrap;
+}
+table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid #dde3ea; border-radius: 8px; overflow: hidden;
+    font-size: .88em;
+}
+th, td { padding: 7px 10px; border-bottom: 1px solid #eef2f6; text-align: left; }
+th { background: #f0f3f7; font-size: .92em; color: #5a6672; white-space: nowrap; }
+tr:hover td { background: #f7f9fb; }
+tr.inactive td { color: #a0aab4; background: #fafbfc; }
+.sw {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -1px;
+}
+.dirmark { color: #5a6672; }
+.dup-mark { color: #a53d3d; font-weight: bold; }
+.count-badge {
+    display: inline-block; min-width: 26px; text-align: center;
+    padding: 1px 7px; border-radius: 10px; background: #eef2f6; color: #5a6672;
+}
+.count-badge.used { background: #dde9f5; color: #35618f; }
+.state-badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .9em;
+}
+.state-on { background: #e4f3e8; color: #21663a; }
+.state-off { background: #eef0f2; color: #8a94a0; }
+td.opcol { white-space: nowrap; }
+/* モーダル */
+.modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(20,28,36,.45);
+    z-index: 250;
+}
+.modal {
+    background: #fff; border-radius: 10px; width: min(460px, 92vw);
+    margin: 9vh auto 0; padding: 20px 24px;
+}
+.modal h2 { font-size: 1.02em; margin-bottom: 12px; }
+.form-row { margin-bottom: 11px; }
+.form-row label { display: block; font-size: .82em; color: #5a6672; margin-bottom: 3px; }
+.form-row input[type=text], .form-row input[type=number] {
+    width: 100%; padding: 7px 10px; border: 1px solid #ccd4dc;
+    border-radius: 6px; font-size: .94em; font-family: inherit;
+}
+.form-row .chk { display: flex; align-items: center; gap: 7px; font-size: .9em; }
+.form-row .subhint { font-size: .76em; color: #98a3ae; margin-top: 3px; }
+.modal-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>🏷 結合子タイプ（ラベルセット）の管理</h1>
+<div class="note">
+    結合子タイプは<b>全キャンバス共通</b>です．ここでの変更（名前の書き換え・追加・削除・無効化）は
+    すべてのキャンバスの表示と選択肢に即時反映されます．
+    「<b>🧹 重複を統合</b>」は，分類・名前・向きが同一のタイプを最小IDの1件に束ね，
+    既存の結合子（エッジ）を付け替えてから余分な行を削除します（何度実行しても安全）．
+    使用中のタイプは削除できません．新規の選択肢から外したい場合は「無効」にしてください
+    （既存エッジの表示はそのまま残ります）．
+    ※分類の色分け（時間・因果・意図など）はキャンバス側に定義があり，新しい分類は灰色で表示されます．
+</div>
+<div id="diag"></div>
+<div class="ops">
+    <button class="btn" id="btnAdd">＋ 新しいラベル</button>
+    <button class="btn danger" id="btnDedupe">🧹 重複を統合</button>
+    <button class="btn secondary" id="btnReload">再読込</button>
+</div>
+<div id="result"></div>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th><th>分類</th><th>名前</th><th>向き</th>
+            <th>表示順</th><th>使用数</th><th>状態</th><th>操作</th>
+        </tr>
+    </thead>
+    <tbody id="tbody">
+        <tr><td colspan="8">読み込み中…（この表示のまま変わらない場合は，上の赤い診断欄か
+            開発者ツールのConsoleをご確認ください）</td></tr>
+    </tbody>
+</table>
+
+<!-- 追加／編集モーダル -->
+<div class="modal-bg" id="modalBg">
+    <div class="modal">
+        <h2 id="modalTitle">ラベルの編集</h2>
+        <div class="form-row">
+            <label>分類（必須）</label>
+            <input type="text" id="fCategory" maxlength="50" list="catList">
+            <datalist id="catList"></datalist>
+            <div class="subhint">既存の分類名から選ぶか，新しい分類名を入力できます．</div>
+        </div>
+        <div class="form-row">
+            <label>名前（必須）</label>
+            <input type="text" id="fName" maxlength="100">
+        </div>
+        <div class="form-row">
+            <label class="chk"><input type="checkbox" id="fDirected">
+                向きあり（主→従：矢印つきで描画）</label>
+        </div>
+        <div class="form-row">
+            <label>表示順（小さいほど上）</label>
+            <input type="number" id="fSort" value="0">
+        </div>
+        <div class="form-row" id="fActiveRow">
+            <label class="chk"><input type="checkbox" id="fActive" checked>
+                有効（新規作成の選択肢に表示する）</label>
+        </div>
+        <div class="modal-ops">
+            <button class="btn secondary" id="fCancel">キャンセル</button>
+            <button class="btn" id="fSave">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// このページは外部ライブラリに依存しない（jQuery等のCDN読み込み失敗の影響を受けない）．
+// 実行時エラーは #diag に赤字で表示する（サイレント故障の防止）．
+'use strict';
+
+var API = '/awami/api/';
+// キャンバス側 CAT_COLORS と同じ配色（新しい分類は灰色）
+var CAT_COLORS = {
+    '時間': '#4a7ebb', '因果': '#c0504d', '意図': '#8064a2',
+    '対立': '#d1662c', '展開': '#4e9a6c', '解釈': '#3aa6b9',
+    '感情': '#d67ab1', '仮想': '#8f8f5a', 'メタ': '#6b6b6b', '具体': '#a67c52'
+};
+var DEFAULT_COLOR = '#8a94a0';
+
+var TYPES = [];
+var editingId = null;   // null=新規
+var resultTimer = null;
+
+function $id(x) { return document.getElementById(x); }
+
+window.addEventListener('error', function (ev) {
+    var d = $id('diag');
+    if (d) {
+        d.style.display = 'block';
+        d.textContent = 'JavaScriptエラー: ' + (ev.message || ev.error || '不明') +
+            (ev.lineno ? '（' + ev.lineno + '行目）' : '');
+    }
+});
+
+function showResult(message, isError) {
+    var r = $id('result');
+    r.textContent = message;
+    r.className = isError ? 'error' : 'success';
+    r.style.display = 'block';
+    if (resultTimer) clearTimeout(resultTimer);
+    resultTimer = setTimeout(function () { r.style.display = 'none'; }, 6000);
+}
+
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function fetchJSON(path, payload, cb) {
+    // payload=null → GET，object → POST(JSON)
+    var opts = { credentials: 'same-origin' };
+    if (payload !== null) {
+        opts.method = 'POST';
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(payload);
+    }
+    fetch(API + path, opts).then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+            if (data && data.success) { cb(null, data); return; }
+            var msg = (data && data.error) ? data.error
+                      : ('HTTP ' + res.status + ' の応答を解釈できませんでした');
+            cb(msg, null);
+        });
+    }).catch(function (e) {
+        cb('通信エラー: ' + e, null);
+    });
+}
+
+function dupKeys() {
+    var seen = {}, dup = {};
+    TYPES.forEach(function (t) {
+        var k = t.category + ' ' + t.name + ' ' + (t.directed ? 1 : 0);
+        if (seen[k]) dup[k] = true;
+        seen[k] = true;
+    });
+    return dup;
+}
+
+function render() {
+    var tb = $id('tbody');
+    tb.innerHTML = '';
+    var dups = dupKeys();
+    var cats = {};
+    if (TYPES.length === 0) {
+        tb.innerHTML = '<tr><td colspan="8">ラベルが1件もありません．' +
+            '「＋ 新しいラベル」で追加してください．</td></tr>';
+    }
+    TYPES.forEach(function (t) {
+        cats[t.category] = true;
+        var k = t.category + ' ' + t.name + ' ' + (t.directed ? 1 : 0);
+        var color = CAT_COLORS[t.category] || DEFAULT_COLOR;
+        var tr = document.createElement('tr');
+        if (!t.is_active) tr.className = 'inactive';
+        tr.innerHTML =
+            '<td>' + t.id + '</td>' +
+            '<td><span class="sw" style="background:' + color + '"></span>' +
+                esc(t.category) +
+                (dups[k] ? ' <span class="dup-mark" title="重複しています">⚠重複</span>' : '') +
+            '</td>' +
+            '<td>' + esc(t.name) + '</td>' +
+            '<td class="dirmark">' + (t.directed ? '主→従' : '無向') + '</td>' +
+            '<td>' + t.sort_order + '</td>' +
+            '<td><span class="count-badge' + (t.n_edges > 0 ? ' used' : '') + '">' +
+                t.n_edges + '</span></td>' +
+            '<td>' + (t.is_active
+                ? '<span class="state-badge state-on">有効</span>'
+                : '<span class="state-badge state-off">無効</span>') + '</td>';
+        var ops = document.createElement('td');
+        ops.className = 'opcol';
+        var bEdit = document.createElement('button');
+        bEdit.className = 'btn secondary small';
+        bEdit.textContent = '✏️ 編集';
+        bEdit.onclick = function () { openModal(t); };
+        var bTog = document.createElement('button');
+        bTog.className = 'btn secondary small';
+        bTog.textContent = t.is_active ? '無効にする' : '有効にする';
+        bTog.onclick = function () { toggleActive(t); };
+        var bDel = document.createElement('button');
+        bDel.className = 'btn danger small';
+        bDel.textContent = '削除';
+        if (t.n_edges > 0) {
+            bDel.disabled = true;
+            bDel.title = '使用中のため削除できません（無効化は可能）';
+        }
+        bDel.onclick = function () { deleteType(t); };
+        ops.appendChild(bEdit); ops.appendChild(document.createTextNode(' '));
+        ops.appendChild(bTog); ops.appendChild(document.createTextNode(' '));
+        ops.appendChild(bDel);
+        tr.appendChild(ops);
+        tb.appendChild(tr);
+    });
+    // 分類のdatalist
+    var dl = $id('catList');
+    dl.innerHTML = '';
+    Object.keys(cats).forEach(function (c) {
+        var o = document.createElement('option');
+        o.value = c;
+        dl.appendChild(o);
+    });
+}
+
+function load() {
+    fetchJSON('connector_types', null, function (err, data) {
+        if (err) {
+            showResult('読込エラー: ' + err, true);
+            $id('tbody').innerHTML = '<tr><td colspan="8">読み込みに失敗しました: ' +
+                esc(err) + '</td></tr>';
+            return;
+        }
+        TYPES = data.types;
+        render();
+        var nd = Object.keys(dupKeys()).length;
+        showResult('読み込みました：' + TYPES.length + '件' +
+                   (nd ? '（⚠重複 ' + nd + '組あり—「🧹 重複を統合」を推奨）' : ''), false);
+    });
+}
+
+// ---------- 追加・編集 ----------
+function openModal(t) {
+    editingId = t ? t.id : null;
+    $id('modalTitle').textContent = t ? 'ラベルの編集（ID ' + t.id + '）' : '新しいラベル';
+    $id('fCategory').value = t ? t.category : '';
+    $id('fName').value = t ? t.name : '';
+    $id('fDirected').checked = t ? t.directed : false;
+    var maxSort = 0;
+    TYPES.forEach(function (x) { if (x.sort_order > maxSort) maxSort = x.sort_order; });
+    $id('fSort').value = t ? t.sort_order : maxSort + 1;
+    $id('fActive').checked = t ? t.is_active : true;
+    $id('fActiveRow').style.display = t ? 'block' : 'none';   // 新規は常に有効で作る
+    $id('modalBg').style.display = 'block';
+    $id('fCategory').focus();
+}
+
+function saveModal() {
+    var payload = {
+        category: $id('fCategory').value.trim(),
+        name: $id('fName').value.trim(),
+        directed: $id('fDirected').checked,
+        sort_order: parseInt($id('fSort').value || '0', 10) || 0
+    };
+    if (!payload.category || !payload.name) {
+        showResult('分類と名前は必須です', true); return;
+    }
+    if (editingId) {
+        payload.is_active = $id('fActive').checked;
+        fetchJSON('connector_type/' + editingId + '/update', payload, function (err) {
+            if (err) { showResult('エラー: ' + err, true); return; }
+            $id('modalBg').style.display = 'none';
+            showResult('保存しました', false); load();
+        });
+    } else {
+        fetchJSON('connector_types/create', payload, function (err) {
+            if (err) { showResult('エラー: ' + err, true); return; }
+            $id('modalBg').style.display = 'none';
+            showResult('追加しました', false); load();
+        });
+    }
+}
+
+// ---------- 有効/無効・削除・重複統合 ----------
+function toggleActive(t) {
+    fetchJSON('connector_type/' + t.id + '/update', {
+        category: t.category, name: t.name, directed: t.directed,
+        sort_order: t.sort_order, is_active: !t.is_active
+    }, function (err) {
+        if (err) { showResult('エラー: ' + err, true); return; }
+        showResult((t.is_active ? '無効' : '有効') + 'にしました：' + t.name, false);
+        load();
+    });
+}
+
+function deleteType(t) {
+    if (!confirm('ラベル「' + t.category + '／' + t.name + '」（ID ' + t.id +
+                 '）を削除しますか？')) return;
+    fetchJSON('connector_type/' + t.id + '/delete', {}, function (err) {
+        if (err) { showResult('エラー: ' + err, true); return; }
+        showResult('削除しました：' + t.name, false); load();
+    });
+}
+
+function dedupe() {
+    var n = Object.keys(dupKeys()).length;
+    var msg = (n === 0)
+        ? '重複は見つかっていませんが，統合処理を実行しますか？（変化はありません）'
+        : '重複しているラベルを統合します．\n分類・名前・向きが同一のタイプを1件に束ね，' +
+          '既存の結合子を付け替えてから余分な行を削除します．よろしいですか？';
+    if (!confirm(msg)) return;
+    fetchJSON('connector_types/dedupe', {}, function (err, resp) {
+        if (err) { showResult('エラー: ' + err, true); return; }
+        showResult('統合しました：' + resp.merged_groups + '組を統合，余分な' +
+                   resp.removed + '件を削除，' + resp.reassigned_edges +
+                   '本のエッジを付け替え', false);
+        load();
+    });
+}
+
+// ---------- 初期化 ----------
+$id('btnAdd').onclick = function () { openModal(null); };
+$id('btnDedupe').onclick = dedupe;
+$id('btnReload').onclick = load;
+$id('fCancel').onclick = function () { $id('modalBg').style.display = 'none'; };
+$id('fSave').onclick = saveModal;
+window.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') $id('modalBg').style.display = 'none';
+});
+
+load();
+</script>
+</body>
+</html>

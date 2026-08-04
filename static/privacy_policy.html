@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  FUJIN-P 配布雛形 / Distribution template
+  ------------------------------------------------------------
+  このファイルは雛形です。自サイトで公開する前に、下記の
+  プレースホルダを自組織の情報に置き換えてください。
+  置き換えないまま公開すると、他組織の名称・連絡先を掲示する
+  ことになります。
+
+    {{ORGANIZATION}}       アライアンス運営主体の組織名（例: ○○大学、○○市）
+    {{SITE_ADMIN_NAME}}    本サイト管理者（FUJIN-Pソムリエ）の氏名
+    {{CONTACT_EMAIL}}      問い合わせ先メールアドレス
+    {{ENACTED_DATE}}       制定日（例: 2026年4月1日）
+    {{HOSTING_PLATFORM}}   ホスティング環境の名称（例: PythonAnywhere）
+
+  置き換え漏れは、二重波括弧に囲まれた記号が画面にそのまま残ります。
+  ブラウザで開いて、二重波括弧が残っていないことを確認してください。
+
+  本雛形は FUJIN-P の一部として AGPL v3 のもとで配布されます。
+  文面はそのまま使用せず、自組織の法務確認を経て用いてください。
+  Copyright (C) 2026 Toyoaki Nishida
+  ============================================================
+-->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ORGANIZATION}}におけるFUJIN-Pアライアンス：プライバシーポリシー</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a2e;
+            --paper: #fafaf7;
+            --accent: #2c5f7c;
+            --accent-light: #e8f0f4;
+            --border: #c8c8be;
+            --subtle: #6b6b60;
+            --highlight: #f5f0e0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(135deg, #e8e6e0 0%, #d8d6d0 100%);
+            font-family: "Noto Sans JP", sans-serif;
+            color: var(--ink);
+            line-height: 1.85;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .document {
+            max-width: 780px;
+            margin: 0 auto;
+            background: var(--paper);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+            padding: 3.5rem 3rem;
+            position: relative;
+        }
+
+        .document::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent), #4a8fa8, var(--accent));
+        }
+
+        .doc-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .doc-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 0.2rem 0.8rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .doc-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.3rem;
+        }
+
+        .doc-subtitle {
+            font-size: 0.88rem;
+            color: var(--subtle);
+            font-weight: 300;
+        }
+
+        .preamble {
+            background: var(--accent-light);
+            border-left: 4px solid var(--accent);
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 0.92rem;
+        }
+
+        .article {
+            margin-bottom: 1.8rem;
+        }
+
+        .article-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            padding-left: 0.8rem;
+            border-left: 3px solid var(--accent);
+        }
+
+        .article p, .article li {
+            font-size: 0.92rem;
+            margin-bottom: 0.4rem;
+            text-align: justify;
+        }
+
+        .article ol {
+            padding-left: 1.8rem;
+        }
+
+        .article ol li {
+            padding-left: 0.3rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.86rem;
+        }
+
+        .data-table th {
+            background: var(--accent);
+            color: white;
+            padding: 0.55rem 0.7rem;
+            text-align: left;
+            font-weight: 500;
+            font-size: 0.8rem;
+        }
+
+        .data-table td {
+            padding: 0.5rem 0.7rem;
+            border-bottom: 1px solid #e0e0d8;
+            vertical-align: top;
+        }
+
+        .data-table tr:hover td {
+            background: #f5f5f0;
+        }
+
+        .highlight-box {
+            background: var(--highlight);
+            border: 1px solid #ddd6b8;
+            padding: 1rem 1.3rem;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+        }
+
+        .note-box {
+            background: #f0f4f0;
+            border-left: 4px solid #5a8a6a;
+            padding: 1rem 1.3rem;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+        }
+
+        .note-box .note-label {
+            font-weight: 700;
+            color: #3a6a4a;
+            font-size: 0.82rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .sommelier-notice {
+            background: #faf5e8;
+            border: 1px solid #d8c888;
+            border-left: 4px solid #a08830;
+            padding: 1rem 1.3rem;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+        }
+
+        .sommelier-notice .notice-label {
+            font-weight: 700;
+            color: #806820;
+            font-size: 0.82rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .doc-footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .doc-footer .date-line {
+            text-align: right;
+            font-size: 0.85rem;
+            color: var(--subtle);
+            margin-bottom: 0.3rem;
+        }
+
+        .contact-block {
+            background: #f5f5f0;
+            padding: 1rem 1.3rem;
+            margin-top: 1.5rem;
+            font-size: 0.88rem;
+            border: 1px solid #e0e0d8;
+        }
+
+        .contact-block .contact-label {
+            font-weight: 700;
+            font-size: 0.82rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+
+        .nav-links {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            font-size: 0.82rem;
+            color: var(--accent);
+            text-decoration: none;
+            border: 1px solid var(--accent);
+            padding: 0.3rem 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: var(--accent);
+            color: white;
+        }
+
+        @media (max-width: 640px) {
+            .document { padding: 2rem 1.5rem; }
+            .doc-title { font-size: 1.3rem; }
+            .data-table { font-size: 0.8rem; }
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .document { box-shadow: none; border: none; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="document">
+    <header class="doc-header">
+        <div class="doc-badge">{{ORGANIZATION}}におけるFUJIN-P Alliance</div>
+        <h1 class="doc-title">プライバシーポリシー</h1>
+        <p class="doc-subtitle">{{ORGANIZATION}}におけるFUJIN-Pアライアンス</p>
+    </header>
+
+    <div class="preamble">
+        {{ORGANIZATION}}におけるFUJIN-Pアライアンス（以下「本アライアンス」）は、利用者およびFUJIN-Pソムリエの個人情報の保護を重要な責務と認識し、以下の方針に従って個人情報を取り扱います。
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第1条（収集する情報）</h2>
+        <p>本アライアンスに参加するFUJIN-Pサイトでは、以下の情報を収集することがあります。</p>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>情報の種類</th>
+                    <th>具体例</th>
+                    <th>収集目的</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>アカウント情報</td>
+                    <td>氏名、メールアドレス、所属</td>
+                    <td>本人確認、サービス提供</td>
+                </tr>
+                <tr>
+                    <td>認証情報</td>
+                    <td>Google認証トークン等</td>
+                    <td>ログイン・SSO連携</td>
+                </tr>
+                <tr>
+                    <td>利用データ</td>
+                    <td>利用者が入力した文書・テーブルデータ</td>
+                    <td>サービス機能の提供</td>
+                </tr>
+                <tr>
+                    <td>アクセスログ</td>
+                    <td>IPアドレス、アクセス日時</td>
+                    <td>セキュリティ維持、障害対応</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第2条（情報の利用目的）</h2>
+        <p>収集した個人情報は、以下の目的にのみ利用します。</p>
+        <ol>
+            <li>FUJIN-Pサイトのサービス提供および運用管理</li>
+            <li>利用者本人の認証およびアクセス権限の管理</li>
+            <li>アライアンス内のサイト間連携（SSO、フィーチャー管理）</li>
+            <li>障害・セキュリティインシデントへの対応</li>
+            <li>サービスの改善および利用状況の統計的分析（個人を特定しない形式）</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第3条（情報の共有範囲）</h2>
+        <ol>
+            <li>一般利用者の個人情報は、原則として、当該利用者が登録したFUJIN-Pサイト内でのみ利用され、本人の同意なく他のFUJIN-Pサイトまたはアライアンス外の第三者に提供されることはありません。</li>
+            <li>ただし、以下の場合はこの限りではありません。
+                <div class="highlight-box">
+                    ① 利用者がSSO連携を利用し、他サイトへのログインを自ら行った場合（認証に必要な基本属性が連携先に共有されます）<br>
+                    ② 法令に基づく場合、または公的機関からの正当な要請があった場合<br>
+                    ③ 利用者の生命・身体・財産の保護に必要な場合
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第4条（ソムリエ情報の特別な取り扱い）</h2>
+        <div class="sommelier-notice">
+            <div class="notice-label">ソムリエに関する特記事項</div>
+            FUJIN-Pソムリエのサイト名・URL・アライアンス所属は、各サイト上に公開される情報です。また、ソムリエの連絡先メールアドレスは、オプトアウトを選択しない限り、サイト間のAPI連携パスワードと同等のセキュリティレベルで、アライアンス内の他サイトのadminに共有されます。詳細は「{{ORGANIZATION}}FUJIN-Pアライアンス運用規程」第6条・第7条をご確認ください。
+        </div>
+        <p>一般利用者のメールアドレスその他の個人情報が、アライアンス内で無断共有されることはありません。</p>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第5条（情報の安全管理）</h2>
+        <ol>
+            <li>各FUJIN-Pサイトのソムリエは、収集した個人情報の漏洩、滅失または毀損の防止のため、合理的な技術的・組織的安全管理措置を講じるものとします。</li>
+            <li>FUJIN-P基盤は、{{HOSTING_PLATFORM}}のホスティング環境上で稼働しており、当該プラットフォームのセキュリティ基準に準拠します。</li>
+            <li>ただし、ソムリエはボランティアまたは兼務により運営を行っている場合があり、商用サービスと同等のセキュリティ水準を保証するものではありません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第6条（データの保持と削除）</h2>
+        <ol>
+            <li>利用者の個人情報は、アカウントが有効である期間中保持されます。</li>
+            <li>利用者がアカウント削除を申し出た場合、ソムリエは合理的な期間内に当該利用者の個人情報を削除するものとします。ただし、法令上の保存義務がある場合、およびバックアップ媒体上の残存データについてはこの限りではありません。</li>
+            <li>ソムリエがアライアンスから脱退した場合、当該サイトに登録された利用者の個人情報の取り扱いについて、アライアンス運営主体と協議のうえ適切な措置を講じます。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第7条（実験履歴情報の取得および利用）</h2>
+        <ol>
+            <li> 本サイトでは、提供するアプリケーションおよび機能の改善、ならびに安定した運用を目的として、利用者の使用履歴情報（アクセス状況、利用したアプリケーションの種別等）を取得することがあります。</li>
+            <li> これらの情報は、氏名、メールアドレス等の個人情報とは分離され、利用者を直接特定できない匿名化された内部IDに基づいて管理されます。</li>
+            <li> 取得した試用履歴情報は、システムの改良、性能評価、障害対応その他のメンテナンス目的にのみ利用し、これらの目的を超えて第三者に提供されることはありません。</li>
+            <li>実験履歴情報については、個人情報を含まない統計的・技術的情報としてのみ取り扱われ、利用者を特定する目的で共有されることはありません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第8条（利用者の権利）</h2>
+        <p>利用者は、自身の個人情報について以下の権利を有します。</p>
+        <ol>
+            <li>自身の個人情報の開示を求める権利</li>
+            <li>誤った個人情報の訂正を求める権利</li>
+            <li>個人情報の削除を求める権利（第6条第2項に定める場合を除く）</li>
+            <li>個人情報の利用停止を求める権利</li>
+        </ol>
+        <div class="note-box">
+            <div class="note-label">権利行使の方法</div>
+            上記の権利を行使する場合は、ご利用のFUJIN-Pサイトのソムリエにお問い合わせください。ソムリエの連絡先がサイト上に掲示されている場合はそちらをご利用ください。掲示がない場合は、アライアンス運営主体にお問い合わせください。
+        </div>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第9条（Cookieおよびセッション情報）</h2>
+        <p>本サイトでは、ログイン状態の維持およびサービスの正常な動作のために、CookieおよびWebブラウザのセッション機能を使用します。利用者がブラウザの設定でCookieを無効にした場合、一部のサービスが正常に機能しないことがあります。</p>
+    </section>
+
+
+    <section class="article">
+        <h2 class="article-title">第10条（ポリシーの改定）</h2>
+        <p>本プライバシーポリシーは、法令の変更、サービスの拡充、またはセキュリティ上の必要性に応じて改定されることがあります。重要な変更がある場合は、本サイト上で利用者に通知します。</p>
+    </section>
+
+    <footer class="doc-footer">
+        <p class="date-line">制定：{{ENACTED_DATE}}</p>
+
+        <div class="contact-block">
+            <p class="contact-label">お問い合わせ先</p>
+            <p>本サイト管理者：{{SITE_ADMIN_NAME}}</p>
+            <p>連絡先：{{CONTACT_EMAIL}}</p>
+            <p>アライアンス運営主体：{{ORGANIZATION}}</p>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/static/alliance_regulation.html">アライアンス運用規程</a>
+            <a href="/static/terms_user.html">サイト利用規約</a>
+        </nav>
+    </footer>
+</div>
+</body>
+</html>

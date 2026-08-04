@@ -1,0 +1,418 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ブロック崩し - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .btn-return {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #ef4444;
+            color: #fff;
+            font-weight: 800;
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2);
+            white-space: nowrap;
+            font-size: 12px;
+        }
+        .btn-return:hover { background: #dc2626; color: #fff; }
+
+        .header h1 { font-size: 1.4rem; flex: 1; }
+
+        #result {
+            display: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+        }
+        #result.success { background: #064e3b; color: #6ee7b7; }
+        #result.error   { background: #7f1d1d; color: #fca5a5; }
+
+        .layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .game-area { flex: 0 0 auto; }
+
+        canvas {
+            background: #1e293b;
+            border-radius: 8px;
+            display: block;
+            cursor: none;
+        }
+
+        .hint {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .side {
+            flex: 1 1 240px;
+            min-width: 240px;
+        }
+
+        .panel {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .panel h2 {
+            font-size: 1rem;
+            color: #a5b4fc;
+            margin-bottom: 10px;
+        }
+
+        .mybest {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+        }
+        .mybest strong { color: #fbbf24; font-size: 1.2rem; }
+
+        table.rank { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        table.rank th, table.rank td {
+            padding: 5px 6px;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+        }
+        table.rank th { color: #94a3b8; font-weight: 600; }
+        table.rank td.score { text-align: right; color: #fbbf24; font-weight: 600; }
+        table.rank tr:nth-child(1) td.pos { color: #fbbf24; }
+        table.rank tr:nth-child(2) td.pos { color: #cbd5e1; }
+        table.rank tr:nth-child(3) td.pos { color: #d97706; }
+        .rank-empty { color: #64748b; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧱 ブロック崩し</h1>
+            <a href="{{ url_for('block_breaker.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        </div>
+        <div id="result"></div>
+
+        <div class="layout">
+            <div class="game-area">
+                <canvas id="game" width="560" height="480"></canvas>
+                <p class="hint">←→キーまたはマウスでパドル移動 / スペースかクリックで開始・再開</p>
+            </div>
+
+            <div class="side">
+                <div class="panel">
+                    <h2>あなたの記録</h2>
+                    <p class="mybest">自己ベスト <strong id="myBest">-</strong>　プレイ回数 <span id="myPlays">-</span></p>
+                </div>
+                <div class="panel">
+                    <h2>🏆 ハイスコアランキング</h2>
+                    <div id="rankingBox"><p class="rank-empty">読み込み中...</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- FUJIN-P 連携 ----------
+        var URL_SAVE_SCORE = '{{ url_for("block_breaker.api_save_score") }}';
+        var URL_RANKING    = '{{ url_for("block_breaker.api_ranking") }}';
+
+        function showResult(message, isError) {
+            var $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(function() { $r.fadeOut(); }, 5000);
+        }
+
+        function loadRanking() {
+            $.ajax({
+                url: URL_RANKING,
+                method: 'GET',
+                success: function(resp) {
+                    if (!resp.success) return;
+                    $('#myBest').text(resp.my_best);
+                    $('#myPlays').text(resp.my_plays);
+                    var box = $('#rankingBox');
+                    if (!resp.ranking || resp.ranking.length === 0) {
+                        box.html('<p class="rank-empty">まだ記録がありません。最初の挑戦者になりましょう！</p>');
+                        return;
+                    }
+                    var html = '<table class="rank"><tr><th></th><th>名前</th><th style="text-align:right;">スコア</th><th>達成日時</th></tr>';
+                    for (var i = 0; i < resp.ranking.length; i++) {
+                        var r = resp.ranking[i];
+                        html += '<tr><td class="pos">' + (i + 1) + '</td>'
+                              + '<td>' + $('<div>').text(r.full_name).html() + '</td>'
+                              + '<td class="score">' + r.best_score + '</td>'
+                              + '<td>' + r.best_at + '</td></tr>';  // 日時は文字列のまま表示
+                    }
+                    html += '</table>';
+                    box.html(html);
+                },
+                error: function() { $('#rankingBox').html('<p class="rank-empty">ランキングを取得できませんでした</p>'); }
+            });
+        }
+
+        var scoreSaved = false;
+        function saveScore(score, cleared) {
+            if (scoreSaved) return;  // 1ゲーム1回
+            scoreSaved = true;
+            $.ajax({
+                url: URL_SAVE_SCORE,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ score: score, cleared: cleared }),
+                success: function(resp) {
+                    if (resp.success) { showResult('スコア ' + score + ' を記録しました', false); loadRanking(); }
+                    else showResult('エラー: ' + resp.error, true);
+                },
+                error: function() { showResult('通信エラー：スコアを記録できませんでした', true); }
+            });
+        }
+
+        // ---------- ゲーム本体（ブロック崩し）----------
+        var canvas = document.getElementById('game');
+        var ctx = canvas.getContext('2d');
+        var W = canvas.width, H = canvas.height;
+
+        // パドル
+        var PADDLE_W = 90, PADDLE_H = 12;
+        var paddleX = (W - PADDLE_W) / 2;
+        var leftPressed = false, rightPressed = false;
+
+        // ボール
+        var BALL_R = 7;
+        var ballX, ballY, ballDX, ballDY;
+        var BALL_SPEED = 4.5;
+
+        // ブロック 6段 × 8列
+        var ROWS = 6, COLS = 8;
+        var BRICK_H = 20, BRICK_PAD = 6, BRICK_TOP = 50, BRICK_SIDE = 20;
+        var BRICK_W = (W - BRICK_SIDE * 2 - BRICK_PAD * (COLS - 1)) / COLS;
+        var ROW_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'];
+        var ROW_POINTS = [60, 50, 40, 30, 20, 10];
+        var bricks = [];
+
+        var score = 0, lives = 3;
+        var state = 'ready';   // ready | playing | over | clear
+
+        function resetBricks() {
+            bricks = [];
+            for (var r = 0; r < ROWS; r++) {
+                bricks[r] = [];
+                for (var c = 0; c < COLS; c++) bricks[r][c] = 1;
+            }
+        }
+
+        function resetBall() {
+            ballX = W / 2;
+            ballY = H - 60;
+            var angle = (Math.random() * 0.6 - 0.3) - Math.PI / 2;  // ほぼ真上
+            ballDX = BALL_SPEED * Math.cos(angle);
+            ballDY = BALL_SPEED * Math.sin(angle);
+        }
+
+        function newGame() {
+            score = 0; lives = 3;
+            scoreSaved = false;
+            resetBricks();
+            resetBall();
+            paddleX = (W - PADDLE_W) / 2;
+            state = 'playing';
+        }
+
+        // 入力
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') leftPressed = true;
+            if (e.key === 'ArrowRight') rightPressed = true;
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (state !== 'playing') newGame();
+            }
+        });
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'ArrowLeft') leftPressed = false;
+            if (e.key === 'ArrowRight') rightPressed = false;
+        });
+        canvas.addEventListener('mousemove', function(e) {
+            var rect = canvas.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            paddleX = Math.min(Math.max(x - PADDLE_W / 2, 0), W - PADDLE_W);
+        });
+        canvas.addEventListener('click', function() {
+            if (state !== 'playing') newGame();
+        });
+
+        function remainingBricks() {
+            var n = 0;
+            for (var r = 0; r < ROWS; r++)
+                for (var c = 0; c < COLS; c++)
+                    if (bricks[r][c]) n++;
+            return n;
+        }
+
+        function update() {
+            if (state !== 'playing') return;
+
+            if (leftPressed)  paddleX = Math.max(paddleX - 7, 0);
+            if (rightPressed) paddleX = Math.min(paddleX + 7, W - PADDLE_W);
+
+            ballX += ballDX;
+            ballY += ballDY;
+
+            // 壁
+            if (ballX < BALL_R) { ballX = BALL_R; ballDX = -ballDX; }
+            if (ballX > W - BALL_R) { ballX = W - BALL_R; ballDX = -ballDX; }
+            if (ballY < BALL_R) { ballY = BALL_R; ballDY = -ballDY; }
+
+            // パドル：当たった位置で反射角が変わる
+            if (ballDY > 0 && ballY + BALL_R >= H - 30 && ballY + BALL_R <= H - 30 + PADDLE_H + 8 &&
+                ballX >= paddleX - BALL_R && ballX <= paddleX + PADDLE_W + BALL_R) {
+                var hit = (ballX - (paddleX + PADDLE_W / 2)) / (PADDLE_W / 2); // -1〜1
+                var angle = hit * (Math.PI / 3) - Math.PI / 2;                  // 最大±60°
+                ballDX = BALL_SPEED * Math.cos(angle);
+                ballDY = BALL_SPEED * Math.sin(angle);
+                ballY = H - 30 - BALL_R;
+            }
+
+            // 落下
+            if (ballY > H + BALL_R) {
+                lives--;
+                if (lives <= 0) {
+                    state = 'over';
+                    saveScore(score, false);
+                } else {
+                    resetBall();
+                }
+            }
+
+            // ブロック衝突
+            for (var r = 0; r < ROWS; r++) {
+                for (var c = 0; c < COLS; c++) {
+                    if (!bricks[r][c]) continue;
+                    var bx = BRICK_SIDE + c * (BRICK_W + BRICK_PAD);
+                    var by = BRICK_TOP + r * (BRICK_H + BRICK_PAD);
+                    if (ballX + BALL_R > bx && ballX - BALL_R < bx + BRICK_W &&
+                        ballY + BALL_R > by && ballY - BALL_R < by + BRICK_H) {
+                        bricks[r][c] = 0;
+                        score += ROW_POINTS[r];
+                        // 反射方向：浅く入った軸を反転
+                        var overlapX = Math.min(ballX + BALL_R - bx, bx + BRICK_W - (ballX - BALL_R));
+                        var overlapY = Math.min(ballY + BALL_R - by, by + BRICK_H - (ballY - BALL_R));
+                        if (overlapX < overlapY) ballDX = -ballDX; else ballDY = -ballDY;
+                        if (remainingBricks() === 0) {
+                            state = 'clear';
+                            saveScore(score, true);
+                        }
+                        r = ROWS; break;  // 1フレーム1個まで
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // ブロック
+            for (var r = 0; r < ROWS; r++) {
+                for (var c = 0; c < COLS; c++) {
+                    if (!bricks[r][c]) continue;
+                    ctx.fillStyle = ROW_COLORS[r];
+                    ctx.fillRect(BRICK_SIDE + c * (BRICK_W + BRICK_PAD),
+                                 BRICK_TOP + r * (BRICK_H + BRICK_PAD), BRICK_W, BRICK_H);
+                }
+            }
+
+            // パドル
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(paddleX, H - 30, PADDLE_W, PADDLE_H);
+
+            // ボール
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, BALL_R, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbf24';
+            ctx.fill();
+
+            // スコア・残機
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('SCORE: ' + score, 12, 24);
+            ctx.textAlign = 'right';
+            ctx.fillText('LIVES: ' + lives, W - 12, 24);
+
+            // メッセージ
+            if (state !== 'playing') {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+                ctx.fillRect(0, 0, W, H);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = 'bold 28px sans-serif';
+                if (state === 'ready') {
+                    ctx.fillText('スペースキーかクリックで開始', W / 2, H / 2);
+                } else if (state === 'over') {
+                    ctx.fillStyle = '#f87171';
+                    ctx.fillText('GAME OVER', W / 2, H / 2 - 20);
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.font = '18px sans-serif';
+                    ctx.fillText('スコア: ' + score + '　スペースかクリックで再挑戦', W / 2, H / 2 + 20);
+                } else if (state === 'clear') {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fillText('🎉 CLEAR! 🎉', W / 2, H / 2 - 20);
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.font = '18px sans-serif';
+                    ctx.fillText('スコア: ' + score + '　スペースかクリックでもう一度', W / 2, H / 2 + 20);
+                }
+            }
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        resetBricks();
+        resetBall();
+        loop();
+        loadRanking();
+    </script>
+</body>
+</html>

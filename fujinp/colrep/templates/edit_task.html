@@ -1,0 +1,230 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{% extends "base.html" %}
+
+{% block title %}{{ task.カラム名 }} - 作業 - CoRePo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- ヘッダー部分 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-pencil-square"></i> タスク作業</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('colrep.worker_dashboard') }}">作業ダッシュボード</a></li>
+                    <li class="breadcrumb-item active">{{ task.カラム名 }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{{ url_for('colrep.worker_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> ダッシュボードに戻る
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}" role="alert">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- タスク情報 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> タスク情報</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-3">プロジェクト:</dt>
+                        <dd class="col-sm-9"><strong>{{ project.プロジェクト名 }}</strong></dd>
+                        
+                        <dt class="col-sm-3">カラム名:</dt>
+                        <dd class="col-sm-9"><code>{{ task.カラム名 }}</code></dd>
+                        
+                        <dt class="col-sm-3">タスクID:</dt>
+                        <dd class="col-sm-9">
+                            <span class="badge bg-secondary">#{{ task.id }}</span>
+                        </dd>
+                        
+                        <dt class="col-sm-3">更新日時:</dt>
+                        <dd class="col-sm-9">
+                            {% if task.更新日時 %}
+                            {{ task.更新日時.strftime('%Y年%m月%d日 %H:%M') }}
+                            {% else %}
+                            <span class="text-muted">未設定</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- 管理者からの説明 -->
+            {% if task.説明 %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clipboard-data"></i> 作業指示</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> <strong>管理者からの説明</strong>
+                        <hr>
+                        <div style="white-space: pre-wrap;">{{ task.説明 }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 作業内容入力フォーム -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pencil"></i> 作業内容</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="taskForm">
+                        <div class="mb-4">
+                            <label for="content" class="form-label">
+                                内容 <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="form-control" id="content" name="content" rows="10" 
+                                      required placeholder="作業内容を入力してください...">{{ task.content or '' }}</textarea>
+                            <div class="form-text">
+                                作業内容を詳細に入力してください。
+                                現在の文字数: <span id="content-count">{{ (task.content or '')|length }}</span> 文字
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="remarks" class="form-label">備考</label>
+                            <textarea class="form-control" id="remarks" name="remarks" rows="4" 
+                                      placeholder="管理者への報告や質問があれば記入してください...">{{ task.備考 or '' }}</textarea>
+                            <div class="form-text">
+                                管理者への報告事項、質問、その他コメントを記入できます（任意）。
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('colrep.worker_dashboard') }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle"></i> 保存
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- 進捗ステータス -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-flag"></i> ステータス</h6>
+                </div>
+                <div class="card-body text-center">
+                    {% if task.content %}
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">完了済み</h6>
+                        <p class="text-muted small">作業が完了しています</p>
+                    {% else %}
+                        <i class="bi bi-clock text-warning" style="font-size: 2rem;"></i>
+                        <h6 class="mt-2">作業中</h6>
+                        <p class="text-muted small">作業内容を入力してください</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- プロジェクト情報 -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-folder"></i> プロジェクト詳細</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row small">
+                        <dt class="col-sm-5">責任者:</dt>
+                        <dd class="col-sm-7">{{ project.責任者名 }}</dd>
+                        
+                        <dt class="col-sm-5">テーブル:</dt>
+                        <dd class="col-sm-7"><code>{{ project.テーブル名 }}</code></dd>
+                        
+                        <dt class="col-sm-5">プロジェクト更新:</dt>
+                        <dd class="col-sm-7">
+                            {% if project.更新日時 %}
+                            {{ project.更新日時.strftime('%m/%d') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- ヒント -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-lightbulb"></i> 作業のヒント</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled small">
+                        <li><i class="bi bi-check text-success"></i> 作業内容は詳細に記録してください</li>
+                        <li><i class="bi bi-check text-success"></i> 不明点は備考欄で質問できます</li>
+                        <li><i class="bi bi-check text-success"></i> 保存はいつでも可能です</li>
+                        <li><i class="bi bi-check text-success"></i> 自動保存はありません</li>
+                    </ul>
+                    
+                    <hr>
+                    
+                    <div class="text-center">
+                        <small class="text-muted">
+                            何か問題があれば管理者にご連絡ください
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const contentTextarea = document.getElementById('content');
+    const contentCount = document.getElementById('content-count');
+    
+    // 文字数カウント機能
+    contentTextarea.addEventListener('input', function() {
+        contentCount.textContent = this.value.length;
+    });
+    
+    // フォーム送信時の確認
+    document.getElementById('taskForm').addEventListener('submit', function(e) {
+        const content = contentTextarea.value.trim();
+        
+        if (!content) {
+            e.preventDefault();
+            alert('作業内容を入力してください。');
+            contentTextarea.focus();
+            return false;
+        }
+        
+        // 確認メッセージ
+        if (!confirm('作業内容を保存しますか？')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

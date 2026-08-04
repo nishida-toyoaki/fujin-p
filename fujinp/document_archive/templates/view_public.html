@@ -1,0 +1,108 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公開文書一覧 - FUJIN-P</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        .header-bar {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 24px 0 20px;
+            margin-bottom: 32px;
+        }
+        .doc-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            transition: transform 0.15s, box-shadow 0.15s;
+            margin-bottom: 12px;
+        }
+        .doc-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(79,70,229,0.13);
+        }
+        .doc-title {
+            font-weight: 700;
+            color: #1e1b4b;
+            font-size: 1rem;
+        }
+        .doc-date {
+            font-size: 0.78rem;
+            color: #9ca3af;
+        }
+        .btn-view {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 18px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: opacity 0.15s;
+        }
+        .btn-view:hover {
+            opacity: 0.85;
+            color: white;
+        }
+        .login-hint {
+            font-size: 0.78rem;
+            color: #9ca3af;
+            text-align: right;
+        }
+        .login-hint a {
+            color: #7c3aed;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-bar">
+        <div class="container">
+            <h4 class="mb-1">📄 公開文書一覧</h4>
+            <div class="login-hint">
+                <a href="{{ url_for('auth.login') }}">ログイン</a> するとすべての機能が利用できます
+            </div>
+        </div>
+    </div>
+
+    <div class="container" style="max-width: 720px;">
+        {% if documents %}
+            {% for doc in documents %}
+            <div class="card doc-card">
+                <div class="card-body d-flex align-items-center justify-content-between gap-3">
+                    <div>
+                        <div class="doc-title">{{ doc.title }}</div>
+                        <div class="doc-date">
+                            更新日: {{ doc.updated_at.strftime('%Y-%m-%d') if doc.updated_at else 'N/A' }}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('document_archive.plain_view', doc_id=doc.id) }}"
+                       class="btn-view">
+                        閲覧
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center text-muted py-5">
+                <p>公開中の文書はありません</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

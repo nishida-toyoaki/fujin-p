@@ -1,0 +1,849 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>プロジェクト一覧 - テーブルマスター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#f0f2f5;color:#333}
+#header{background:#1a3a5c;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+#header h1{font-size:16px;font-weight:600}
+.nav-links{margin-left:auto;display:flex;gap:8px}
+.nav-links a{color:#aed6f1;text-decoration:none;font-size:12px;padding:4px 8px;
+             border:1px solid #2e6da4;border-radius:3px}
+.nav-links a:hover{background:#2e6da4}
+.btn{padding:5px 12px;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:500;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary {background:#2e6da4;color:#fff}
+.btn-success {background:#27ae60;color:#fff}
+.btn-danger  {background:#e74c3c;color:#fff}
+.btn-dark    {background:#1a3a5c;color:#fff}
+.btn-view    {background:#8e44ad;color:#fff}
+.btn-dl-html {background:#2980b9;color:#fff;font-size:11px;padding:3px 8px}
+.btn-dl-md   {background:#16a085;color:#fff;font-size:11px;padding:3px 8px}
+input[type=text],textarea{width:100%;padding:6px 8px;border:1px solid #ccc;
+                           border-radius:3px;font-size:13px;font-family:inherit}
+label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
+
+/* ===== プロジェクト一覧 ===== */
+#main{margin:16px 20px;padding:0}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.section-header h2{font-size:15px;color:#1a3a5c}
+/* プロジェクト一覧テーブル */
+#project-grid{background:#fff;border:1px solid #ddd;border-radius:6px;overflow:hidden}
+.project-table{width:100%;border-collapse:collapse;font-size:13px}
+.project-table thead th{background:#2e6da4;color:#fff;padding:8px 12px;
+                         text-align:left;font-weight:600;white-space:nowrap}
+.project-table tbody tr{border-bottom:1px solid #eee}
+.project-table tbody tr:last-child{border-bottom:none}
+.project-table tbody tr:hover{background:#f5f9ff}
+.project-table td{padding:9px 12px;vertical-align:middle}
+.pc-name{font-size:14px;font-weight:700;color:#1a3a5c;cursor:pointer}
+.pc-name:hover{text-decoration:underline}
+.pc-desc{font-size:12px;color:#666}
+.badge-count{background:#2e6da4;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-right:4px}
+.badge-view {background:#8e44ad;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px}
+.td-btns{white-space:nowrap;text-align:right}
+
+/* ===== 編集モーダル ===== */
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100}
+#modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+       width:420px;max-width:90vw;background:#fff;border-radius:6px;
+       box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:101}
+#modal .mh{background:#1a3a5c;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;
+           display:flex;justify-content:space-between;align-items:center}
+#modal .mh span{font-size:14px;font-weight:600}
+#modal .mh button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+#modal .mb{padding:16px}
+#modal .mb .field{margin-bottom:12px}
+#modal .mf{padding:10px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end}
+
+/* ===== 閲覧モーダル ===== */
+#view-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
+#view-modal{display:none;position:fixed;top:3vh;left:50%;transform:translateX(-50%);
+            width:92vw;max-width:1100px;height:94vh;background:#fff;border-radius:6px;
+            box-shadow:0 10px 40px rgba(0,0,0,.35);z-index:201;flex-direction:column}
+#view-modal.show{display:flex}
+
+/* ヘッダー */
+#vm-header{background:#6c3483;color:#fff;padding:10px 16px;border-radius:6px 6px 0 0;
+           display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+#vm-header h2{font-size:14px;font-weight:700;flex:1;min-width:120px}
+#vm-header .vm-hdr-btns{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.btn-hdr{font-size:12px;padding:5px 12px;border:none;border-radius:3px;cursor:pointer;font-weight:600}
+.btn-hdr:hover{opacity:.85}
+.btn-hdr-prev  {background:#e8f4f8;color:#1a5276}
+.btn-hdr-code  {background:#fdf2e9;color:#784212}
+.btn-hdr-dlh   {background:#2980b9;color:#fff}
+.btn-hdr-dlmd  {background:#16a085;color:#fff}
+#vm-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;padding:2px 4px;margin-left:4px}
+
+/* アコーディオン展開行 */
+.vm-expand-row{display:none}
+.vm-expand-row.open{display:table-row}
+.vm-expand-cell{padding:0 !important;border-bottom:2px solid #6c3483 !important}
+.vm-expand-inner{padding:12px 14px;background:#faf7ff}
+.vm-sub-btns{display:flex;gap:6px;margin-bottom:0}
+.btn-row-prev{background:#e8f4f8;color:#1a5276;border:1px solid #aed6f1;
+              font-size:11px;padding:3px 9px;border-radius:3px;cursor:pointer;font-weight:600}
+.btn-row-prev:hover{background:#d4e9f7}
+.btn-row-code{background:#fdf2e9;color:#784212;border:1px solid #f0b27a;
+              font-size:11px;padding:3px 9px;border-radius:3px;cursor:pointer;font-weight:600}
+.btn-row-code:hover{background:#fce8d0}
+.btn-row-prev.active,.btn-row-code.active{font-weight:700;box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
+.vm-row-preview{display:none;margin-top:8px}
+.vm-row-code   {display:none;margin-top:8px;background:#1e1e1e;color:#d4d4d4;
+                font-family:'Courier New',monospace;font-size:11px;padding:10px;
+                border-radius:3px;white-space:pre-wrap;word-wrap:break-word;max-height:300px;overflow:auto}
+/* ビュー一覧テーブル */
+#vm-view-list{flex-shrink:0;overflow-y:auto;max-height:220px;border-bottom:2px solid #e0d0f0}
+#vm-view-table{width:100%;border-collapse:collapse;font-size:12px}
+#vm-view-table thead th{background:#f5f0ff;color:#4a235a;padding:7px 12px;
+                         text-align:left;font-weight:600;border-bottom:1px solid #e0d0f0;
+                         position:sticky;top:0;z-index:1}
+#vm-view-table tbody tr{border-bottom:1px solid #f0f0f0}
+#vm-view-table tbody tr:hover{background:#faf7ff}
+#vm-view-table td{padding:6px 12px;vertical-align:middle}
+.vt-name{font-weight:600;color:#4a235a}
+.vt-desc{color:#888;font-size:11px}
+.vt-badge-ok  {background:#d5f5e3;color:#1e8449;border-radius:8px;padding:2px 8px;font-size:11px}
+.vt-badge-none{background:#f0f0f0;color:#aaa;border-radius:8px;padding:2px 8px;font-size:11px}
+.btn-vdl{font-size:11px;padding:3px 8px;border:none;border-radius:3px;cursor:pointer;font-weight:500}
+.btn-vdl:hover{opacity:.85}
+.btn-vdl-html{background:#2980b9;color:#fff}
+.btn-vdl-md  {background:#16a085;color:#fff}
+.btn-vdl-dis {background:#e0e0e0;color:#bbb;cursor:not-allowed}
+
+/* コンテンツエリア（プレビュー・HTMLコード） */
+#vm-content-area{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+#vm-content-placeholder{flex:1;display:flex;align-items:center;justify-content:center;
+                         color:#bbb;font-size:13px;flex-direction:column;gap:10px}
+#vm-preview-wrap{flex:1;overflow:auto;padding:14px;background:#fff;display:none}
+#vm-code-wrap   {flex:1;overflow:auto;padding:10px 14px;font-family:'Courier New',monospace;
+                 font-size:11px;background:#1e1e1e;color:#d4d4d4;
+                 white-space:pre-wrap;word-wrap:break-word;display:none}
+/* ボタン無効 */
+.btn-disabled{opacity:.4 !important;cursor:not-allowed !important}
+
+/* ===== アクセス権モーダル ===== */
+#access-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300}
+#access-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+              width:480px;max-width:92vw;background:#fff;border-radius:6px;
+              box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:301}
+#access-modal .am-hd{background:#2c3e50;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;
+                     display:flex;align-items:center;justify-content:space-between}
+#access-modal .am-hd span{font-size:14px;font-weight:700}
+#access-modal .am-hd button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+#access-modal .am-body{padding:16px}
+#access-modal .am-foot{padding:10px 16px;border-top:1px solid #eee;
+                       display:flex;gap:8px;justify-content:flex-end}
+.policy-radio-group{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.policy-radio-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+                   border:1px solid #e0e0e0;border-radius:4px;cursor:pointer}
+.policy-radio-item:hover{background:#f5f5f5}
+.policy-radio-item input[type=radio]{margin-top:3px;flex-shrink:0}
+.policy-radio-item .pr-label{font-size:13px;font-weight:600;color:#2c3e50}
+.policy-radio-item .pr-desc {font-size:11px;color:#888;margin-top:2px}
+.policy-radio-item.selected{border-color:#2e6da4;background:#eef4fb}
+#access-group-area{display:none;margin-top:10px;border:1px solid #ddd;
+                   border-radius:4px;padding:10px;background:#fafafa}
+#access-group-area label{font-size:12px;font-weight:600;color:#555;margin-bottom:6px;display:block}
+#access-group-list{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto}
+.group-chip{display:flex;align-items:center;gap:4px;padding:3px 8px;
+            border:1px solid #ccc;border-radius:12px;font-size:12px;cursor:pointer;background:#fff}
+.group-chip input[type=checkbox]{margin:0}
+.group-chip.checked{background:#2e6da4;color:#fff;border-color:#2e6da4}
+.policy-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:8px;
+              font-weight:600;vertical-align:middle;margin-left:4px}
+.pb-public  {background:#d5f5e3;color:#1e8449}
+.pb-domestic{background:#d6eaf8;color:#1a5276}
+.pb-private {background:#fde8e8;color:#922b21}
+.pb-group   {background:#f9ebea;color:#784212}
+
+/* ===== トースト ===== */
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:4px;
+       color:#fff;font-size:13px;z-index:9999;display:none;max-width:300px}
+#toast.ok {background:#27ae60}
+#toast.err{background:#e74c3c}
+.loading{color:#aaa;padding:30px;text-align:center;font-style:italic}
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div id="header">
+  <h1>📁 プロジェクト</h1>
+  <div class="nav-links">
+    <a href="/table_master/archive/">📦 アーカイブ</a>
+    <a href="/table_master/view_editor/">📋 ビューエディタ</a>
+    <a href="/table_master/">← テーブルマスター</a>
+  </div>
+</div>
+
+<!-- プロジェクト一覧 -->
+<div id="main">
+  <div class="section-header">
+    <h2>📁 プロジェクト一覧</h2>
+    <button class="btn btn-dark" onclick="openCreate()">＋ 新規プロジェクト</button>
+    <button class="btn btn-primary" onclick="loadProjects()" style="margin-left:auto">⟳ 更新</button>
+  </div>
+  <div id="project-grid">
+    <table class="project-table">
+      <thead><tr>
+        <th style="width:22%">プロジェクト名</th>
+        <th>説明</th>
+        <th style="width:14%">統計</th>
+        <th style="width:12%">ポリシー</th>
+        <th style="width:26%">操作</th>
+      </tr></thead>
+      <tbody id="project-tbody">
+        <tr><td colspan="5" class="loading">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 編集モーダル -->
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="modal">
+  <div class="mh">
+    <span id="modal-title">プロジェクト作成</span>
+    <button onclick="closeModal()">✕</button>
+  </div>
+  <div class="mb">
+    <input type="hidden" id="modal-id">
+    <div class="field">
+      <label>プロジェクト名 *</label>
+      <input type="text" id="modal-name" placeholder="例: データブック 2025年度">
+    </div>
+    <div class="field">
+      <label>説明</label>
+      <textarea id="modal-desc" rows="2" placeholder="用途・メモ..."></textarea>
+    </div>
+  </div>
+  <div class="mf">
+    <button class="btn btn-danger" id="btn-modal-delete" onclick="deleteProject()"
+            style="display:none;margin-right:auto">🗑 削除</button>
+    <button class="btn" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-success" onclick="saveProject()">💾 保存</button>
+  </div>
+</div>
+
+<!-- アクセス権設定モーダル -->
+<div id="access-overlay" onclick="closeAccess()"></div>
+<div id="access-modal">
+  <div class="am-hd">
+    <span>🔑 アクセス権設定: <span id="access-proj-name"></span></span>
+    <button onclick="closeAccess()">✕</button>
+  </div>
+  <div class="am-body">
+    <input type="hidden" id="access-proj-id">
+    <div class="policy-radio-group" id="policy-radio-group">
+      <label class="policy-radio-item" onclick="selectPolicy('public')">
+        <input type="radio" name="access_policy" value="public">
+        <div>
+          <div class="pr-label">🌐 公開（public）</div>
+          <div class="pr-desc">ログイン済みユーザーであれば誰でも閲覧可</div>
+        </div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('domestic')">
+        <input type="radio" name="access_policy" value="domestic">
+        <div>
+          <div class="pr-label">🏫 学内公開（domestic）</div>
+          <div class="pr-desc">regular / admin カテゴリのユーザーのみ閲覧可</div>
+        </div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('group')">
+        <input type="radio" name="access_policy" value="group">
+        <div>
+          <div class="pr-label">👥 グループ限定（group）</div>
+          <div class="pr-desc">指定したグループに所属するユーザーのみ閲覧可</div>
+        </div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('private')">
+        <input type="radio" name="access_policy" value="private">
+        <div>
+          <div class="pr-label">🔒 非公開（private）</div>
+          <div class="pr-desc">作成者・管理者のみ閲覧可</div>
+        </div>
+      </label>
+    </div>
+    <div id="access-group-area">
+      <label>許可するグループを選択:</label>
+      <div id="access-group-list"></div>
+    </div>
+  </div>
+  <div class="am-foot">
+    <button class="btn" onclick="closeAccess()">キャンセル</button>
+    <button class="btn btn-success" onclick="saveAccess()">💾 保存</button>
+  </div>
+</div>
+
+<!-- 閲覧モーダル -->
+<div id="view-overlay" onclick="closeViewer()"></div>
+<div id="view-modal">
+  <div id="vm-header">
+    <h2 id="vm-title">📄 プロジェクト閲覧</h2>
+    <div class="vm-hdr-btns">
+      <button class="btn-hdr btn-hdr-prev" onclick="showProjectView('preview')">👁 プレビュー</button>
+      <button class="btn-hdr btn-hdr-code" onclick="showProjectView('code')">&lt;/&gt; HTMLコード</button>
+      <button class="btn-hdr btn-hdr-dlh"  onclick="bulkDownload('html')">⬇ HTML一括</button>
+      <button class="btn-hdr btn-hdr-dlmd" onclick="bulkDownload('md')">⬇ MD一括</button>
+    </div>
+    <button id="vm-close" onclick="closeViewer()">✕</button>
+  </div>
+  <!-- ビュー一覧 -->
+  <div id="vm-view-list">
+    <table id="vm-view-table">
+      <thead><tr>
+        <th>ビュー名</th><th>説明</th><th>状態</th><th>表示</th><th>ダウンロード</th>
+      </tr></thead>
+      <tbody id="vm-view-tbody"></tbody>
+    </table>
+  </div>
+  <!-- プレビュー・HTMLコードエリア -->
+  <div id="vm-content-area">
+    <div id="vm-content-placeholder">
+      <span>↑ 上のボタンで「👁 プレビュー」または「&lt;/&gt; HTMLコード」を表示</span>
+    </div>
+    <div id="vm-preview-wrap"></div>
+    <div id="vm-code-wrap"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 状態 =====
+let allViewerData = []; // {link_id, view_name, description, html_content}
+let currentViewerProjectName = '';
+
+// ===== 起動 =====
+$(function(){ loadProjects(); });
+
+// ===== プロジェクト一覧 =====
+function loadProjects(){
+  $.get('/table_master/projects/list', function(data){
+    const $tb = $('#project-tbody').empty();
+    if(!data.success){
+      $tb.html('<tr><td colspan="5" class="loading" style="color:#e74c3c">'+esc(data.error)+'</td></tr>');
+      return;
+    }
+    if(!data.projects.length){
+      $tb.html('<tr><td colspan="5" class="loading" style="color:#bbb">プロジェクトがありません</td></tr>');
+      return;
+    }
+    data.projects.forEach(p => {
+      const vc = p.view_count || 0;
+      $tb.append(`<tr>
+        <td>
+          <div class="pc-name" onclick="location.href='/table_master/projects/${p.id}'">${esc(p.name)}</div>
+        </td>
+        <td class="pc-desc">${esc(p.description||'')}</td>
+        <td>
+          <span class="badge-count">${p.table_count} T</span>
+          <span class="badge-view">${vc} V</span>
+        </td>
+        <td>${policyBadgeHtml(p.access_policy)}</td>
+        <td class="td-btns">
+          <button class="btn btn-view" style="padding:2px 9px;font-size:11px"
+            onclick="openViewer(${p.id},'${escAttr(p.name)}')">👁 閲覧</button>
+          <button class="btn btn-primary" style="padding:2px 8px;font-size:11px"
+            onclick="openEdit(${p.id},'${escAttr(p.name)}','${escAttr(p.description||'')}')">編集</button>
+          <button class="btn" style="padding:2px 8px;font-size:11px;background:#2c3e50;color:#fff"
+            onclick="openAccess(${p.id},'${escAttr(p.name)}')">🔑 アクセス権</button>
+        </td>
+      </tr>`);
+    });
+  });
+}
+
+// ===== 編集モーダル =====
+function openCreate(){
+  $('#modal-id').val('');$('#modal-name').val('');$('#modal-desc').val('');
+  $('#modal-title').text('プロジェクト作成');$('#btn-modal-delete').hide();
+  $('#modal,#modal-overlay').show();setTimeout(()=>$('#modal-name').focus(),100);
+}
+function openEdit(id,name,desc){
+  $('#modal-id').val(id);$('#modal-name').val(name);$('#modal-desc').val(desc);
+  $('#modal-title').text('プロジェクト編集');$('#btn-modal-delete').show();
+  $('#modal,#modal-overlay').show();
+}
+function closeModal(){ $('#modal,#modal-overlay').hide(); }
+function saveProject(){
+  const name=$('#modal-name').val().trim();
+  if(!name){toast('プロジェクト名を入力してください','err');return;}
+  $.ajax({url:'/table_master/projects/save',type:'POST',contentType:'application/json',
+    data:JSON.stringify({id:$('#modal-id').val()||null,name,description:$('#modal-desc').val().trim()}),
+    success:function(r){ if(r.success){toast(r.message,'ok');closeModal();loadProjects();}else toast(r.error,'err'); },
+    error:function(x){toast((x.responseJSON&&x.responseJSON.error?x.responseJSON.error:'エラー'),'err');}
+  });
+}
+function deleteProject(){
+  const id=$('#modal-id').val(),name=$('#modal-name').val();
+  if(!confirm(`「${name}」を削除しますか？`))return;
+  $.ajax({url:'/table_master/projects/delete',type:'POST',contentType:'application/json',
+    data:JSON.stringify({id}),
+    success:function(r){if(r.success){toast(r.message,'ok');closeModal();loadProjects();}else toast(r.error,'err');}
+  });
+}
+
+// ===== 閲覧モーダル =====
+function openViewer(projectId, projectName){
+  allViewerData = [];
+  currentViewerProjectName = projectName;
+  $('#vm-title').text('📄 ' + projectName);
+  $('#vm-tab-bar').html('<div class="loading" style="padding:10px">読み込み中...</div>');
+  $('#vm-body').empty();
+  $('#view-overlay').show();
+  $('#view-modal').addClass('show');
+
+  $.get('/table_master/projects/'+projectId+'/all_html', function(data){
+    if(!data.success){
+      toast('エラー: '+(data.error||'不明なエラー'),'err');
+      // エラーでもモーダルは閉じずにメッセージ表示
+      $('#vm-tab-bar').html('<div style="padding:12px;color:#e74c3c;font-size:12px">❌ '+(data.error||'取得失敗')+'</div>');
+      return;
+    }
+    allViewerData = data.views || [];
+    currentViewerProjectName = data.project_name || projectName;
+    $('#vm-title').text('📄 ' + currentViewerProjectName);
+    renderViewer(allViewerData);
+  }).fail(function(xhr){
+    var status = xhr.status;
+    var msg = (xhr.responseJSON&&xhr.responseJSON.error) ? xhr.responseJSON.error : (xhr.responseText || '通信エラー');
+    $('#vm-tab-bar').html('<div style="padding:12px;color:#e74c3c;font-size:12px">❌ HTTP '+status+': '+esc(msg.substring(0,200))+'</div>');
+    toast('HTTP '+status+': 読み込みに失敗しました','err');
+  });
+}
+
+function renderViewer(views){
+  const $tbody = $('#vm-view-tbody').empty();
+  $('#vm-content-placeholder').show();
+  $('#vm-preview-wrap').hide().empty();
+  $('#vm-code-wrap').hide().text('');
+
+  if(!views.length){
+    $tbody.append('<tr><td colspan="5" style="padding:16px;color:#aaa;text-align:center">ビューが登録されていません</td></tr>');
+    return;
+  }
+
+  views.forEach(function(v, i){
+    const hasHtml = !!v.has_html;
+    const expandId = 'vm-expand-'+i;
+    const $tr = $('<tr>');
+
+    // ビュー名
+    $tr.append($('<td class="vt-name">').text(v.view_name));
+    // 説明
+    $tr.append($('<td class="vt-desc">').text(v.description||''));
+    // 状態バッジ
+    const $badge = hasHtml
+      ? $('<span class="vt-badge-ok">').text('✓ HTML保存済')
+      : $('<span class="vt-badge-none">').text('未保存');
+    $tr.append($('<td>').append($badge));
+
+    // 個別プレビュー・HTMLコードボタン
+    const $tdView = $('<td style="white-space:nowrap">');
+    if(hasHtml){
+      const $btnPrev = $('<button class="btn-row-prev">').text('👁 プレビュー');
+      const $btnCode = $('<button class="btn-row-code">').text('</> HTMLコード');
+      $btnPrev.on('click', function(){
+        toggleRowExpand(expandId, 'preview', $btnPrev, $btnCode, v);
+      });
+      $btnCode.on('click', function(){
+        toggleRowExpand(expandId, 'code', $btnPrev, $btnCode, v);
+      });
+      $tdView.append($btnPrev, ' ', $btnCode);
+    } else {
+      $tdView.append(
+        $('<button class="btn-row-prev" disabled style="opacity:.35;cursor:not-allowed">').text('👁 プレビュー'),
+        ' ',
+        $('<button class="btn-row-code" disabled style="opacity:.35;cursor:not-allowed">').text('</> HTMLコード')
+      );
+    }
+    $tr.append($tdView);
+
+    // ダウンロードボタン
+    const $tdBtn = $('<td style="white-space:nowrap">');
+    if(hasHtml){
+      $tdBtn.append(
+        $('<button class="btn-vdl btn-vdl-html">').text('⬇ HTML')
+          .on('click', function(){ downloadHtml(v); }),
+        ' ',
+        $('<button class="btn-vdl btn-vdl-md">').text('⬇ MD')
+          .on('click', function(){ downloadMd(v); })
+      );
+    } else {
+      $tdBtn.append(
+        $('<button class="btn-vdl btn-vdl-dis" disabled>').text('⬇ HTML'),
+        ' ',
+        $('<button class="btn-vdl btn-vdl-dis" disabled>').text('⬇ MD')
+      );
+    }
+    $tr.append($tdBtn);
+    $tbody.append($tr);
+
+    // アコーディオン展開行（初期非表示）
+    const $expandRow = $('<tr class="vm-expand-row">').attr('id', expandId);
+    const $expandCell = $('<td class="vm-expand-cell">').attr('colspan', 5);
+    const $inner = $('<div class="vm-expand-inner">');
+    // プレビューエリア
+    const $prevDiv = $('<div class="vm-row-preview">');
+    const $iframe = $('<iframe>').css({width:'100%',border:'1px solid #ddd',
+      borderRadius:'3px',display:'block',minHeight:'120px'})
+      .attr('sandbox','allow-same-origin').attr('scrolling','no');
+    $prevDiv.append($iframe);
+    // HTMLコードエリア
+    const $codeDiv = $('<div class="vm-row-code">').text(v.html_content||'');
+    $inner.append($prevDiv, $codeDiv);
+    $expandCell.append($inner);
+    $expandRow.append($expandCell);
+    // iframeとviewデータを紐づけ
+    $expandRow.data('iframe', $iframe[0]);
+    $expandRow.data('html', v.html_content||'');
+    $expandRow.data('loaded', false);
+    $tbody.append($expandRow);
+  });
+}
+
+function toggleRowExpand(expandId, mode, $btnPrev, $btnCode, v){
+  const $row = $('#'+expandId);
+  const $prevDiv = $row.find('.vm-row-preview');
+  const $codeDiv = $row.find('.vm-row-code');
+  const iframe   = $row.data('iframe');
+  const html     = $row.data('html');
+
+  // 同じボタンを再クリック → 折りたたむ
+  const isOpen   = $row.hasClass('open');
+  const curMode  = $row.data('mode');
+  if(isOpen && curMode === mode){
+    $row.removeClass('open');
+    $btnPrev.removeClass('active');
+    $btnCode.removeClass('active');
+    return;
+  }
+
+  // 展開
+  $row.addClass('open').data('mode', mode);
+  if(mode === 'preview'){
+    $prevDiv.show(); $codeDiv.hide();
+    $btnPrev.addClass('active'); $btnCode.removeClass('active');
+    // iframeはまだ書き込まれていなければ書き込む
+    if(!$row.data('loaded')){
+      $row.data('loaded', true);
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write('<html><head><style>body{margin:8px;font-family:sans-serif;font-size:13px}'
+        +'table{border-collapse:collapse;width:100%}'
+        +'th{background:#2e6da4;color:#fff;padding:5px 9px;text-align:left}'
+        +'td{padding:4px 9px;border:1px solid #ccc}</style></head><body>'+html+'</body></html>');
+      doc.close();
+      setTimeout(function(){
+        try{ iframe.style.height=(iframe.contentDocument.body.scrollHeight+20)+'px'; }catch(e){}
+      }, 120);
+    }
+  } else {
+    $prevDiv.hide(); $codeDiv.show();
+    $btnCode.addClass('active'); $btnPrev.removeClass('active');
+  }
+}
+
+// プロジェクト全体のプレビュー or HTMLコードを表示
+function showProjectView(mode){
+  const downloadable = allViewerData.filter(function(v){ return !!v.has_html; });
+
+  $('#vm-content-placeholder').hide();
+  $('#vm-preview-wrap').hide();
+  $('#vm-code-wrap').hide();
+
+  if(!downloadable.length){
+    $('#vm-content-placeholder').show()
+      .html('<span style="color:#e67e22">⚠️ HTMLが保存されているビューがありません</span>');
+    return;
+  }
+
+  if(mode === 'preview'){
+    const $wrap = $('#vm-preview-wrap').empty().show();
+    downloadable.forEach(function(v){
+      // セクションヘッダー
+      $wrap.append(
+        $('<div>').css({
+          fontWeight:'700', fontSize:'14px', color:'#4a235a',
+          borderBottom:'2px solid #6c3483', paddingBottom:'4px',
+          margin:'16px 0 10px'
+        }).text(v.view_name)
+      );
+      if(v.description){
+        $wrap.append($('<div>').css({fontSize:'11px',color:'#888',marginBottom:'8px'}).text(v.description));
+      }
+      // iframe でレンダリング
+      const $iframe = $('<iframe>').css({
+        width:'100%', border:'1px solid #ddd', borderRadius:'3px',
+        display:'block', marginBottom:'8px'
+      }).attr('sandbox','allow-same-origin').attr('scrolling','no');
+      $wrap.append($iframe);
+      // DOM追加後に書き込み
+      setTimeout((function(iframe, html){
+        return function(){
+          var doc = iframe.contentDocument || iframe.contentWindow.document;
+          doc.open();
+          doc.write('<html><head><style>body{margin:8px;font-family:sans-serif;font-size:13px}table{border-collapse:collapse;width:100%}th{background:#2e6da4;color:#fff;padding:5px 9px;text-align:left}td{padding:4px 9px;border:1px solid #ccc}</style></head><body>'+html+'</body></html>');
+          doc.close();
+          // コンテンツに合わせてiframe高さを自動調整
+          setTimeout(function(){
+            try{ iframe.style.height=(iframe.contentDocument.body.scrollHeight+20)+'px'; }catch(e){}
+          }, 80);
+        };
+      })($iframe[0], v.html_content), 30);
+    });
+  } else {
+    // HTMLコード表示（全ビュー連結）
+    var code = '';
+    downloadable.forEach(function(v){
+      code += '<!-- ========== '+v.view_name+' ========== -->\n';
+      code += v.html_content + '\n\n';
+    });
+    $('#vm-code-wrap').text(code).show();
+  }
+}
+
+function closeViewer(){
+  $('#view-overlay').hide();
+  $('#view-modal').removeClass('show');
+}
+
+// ===== ダウンロード =====
+function downloadHtml(v){
+  const blob = new Blob([buildFullHtml(v)], {type:'text/html;charset=utf-8'});
+  triggerDownload(blob, safeFilename(v.view_name)+'.html');
+}
+
+function downloadMd(v){
+  const md = htmlTableToMd(v.html_content, v.view_name);
+  const blob = new Blob([md], {type:'text/markdown;charset=utf-8'});
+  triggerDownload(blob, safeFilename(v.view_name)+'.md');
+}
+
+function bulkDownload(type){
+  const downloadable = allViewerData.filter(function(v){ return !!v.has_html; });
+  if(!downloadable.length){ toast('HTMLが保存されているビューがありません','err'); return; }
+  // allViewerData を downloadable に差し替えてダウンロード
+  const _orig = allViewerData;
+  allViewerData = downloadable;
+  if(type === 'html'){
+    // 全ビューを1つのHTMLファイルに結合
+    let html = '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n';
+    html += '<title>'+escHtml(currentViewerProjectName)+'</title>\n';
+    html += '<style>body{font-family:sans-serif;font-size:13px;margin:20px}';
+    html += 'h2{color:#1a3a5c;border-bottom:2px solid #2e6da4;padding-bottom:6px;margin:30px 0 12px}';
+    html += 'table{border-collapse:collapse;width:100%;margin-bottom:30px}';
+    html += 'th{background:#2e6da4;color:#fff;padding:6px 10px;text-align:left}';
+    html += 'td{padding:5px 10px;border:1px solid #ccc}</style>\n</head>\n<body>\n';
+    html += '<h1>'+escHtml(currentViewerProjectName)+'</h1>\n';
+    allViewerData.forEach(function(v){
+      html += '<h2>'+escHtml(v.view_name)+'</h2>\n';
+      if(v.description) html += '<p style="color:#666;font-size:12px;margin-bottom:8px">'+escHtml(v.description)+'</p>\n';
+      html += v.html_content + '\n';
+    });
+    html += '</body>\n</html>';
+    const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    triggerDownload(blob, safeFilename(currentViewerProjectName)+'_all.html');
+  } else {
+    // 全ビューを1つのMDファイルに結合
+    let md = '# '+currentViewerProjectName+'\n\n';
+    allViewerData.forEach(function(v){
+      md += '## '+v.view_name+'\n\n';
+      if(v.description) md += '*'+v.description+'*\n\n';
+      md += htmlTableToMd(v.html_content, '') + '\n\n';
+    });
+    const blob = new Blob([md], {type:'text/markdown;charset=utf-8'});
+    triggerDownload(blob, safeFilename(currentViewerProjectName)+'_all.md');
+  }
+  allViewerData = _orig; // 元に戻す
+}
+
+// ===== HTML→Markdown テーブル変換 =====
+function htmlTableToMd(htmlContent, title){
+  var md = title ? '## ' + title + '\n\n' : '';
+  var $tmp = $('<div>').html(htmlContent);
+  $tmp.find('table').each(function(){
+    var $tbl = $(this);
+    var rows = [];
+    // ヘッダ行
+    var headerCells = [];
+    $tbl.find('thead th').each(function(){ headerCells.push(cellText($(this))); });
+    // thead がなければ最初の tr の th/td をヘッダとして扱う
+    if(!headerCells.length){
+      $tbl.find('tr:first th, tr:first td').each(function(){ headerCells.push(cellText($(this))); });
+    }
+    if(headerCells.length){
+      rows.push('| '+headerCells.join(' | ')+' |');
+      rows.push('|'+headerCells.map(()=>' --- ').join('|')+'|');
+    }
+    // データ行
+    $tbl.find('tbody tr').each(function(){
+      var cols = [];
+      $(this).find('td,th').each(function(){ cols.push(cellText($(this))); });
+      if(cols.length) rows.push('| '+cols.join(' | ')+' |');
+    });
+    // thead なしパターン（tr が body に直接）
+    if(!$tbl.find('tbody').length){
+      $tbl.find('tr').each(function(ri){
+        if(ri===0 && headerCells.length) return; // ヘッダ行はスキップ
+        var cols = [];
+        $(this).find('td,th').each(function(){ cols.push(cellText($(this))); });
+        if(cols.length) rows.push('| '+cols.join(' | ')+' |');
+      });
+    }
+    md += rows.join('\n') + '\n';
+  });
+  if(!$tmp.find('table').length){
+    // テーブルがない場合はテキストとして出力
+    md += $tmp.text().trim() + '\n';
+  }
+  return md;
+}
+
+function cellText($el){
+  return $el.text().trim().replace(/\|/g,'\\|').replace(/\n/g,' ');
+}
+
+function buildFullHtml(v){
+  return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n'
+    +'<title>'+escHtml(v.view_name)+'</title>\n'
+    +'<style>body{font-family:sans-serif;font-size:13px;margin:20px}'
+    +'h1{color:#1a3a5c;border-bottom:2px solid #2e6da4;padding-bottom:6px;margin-bottom:14px}'
+    +'table{border-collapse:collapse;width:100%}'
+    +'th{background:#2e6da4;color:#fff;padding:6px 10px;text-align:left}'
+    +'td{padding:5px 10px;border:1px solid #ccc}</style>\n</head>\n<body>\n'
+    +'<h1>'+escHtml(v.view_name)+'</h1>\n'
+    +(v.description?'<p style="color:#666;font-size:12px;margin-bottom:14px">'+escHtml(v.description)+'</p>\n':'')
+    +v.html_content+'\n</body>\n</html>';
+}
+
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const $a = $('<a>').attr({href:url, download:filename}).appendTo('body');
+  $a[0].click();
+  $a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+function safeFilename(s){
+  return (s||'download').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_');
+}
+
+// ===== アクセス権設定 =====
+const POLICY_LABELS = {
+  public  : ['🌐 公開',      'pb-public'],
+  domestic: ['🏫 学内公開',  'pb-domestic'],
+  group   : ['👥 グループ限定','pb-group'],
+  private : ['🔒 非公開',    'pb-private'],
+};
+
+function policyBadgeHtml(policy){
+  const info = POLICY_LABELS[policy];
+  if(!info) return '';
+  return `<span class="policy-badge ${info[1]}">${info[0]}</span>`;
+}
+
+function openAccess(projectId, projectName){
+  $('#access-proj-id').val(projectId);
+  $('#access-proj-name').text(projectName);
+  // ラジオ・グループをリセット
+  $('input[name=access_policy]').prop('checked', false);
+  $('.policy-radio-item').removeClass('selected');
+  $('#access-group-list').empty();
+  $('#access-group-area').hide();
+
+  // サーバーから現在の設定を取得
+  $.get('/table_master/projects/'+projectId+'/access', function(data){
+    if(!data.success){ toast(data.error||'取得エラー','err'); return; }
+
+    // ポリシーを選択
+    selectPolicy(data.policy);
+    $('input[name=access_policy][value="'+data.policy+'"]').prop('checked', true);
+
+    // グループ一覧を構築
+    if(data.all_groups && data.all_groups.length){
+      data.all_groups.forEach(function(g){
+        const checked = data.group_ids.indexOf(g.id) >= 0;
+        const $chip = $('<label class="group-chip '+(checked?'checked':'')+'">');
+        const $cb   = $('<input type="checkbox">').val(g.id).prop('checked', checked);
+        $cb.on('change', function(){
+          $(this).closest('.group-chip').toggleClass('checked', this.checked);
+        });
+        $chip.append($cb, $('<span>').text(g.name));
+        $('#access-group-list').append($chip);
+      });
+    } else {
+      $('#access-group-list').html('<span style="color:#aaa;font-size:12px">グループが登録されていません</span>');
+    }
+
+    $('#access-overlay').show();
+    $('#access-modal').show();
+  }).fail(function(xhr){
+    toast('取得に失敗しました: '+((xhr.responseJSON&&xhr.responseJSON.error)?xhr.responseJSON.error:''),'err');
+  });
+}
+
+function selectPolicy(val){
+  $('input[name=access_policy]').each(function(){
+    const checked = $(this).val() === val;
+    $(this).prop('checked', checked);
+    $(this).closest('.policy-radio-item').toggleClass('selected', checked);
+  });
+  $('#access-group-area').toggle(val === 'group');
+}
+
+function closeAccess(){
+  $('#access-overlay').hide();
+  $('#access-modal').hide();
+}
+
+function saveAccess(){
+  const projectId = $('#access-proj-id').val();
+  const policy    = $('input[name=access_policy]:checked').val();
+  if(!policy){ toast('ポリシーを選択してください','err'); return; }
+
+  const groupIds = [];
+  $('#access-group-list input[type=checkbox]:checked').each(function(){
+    groupIds.push(parseInt($(this).val()));
+  });
+  if(policy === 'group' && !groupIds.length){
+    toast('グループを1つ以上選択してください','err'); return;
+  }
+
+  $.ajax({
+    url : '/table_master/projects/'+projectId+'/access',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ policy, group_ids: groupIds }),
+    success: function(r){
+      if(r.success){ toast(r.message,'ok'); closeAccess(); loadProjects(); }
+      else toast(r.error,'err');
+    },
+    error: function(xhr){ toast((xhr.responseJSON&&xhr.responseJSON.error?xhr.responseJSON.error:'保存エラー'),'err'); }
+  });
+}
+
+// ===== ユーティリティ =====
+function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s){ return esc(s); }
+function escAttr(s){ return String(s??'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function toast(msg,type='ok'){
+  $('#toast').attr('class',type).text(msg).fadeIn(200);
+  setTimeout(()=>$('#toast').fadeOut(400),3000);
+}
+</script>
+</body>
+</html>

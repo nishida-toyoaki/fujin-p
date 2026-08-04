@@ -1,0 +1,301 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>データ更新 | FUJIN-P</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<style>
+:root {
+  --primary:    #6366f1;
+  --primary-dk: #4f46e5;
+  --success:    #10b981;
+  --danger:     #ef4444;
+  --warning:    #f59e0b;
+  --gray-50:    #f9fafb;
+  --gray-100:   #f3f4f6;
+  --gray-200:   #e5e7eb;
+  --gray-300:   #d1d5db;
+  --gray-400:   #9ca3af;
+  --gray-500:   #6b7280;
+  --gray-600:   #4b5563;
+  --gray-700:   #374151;
+  --gray-800:   #1f2937;
+  --radius:     8px;
+  --shadow:     0 1px 4px rgba(0,0,0,.10);
+  --shadow-lg:  0 4px 16px rgba(0,0,0,.12);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 13px; background: var(--gray-50); color: var(--gray-800);
+}
+#app-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: #fff; padding: 12px 20px;
+  display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(30,64,175,.4);
+}
+#app-header h1 { font-size: 1rem; font-weight: 700; }
+#app-header .subtitle { font-size: .75rem; opacity: .8; }
+.hdr-btn {
+  padding: 5px 12px; border-radius: 20px;
+  border: 1.5px solid rgba(255,255,255,.6);
+  background: rgba(255,255,255,.15); color: #fff;
+  font-size: .78rem; font-weight: 600;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+  transition: background .15s;
+}
+.hdr-btn:hover { background: rgba(255,255,255,.30); color: #fff; }
+
+.container { max-width: 720px; margin: 28px auto; padding: 0 16px; }
+
+.card {
+  background: #fff; border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 22px 26px; margin-bottom: 16px;
+}
+.card-title {
+  font-size: .8rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: #1e40af; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* テーブル情報 */
+.table-info-name {
+  font-size: 1rem; font-weight: 700; color: var(--gray-800); margin-bottom: 4px;
+}
+.table-info-meta { font-size: .75rem; color: var(--gray-500); }
+
+/* 警告ボックス */
+.warning-box {
+  background: #fffbeb; border: 1.5px solid #fde68a;
+  border-radius: var(--radius); padding: 12px 16px;
+  font-size: .75rem; color: #92400e; line-height: 1.8;
+  margin-bottom: 16px;
+}
+.warning-box strong { display: block; margin-bottom: 4px; }
+.warning-box ul { padding-left: 18px; }
+
+/* ステップ */
+.step {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 16px 0; border-bottom: 1px solid var(--gray-100);
+}
+.step:last-child { border-bottom: none; padding-bottom: 0; }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #1e40af; color: #fff;
+  font-size: .78rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+.step-body { flex: 1; }
+.step-title { font-weight: 700; font-size: .82rem; margin-bottom: 5px; color: var(--gray-700); }
+.step-desc  { font-size: .73rem; color: var(--gray-500); margin-bottom: 10px; line-height: 1.7; }
+
+/* ボタン */
+.btn {
+  padding: 7px 18px; border-radius: 6px; border: none;
+  font-size: .78rem; font-weight: 600; cursor: pointer;
+  transition: all .15s; display: inline-flex; align-items: center; gap: 5px;
+}
+.btn-primary  { background: var(--primary); color: #fff; }
+.btn-primary:hover  { background: var(--primary-dk); }
+.btn-success  { background: var(--success); color: #fff; }
+.btn-success:hover  { filter: brightness(1.05); }
+.btn-success:disabled { opacity: .45; cursor: not-allowed; }
+.btn-outline  {
+  background: #fff; border: 1.5px solid var(--gray-300); color: var(--gray-700);
+}
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ファイル選択 */
+.file-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px; border-radius: 6px;
+  border: 1.5px dashed var(--gray-300); background: var(--gray-50);
+  color: var(--gray-600); font-size: .78rem; cursor: pointer;
+  transition: border-color .15s;
+}
+.file-label:hover { border-color: var(--primary); color: var(--primary); }
+#upload-file { display: none; }
+#file-name {
+  font-size: .72rem; color: var(--gray-500); margin-top: 5px;
+}
+
+/* 結果 */
+#result {
+  margin-top: 10px; font-size: .78rem; padding: 8px 12px;
+  border-radius: 6px; display: none;
+}
+#result.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+#result.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+/* スピナー */
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="app-header">
+  <span style="font-size:1.3rem">🔄</span>
+  <div>
+    <h1>データ更新</h1>
+    <div class="subtitle">{{ item.table_name }}</div>
+  </div>
+  <div style="margin-left:auto; display:flex; gap:8px;">
+    <a href="{{ url_for('index_review.table_manager') }}" class="hdr-btn">
+      ← テーブル集管理に戻る
+    </a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- テーブル情報 -->
+  <div class="card">
+    <div class="table-info-name">{{ item.table_name }}</div>
+    <div class="table-info-meta">
+      データベース：{{ item.database_name }}　／　テーブル集：{{ item.set_name }}
+    </div>
+  </div>
+
+  <!-- 警告 -->
+  <div class="warning-box">
+    <strong>⚠️ 操作前にご確認ください</strong>
+    <ul>
+      <li>アップロード時、テーブル内の既存データは<strong>全件削除</strong>されてExcelの内容で上書きされます。</li>
+      <li>外部キー制約は一時的に無効化されます。データの整合性は担当者の責任で確認してください。</li>
+      <li>必ずステップ1でダウンロードしてからローカル編集してください。</li>
+    </ul>
+  </div>
+
+  <!-- 操作ステップ -->
+  <div class="card">
+    <div class="card-title">🔄 データ更新手順</div>
+
+    <!-- Step 1 -->
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">現在のデータをExcelでダウンロード</div>
+        <div class="step-desc">
+          現在のテーブル内容をExcelファイルとして取得します。<br>
+          このファイルがバックアップ兼編集テンプレートになります。
+        </div>
+        <a href="{{ url_for('index_review.table_data_update_download', item_id=item.id) }}"
+           class="btn btn-primary" id="btn-download">
+          ⬇ Excelをダウンロード
+        </a>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">ローカルでデータを編集</div>
+        <div class="step-desc">
+          ダウンロードしたExcelをPC上で編集してください。<br>
+          カラム構成（列の順序・名称・型）は変更しないでください。
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">編集済みExcelをアップロード</div>
+        <div class="step-desc">
+          編集済みのExcelファイルを選択してアップロードしてください。<br>
+          テーブルの内容がExcelの内容で完全に置き換えられます。
+        </div>
+        <label class="file-label" for="upload-file">
+          📂 Excelファイルを選択
+        </label>
+        <input type="file" id="upload-file" accept=".xlsx">
+        <div id="file-name">ファイルが選択されていません</div>
+        <div style="margin-top:10px;">
+          <button class="btn btn-success" id="btn-upload" disabled>
+            ⬆ アップロードして更新
+          </button>
+        </div>
+        <div id="result"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const UPLOAD_URL = "{{ url_for('index_review.table_data_update_upload', item_id=item.id) }}";
+
+// ファイル選択
+$('#upload-file').on('change', function() {
+  const file = this.files[0];
+  if (file) {
+    $('#file-name').text(file.name);
+    $('#btn-upload').prop('disabled', false);
+  } else {
+    $('#file-name').text('ファイルが選択されていません');
+    $('#btn-upload').prop('disabled', true);
+  }
+});
+
+// アップロード
+$('#btn-upload').on('click', function() {
+  const file = $('#upload-file')[0].files[0];
+  if (!file) return;
+
+  if (!confirm(
+    'テーブルの既存データは全て削除され、Excelの内容で上書きされます。\n' +
+    '本当に続行しますか？'
+  )) return;
+
+  const $btn = $(this);
+  $btn.prop('disabled', true).html('<span class="spinner"></span> 処理中…');
+  $('#result').hide().removeClass('success error');
+
+  const formData = new FormData();
+  formData.append('excel_file', file);
+
+  $.ajax({
+    url: UPLOAD_URL,
+    method: 'POST',
+    data: formData,
+    processData: false,
+    contentType: false,
+  }).done(res => {
+    if (res.success) {
+      $('#result').addClass('success').text('✅ ' + res.message).show();
+      $('#upload-file').val('');
+      $('#file-name').text('ファイルが選択されていません');
+    } else {
+      $('#result').addClass('error').text('⚠️ ' + res.error).show();
+    }
+  }).fail(() => {
+    $('#result').addClass('error').text('⚠️ 通信エラーが発生しました').show();
+  }).always(() => {
+    $btn.prop('disabled', false).html('⬆ アップロードして更新');
+  });
+});
+</script>
+</body>
+</html>

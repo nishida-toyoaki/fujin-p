@@ -1,0 +1,1083 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エクスポーター - さいまる</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         "Hiragino Sans", "Yu Gothic UI", sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            min-height: 100vh;
+            padding: 15px;
+            color: #1e293b;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        .header {
+            background: white;
+            padding: 18px 25px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header h1 { font-size: 1.3rem; color: #1e293b; }
+        .header .subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .back-btn {
+            padding: 8px 16px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .back-btn:hover { background: #4f46e5; }
+
+        #toast {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            padding: 12px 20px; border-radius: 8px;
+            font-weight: 600; font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: none; max-width: 400px;
+        }
+        #toast.success { background: #d1fae5; color: #065f46; border-left: 4px solid #10b981; }
+        #toast.error   { background: #fee2e2; color: #991b1b; border-left: 4px solid #ef4444; }
+        #toast.info    { background: #dbeafe; color: #1e40af; border-left: 4px solid #3b82f6; }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 18px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e0e7ff;
+            color: #4338ca;
+            font-weight: 600;
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px; height: 24px;
+            background: #6366f1;
+            color: white;
+            border-radius: 50%;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .info-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px 15px;
+        }
+        .info-label { font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .info-value { font-size: 0.95rem; color: #1e293b; font-weight: 600; margin-top: 4px; word-break: break-all; }
+        .info-value code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+
+        .section-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 14px 0 6px;
+        }
+        .hint { font-size: 0.78rem; color: #94a3b8; margin-top: 5px; line-height: 1.6; }
+
+        /* 採用ファイル一覧 */
+        .scope-list {
+            list-style: none;
+            font-size: 0.88rem;
+        }
+        .scope-list li {
+            padding: 7px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .scope-list li.ok { background: #ecfdf5; }
+        .scope-list li.missing { background: #fffbeb; color: #92400e; }
+        .scope-list code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
+        .ext-breakdown {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;
+        }
+        .ext-chip {
+            display: inline-flex; align-items: baseline; gap: 6px;
+            background: #f1f5f9; border: 1px solid #e2e8f0;
+            border-radius: 7px; padding: 5px 11px; font-size: 0.85rem;
+        }
+        .ext-chip code { background: none; font-weight: 700; color: #334155; }
+        .ext-chip span { color: #64748b; font-size: 0.8rem; }
+
+        .pill {
+            margin-left: auto;
+            font-size: 0.75rem;
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        /* DB テーブル */
+        .db-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .db-table th, .db-table td {
+            padding: 9px 12px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
+        .db-table th { background: #f1f5f9; font-weight: 600; color: #475569; }
+        .db-table tr:hover td { background: #f8fafc; }
+        .db-table .cb-cell { text-align: center; width: 44px; }
+        .db-table input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+        .badge-tables {
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+            font-size: 0.75rem;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .badge-err { background: #fee2e2; color: #991b1b; }
+
+        /* レビュー */
+        .editor-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #1e293b;
+            border-radius: 7px 7px 0 0;
+            padding: 8px 14px;
+        }
+        .editor-bar .filename {
+            color: #e2e8f0;
+            font-family: "SF Mono", Consolas, monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        /* 状態バッジ */
+        .state-tag {
+            font-size: 0.72rem;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+        .state-tag.editing  { background: #6366f1; color: #fff; }
+        .state-tag.saved    { background: #0ea5e9; color: #fff; }
+        .state-tag.confirmed{ background: #10b981; color: #fff; }
+        .editor-bar .dirty-tag {
+            margin-left: auto;
+            font-size: 0.74rem;
+            color: #fbbf24;
+            font-weight: 600;
+            display: none;
+        }
+        .editor-bar .dirty-tag.show { display: inline; }
+
+        .review-area {
+            width: 100%;
+            height: 340px;
+            font-family: "SF Mono", Consolas, monospace;
+            font-size: 0.82rem;
+            border: 2px solid #6366f1;
+            border-top: none;
+            border-radius: 0 0 7px 7px;
+            padding: 12px;
+            resize: vertical;
+            line-height: 1.6;
+            background: #0f172a;
+            color: #e2e8f0;
+            caret-color: #818cf8;
+        }
+        .review-area:focus {
+            outline: none;
+            border-color: #818cf8;
+            box-shadow: 0 0 0 3px rgba(129,140,248,0.25);
+        }
+        /* 編集不能（保存済 / 確認済）状態 */
+        .review-area.locked {
+            border-color: #475569;
+            background: #0b1120;
+            color: #94a3b8;
+            cursor: default;
+        }
+        .review-area.locked.confirmed { border-color: #10b981; }
+
+        .review-warn {
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            color: #92400e;
+            font-size: 0.82rem;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+        .review-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .review-state-msg {
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .review-state-msg.editing  { background: #eef2ff; color: #4338ca; }
+        .review-state-msg.saved    { background: #e0f2fe; color: #075985; }
+        .review-state-msg.confirmed{ background: #ecfdf5; color: #065f46; }
+
+
+        /* 説明入力 */
+        .desc-area {
+            width: 100%;
+            height: 90px;
+            font-size: 0.9rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            padding: 10px 12px;
+            resize: vertical;
+            line-height: 1.6;
+        }
+        .desc-area:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px #e0e7ff; }
+        /* 入力必須エラー時 */
+        .desc-area.field-error {
+            border: 2px solid #ef4444;
+            background: #fef2f2;
+        }
+        .desc-area.field-error:focus {
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.2);
+        }
+        .field-error-msg {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            padding: 8px 12px;
+            background: #fef2f2;
+            border-left: 4px solid #ef4444;
+            border-radius: 6px;
+            color: #991b1b;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .field-error-msg.show { display: flex; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 11px 22px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #4f46e5; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover:not(:disabled) { background: #059669; }
+        .btn-orange { background: #f59e0b; color: white; }
+        .btn-orange:hover:not(:disabled) { background: #d97706; }
+        .btn-slate { background: #475569; color: white; }
+        .btn-slate:hover:not(:disabled) { background: #334155; }
+        .btn-sm { padding: 7px 14px; font-size: 0.82rem; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; align-items: center; }
+
+        .status-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; border-radius: 7px;
+            font-size: 0.85rem; margin-top: 10px;
+        }
+        .status-ok   { background: #ecfdf5; color: #065f46; }
+        .status-err  { background: #fef2f2; color: #991b1b; }
+
+        #loading {
+            display: none;
+            position: fixed; inset: 0; z-index: 8888;
+            background: rgba(15,23,42,0.6);
+            justify-content: center; align-items: center;
+        }
+        #loading.active { display: flex; }
+        .loading-box {
+            background: white; padding: 28px 36px;
+            border-radius: 12px; text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 14px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-msg { color: #475569; font-weight: 600; }
+
+        @media (max-width: 600px) {
+            .info-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div id="loading">
+    <div class="loading-box">
+        <div class="loading-spinner"></div>
+        <div class="loading-msg" id="loading-msg">処理中...</div>
+    </div>
+</div>
+<div id="toast"></div>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <span style="font-size:1.8rem">📦</span>
+            <div>
+                <h1>エクスポーター</h1>
+                <div class="subtitle">FUJIN-P サイトを丸ごとパッケージ化して登録</div>
+            </div>
+        </div>
+        <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="back-btn">← さいまる</a>
+    </div>
+
+    <!-- 1. 対象範囲 -->
+    <div class="card">
+        <div class="card-title"><span class="step-num">1</span> エクスポート対象の確認 <span class="badge">自動取得</span></div>
+        <div id="info-loading" style="color:#64748b;font-size:0.9rem;">読み込み中...</div>
+        <div id="info-body" style="display:none">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Owner</div>
+                    <div class="info-value" id="i-owner">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">ホームディレクトリ</div>
+                    <div class="info-value"><code id="i-home">-</code></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">採用ファイル数（概算）</div>
+                    <div class="info-value" id="i-files">-</div>
+                </div>
+            </div>
+
+            <div class="section-label">対象ディレクトリ（無条件で全採用）</div>
+            <ul class="scope-list" id="dir-list"></ul>
+
+            <div class="section-label">拡張子の内訳</div>
+            <div id="ext-breakdown" class="ext-breakdown"></div>
+            <div class="hint">
+                同梱するのは <code>.py</code> <code>.html</code>
+                <code>.js</code> <code>.css</code> のみです。
+                画像・フォント・データファイルは含まれないため、
+                移行先へは手作業でコピーしてください。
+            </div>
+
+            <div class="section-label">トップレベル .py ファイル（config.py を除き全採用）</div>
+            <ul class="scope-list" id="py-list"></ul>
+
+            <div id="skipped-block" style="display:none">
+                <div class="section-label">丸ごと除外したディレクトリ</div>
+                <ul class="scope-list" id="skipped-list"></ul>
+                <div class="hint">
+                    利用者のアップロード置き場・キャッシュ・第三者ライブラリ・
+                    仮想環境は、ソースではないため走査ごと除外しています。
+                    <strong>パッケージはダウンロードできる利用者の手に渡ります。</strong>
+                    ここに出ていないディレクトリに利用者のデータが入っていないか、
+                    一度ご確認ください。
+                </div>
+            </div>
+
+            <div id="minified-block" style="display:none">
+                <div class="section-label">圧縮・結合された成果物の可能性があるファイル</div>
+                <ul class="scope-list" id="minified-list"></ul>
+                <div class="hint">
+                    これらは同梱されますが、<strong>「変更するのに適した形式」ではない</strong>
+                    可能性があります。AGPL 等でソースを頒布する場合、
+                    自作のものはビルド前のソースと生成手順を、
+                    第三者ライブラリは上流の入手先を別途示してください。
+                </div>
+            </div>
+
+            <div id="excluded-block" style="display:none">
+                <div class="section-label">秘密ファイル名として除外したファイル</div>
+                <ul class="scope-list" id="excluded-list"></ul>
+                <div class="hint">
+                    これらは名前から秘密情報を含むと判断して除外しました。
+                    移行先で必要な場合は手動でコピーしてください。
+                </div>
+            </div>
+
+            <div class="hint" id="config-note"></div>
+        </div>
+    </div>
+
+    <!-- 2. スキーマ同梱 DB の選択 -->
+    <div class="card">
+        <div class="card-title"><span class="step-num">2</span> スキーマ同梱データベースの選択</div>
+        <div class="hint" style="margin-bottom:10px">
+            チェックしたデータベースの <code>CREATE TABLE</code> 定義を，
+            データベースごとに <code>schema_&lt;名前&gt;.sql</code>
+            （例: <code>schema_default.sql</code>，<code>schema_fujinp.sql</code>）
+            としてパッケージに同梱します。
+            テーブル定義のみで、データ（行）は含まれません。
+        </div>
+        {% if allow_guest_download %}
+        <div class="review-warn" style="margin-bottom:10px">
+            📢 現在このサイトは、<strong>ログイン済みユーザー全員が
+            パッケージをダウンロードできる設定</strong>です
+            （<code>ALLOW_GUEST_DOWNLOAD = True</code>）。<br>
+            ソース公開（AGPL 等）を目的としたパッケージを作る場合は、
+            <strong>チェックをすべて外す</strong>ことをおすすめします。
+            ソースコードの頒布にデータベース構造は必要なく、
+            同梱すると内部構造まで公開することになります。
+            移設のためのパッケージであれば、必要な DB にチェックを入れてください。
+        </div>
+        {% endif %}
+        <table class="db-table">
+            <thead>
+                <tr>
+                    <th class="cb-cell">同梱</th>
+                    <th>元の DB 名 (owner$name)</th>
+                    <th>移行先での名前 (bare)</th>
+                    <th>テーブル数</th>
+                </tr>
+            </thead>
+            <tbody id="db-tbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 3. レビュー -->
+    <div class="card">
+        <div class="card-title"><span class="step-num">3</span> config_template.py のレビュー・確定</div>
+        <div class="review-warn">
+            ⚠️ 下のエディタは <strong>config.py を自動で匿名化したもの</strong>です。
+            秘密情報が伏せ字（<code>&lt;YOUR_...&gt;</code>）になっているか必ず確認し、
+            必要な修正をこの場で直接おこなってください。
+            手順は <strong>編集 → 💾 保存 → ✔ 確認</strong> です。
+            確認まで終えると、その内容が <code>config_template.py</code> として
+            パッケージに同梱されます。
+        </div>
+        <div class="editor-bar">
+            <span class="filename">config_template.py</span>
+            <span class="state-tag editing" id="state-tag">✏️ 編集中</span>
+            <span class="dirty-tag" id="dirty-tag">● 未保存の変更があります</span>
+        </div>
+        <textarea id="review-area" class="review-area" spellcheck="false"
+            placeholder="読み込み中..."></textarea>
+
+        <div class="review-actions">
+            <!-- 編集中に出るボタン -->
+            <button class="btn btn-primary btn-sm" id="btn-save-template">
+                💾 保存
+            </button>
+            <!-- 保存済み / 確認済みに出るボタン -->
+            <button class="btn btn-orange btn-sm" id="btn-reload-template"
+                    style="display:none">
+                ↻ config.py から再生成
+            </button>
+            <button class="btn btn-slate btn-sm" id="btn-edit-template"
+                    style="display:none">
+                ✏️ 編集に戻る
+            </button>
+            <button class="btn btn-success btn-sm" id="btn-confirm-template"
+                    style="display:none">
+                ✔ 確認（内容を確定）
+            </button>
+        </div>
+        <div class="review-state-msg editing" id="review-state-msg">
+            内容を確認・修正したら「💾 保存」を押してください。
+        </div>
+    </div>
+
+    <!-- 4. 登録 -->
+    <div class="card">
+        <div class="card-title"><span class="step-num">4</span> パッケージの登録</div>
+        <div class="section-label">
+            パッケージの説明（自由テキスト）
+            <span style="color:#ef4444">＊必須</span>
+        </div>
+        <textarea id="desc-area" class="desc-area"
+            placeholder="例: 2026年度版 本番サイトのフルエクスポート。STR予約システム改修後の状態。"></textarea>
+        <div class="field-error-msg" id="desc-error">
+            ⚠️ パッケージの説明が未入力です。登録するには説明を入力してください。
+        </div>
+        <div class="hint">
+            登録すると ZIP が生成され、日付・説明とともにシステムに保存されます。
+            登録後はインポーターからダウンロードできます。<br>
+            ※ 登録するには、ステップ3で <strong>config_template.py の「✔ 確認」</strong>
+            を完了しておく必要があります。
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-success" id="btn-register">
+                <span>📦</span> パッケージを生成して登録
+            </button>
+        </div>
+        <div id="register-status"></div>
+    </div>
+
+</div>
+
+<script>
+// 配布ポリシー（サーバの ALLOW_GUEST_DOWNLOAD）
+const PUBLIC_DOWNLOAD = {{ 'true' if allow_guest_download else 'false' }};
+
+// ===== CSRF 対策 =====
+// サーバ側（csrf_guard）はカスタムヘッダ X-Requested-With を必須にしている。
+// このヘッダはクロスオリジンの <form> 送信では付けられないため、
+// フォーム送信型の CSRF を防げる。すべての ajax に自動付与する。
+$.ajaxSetup({
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+});
+
+// ===== Utility =====
+function escapeHtml(s) {
+    return String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+function showToast(msg, type) {
+    const $t = $('#toast');
+    $t.text(msg).removeClass('success error info').addClass(type || 'info').show();
+    setTimeout(() => $t.fadeOut(), 4000);
+}
+function setLoading(on, msg) {
+    if (on) { $('#loading-msg').text(msg || '処理中...'); $('#loading').addClass('active'); }
+    else { $('#loading').removeClass('active'); }
+}
+// 第4引数 html=true のときだけ HTML として解釈する。
+// サーバ由来の文字列は必ず既定（エスケープあり）で渡すこと。
+function setStatus($el, msg, type, html) {
+    const body = html ? msg : escapeHtml(msg);
+    $el.html('<div class="status-row status-' + type + '">' + body + '</div>');
+}
+
+// ===== 環境情報の読み込み =====
+function loadInfo() {
+    $.ajax({
+        url: '{{ url_for("migrate_fujinp_scions.api_export_info") }}',
+        method: 'GET',
+        success: function(r) {
+            if (!r.success) {
+                $('#info-loading').text('エラー: ' + r.error).css('color','#ef4444');
+                return;
+            }
+            $('#i-owner').text(r.owner);
+            $('#i-home').text(r.home);
+            $('#i-files').text(r.approx_file_count + ' ファイル');
+
+            // 対象ディレクトリ
+            const $dl = $('#dir-list').empty();
+            r.dirs.forEach(d => {
+                if (d.exists) {
+                    $dl.append(`<li class="ok">✅ <code>~/${d.name}/</code>
+                        <span class="pill">${d.files} ファイル</span></li>`);
+                } else {
+                    $dl.append(`<li class="missing">⚠️ <code>~/${d.name}/</code>
+                        ディレクトリが存在しません（スキップ）</li>`);
+                }
+            });
+
+            // トップレベル .py
+            const $pl = $('#py-list').empty();
+            if (r.toplevel_py.length === 0) {
+                $pl.append(`<li class="missing">トップレベルに .py ファイルがありません</li>`);
+            } else {
+                r.toplevel_py.forEach(f => {
+                    $pl.append(`<li class="ok">📄 <code>~/${escapeHtml(f)}</code></li>`);
+                });
+            }
+
+            // 拡張子の内訳
+            const $eb = $('#ext-breakdown').empty();
+            const exts = Object.keys(r.ext_counts || {}).sort(
+                (a, b) => (r.ext_counts[b] - r.ext_counts[a]));
+            if (exts.length === 0) {
+                $eb.append('<span class="hint">採用ファイルがありません</span>');
+            } else {
+                exts.forEach(e => {
+                    $eb.append('<div class="ext-chip"><code>'
+                        + escapeHtml(e) + '</code><span>'
+                        + r.ext_counts[e] + ' ファイル</span></div>');
+                });
+            }
+
+            // 丸ごと除外したディレクトリ
+            const sk = r.skipped_dirs || [];
+            if (sk.length) {
+                const $sl = $('#skipped-list').empty();
+                sk.slice(0, 60).forEach(s => {
+                    $sl.append(`<li class="missing">🚫 <code>~/${escapeHtml(s.path)}/</code>
+                        <span class="pill" style="background:#e0e7ff;color:#3730a3">${escapeHtml(s.reason)}</span></li>`);
+                });
+                if (sk.length > 60) {
+                    $sl.append(`<li class="missing">…他 ${sk.length - 60} 件</li>`);
+                }
+                $('#skipped-block').show();
+            } else {
+                $('#skipped-block').hide();
+            }
+
+            // 圧縮・結合された成果物らしきもの
+            const mins = r.minified_files || [];
+            if (mins.length) {
+                const $ml = $('#minified-list').empty();
+                mins.slice(0, 50).forEach(f => {
+                    $ml.append(`<li class="missing">🧱 <code>~/${escapeHtml(f)}</code></li>`);
+                });
+                if (mins.length > 50) {
+                    $ml.append(`<li class="missing">…他 ${mins.length - 50} 件</li>`);
+                }
+                $('#minified-block').show();
+            } else {
+                $('#minified-block').hide();
+            }
+
+            // 秘密ファイル名として除外したもの
+            const ex = r.excluded_secret_files || [];
+            if (ex.length) {
+                const $el = $('#excluded-list').empty();
+                ex.forEach(f => {
+                    $el.append(`<li class="missing">🚫 <code>~/${escapeHtml(f)}</code>
+                        <span class="pill" style="background:#fef3c7;color:#92400e">除外</span></li>`);
+                });
+                $('#excluded-block').show();
+            } else {
+                $('#excluded-block').hide();
+            }
+
+            // config.py の注記
+            if (r.config_exists) {
+                $('#config-note').html(
+                    '🔒 <code>~/config.py</code> は除外し、匿名化した ' +
+                    '<code>config_template.py</code> を同梱します（ステップ3で確認）。'
+                );
+            } else {
+                $('#config-note').html(
+                    '🔒 <code>~/config.py</code> が見つかりません。汎用テンプレートの ' +
+                    '<code>config_template.py</code> を同梱します。'
+                );
+            }
+
+            // DB 一覧
+            // 初期状態は配布ポリシーで変える。
+            //   非公開（admin 限定）… 全選択。移設用途なので、
+            //       スキーマの入れ忘れのほうが事故になりやすい。
+            //   公開（ログイン済み全員がDL可）… 全解除。
+            //       ソース頒布に DB 構造は不要で、既定で公開すべきでない。
+            // どちらの場合も、1つも選ばずに登録しようとすると確認が出る。
+            const defaultChecked = !r.allow_guest_download;
+            const $tbody = $('#db-tbody').empty();
+            r.databases.forEach(db => {
+                const tBadge = db.tables < 0
+                    ? '<span class="badge-tables badge-err">取得エラー</span>'
+                    : `<span class="badge-tables">${db.tables} テーブル</span>`;
+                $tbody.append(`
+                    <tr>
+                        <td class="cb-cell">
+                            <input type="checkbox" class="db-check"
+                                   ${defaultChecked ? 'checked' : ''}
+                                   value="${escapeHtml(db.full)}">
+                        </td>
+                        <td><code>${escapeHtml(db.full)}</code></td>
+                        <td><strong>${escapeHtml(db.bare)}</strong></td>
+                        <td>${tBadge}</td>
+                    </tr>
+                `);
+            });
+
+            // config_template.py エディタを初回読み込み
+            loadTemplate(false);
+
+            $('#info-loading').hide();
+            $('#info-body').show();
+        },
+        error: function() {
+            $('#info-loading').text('情報の取得に失敗しました').css('color','#ef4444');
+        }
+    });
+}
+
+// ===== config_template.py レビューエディタ（状態機械） =====
+// 状態: 'editing'（編集中） → 'saved'（保存済） → 'confirmed'（確認済）
+let reviewState = 'editing';
+let templateLoaded = false;
+let templateDirty = false;     // 編集中に未保存の変更があるか
+let savedText = '';            // 「保存」時点のエディタ内容
+
+function setDirty(on) {
+    templateDirty = on;
+    $('#dirty-tag').toggleClass('show', on && reviewState === 'editing');
+}
+
+// 状態に応じて UI を更新
+function applyReviewState() {
+    const $area = $('#review-area');
+    const $tag  = $('#state-tag');
+    const $msg  = $('#review-state-msg');
+
+    $tag.removeClass('editing saved confirmed');
+    $msg.removeClass('editing saved confirmed');
+    $area.removeClass('locked confirmed');
+
+    // ボタンの表示/非表示
+    const editing   = reviewState === 'editing';
+    const saved     = reviewState === 'saved';
+    const confirmed = reviewState === 'confirmed';
+
+    $('#btn-save-template').toggle(editing);
+    $('#btn-reload-template').toggle(saved);
+    $('#btn-edit-template').toggle(saved || confirmed);
+    $('#btn-confirm-template').toggle(saved);
+
+    if (editing) {
+        $area.prop('readonly', false);
+        $tag.addClass('editing').text('✏️ 編集中');
+        $msg.addClass('editing')
+            .text('内容を確認・修正したら「💾 保存」を押してください。');
+    } else if (saved) {
+        $area.prop('readonly', true).addClass('locked');
+        $tag.addClass('saved').text('💾 保存済み');
+        $msg.addClass('saved')
+            .text('保存しました。内容をもう一度ご確認のうえ「✔ 確認」を押すと確定します。' +
+                  'やり直す場合は「✏️ 編集に戻る」または「↻ config.py から再生成」。');
+        $('#dirty-tag').removeClass('show');
+    } else if (confirmed) {
+        $area.prop('readonly', true).addClass('locked confirmed');
+        $tag.addClass('confirmed').text('✔ 確認済み');
+        $msg.addClass('confirmed')
+            .text('確認が完了しました。この内容で config_template.py をパッケージに同梱します。' +
+                  'ステップ4へ進んでください。');
+        $('#dirty-tag').removeClass('show');
+    }
+}
+
+// config.py から（再）読み込み。force=true は保存済み状態からの再生成
+function loadTemplate(force) {
+    if (force) {
+        if (!confirm('エディタの内容を破棄し、config.py から作り直します。よろしいですか？')) {
+            return;
+        }
+    }
+    $('#review-area').val('読み込み中...').prop('readonly', true);
+    $.ajax({
+        url: '{{ url_for("migrate_fujinp_scions.api_export_review") }}',
+        method: 'GET',
+        data: { file: 'config_template.py' },
+        success: function(r) {
+            if (r.success) {
+                $('#review-area').val(r.content);
+                templateLoaded = true;
+                reviewState = 'editing';
+                setDirty(false);
+                applyReviewState();
+                if (force) showToast('config.py から再生成しました', 'info');
+            } else {
+                $('#review-area').val('# 取得エラー: ' + r.error);
+            }
+        },
+        error: function() {
+            $('#review-area').val('# 取得に失敗しました');
+        }
+    });
+}
+
+// エディタ入力検知（編集中のみ）
+$('#review-area').on('input', function() {
+    if (templateLoaded && reviewState === 'editing') setDirty(true);
+});
+
+// 💾 保存：編集中 → 保存済み（編集不能化）
+$('#btn-save-template').on('click', function() {
+    if (!templateLoaded) {
+        showToast('まだ読み込まれていません', 'error');
+        return;
+    }
+    if (!$('#review-area').val().trim()) {
+        showToast('内容が空です', 'error');
+        return;
+    }
+    savedText = $('#review-area').val();
+    reviewState = 'saved';
+    setDirty(false);
+    applyReviewState();
+    showToast('保存しました。内容を確認してください', 'success');
+});
+
+// ✏️ 編集に戻る：保存済み/確認済み → 編集中
+$('#btn-edit-template').on('click', function() {
+    reviewState = 'editing';
+    setDirty(false);
+    applyReviewState();
+    $('#review-area').focus();
+    showToast('編集モードに戻りました。再度「💾 保存」してください', 'info');
+});
+
+// ↻ config.py から再生成（保存済み状態のボタン）
+$('#btn-reload-template').on('click', function() { loadTemplate(true); });
+
+// ✔ 確認：保存済み → 確認済み（確定）
+$('#btn-confirm-template').on('click', function() {
+    if ($('#review-area').val() !== savedText) {
+        // 保険：保存後に何らかの理由で内容がずれていたら確認させる
+        showToast('保存内容と一致しません。もう一度保存してください', 'error');
+        return;
+    }
+    if (!confirm('config_template.py の内容をこれで確定します。よろしいですか？')) {
+        return;
+    }
+    reviewState = 'confirmed';
+    applyReviewState();
+    showToast('確認しました。ステップ4へ進めます', 'success');
+});
+
+// ===== 選択 DB =====
+function getSelectedDbs() {
+    const dbs = [];
+    $('.db-check:checked').each(function() { dbs.push($(this).val()); });
+    return dbs;
+}
+
+// ===== 説明欄の必須エラー表示 =====
+function showDescError() {
+    $('#desc-area').addClass('field-error');
+    $('#desc-error').addClass('show');
+    document.querySelector('#desc-area')
+        .scrollIntoView({behavior:'smooth', block:'center'});
+    $('#desc-area').focus();
+}
+function clearDescError() {
+    $('#desc-area').removeClass('field-error');
+    $('#desc-error').removeClass('show');
+}
+// 入力が始まったらエラー表示を消す
+$('#desc-area').on('input', function() {
+    if ($(this).val().trim()) clearDescError();
+});
+
+// ===== 登録 =====
+// サーバへ実際に送る処理。force=true は「伏せ字漏れ警告を承知で続行」。
+function doRegister(payload, force) {
+    const $st = $('#register-status');
+    const body = Object.assign({}, payload, { force: !!force });
+
+    setLoading(true, 'パッケージを生成・登録中...');
+    $('#btn-register').prop('disabled', true);
+
+    $.ajax({
+        url: '{{ url_for("migrate_fujinp_scions.api_export_register") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(body),
+        success: function(r) {
+            setLoading(false);
+            if (r.success) {
+                const kb = Math.round(r.size_bytes / 1024).toLocaleString();
+                const schemaNote = (r.included_dbs && r.included_dbs.length)
+                    ? 'スキーマ: ' + escapeHtml(r.included_dbs.join(', '))
+                    : '<strong style="color:#b45309">スキーマは同梱されていません</strong>';
+                setStatus($st,
+                    '✅ <strong>' + escapeHtml(r.filename) + '</strong> を登録しました'
+                    + '（' + r.file_count + ' ファイル / ' + kb + ' KB / '
+                    + schemaNote + '）。'
+                    + 'インポーターからダウンロードできます。', 'ok', true);
+                showToast('パッケージを登録しました', 'success');
+                setDirty(false);
+            } else {
+                setStatus($st, '❌ 登録に失敗しました: ' + r.error, 'err');
+                showToast('登録失敗', 'error');
+            }
+        },
+        error: function(xhr) {
+            setLoading(false);
+            let r = null;
+            try { r = xhr.responseJSON || JSON.parse(xhr.responseText || '{}'); }
+            catch (e) { r = null; }
+
+            // 秘密情報の疑い → 内容を見せて再確認してもらう
+            if (r && r.needs_confirm) {
+                const lines = [];
+                if ((r.suspects || []).length) {
+                    lines.push('【config_template.py の伏せ字漏れ】');
+                    r.suspects.slice(0, 15).forEach(s => {
+                        lines.push('  ' + s.line + '行目: ' + s.name);
+                    });
+                    if (r.suspects.length > 15) {
+                        lines.push('  ...他 ' + (r.suspects.length - 15) + ' 件');
+                    }
+                }
+                if ((r.file_hits || []).length) {
+                    if (lines.length) lines.push('');
+                    lines.push('【同梱ファイル内の秘密情報らしき直書き】');
+                    r.file_hits.slice(0, 15).forEach(h => {
+                        // preview は「◯文字の文字列」であって値そのもの
+                        // ではない（画面に秘密の断片を出さないため）
+                        lines.push('  ' + h.file + ':' + h.line
+                                   + '  ' + h.name + ' (' + h.preview + ')');
+                    });
+                    if (r.file_hits.length > 15) {
+                        lines.push('  ...他 ' + (r.file_hits.length - 15) + ' 件');
+                    }
+                }
+                setStatus($st, '⚠️ ' + r.error, 'err');
+                const head = r.public_download
+                    ? '⚠️ このパッケージは、ログイン済みユーザー全員が\n'
+                      + 'ダウンロードできる設定です。\n'
+                      + 'ここで見逃した秘密情報は「公開」されます。\n\n'
+                    : '';
+                const ok = confirm(
+                    head
+                    + '秘密情報が含まれている可能性があります。\n\n'
+                    + lines.join('\n')
+                    + '\n\n「キャンセル」で中止して修正できます。\n'
+                    + '（config_template.py はステップ3で、同梱ファイルの'
+                    + '直書きは元のソースを直してください）\n'
+                    + 'すべて意図した値だと確認済みなら「OK」で登録を続行します。'
+                );
+                if (ok) {
+                    doRegister(payload, true);
+                } else if ((r.suspects || []).length) {
+                    document.querySelector('#review-area')
+                        .scrollIntoView({behavior:'smooth', block:'center'});
+                }
+                return;
+            }
+
+            const msg = (r && r.error) ? ': ' + r.error : '';
+            setStatus($st, '❌ 登録に失敗しました' + msg, 'err');
+            showToast('登録失敗', 'error');
+        },
+        complete: function() { $('#btn-register').prop('disabled', false); }
+    });
+}
+
+$('#btn-register').on('click', function() {
+    const $st = $('#register-status');
+
+    // ステップ3が未確認
+    if (reviewState !== 'confirmed') {
+        setStatus($st,
+            '❌ 登録できません: 先にステップ3で config_template.py の' +
+            '「✔ 確認」を完了してください。', 'err');
+        showToast('ステップ3の「✔ 確認」が未完了です', 'error');
+        document.querySelector('#review-area')
+            .scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+    }
+
+    // 説明が未入力
+    const templateText = savedText;
+    const description = $('#desc-area').val().trim();
+    if (!description) {
+        setStatus($st,
+            '❌ 登録できません: パッケージの説明が未入力です。', 'err');
+        showToast('パッケージの説明が未入力です', 'error');
+        showDescError();
+        return;
+    }
+
+    // ここまで来たらエラー表示はクリア
+    clearDescError();
+    $st.empty();
+
+    // スキーマ同梱 DB が1つも選ばれていない場合は念のため確認する
+    const selected = getSelectedDbs();
+    if (selected.length === 0 && $('.db-check').length > 0 && !PUBLIC_DOWNLOAD) {
+        if (!confirm(
+            'ステップ2でデータベースが1つも選択されていません。\n' +
+            'このまま登録すると、スキーマ SQL（schema_*.sql）を含まない' +
+            'パッケージになります。\n\n続行しますか？'
+        )) {
+            document.querySelector('#db-tbody')
+                .scrollIntoView({behavior:'smooth', block:'center'});
+            return;
+        }
+    }
+
+    if (PUBLIC_DOWNLOAD && selected.length > 0) {
+        if (!confirm(
+            'このサイトは、ログイン済みユーザー全員がパッケージを\n' +
+            'ダウンロードできる設定です。\n\n' +
+            'ステップ2で ' + selected.length + ' 個のデータベースが選択されており、\n' +
+            'テーブル構造（CREATE TABLE 定義）が同梱されます。\n' +
+            'ソース公開が目的の場合、DB 構造の同梱は不要です。\n\n' +
+            'このまま続行しますか？'
+        )) {
+            document.querySelector('#db-tbody')
+                .scrollIntoView({behavior:'smooth', block:'center'});
+            return;
+        }
+    }
+
+    if (!confirm('現在のサイト状態と確認済みの config_template.py でエクスポートパッケージを生成し、登録します。よろしいですか？')) {
+        return;
+    }
+
+    doRegister({
+        databases: selected,
+        description: description,
+        config_template_text: templateText,
+    }, false);
+});
+
+// ===== Init =====
+$(document).ready(function() { loadInfo(); });
+</script>
+</body>
+</html>

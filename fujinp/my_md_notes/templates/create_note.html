@@ -1,0 +1,35 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新規ノート作成</title>
+</head>
+<body>
+    <h1>新規ノート作成</h1>
+    <form method="POST">
+        <div>
+            <label for="name">ノート名：</label>
+            <input type="text" id="name" name="name" required>
+        </div>
+        <div>
+            <label for="parent_id">親ノート（オプション）：</label>
+            <select id="parent_id" name="parent_id">
+                <option value="">なし（トップレベル）</option>
+                {% for note in notes %}
+                    <option value="{{ note.id }}">{{ note.名前 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">作成</button>
+    </form>
+    <a href="{{ url_for('my_md_notes.index') }}">マイノートに戻る</a>
+</body>
+</html>

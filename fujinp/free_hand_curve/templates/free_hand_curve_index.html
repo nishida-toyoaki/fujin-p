@@ -1,0 +1,220 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>曲線測定</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/javascript">
+        const CurveMeasurement = () => {
+            const [isDrawing, setIsDrawing] = React.useState(false);
+            const [points, setPoints] = React.useState([]);
+            const [curveLength, setCurveLength] = React.useState(0);
+            const [area, setArea] = React.useState(0);
+            const [isAnimating, setIsAnimating] = React.useState(false);
+            const canvasRef = React.useRef(null);
+            const animationRef = React.useRef(null);
+
+            React.useEffect(() => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+            }, []);
+
+            const startDrawing = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                setIsDrawing(true);
+                setPoints([[x, y]]);
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                setPoints(prevPoints => [...prevPoints, [x, y]]);
+
+                const ctx = canvas.getContext('2d');
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            };
+
+            const stopDrawing = () => {
+                if (!isDrawing) return;
+
+                setIsDrawing(false);
+                calculateMeasurements();
+            };
+
+            const calculateMeasurements = () => {
+                let length = 0;
+                for (let i = 1; i < points.length; i++) {
+                    const dx = points[i][0] - points[i-1][0];
+                    const dy = points[i][1] - points[i-1][1];
+                    length += Math.sqrt(dx * dx + dy * dy);
+                }
+                setCurveLength(length);
+
+                if (points.length > 2) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    
+                    // ユーザーが描いた線を青色で表示
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#0000FF';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(points[0][0], points[0][1]);
+                    points.forEach(point => ctx.lineTo(point[0], point[1]));
+                    ctx.stroke();
+                    
+                    // 閉曲線化のために追加した線を黄色で表示
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#FFFF00';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(points[points.length - 1][0], points[points.length - 1][1]);
+                    ctx.lineTo(points[0][0], points[0][1]);
+                    ctx.stroke();
+
+                    let area = 0;
+                    for (let i = 0; i < points.length; i++) {
+                        const j = (i + 1) % points.length;
+                        area += points[i][0] * points[j][1];
+                        area -= points[j][0] * points[i][1];
+                    }
+                    setArea(Math.abs(area / 2));
+                }
+            };
+
+            const animateCircle = () => {
+                setIsAnimating(true);
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                let currentIndex = 0;
+                const circleRadius = 5;
+
+                const animate = () => {
+                    if (currentIndex >= points.length) {
+                        setIsAnimating(false);
+                        return;
+                    }
+
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // ユーザーが描いた線を青色で表示
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#0000FF';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(points[0][0], points[0][1]);
+                    points.forEach(point => ctx.lineTo(point[0], point[1]));
+                    ctx.stroke();
+
+                    // 閉曲線化のために追加した線を黄色で表示
+                    if (points.length > 2) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = '#FFFF00';
+                        ctx.lineWidth = 2;
+                        ctx.moveTo(points[points.length - 1][0], points[points.length - 1][1]);
+                        ctx.lineTo(points[0][0], points[0][1]);
+                        ctx.stroke();
+                    }
+
+                    // 赤い円を描画
+                    ctx.beginPath();
+                    ctx.fillStyle = '#FF0000';
+                    ctx.arc(points[currentIndex][0], points[currentIndex][1], circleRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    currentIndex++;
+                    animationRef.current = requestAnimationFrame(animate);
+                };
+
+                animate();
+            };
+
+            const clearCanvas = () => {
+                if (animationRef.current) {
+                    cancelAnimationFrame(animationRef.current);
+                }
+
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                setPoints([]);
+                setCurveLength(0);
+                setArea(0);
+                setIsAnimating(false);
+            };
+
+            const redrawCurve = () => {
+                if (points.length > 0) {
+                    animateCircle();
+                }
+            };
+
+            return React.createElement('div', { className: 'p-4 space-y-4' },
+                React.createElement('div', { className: 'flex gap-4 mb-4' },
+                    React.createElement('button', {
+                        onClick: clearCanvas,
+                        className: 'px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600',
+                        disabled: isAnimating
+                    }, 'クリア'),
+                    React.createElement('button', {
+                        onClick: redrawCurve,
+                        className: 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600',
+                        disabled: isAnimating || points.length === 0
+                    }, isAnimating ? '再描画中...' : '再描画')
+                ),
+                React.createElement('div', { className: 'border rounded p-4 bg-white' },
+                    React.createElement('canvas', {
+                        ref: canvasRef,
+                        width: 600,
+                        height: 400,
+                        className: 'border border-gray-300 bg-white cursor-crosshair',
+                        onMouseDown: startDrawing,
+                        onMouseMove: draw,
+                        onMouseUp: stopDrawing,
+                        onMouseLeave: stopDrawing
+                    })
+                ),
+                React.createElement('div', { className: 'space-y-2' },
+                    React.createElement('p', { className: 'text-lg' },
+                        `曲線の長さ: ${curveLength.toFixed(2)} ピクセル`
+                    ),
+                    React.createElement('p', { className: 'text-lg' },
+                        `閉曲線の面積: ${area.toFixed(2)} 平方ピクセル`
+                    )
+                )
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(CurveMeasurement));
+    </script>
+</body>
+</html>

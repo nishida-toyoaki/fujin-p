@@ -1,0 +1,971 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鬼ごっこ3D - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* ---------- リセット・全体 ---------- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif;
+            background: #bfe3f2;
+            color: #1f2937;
+        }
+
+        #canvas-container { position: fixed; inset: 0; }
+
+        /* ---------- ヘッダー ---------- */
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(6px);
+            z-index: 10;
+        }
+
+        .header h1 { font-size: 1.05rem; font-weight: 600; color: #1f2937; }
+
+        .back-btn {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(99, 102, 241, 0.9);
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .back-btn:hover { background: rgba(79, 70, 229, 1); }
+
+        /* ---------- コントロールパネル ---------- */
+        .control-panel {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            border-radius: 10px;
+            z-index: 10;
+            min-width: 285px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .control-row:last-child { margin-bottom: 0; }
+
+        .ctrl-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(99, 102, 241, 0.6);
+            background: rgba(99, 102, 241, 0.12);
+            color: #3730a3;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .ctrl-btn:hover { background: rgba(99, 102, 241, 0.3); }
+
+        .ctrl-btn.primary {
+            background: rgba(99, 102, 241, 0.85);
+            color: #fff;
+        }
+
+        .readout {
+            font-size: 0.85rem;
+            color: #3730a3;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hint {
+            font-size: 0.72rem;
+            color: #4b5563;
+            line-height: 1.5;
+        }
+
+        input[type="range"] {
+            width: 130px;
+            accent-color: #6366f1;
+        }
+
+        /* ---------- トースト・捕獲オーバーレイ ---------- */
+        #toast {
+            position: fixed;
+            top: 56px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 18px;
+            background: rgba(31, 41, 55, 0.85);
+            color: #fff;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            z-index: 20;
+            display: none;
+        }
+
+        #caught-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        #caught-overlay .caught-box {
+            background: rgba(31, 41, 55, 0.88);
+            color: #fff;
+            padding: 28px 46px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        #caught-overlay .caught-box .big {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        #caught-overlay .caught-box .small {
+            font-size: 1rem;
+            color: #c7d2fe;
+        }
+
+        @media (max-width: 600px) {
+            .control-panel { right: 16px; min-width: 0; }
+            .hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="header">
+        <a href="{{ url_for('tag_chase.return_to_fujin') }}" class="back-btn">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <h1>👹 鬼ごっこ3D</h1>
+    </div>
+
+    <div id="toast"></div>
+
+    <div id="caught-overlay">
+        <div class="caught-box">
+            <div class="big">捕まった！</div>
+            <div class="small">生存時間 <span id="caught-time">0.0</span> 秒 ／ ベスト <span id="caught-best">0.0</span> 秒</div>
+            <div class="small" style="margin-top:6px;">「リスタート」で再挑戦</div>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-row">
+            <span class="readout">👹 <span id="status-label">逃走中</span></span>
+            <span class="readout">経過: <span id="elapsed-value">0.0</span> 秒</span>
+            <span class="readout">ベスト: <span id="best-value">--</span> 秒</span>
+        </div>
+        <div class="control-row">
+            <span class="readout">🏃 追手: <span id="chaser-count">3</span> 人</span>
+            <button id="btn-chaser-minus" class="ctrl-btn">−</button>
+            <button id="btn-chaser-plus" class="ctrl-btn">＋</button>
+        </div>
+        <div class="control-row">
+            <span class="readout">追手速度: <span id="speed-ratio">1.00</span>（鬼=1）</span>
+            <input type="range" id="speed-slider" min="0.9" max="1.1" step="0.01" value="1.0">
+        </div>
+        <div class="control-row">
+            <button id="btn-restart" class="ctrl-btn primary">🔄 リスタート</button>
+            <button id="btn-block-undo" class="ctrl-btn">ブロック1つ削除</button>
+            <button id="btn-block-clear" class="ctrl-btn">全削除</button>
+            <button id="btn-reset" class="ctrl-btn">視点リセット</button>
+        </div>
+        <div class="hint">
+            地面をクリック: ブロック（障害物）を配置 ／ ドラッグ: 視点回転 ／ ホイール: ズーム<br>
+            鬼はブロックの陰に隠れながら逃げます。見失った追手は記憶を頼りに探し回ります
+        </div>
+    </div>
+
+    <script>
+    // =====================================================================
+    // 鬼ごっこ3D（Three.js / WebGL）
+    // 鬼（1人）はブロックの陰に隠れ、追手との距離を保ちながら逃げる。
+    // 追手は鬼が見えていれば直進、障害物で見えないときは
+    // 「最後に見た位置の記憶」に多少引かれつつランダムに探索する。
+    // 鬼も追手もブロックを通り抜けることはできない。
+    // =====================================================================
+
+    // ---------- 定数 ----------
+    var AREA = 30;               // 移動可能領域の半辺長
+    var AGENT_R = 0.35;          // エージェントの当たり半径
+    var ONI_SPEED = 3.2;         // 鬼の移動速度（=1.0 の基準）
+    var CATCH_DIST = 0.9;        // 捕獲判定距離
+    var MAX_CHASERS = 8;
+    var MIN_CHASERS = 1;
+    var MAX_BLOCKS = 20;
+    var BLOCK_W = 3.0, BLOCK_H = 4.5, BLOCK_D = 3.0;   // 背の高いブロック
+    var LEG_LEN = 0.92;
+
+    var CHASER_COLORS = [
+        0x3498db, 0x27ae60, 0x9b59b6, 0x16a085,
+        0x2980b9, 0x8e44ad, 0x2c3e50, 0x1abc9c
+    ];
+
+    // ---------- シーン基盤 ----------
+    var container = document.getElementById('canvas-container');
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xbfe3f2);
+    scene.fog = new THREE.Fog(0xbfe3f2, 70, 160);
+
+    var camera = new THREE.PerspectiveCamera(
+        45, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // ---------- 照明 ----------
+    scene.add(new THREE.HemisphereLight(0xe8f4ff, 0x8a9a6a, 0.75));
+
+    var sunLight = new THREE.DirectionalLight(0xfff4e0, 0.85);
+    sunLight.position.set(30, 50, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -45;
+    sunLight.shadow.camera.right = 45;
+    sunLight.shadow.camera.top = 45;
+    sunLight.shadow.camera.bottom = -45;
+    sunLight.shadow.camera.far = 130;
+    scene.add(sunLight);
+
+    // ---------- 地面・境界 ----------
+    var ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(AREA * 2 + 14, AREA * 2 + 14),
+        new THREE.MeshLambertMaterial({ color: 0x9fc98a })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    var plaza = new THREE.Mesh(
+        new THREE.PlaneGeometry(AREA * 2, AREA * 2),
+        new THREE.MeshLambertMaterial({ color: 0xcfc5ae })
+    );
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.y = 0.01;
+    plaza.receiveShadow = true;
+    scene.add(plaza);
+
+    // 生け垣（境界）
+    (function makeHedges() {
+        var hedgeMat = new THREE.MeshLambertMaterial({ color: 0x4a7a3a });
+        var len = AREA * 2 + 2;
+        var defs = [
+            { x: 0, z: -(AREA + 1), w: len, d: 1.0 },
+            { x: 0, z: (AREA + 1),  w: len, d: 1.0 },
+            { x: -(AREA + 1), z: 0, w: 1.0, d: len },
+            { x: (AREA + 1),  z: 0, w: 1.0, d: len }
+        ];
+        defs.forEach(function(h) {
+            var m = new THREE.Mesh(new THREE.BoxGeometry(h.w, 1.1, h.d), hedgeMat);
+            m.position.set(h.x, 0.55, h.z);
+            m.castShadow = true;
+            m.receiveShadow = true;
+            scene.add(m);
+        });
+    })();
+
+    // =====================================================================
+    // 棒人形（ウィンドウショッピング3Dと同じ骨格）
+    // =====================================================================
+
+    function makeLimb(mat, radius, length) {
+        var pivot = new THREE.Group();
+        var mesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(radius, radius * 0.85, length, 8),
+            mat
+        );
+        mesh.position.y = -length / 2;
+        mesh.castShadow = true;
+        pivot.add(mesh);
+        return pivot;
+    }
+
+    function makeStickFigure(color, withHorns) {
+        var mat = new THREE.MeshLambertMaterial({ color: color });
+
+        var group = new THREE.Group();
+        var body = new THREE.Group();
+        body.position.y = LEG_LEN;
+        group.add(body);
+
+        var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.62, 8), mat);
+        torso.position.y = 0.31;
+        torso.castShadow = true;
+        body.add(torso);
+
+        var headGrp = new THREE.Group();
+        headGrp.position.y = 0.66;
+        var headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), mat);
+        headMesh.position.y = 0.14;
+        headMesh.castShadow = true;
+        headGrp.add(headMesh);
+        body.add(headGrp);
+
+        // 鬼の角（2本の小さな円錐）
+        if (withHorns) {
+            var hornMat = new THREE.MeshLambertMaterial({ color: 0x8b1a1a });
+            [-1, 1].forEach(function(side) {
+                var horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 8), hornMat);
+                horn.position.set(0.08 * side, 0.32, 0);
+                horn.rotation.z = -0.35 * side;
+                horn.castShadow = true;
+                headGrp.add(horn);
+            });
+        }
+
+        function makeLeg(side) {
+            var hip = makeLimb(mat, 0.055, 0.46);
+            hip.position.set(0.11 * side, 0, 0);
+            var knee = makeLimb(mat, 0.05, 0.46);
+            knee.position.y = -0.46;
+            hip.add(knee);
+            body.add(hip);
+            return { hip: hip, knee: knee };
+        }
+
+        function makeArm(side) {
+            var shoulder = makeLimb(mat, 0.045, 0.38);
+            shoulder.position.set(0.22 * side, 0.56, 0);
+            var elbow = makeLimb(mat, 0.04, 0.34);
+            elbow.position.y = -0.38;
+            shoulder.add(elbow);
+            body.add(shoulder);
+            return { shoulder: shoulder, elbow: elbow };
+        }
+
+        return {
+            group: group, body: body, head: headGrp,
+            legL: makeLeg(-1), legR: makeLeg(1),
+            armL: makeArm(-1), armR: makeArm(1)
+        };
+    }
+
+    // 歩行・走行の関節アニメーション
+    function applyGait(fig, dt, speed, run) {
+        var p = fig.parts;
+        var legAmp = run ? 0.85 : 0.5;
+        var armAmp = run ? 0.95 : 0.45;
+        var omega = speed * (run ? 4.6 : 5.4);
+        fig.phase += omega * dt;
+        var s = Math.sin(fig.phase);
+
+        p.legL.hip.rotation.x = legAmp * s;
+        p.legR.hip.rotation.x = -legAmp * s;
+        var bend = run ? 1.15 : 0.6;
+        p.legL.knee.rotation.x = -bend * Math.max(0, Math.sin(fig.phase - 0.7));
+        p.legR.knee.rotation.x = -bend * Math.max(0, Math.sin(fig.phase + Math.PI - 0.7));
+
+        p.armL.shoulder.rotation.x = -armAmp * s;
+        p.armR.shoulder.rotation.x = armAmp * s;
+        var elbowBase = run ? 1.0 : 0.35;
+        p.armL.elbow.rotation.x = elbowBase;
+        p.armR.elbow.rotation.x = elbowBase;
+
+        p.body.position.y = LEG_LEN - 0.03 + (run ? 0.075 : 0.045) * Math.abs(Math.cos(fig.phase));
+        p.body.rotation.x = run ? 0.28 : 0.07;
+    }
+
+    // 直立姿勢へ戻す
+    function applyStand(fig) {
+        var p = fig.parts;
+        var relax = 0.85;
+        ['legL', 'legR'].forEach(function(k) {
+            p[k].hip.rotation.x *= relax;
+            p[k].knee.rotation.x *= relax;
+        });
+        p.armL.shoulder.rotation.x *= relax;
+        p.armR.shoulder.rotation.x *= relax;
+        p.armL.elbow.rotation.x = 0.25;
+        p.armR.elbow.rotation.x = 0.25;
+        p.body.rotation.x *= relax;
+        p.body.position.y = LEG_LEN - 0.03;
+    }
+
+    function turnToward(fig, targetAngle, dt) {
+        var cur = fig.parts.group.rotation.y;
+        var diff = targetAngle - cur;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        fig.parts.group.rotation.y = cur + diff * Math.min(1, dt * 8);
+    }
+
+    // =====================================================================
+    // ブロック（障害物）
+    // =====================================================================
+    var blocks = [];   // { mesh, cx, cz, hx, hz }（xz平面のAABB）
+
+    var BLOCK_COLORS = [0x9a8a7a, 0xa89888, 0x8a7a6a, 0xb0a090];
+
+    function addBlock(pos) {
+        var mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(BLOCK_W, BLOCK_H, BLOCK_D),
+            new THREE.MeshLambertMaterial({
+                color: BLOCK_COLORS[blocks.length % BLOCK_COLORS.length]
+            })
+        );
+        mesh.position.set(pos.x, BLOCK_H / 2, pos.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+
+        var b = { mesh: mesh, cx: pos.x, cz: pos.z, hx: BLOCK_W / 2, hz: BLOCK_D / 2 };
+        blocks.push(b);
+
+        // ブロック内に居るエージェントを押し出す
+        allAgents().forEach(function(a) { pushOut(a.parts.group.position, b); });
+        return b;
+    }
+
+    function removeBlock(b) {
+        var idx = blocks.indexOf(b);
+        if (idx < 0) return;
+        blocks.splice(idx, 1);
+        scene.remove(b.mesh);
+    }
+
+    function canPlaceBlock(pos) {
+        if (Math.abs(pos.x) > AREA - 2.5 || Math.abs(pos.z) > AREA - 2.5) {
+            showToast('領域の内側に置いてください');
+            return false;
+        }
+        if (blocks.length >= MAX_BLOCKS) {
+            showToast('ブロックは最大 ' + MAX_BLOCKS + ' 個までです');
+            return false;
+        }
+        for (var i = 0; i < blocks.length; i++) {
+            var dx = Math.abs(pos.x - blocks[i].cx);
+            var dz = Math.abs(pos.z - blocks[i].cz);
+            if (dx < BLOCK_W + 0.6 && dz < BLOCK_D + 0.6) {
+                showToast('他のブロックと近すぎます（通り道が必要です）');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ---------- 幾何ユーティリティ ----------
+
+    // 点pがブロックb（半径r分拡張）内にあるか
+    function insideBlock(p, b, r) {
+        return Math.abs(p.x - b.cx) < b.hx + r && Math.abs(p.z - b.cz) < b.hz + r;
+    }
+
+    // 点をブロックの外へ最小移動で押し出す
+    function pushOut(p, b) {
+        if (!insideBlock(p, b, AGENT_R)) return;
+        var oxp = (b.cx + b.hx + AGENT_R) - p.x;   // +x方向へ出る距離
+        var oxm = p.x - (b.cx - b.hx - AGENT_R);
+        var ozp = (b.cz + b.hz + AGENT_R) - p.z;
+        var ozm = p.z - (b.cz - b.hz - AGENT_R);
+        var m = Math.min(oxp, oxm, ozp, ozm);
+        if (m === oxp) p.x = b.cx + b.hx + AGENT_R;
+        else if (m === oxm) p.x = b.cx - b.hx - AGENT_R;
+        else if (m === ozp) p.z = b.cz + b.hz + AGENT_R;
+        else p.z = b.cz - b.hz - AGENT_R;
+    }
+
+    // 移動（衝突あり）: pos から delta 動かす。壁ずり（スライド）対応。
+    function moveWithCollision(pos, dx, dz) {
+        var nx = pos.x + dx, nz = pos.z + dz;
+        for (var i = 0; i < blocks.length; i++) {
+            var b = blocks[i];
+            if (Math.abs(nx - b.cx) < b.hx + AGENT_R && Math.abs(nz - b.cz) < b.hz + AGENT_R) {
+                // X方向のみ・Z方向のみで試す（壁に沿って滑る）
+                var okX = !(Math.abs(nx - b.cx) < b.hx + AGENT_R && Math.abs(pos.z - b.cz) < b.hz + AGENT_R);
+                var okZ = !(Math.abs(pos.x - b.cx) < b.hx + AGENT_R && Math.abs(nz - b.cz) < b.hz + AGENT_R);
+                if (okX) { nz = pos.z; }
+                else if (okZ) { nx = pos.x; }
+                else { nx = pos.x; nz = pos.z; }
+            }
+        }
+        pos.x = Math.max(-AREA + 0.8, Math.min(AREA - 0.8, nx));
+        pos.z = Math.max(-AREA + 0.8, Math.min(AREA - 0.8, nz));
+    }
+
+    // 視線判定: a→b の線分がどれかのブロックに遮られていないか
+    function hasLOS(a, b) {
+        for (var i = 0; i < blocks.length; i++) {
+            if (segIntersectsBlock(a.x, a.z, b.x, b.z, blocks[i])) return false;
+        }
+        return true;
+    }
+
+    // 2D線分 vs AABB（slab法）
+    function segIntersectsBlock(ax, az, bx, bz, blk) {
+        var dx = bx - ax, dz = bz - az;
+        var tmin = 0, tmax = 1;
+        var minX = blk.cx - blk.hx, maxX = blk.cx + blk.hx;
+        var minZ = blk.cz - blk.hz, maxZ = blk.cz + blk.hz;
+
+        if (Math.abs(dx) < 1e-9) {
+            if (ax < minX || ax > maxX) return false;
+        } else {
+            var t1 = (minX - ax) / dx, t2 = (maxX - ax) / dx;
+            if (t1 > t2) { var tmp = t1; t1 = t2; t2 = tmp; }
+            tmin = Math.max(tmin, t1);
+            tmax = Math.min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+        if (Math.abs(dz) < 1e-9) {
+            if (az < minZ || az > maxZ) return false;
+        } else {
+            var t3 = (minZ - az) / dz, t4 = (maxZ - az) / dz;
+            if (t3 > t4) { var tmp2 = t3; t3 = t4; t4 = tmp2; }
+            tmin = Math.max(tmin, t3);
+            tmax = Math.min(tmax, t4);
+            if (tmin > tmax) return false;
+        }
+        return true;
+    }
+
+    // =====================================================================
+    // エージェント（鬼・追手）
+    // =====================================================================
+    var oni = null;
+    var chasers = [];
+
+    var game = {
+        state: 'running',    // running / caught
+        elapsed: 0,
+        best: null,
+        chaserSpeedRatio: 1.0
+    };
+
+    function allAgents() {
+        return oni ? [oni].concat(chasers) : chasers.slice();
+    }
+
+    function makeOni() {
+        var f = makeStickFigure(0xe74c3c, true);
+        f.group.position.set(0, 0, 0);
+        scene.add(f.group);
+        return { parts: f, phase: Math.random() * 6.28, seed: Math.random() * 100 };
+    }
+
+    function makeChaser(i) {
+        var f = makeStickFigure(CHASER_COLORS[i % CHASER_COLORS.length], false);
+        f.group.position.copy(chaserSpawnPos());
+        scene.add(f.group);
+        return {
+            parts: f,
+            phase: Math.random() * 6.28,
+            seed: Math.random() * 100,
+            mem: null,           // 最後に鬼を見た位置（記憶）
+            memT: -1e9,          // 見た時刻
+            wanderDir: randUnit(),
+            wanderT: 0
+        };
+    }
+
+    function chaserSpawnPos() {
+        // 鬼から十分離れた縁の近くに出現させる
+        for (var k = 0; k < 40; k++) {
+            var edge = Math.floor(Math.random() * 4);
+            var u = (Math.random() * 2 - 1) * (AREA - 3);
+            var p = new THREE.Vector3(
+                edge === 0 ? -(AREA - 3) : edge === 1 ? (AREA - 3) : u, 0,
+                edge === 2 ? -(AREA - 3) : edge === 3 ? (AREA - 3) : u
+            );
+            var farFromOni = !oni || p.distanceTo(oni.parts.group.position) > 14;
+            var freeOfBlocks = blocks.every(function(b) { return !insideBlock(p, b, AGENT_R + 0.2); });
+            if (farFromOni && freeOfBlocks) return p;
+        }
+        return new THREE.Vector3(AREA - 3, 0, AREA - 3);
+    }
+
+    function randUnit() {
+        var a = Math.random() * Math.PI * 2;
+        return new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+    }
+
+    // ---------- 追手AI ----------
+    function updateChaser(ch, dt, t) {
+        var pos = ch.parts.group.position;
+        var oniPos = oni.parts.group.position;
+        var dir;
+
+        if (hasLOS(pos, oniPos)) {
+            // 鬼が見えている：直進し、記憶を更新
+            ch.mem = oniPos.clone();
+            ch.memT = t;
+            dir = oniPos.clone().sub(pos).setY(0).normalize();
+        } else {
+            // 見えていない：ランダム行動 ＋ 記憶方向へのバイアス
+            ch.wanderT -= dt;
+            if (ch.wanderT <= 0) {
+                ch.wanderDir = randUnit();
+                ch.wanderT = 0.7 + Math.random() * 1.3;
+            }
+            dir = ch.wanderDir.clone();
+
+            if (ch.mem) {
+                var age = t - ch.memT;
+                if (pos.distanceTo(ch.mem) < 1.5) {
+                    ch.mem = null;   // 記憶の場所に着いたが居ない → 記憶を破棄
+                } else if (age < 8) {
+                    // 記憶が新しいほど強く引かれる（最大 0.45）
+                    var w = 0.45 * (1 - age / 8);
+                    var memDir = ch.mem.clone().sub(pos).setY(0).normalize();
+                    dir.multiplyScalar(1 - w).add(memDir.multiplyScalar(w)).normalize();
+                }
+            }
+        }
+
+        var speed = ONI_SPEED * game.chaserSpeedRatio;
+        turnToward(ch, Math.atan2(dir.x, dir.z), dt);
+        moveWithCollision(pos, dir.x * speed * dt, dir.z * speed * dt);
+        applyGait(ch, dt, speed, true);
+
+        // 捕獲判定
+        if (pos.distanceTo(oniPos) < CATCH_DIST) {
+            endGame();
+        }
+    }
+
+    // ---------- 鬼AI（逃走）----------
+    function updateOni(dt, t) {
+        var pos = oni.parts.group.position;
+        var force = new THREE.Vector3();
+        var minDist = 1e9;
+        var nearest = null;
+
+        // 1) 追手から離れる力（近いほど強い）
+        chasers.forEach(function(ch) {
+            var cp = ch.parts.group.position;
+            var away = pos.clone().sub(cp).setY(0);
+            var d = Math.max(away.length(), 0.5);
+            if (d < minDist) { minDist = d; nearest = ch; }
+            force.add(away.normalize().multiplyScalar(14 / (d * d)));
+        });
+
+        // 2) 壁から離れる力
+        var wallMargin = 5;
+        if (pos.x > AREA - wallMargin)  force.x -= (pos.x - (AREA - wallMargin)) * 0.5;
+        if (pos.x < -AREA + wallMargin) force.x += ((-AREA + wallMargin) - pos.x) * 0.5;
+        if (pos.z > AREA - wallMargin)  force.z -= (pos.z - (AREA - wallMargin)) * 0.5;
+        if (pos.z < -AREA + wallMargin) force.z += ((-AREA + wallMargin) - pos.z) * 0.5;
+
+        // 3) ブロックの陰（追手の反対側）に隠れる力
+        if (nearest && minDist < 16 && blocks.length > 0) {
+            var np = nearest.parts.group.position;
+            var best = null, bestScore = -1e9;
+            blocks.forEach(function(b) {
+                var c = new THREE.Vector3(b.cx, 0, b.cz);
+                var behind = c.clone().sub(np).setY(0).normalize();
+                var hp = c.clone().add(behind.multiplyScalar(Math.max(b.hx, b.hz) + 1.6));
+                if (Math.abs(hp.x) > AREA - 1.5 || Math.abs(hp.z) > AREA - 1.5) return;
+                var dOni = pos.distanceTo(hp);
+                var dChaser = np.distanceTo(hp);
+                // 自分から近く、追手から遠い隠れ場所ほど高スコア
+                var score = dChaser - dOni * 1.6;
+                if (score > bestScore) { bestScore = score; best = hp; }
+            });
+            if (best && pos.distanceTo(best) > 0.8) {
+                force.add(best.clone().sub(pos).setY(0).normalize().multiplyScalar(2.4));
+            }
+        }
+
+        // 4) 進行方向のブロックを避ける（脇へそれる）
+        var heading = force.clone();
+        if (heading.lengthSq() > 1e-6) {
+            heading.normalize();
+            var ahead = pos.clone().add(heading.clone().multiplyScalar(2.0));
+            for (var i = 0; i < blocks.length; i++) {
+                var b = blocks[i];
+                if (insideBlock(ahead, b, AGENT_R + 0.3)) {
+                    var side = new THREE.Vector3(-heading.z, 0, heading.x);
+                    var toBlock = new THREE.Vector3(b.cx - pos.x, 0, b.cz - pos.z);
+                    if (side.dot(toBlock) > 0) side.multiplyScalar(-1);
+                    force.add(side.multiplyScalar(2.0));
+                    break;
+                }
+            }
+        }
+
+        // 移動（遠く安全なときは歩き、近いときは全力疾走）
+        var run = minDist < 18;
+        var speed = run ? ONI_SPEED : 1.3;
+        var dir = force.lengthSq() > 1e-6 ? force.normalize() : randUnit();
+        turnToward(oni, Math.atan2(dir.x, dir.z), dt);
+        moveWithCollision(pos, dir.x * speed * dt, dir.z * speed * dt);
+        applyGait(oni, dt, speed, run);
+    }
+
+    // ---------- ゲーム進行 ----------
+    function endGame() {
+        if (game.state !== 'running') return;
+        game.state = 'caught';
+        var rec = game.elapsed;
+        if (game.best === null || rec > game.best) game.best = rec;
+        $('#caught-time').text(rec.toFixed(1));
+        $('#caught-best').text(game.best.toFixed(1));
+        $('#status-label').text('捕まった！');
+        $('#best-value').text(game.best.toFixed(1));
+        $('#caught-overlay').css('display', 'flex');
+    }
+
+    function restart() {
+        game.state = 'running';
+        game.elapsed = 0;
+        $('#caught-overlay').hide();
+        $('#status-label').text('逃走中');
+
+        oni.parts.group.position.set(0, 0, 0);
+        blocks.forEach(function(b) { pushOut(oni.parts.group.position, b); });
+        chasers.forEach(function(ch) {
+            ch.parts.group.position.copy(chaserSpawnPos());
+            ch.mem = null;
+            ch.memT = -1e9;
+        });
+    }
+
+    function addChaser() {
+        chasers.push(makeChaser(chasers.length));
+        updateCounts();
+    }
+
+    function removeChaser() {
+        var ch = chasers.pop();
+        if (ch) scene.remove(ch.parts.group);
+        updateCounts();
+    }
+
+    // =====================================================================
+    // カメラ操作（ドラッグ回転・ホイールズーム）とクリックでのブロック配置
+    // =====================================================================
+    var cam = {
+        yaw: 0.7, pitch: 0.55, distance: 46,
+        dragging: false, lastX: 0, lastY: 0,
+        downX: 0, downY: 0, moved: 0
+    };
+
+    function updateCamera() {
+        var cp = Math.cos(cam.pitch);
+        camera.position.set(
+            cam.distance * cp * Math.sin(cam.yaw),
+            cam.distance * Math.sin(cam.pitch) + 1,
+            cam.distance * cp * Math.cos(cam.yaw)
+        );
+        camera.lookAt(0, 1, 0);
+    }
+
+    var el = renderer.domElement;
+    var raycaster = new THREE.Raycaster();
+    var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    var ndc = new THREE.Vector2();
+
+    function placeBlockAt(clientX, clientY) {
+        ndc.x = (clientX / window.innerWidth) * 2 - 1;
+        ndc.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(ndc, camera);
+        var hit = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(groundPlane, hit)) {
+            hit.y = 0;
+            if (canPlaceBlock(hit)) {
+                addBlock(hit);
+                showToast('ブロックを配置しました（' + blocks.length + ' 個）');
+                updateCounts();
+            }
+        }
+    }
+
+    el.addEventListener('mousedown', function(e) {
+        if (e.button === 0) {
+            cam.dragging = true;
+            cam.lastX = cam.downX = e.clientX;
+            cam.lastY = cam.downY = e.clientY;
+            cam.moved = 0;
+        }
+    });
+
+    window.addEventListener('mousemove', function(e) {
+        if (!cam.dragging) return;
+        rotateBy(e.clientX - cam.lastX, e.clientY - cam.lastY);
+        cam.moved += Math.abs(e.clientX - cam.lastX) + Math.abs(e.clientY - cam.lastY);
+        cam.lastX = e.clientX;
+        cam.lastY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', function(e) {
+        if (!cam.dragging) return;
+        cam.dragging = false;
+        if (cam.moved < 6 && e.target === el) {
+            placeBlockAt(e.clientX, e.clientY);
+        }
+    });
+
+    el.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var steps = -e.deltaY / 100;
+        cam.distance *= Math.pow(0.9, steps);
+        cam.distance = Math.max(8, Math.min(120, cam.distance));
+    }, { passive: false });
+
+    // タッチ（1本指ドラッグ回転・ピンチズーム・タップで配置）
+    var lastPinch = 0;
+    el.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            cam.dragging = true;
+            cam.lastX = cam.downX = e.touches[0].clientX;
+            cam.lastY = cam.downY = e.touches[0].clientY;
+            cam.moved = 0;
+        } else if (e.touches.length === 2) {
+            cam.dragging = false;
+            lastPinch = pinchDist(e);
+        }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 1 && cam.dragging) {
+            rotateBy(e.touches[0].clientX - cam.lastX, e.touches[0].clientY - cam.lastY);
+            cam.moved += Math.abs(e.touches[0].clientX - cam.lastX)
+                       + Math.abs(e.touches[0].clientY - cam.lastY);
+            cam.lastX = e.touches[0].clientX;
+            cam.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            var d = pinchDist(e);
+            if (lastPinch > 0) {
+                cam.distance *= lastPinch / d;
+                cam.distance = Math.max(8, Math.min(120, cam.distance));
+            }
+            lastPinch = d;
+        }
+        e.preventDefault();
+    }, { passive: false });
+
+    el.addEventListener('touchend', function() {
+        if (cam.dragging && cam.moved < 6) {
+            placeBlockAt(cam.downX, cam.downY);
+        }
+        cam.dragging = false;
+        lastPinch = 0;
+    });
+
+    function pinchDist(e) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function rotateBy(dx, dy) {
+        cam.yaw += dx * 0.01;
+        cam.pitch += dy * 0.008;
+        cam.pitch = Math.max(0.12, Math.min(1.45, cam.pitch));
+    }
+
+    // =====================================================================
+    // UI
+    // =====================================================================
+    function updateCounts() {
+        $('#chaser-count').text(chasers.length);
+    }
+
+    var toastTimer = null;
+    function showToast(msg) {
+        $('#toast').text(msg).stop(true, true).fadeIn(120);
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function() { $('#toast').fadeOut(300); }, 2200);
+    }
+
+    $('#btn-chaser-plus').on('click', function() {
+        if (chasers.length < MAX_CHASERS) addChaser();
+        else showToast('追手は最大 ' + MAX_CHASERS + ' 人までです');
+    });
+    $('#btn-chaser-minus').on('click', function() {
+        if (chasers.length > MIN_CHASERS) removeChaser();
+    });
+    $('#speed-slider').on('input', function() {
+        game.chaserSpeedRatio = parseFloat(this.value);
+        $('#speed-ratio').text(game.chaserSpeedRatio.toFixed(2));
+    });
+    $('#btn-restart').on('click', restart);
+    $('#btn-block-undo').on('click', function() {
+        if (blocks.length > 0) removeBlock(blocks[blocks.length - 1]);
+    });
+    $('#btn-block-clear').on('click', function() {
+        while (blocks.length > 0) removeBlock(blocks[blocks.length - 1]);
+    });
+    $('#btn-reset').on('click', function() {
+        cam.yaw = 0.7; cam.pitch = 0.55; cam.distance = 46;
+    });
+
+    window.addEventListener('resize', function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // =====================================================================
+    // 初期化・メインループ
+    // =====================================================================
+    oni = makeOni();
+    for (var i = 0; i < 3; i++) addChaser();
+    updateCounts();
+
+    var lastFrame = performance.now();
+
+    function animate(now) {
+        requestAnimationFrame(animate);
+        var dt = Math.min((now - lastFrame) / 1000, 0.1);
+        lastFrame = now;
+        var t = now / 1000;
+
+        if (game.state === 'running') {
+            game.elapsed += dt;
+            updateOni(dt, t);
+            chasers.forEach(function(ch) { updateChaser(ch, dt, t); });
+            $('#elapsed-value').text(game.elapsed.toFixed(1));
+        } else {
+            // 捕まった後は全員直立
+            applyStand(oni);
+            chasers.forEach(applyStand);
+        }
+
+        updateCamera();
+        renderer.render(scene, camera);
+    }
+
+    updateCamera();
+    requestAnimationFrame(animate);
+    </script>
+</body>
+</html>

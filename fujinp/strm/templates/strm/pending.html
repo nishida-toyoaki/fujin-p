@@ -1,0 +1,194 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>承認ダッシュボード - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f8fafc; color: #1f2937; }
+        .container { max-width: 1150px; margin: 0 auto; }
+        .card { background: #fff; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .nav-button { padding: 8px 16px; background-color: #2563eb; color: white !important; border: none; border-radius: 12px; cursor: pointer; text-decoration: none; font-weight: 500; }
+        .nav-button:hover { background-color: #1d4ed8; }
+        .btn-return { display: inline-block; padding: 6px 14px; background: #e74c3c; border-radius: 20px; color: #fff !important; text-decoration: none; font-size: .82em; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+        .btn-return:hover { background: #c0392b; }
+        .summary-tiles { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .tile { flex: 1; min-width: 180px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.2rem; }
+        .tile .tile-label { font-size: 0.85rem; color: #4b5563; }
+        .tile .tile-value { font-size: 2rem; font-weight: bold; }
+        .tile.alert { background: #fef2f2; border-color: #fecaca; }
+        .tile.alert .tile-value { color: #dc2626; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background-color: #f8f9fa; font-weight: 600; }
+        button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; color: white; font-size: 0.85rem; }
+        .approve-button { background-color: #28a745; }
+        .approve-button:hover { background-color: #218838; }
+        .reject-button { background-color: #dc3545; }
+        .reject-button:hover { background-color: #c82333; }
+        .empty { color: #6b7280; padding: 1rem 0; }
+        .status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.85em; white-space: nowrap; }
+        .status-active { background-color: #e3f2fd; color: #1565c0; }
+        .status-rejected { background-color: #fce4ec; color: #c2185b; }
+        .status-canceled { background-color: #ffebee; color: #c62828; }
+        #result { display: none; padding: 10px 16px; margin-bottom: 15px; border-radius: 6px; font-weight: bold; }
+        #result.success { background-color: #ecfdf5; color: #065f46; border: 1px solid #10b981; }
+        #result.error { background-color: #fef2f2; color: #991b1b; border: 1px solid #ef4444; }
+        .note { font-size: 0.85rem; color: #4b5563; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card header-bar">
+            <h1>承認ダッシュボード</h1>
+            <div>
+                <a href="{{ url_for('strm.index') }}" class="nav-button">予約カレンダー</a>
+                <a href="{{ url_for('strm.overview') }}" class="nav-button">予約状況</a>
+                {% if is_admin %}
+                <a href="{{ url_for('strm.resources') }}" class="nav-button">資源管理</a>
+                {% endif %}
+                <a href="{{ url_for('strm.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+            </div>
+        </div>
+
+        <div id="result"></div>
+
+        <div class="card">
+            <div class="summary-tiles">
+                <div class="tile" id="pending-tile">
+                    <div class="tile-label">承認待ち</div>
+                    <div class="tile-value" id="pending-count">-</div>
+                </div>
+                <div class="tile">
+                    <div class="tile-label">担当</div>
+                    <div class="tile-value" style="font-size:1rem; font-weight:normal; padding-top:8px;">
+                        あなたが承認者となっている資源の申請が表示されます。<br>
+                        いずれかの承認者1人が承認すると「確定」になります。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>承認待ちの申請</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>資源名</th>
+                        <th>申請者</th>
+                        <th>利用日時</th>
+                        <th>概要</th>
+                        <th>申請日時</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="pending-rows"></tbody>
+            </table>
+            <p id="empty-message" class="empty" style="display:none;">承認待ちの申請はありません。</p>
+        </div>
+
+        <div class="card">
+            <h2>最近の決定履歴（直近20件）</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>資源名</th>
+                        <th>申請者</th>
+                        <th>利用日時</th>
+                        <th>概要</th>
+                        <th>結果</th>
+                        <th>決定者</th>
+                        <th>決定日時</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-rows"></tbody>
+            </table>
+            <p id="recent-empty" class="empty" style="display:none;">決定履歴はまだありません。</p>
+        </div>
+    </div>
+
+    <script>
+        const API = {
+            pending: '{{ url_for("strm.api_pending") }}',
+            approve: id => '{{ url_for("strm.api_approve_reservation", reservation_id=0) }}'.replace('/0/', '/' + id + '/'),
+            reject:  id => '{{ url_for("strm.api_reject_reservation", reservation_id=0) }}'.replace('/0/', '/' + id + '/')
+        };
+
+        function showResult(message, isError) {
+            const $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(() => $r.fadeOut(), 5000);
+        }
+
+        function loadDashboard() {
+            $.get(API.pending, function(resp) {
+                if (!resp.success) { showResult(resp.error || '読み込みに失敗しました。', true); return; }
+
+                $('#pending-count').text(resp.pending_count);
+                $('#pending-tile').toggleClass('alert', resp.pending_count > 0);
+
+                const $rows = $('#pending-rows').empty();
+                $('#empty-message').toggle(resp.items.length === 0);
+                resp.items.forEach(item => {
+                    const $tr = $('<tr>');
+                    $tr.append($('<td>').text(item.resource_name));
+                    $tr.append($('<td>').text(item.reserver_name));
+                    $tr.append($('<td>').text(item.start + ' 〜 ' + item.end_time));
+                    $tr.append($('<td>').text(item.summary || 'なし'));
+                    $tr.append($('<td>').text(item.created));
+                    const $ops = $('<td>');
+                    $ops.append($('<button>').addClass('approve-button').text('承認')
+                        .on('click', () => decide(API.approve(item.id), 'この予約を承認しますか？')));
+                    $ops.append(' ');
+                    $ops.append($('<button>').addClass('reject-button').text('却下')
+                        .on('click', () => decide(API.reject(item.id), 'この予約を却下しますか？')));
+                    $tr.append($ops);
+                    $rows.append($tr);
+                });
+
+                const $recent = $('#recent-rows').empty();
+                $('#recent-empty').toggle(resp.recent.length === 0);
+                resp.recent.forEach(item => {
+                    const $tr = $('<tr>');
+                    $tr.append($('<td>').text(item.resource_name));
+                    $tr.append($('<td>').text(item.reserver_name));
+                    $tr.append($('<td>').text(item.start + ' 〜 ' + item.end_time));
+                    $tr.append($('<td>').text(item.summary || 'なし'));
+                    $tr.append($('<td>').append(
+                        $('<span>').addClass('status-badge status-' + item.status).text(item.status_label)));
+                    $tr.append($('<td>').text(item.decided_by_name));
+                    $tr.append($('<td>').text(item.decided_at));
+                    $recent.append($tr);
+                });
+            });
+        }
+
+        function decide(url, confirmMessage) {
+            if (!confirm(confirmMessage)) return;
+            $.ajax({
+                url: url, method: 'POST', contentType: 'application/json', data: '{}',
+                success: resp => {
+                    if (resp.success) { showResult(resp.message, false); loadDashboard(); }
+                    else showResult(resp.error || '処理に失敗しました。', true);
+                },
+                error: xhr => {
+                    const r = xhr.responseJSON;
+                    showResult((r && r.error) || '通信エラーが発生しました。', true);
+                }
+            });
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

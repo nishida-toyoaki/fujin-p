@@ -1,0 +1,212 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>削除済みユーザー - FUJIN-P 管理画面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #5a6268; }
+        .content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            color: #721c24;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-restore {
+            background: #28a745;
+            color: white;
+        }
+        .btn-restore:hover { background: #218838; }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover { background: #c82333; }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .badge-deleted {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .stats-box {
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>削除済みユーザー</h1>
+                <p style="color: #666;">論理削除されたユーザーの管理</p>
+            </div>
+            <div>
+                <a href="{{ url_for('admin.users') }}" class="back-btn" style="margin-right: 10px;">ユーザー一覧に戻る</a>
+                <a href="{{ url_for('admin.dashboard') }}" class="back-btn">ダッシュボードに戻る</a>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <strong>論理削除について:</strong> 
+                削除されたユーザーは物理的にはデータベースに残っていますが、システムからはアクセスできません。
+                必要に応じて復元することができます。
+            </div>
+
+            <div class="warning-box">
+                <strong>⚠️ 物理削除について:</strong> 
+                「完全削除」ボタンはユーザーをデータベースから完全に削除します。
+                この操作は取り消せません。削除後、同じメールアドレスで再登録が可能になります。
+            </div>
+
+            {% if users %}
+            <div class="stats-box">
+                <strong>削除済みユーザー数:</strong> {{ users|length }}人
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>メールアドレス</th>
+                        <th>氏名</th>
+                        <th>カテゴリ</th>
+                        <th>所属</th>
+                        <th>削除日時</th>
+                        <th>削除者</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.full_name }}</td>
+                        <td><span class="badge badge-deleted">{{ user.category }}</span></td>
+                        <td>{{ user.affiliation or '－' }}</td>
+                        <td>{{ user.deleted_at }}</td>
+                        <td>{{ user.deleted_by_name or '－' }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <form action="{{ url_for('admin.restore_user', user_id=user.id) }}" 
+                                      method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-restore" 
+                                            onclick="return confirm('{{ user.full_name }}さんを復元しますか？')">
+                                        復元
+                                    </button>
+                                </form>
+
+                                <form action="{{ url_for('admin.permanent_delete_user', user_id=user.id) }}" 
+                                      method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger" 
+                                            onclick="return confirm('⚠️ 警告 ⚠️\n\n{{ user.full_name }} ({{ user.email }}) をデータベースから完全に削除します。\n\nこの操作は取り消せません！\n本当に削除しますか？')">
+                                        完全削除
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">
+                <p>削除済みのユーザーはいません</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

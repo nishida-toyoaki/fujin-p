@@ -1,0 +1,659 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>アーカイブ管理 - テーブルマスター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+       font-size: 13px; background: #f0f2f5; color: #333; }
+
+/* ヘッダー */
+#header { background: #1a3a5c; color: #fff; padding: 10px 16px;
+          display: flex; align-items: center; gap: 12px; }
+#header h1 { font-size: 16px; font-weight: 600; }
+.nav-links { margin-left: auto; display: flex; gap: 8px; }
+.nav-links a { color: #aed6f1; text-decoration: none; font-size: 12px;
+               padding: 4px 8px; border: 1px solid #2e6da4; border-radius: 3px; }
+.nav-links a:hover { background: #2e6da4; }
+
+/* ボタン */
+.btn { padding: 5px 12px; border: none; border-radius: 3px; cursor: pointer;
+       font-size: 12px; font-weight: 500; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-primary   { background: #2e6da4; color: #fff; }
+.btn-success   { background: #27ae60; color: #fff; }
+.btn-danger    { background: #e74c3c; color: #fff; }
+.btn-warning   { background: #f39c12; color: #fff; }
+.btn-secondary { background: #7f8c8d; color: #fff; }
+.btn-dark      { background: #1a3a5c; color: #fff; }
+input[type=text], select, textarea {
+  width: 100%; padding: 5px 8px; border: 1px solid #ccc;
+  border-radius: 3px; font-size: 12px; font-family: inherit; }
+textarea { resize: vertical; }
+label { font-size: 11px; color: #666; display: block; margin-bottom: 3px; }
+
+/* ===== アーカイブ一覧 ===== */
+#archive-list-section { padding: 16px; }
+.section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.section-header h2 { font-size: 15px; color: #1a3a5c; }
+
+#archive-table-wrap { background: #fff; border-radius: 4px;
+                      border: 1px solid #ddd; overflow: hidden; }
+#archive-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#archive-table th { background: #2e6da4; color: #fff; padding: 8px 10px;
+                    text-align: left; white-space: nowrap; }
+#archive-table td { padding: 7px 10px; border-bottom: 1px solid #eee;
+                    vertical-align: middle; }
+#archive-table tr:hover td { background: #f5f9ff; }
+.badge-public  { background: #d5f5e3; color: #1e8449; padding: 2px 6px;
+                 border-radius: 10px; font-size: 11px; }
+.badge-private { background: #fde8e8; color: #922b21; padding: 2px 6px;
+                 border-radius: 10px; font-size: 11px; }
+.archive-num { font-size: 15px; font-weight: 700; color: #2e6da4; }
+.url-link { font-size: 11px; color: #2e6da4; text-decoration: none; }
+.url-link:hover { text-decoration: underline; }
+
+/* ===== モーダル: アーカイブ作成/編集 ===== */
+#modal-overlay { display: none; position: fixed; inset: 0;
+                 background: rgba(0,0,0,.45); z-index: 100; }
+#modal { display: none; position: fixed; top: 5vh; left: 50%; transform: translateX(-50%);
+         width: 860px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+         background: #fff; border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,.3);
+         z-index: 101; }
+#modal .modal-header { background: #1a3a5c; color: #fff; padding: 10px 16px;
+                       display: flex; align-items: center; justify-content: space-between;
+                       position: sticky; top: 0; z-index: 1; }
+#modal .modal-header h3 { font-size: 14px; }
+#modal .modal-close { background: none; border: none; color: #fff; font-size: 18px;
+                      cursor: pointer; line-height: 1; }
+#modal .modal-body { padding: 16px; }
+#modal .modal-footer { padding: 10px 16px; border-top: 1px solid #eee;
+                       display: flex; gap: 8px; justify-content: flex-end;
+                       position: sticky; bottom: 0; background: #fff; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px; }
+.form-grid .full { grid-column: 1 / -1; }
+
+/* ===== SQL入力エリア ===== */
+#modal-query-area { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px;
+                    padding: 10px; margin-bottom: 10px; }
+#modal-query-area .query-toolbar { display: flex; gap: 8px; margin-bottom: 6px;
+                                   align-items: center; flex-wrap: wrap; }
+#modal-query-area .query-toolbar label { margin: 0; color: #555; white-space: nowrap; }
+#modal-query-db { width: 180px; flex-shrink: 0; }
+#modal-query-text { font-family: 'Courier New', monospace; font-size: 12px;
+                    background: #fff; min-height: 60px; }
+
+/* ===== プレビュー結果 ===== */
+#modal-preview-status { font-size: 12px; margin-bottom: 6px; min-height: 18px; }
+.status-ok  { color: #27ae60; font-weight: 600; }
+.status-err { color: #e74c3c; font-weight: 600; }
+#modal-preview-wrap { overflow-x: auto; max-height: 220px; overflow-y: auto;
+                      border: 1px solid #ddd; border-radius: 3px; margin-bottom: 10px; }
+#modal-preview-table { border-collapse: collapse; font-size: 11px; width: 100%; }
+#modal-preview-table th { background: #2e6da4; color: #fff; padding: 5px 8px;
+                           text-align: left; white-space: nowrap; position: sticky; top: 0; }
+#modal-preview-table td { padding: 4px 8px; border-bottom: 1px solid #eee;
+                           white-space: nowrap; max-width: 200px;
+                           overflow: hidden; text-overflow: ellipsis; }
+#modal-preview-table tr:nth-child(even) td { background: #f9fbff; }
+
+/* ===== HTMLエディタ ===== */
+#html-editor-section { border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+#html-editor-section .he-header { background: #f5f5f5; padding: 6px 10px;
+                                   font-size: 12px; font-weight: 600; color: #555;
+                                   border-bottom: 1px solid #ddd; display: flex;
+                                   align-items: center; justify-content: space-between; }
+#html-textarea { width: 100%; min-height: 120px; font-family: 'Courier New', monospace;
+                 font-size: 11px; padding: 8px; border: none; resize: vertical;
+                 background: #1e1e1e; color: #d4d4d4; }
+#html-preview-frame { width: 100%; min-height: 150px; border: none;
+                      border-top: 1px solid #ddd; background: #fff; display: none; }
+
+/* ===== タブ ===== */
+.tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 10px; }
+.tab { padding: 6px 14px; cursor: pointer; font-size: 12px; border-bottom: 2px solid transparent;
+       color: #666; }
+.tab.active { border-bottom-color: #2e6da4; color: #2e6da4; font-weight: 600; }
+
+/* ===== トースト ===== */
+#toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+         border-radius: 4px; color: #fff; font-size: 13px; z-index: 9999;
+         display: none; max-width: 320px; }
+#toast.ok  { background: #27ae60; }
+#toast.err { background: #e74c3c; }
+.loading { color: #aaa; padding: 20px; text-align: center; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div id="header">
+  <h1>📦 アーカイブ管理</h1>
+  <div class="nav-links">
+    <a href="/table_master/view_editor/">📋 ビューエディタ</a>
+    <a href="/table_master/">← テーブルマスター</a>
+  </div>
+</div>
+
+<!-- アーカイブ一覧 -->
+<div id="archive-list-section">
+  <div class="section-header">
+    <h2>📚 公開テーブル一覧</h2>
+    <button class="btn btn-dark" onclick="openCreateModal()">＋ 新規アーカイブ作成</button>
+    <button class="btn btn-secondary" onclick="loadArchives()" style="margin-left:auto">⟳ 更新</button>
+  </div>
+  <div id="archive-table-wrap">
+    <div class="loading">読み込み中...</div>
+  </div>
+</div>
+
+<!-- モーダルオーバーレイ -->
+<div id="modal-overlay" onclick="closeModal()"></div>
+
+<!-- 作成/編集モーダル -->
+<div id="modal">
+  <div class="modal-header">
+    <h3 id="modal-title">アーカイブ作成</h3>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body">
+
+    <!-- タブ -->
+    <div class="tabs">
+      <div class="tab active" data-tab="query">① クエリ実行</div>
+      <div class="tab" data-tab="html">② HTML編集</div>
+      <div class="tab" data-tab="meta">③ メタ情報</div>
+    </div>
+
+    <!-- タブ①: クエリ -->
+    <div id="tab-query" class="tab-content">
+      <div id="modal-query-area">
+        <div class="query-toolbar">
+          <label>DB:</label>
+          <select id="modal-query-db" style="width:180px"></select>
+          <button class="btn btn-warning" onclick="runModalQuery()">▶ 実行</button>
+          <button class="btn btn-primary" onclick="loadFromView()">📋 ビューから選択</button>
+          <span id="modal-preview-status"></span>
+        </div>
+        <textarea id="modal-query-text" rows="3"
+          placeholder="SELECT * FROM ..."></textarea>
+      </div>
+      <div id="modal-preview-wrap">
+        <div class="loading" id="preview-placeholder">クエリを実行するとここに結果が表示されます</div>
+      </div>
+      <div style="text-align:right;margin-top:6px">
+        <button class="btn btn-success" onclick="applyQueryToHtml()" id="btn-apply-html" disabled>
+          → HTML編集へ ▶</button>
+      </div>
+    </div>
+
+    <!-- タブ②: HTML編集 -->
+    <div id="tab-html" class="tab-content" style="display:none">
+      <div id="html-editor-section">
+        <div class="he-header">
+          <span>HTMLコード（直接編集可）</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary" style="padding:2px 8px;font-size:11px"
+              onclick="toggleHtmlPreview()">👁 プレビュー切替</button>
+            <button class="btn btn-primary"  style="padding:2px 8px;font-size:11px"
+              onclick="beautifyHtml()">✨ 整形</button>
+          </div>
+        </div>
+        <textarea id="html-textarea" placeholder="<table>...</table>"
+          oninput="schedulePreview()"></textarea>
+        <iframe id="html-preview-frame" sandbox="allow-same-origin"></iframe>
+      </div>
+      <p style="font-size:11px;color:#888;margin-top:6px">
+        ※ テーブルマスター v2.0 のHTML編集機能でスタイルを付けた後、ここに貼り付けることもできます。
+      </p>
+    </div>
+
+    <!-- タブ③: メタ情報 -->
+    <div id="tab-meta" class="tab-content" style="display:none">
+      <div class="form-grid">
+        <input type="hidden" id="modal-archive-id">
+        <div>
+          <label>タイトル *</label>
+          <input type="text" id="modal-title-field" placeholder="例: 福知山市人口統計 2025年度">
+        </div>
+        <div>
+          <label>公開設定</label>
+          <select id="modal-is-public">
+            <option value="1">公開</option>
+            <option value="0">非公開（下書き）</option>
+          </select>
+        </div>
+        <div class="full">
+          <label>説明文（HTML可）</label>
+          <textarea id="modal-description" rows="3"
+            placeholder="このテーブルの説明・出典・備考など..."></textarea>
+        </div>
+        <div class="full" style="background:#f9f9f9;padding:8px;border-radius:3px;border:1px solid #eee">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">公開URL（保存後）</div>
+          <div id="modal-public-url" style="font-family:monospace;font-size:12px;color:#2e6da4">
+            （新規保存後に発行されます）
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /modal-body -->
+  <div class="modal-footer">
+    <button class="btn btn-danger"  id="btn-modal-delete" onclick="deleteArchive()" style="display:none;margin-right:auto">
+      🗑 削除</button>
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-success"  onclick="saveArchive()">💾 保存</button>
+  </div>
+</div>
+
+<!-- ビュー選択モーダル -->
+<div id="view-select-modal" style="display:none;position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);width:500px;max-width:90vw;background:#fff;
+  border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.3);z-index:200">
+  <div style="background:#1a3a5c;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-radius:6px 6px 0 0">
+    <span style="font-size:13px;font-weight:600">ビューを選択</span>
+    <button onclick="$('#view-select-modal').hide()" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer">✕</button>
+  </div>
+  <div id="view-select-list" style="max-height:360px;overflow-y:auto;padding:8px"></div>
+</div>
+<div id="view-select-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:199"
+  onclick="$('#view-select-modal,#view-select-overlay').hide()"></div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 状態 =====
+let allViews = [];
+let queryResult = null;  // 最新のクエリ結果
+let previewTimer = null;
+let showingHtmlPreview = false;
+
+const BASE_URL = window.location.origin + '/table_master/archive/';
+
+// ===== 起動 =====
+$(function() {
+  loadDatabases();
+  loadArchives();
+  loadViews();
+
+  // タブ切替
+  $(document).on('click', '.tab', function() {
+    $('.tab').removeClass('active');
+    $(this).addClass('active');
+    const tab = $(this).data('tab');
+    $('.tab-content').hide();
+    $(`#tab-${tab}`).show();
+  });
+
+  // ビューエディタから遷移してきた場合、パラメータを復元
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('query')) {
+    setTimeout(() => {
+      openCreateModal();
+      $('#modal-query-db').val(params.get('db') || '');
+      $('#modal-query-text').val(params.get('query') || '');
+      $('#modal-title-field').val(params.get('title') || '');
+      if (params.get('from_view')) {
+        // source_view_id をhiddenで保持
+        $('#modal-archive-id').data('source_view_id', params.get('from_view'));
+      }
+    }, 300);
+  }
+});
+
+// ===== DBリスト =====
+function loadDatabases() {
+  $.get('/table_master/get_all_tables', function(data) {
+    if (!data.tables) return;
+    const dbs = [...new Set(data.tables.map(t => t.database))].sort();
+    const $sel = $('#modal-query-db');
+    $sel.empty().append('<option value="">DB選択...</option>');
+    dbs.forEach(db => $sel.append(`<option value="${esc(db)}">${esc(db)}</option>`));
+  });
+}
+
+// ===== ビュー一覧読み込み =====
+function loadViews() {
+  $.get('/table_master/view_editor/list', function(data) {
+    if (data.success) allViews = data.views;
+  });
+}
+
+// ===== アーカイブ一覧 =====
+function loadArchives() {
+  $('#archive-table-wrap').html('<div class="loading">読み込み中...</div>');
+  $.get('/table_master/archive/list', function(data) {
+    if (!data.success) {
+      $('#archive-table-wrap').html(`<div class="loading" style="color:#e74c3c">エラー: ${esc(data.error)}</div>`);
+      return;
+    }
+    renderArchiveTable(data.archives);
+  });
+}
+
+function renderArchiveTable(archives) {
+  if (!archives.length) {
+    $('#archive-table-wrap').html('<div class="loading" style="color:#aaa">アーカイブがありません。「新規アーカイブ作成」で追加してください。</div>');
+    return;
+  }
+  let html = `<table id="archive-table">
+    <thead><tr>
+      <th>No.</th><th>タイトル</th><th>説明</th><th>元DB / ビュー</th>
+      <th>公開URL</th><th>状態</th><th>更新日時</th><th>操作</th>
+    </tr></thead><tbody>`;
+  archives.forEach(a => {
+    const url = BASE_URL + a.archive_number;
+    const srcInfo = a.source_view_name
+      ? `${esc(a.source_database || '')} / ${esc(a.source_view_name)}`
+      : (a.source_database ? esc(a.source_database) + ' / アドホック' : '—');
+    const updated = (a.updated_at || '').slice(0,16).replace('T',' ');
+    html += `<tr>
+      <td><span class="archive-num">${a.archive_number}</span></td>
+      <td style="font-weight:600;max-width:180px">${esc(a.title)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#666">${esc(a.description||'')}</td>
+      <td style="font-size:11px;color:#888">${srcInfo}</td>
+      <td><a class="url-link" href="${url}" target="_blank">/archive/${a.archive_number}</a></td>
+      <td><span class="${a.is_public ? 'badge-public' : 'badge-private'}">${a.is_public ? '公開' : '非公開'}</span></td>
+      <td style="font-size:11px;color:#888;white-space:nowrap">${updated}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary" style="padding:3px 8px;font-size:11px" onclick="openEditModal(${a.id})">編集</button>
+        <button class="btn btn-${a.is_public ? 'warning' : 'success'}" style="padding:3px 8px;font-size:11px"
+          onclick="togglePublic(${a.id}, ${a.is_public ? 0 : 1})">${a.is_public ? '非公開に' : '公開に'}</button>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  $('#archive-table-wrap').html(html);
+}
+
+// ===== モーダル開閉 =====
+function openCreateModal() {
+  resetModal();
+  $('#modal-title').text('アーカイブ作成');
+  $('#btn-modal-delete').hide();
+  $('#modal, #modal-overlay').show();
+}
+
+function openEditModal(archiveId) {
+  resetModal();
+  $('#modal-title').text('アーカイブ編集');
+  $('#btn-modal-delete').show();
+  $('#modal, #modal-overlay').show();
+
+  $.get('/table_master/archive/get', { id: archiveId }, function(data) {
+    if (!data.success) { toast(data.error, 'err'); return; }
+    const a = data.archive;
+    $('#modal-archive-id').val(a.id).data('source_view_id', a.source_view_id);
+    $('#modal-title-field').val(a.title);
+    $('#modal-description').val(a.description || '');
+    $('#modal-is-public').val(a.is_public ? '1' : '0');
+    $('#modal-query-db').val(a.source_database || '');
+    $('#modal-query-text').val(a.source_query || '');
+    $('#html-textarea').val(a.html_content || '');
+    $('#modal-public-url').html(
+      `<a href="${BASE_URL}${a.archive_number}" target="_blank" style="color:#2e6da4">
+        ${BASE_URL}${a.archive_number}</a>`
+    );
+  });
+}
+
+function closeModal() {
+  $('#modal, #modal-overlay').hide();
+}
+
+function resetModal() {
+  $('#modal-archive-id').val('').data('source_view_id', null);
+  $('#modal-title-field').val('');
+  $('#modal-description').val('');
+  $('#modal-is-public').val('1');
+  $('#modal-query-db').val('');
+  $('#modal-query-text').val('');
+  $('#modal-preview-status').html('');
+  $('#modal-preview-wrap').html('<div class="loading" id="preview-placeholder">クエリを実行するとここに結果が表示されます</div>');
+  $('#html-textarea').val('');
+  $('#html-preview-frame').hide();
+  $('#modal-public-url').text('（新規保存後に発行されます）');
+  queryResult = null;
+  $('#btn-apply-html').prop('disabled', true);
+  // タブをリセット
+  $('.tab').removeClass('active').first().addClass('active');
+  $('.tab-content').hide(); $('#tab-query').show();
+  showingHtmlPreview = false;
+}
+
+// ===== クエリ実行 =====
+function runModalQuery() {
+  const db = $('#modal-query-db').val();
+  const q  = $('#modal-query-text').val().trim();
+  if (!db || !q) { toast('DBとクエリを入力してください', 'err'); return; }
+
+  $('#modal-preview-status').html('<span style="color:#888">実行中...</span>');
+  $('#modal-preview-wrap').html('<div class="loading">...</div>');
+  queryResult = null;
+  $('#btn-apply-html').prop('disabled', true);
+
+  $.ajax({
+    url: '/table_master/archive/rerun',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ source_database: db, source_query: q }),
+    success: function(res) {
+      if (!res.success) {
+        $('#modal-preview-status').html(`<span class="status-err">エラー: ${esc(res.error)}</span>`);
+        $('#modal-preview-wrap').html('');
+        return;
+      }
+      queryResult = res;
+      $('#modal-preview-status').html(
+        `<span class="status-ok">✓ ${res.row_count}行</span>  実行: ${res.execution_time}秒`
+      );
+      renderModalTable(res.columns, res.rows);
+      $('#btn-apply-html').prop('disabled', false);
+    },
+    error: function(xhr) {
+      $('#modal-preview-status').html(`<span class="status-err">${esc(xhr.responseJSON?.error || 'エラー')}</span>`);
+    }
+  });
+}
+
+function renderModalTable(columns, rows) {
+  let html = '<table id="modal-preview-table"><thead><tr>';
+  columns.forEach(c => { html += `<th>${esc(c)}</th>`; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
+    columns.forEach(c => { html += `<td>${esc(row[c] ?? '')}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  $('#modal-preview-wrap').html(html);
+}
+
+// ===== クエリ結果 → HTML変換 =====
+function applyQueryToHtml() {
+  if (!queryResult) return;
+  const { columns, rows } = queryResult;
+
+  let html = '<table border="1" style="border-collapse:collapse;width:100%;font-size:13px">\n';
+  html += '  <thead>\n    <tr>\n';
+  columns.forEach(c => {
+    html += `      <th style="background:#2e6da4;color:#fff;padding:6px 10px">${esc(c)}</th>\n`;
+  });
+  html += '    </tr>\n  </thead>\n  <tbody>\n';
+  rows.forEach((row, i) => {
+    const bg = i % 2 === 0 ? '#fff' : '#f5f9ff';
+    html += `    <tr style="background:${bg}">\n`;
+    columns.forEach(c => {
+      html += `      <td style="padding:5px 10px;border:1px solid #ddd">${esc(row[c] ?? '')}</td>\n`;
+    });
+    html += '    </tr>\n';
+  });
+  html += '  </tbody>\n</table>';
+
+  $('#html-textarea').val(html);
+  // タブを②HTMLへ切替
+  $('.tab[data-tab="html"]').click();
+  updateHtmlPreview();
+}
+
+// ===== ビュー選択 =====
+function loadFromView() {
+  if (!allViews.length) { toast('ビューが登録されていません', 'err'); return; }
+  const $list = $('#view-select-list').empty();
+  allViews.forEach(v => {
+    $list.append(`
+      <div style="padding:8px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer"
+           class="view-select-item"
+           data-db="${esc(v.source_database)}" data-q="${escAttr(v.query_text)}" data-id="${v.id}">
+        <div style="font-weight:600;font-size:13px">${esc(v.display_name)}</div>
+        <div style="font-size:11px;color:#888">${esc(v.source_database)} / ${esc(v.view_name)}</div>
+        <div style="font-size:11px;color:#666">${esc(v.description||'')}</div>
+      </div>
+    `);
+  });
+  $list.on('click', '.view-select-item', function() {
+    const db = $(this).data('db');
+    const q  = $(this).data('q');
+    const id = $(this).data('id');
+    $('#modal-query-db').val(db);
+    $('#modal-query-text').val(q);
+    $('#modal-archive-id').data('source_view_id', id);
+    if (!$('#modal-title-field').val()) {
+      const v = allViews.find(x => x.id == id);
+      if (v) $('#modal-title-field').val(v.display_name);
+    }
+    $('#view-select-modal, #view-select-overlay').hide();
+    runModalQuery();
+  });
+  $('#view-select-modal, #view-select-overlay').show();
+}
+
+// ===== HTML編集 =====
+function schedulePreview() {
+  if (!showingHtmlPreview) return;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(updateHtmlPreview, 400);
+}
+function updateHtmlPreview() {
+  const html = $('#html-textarea').val();
+  const $f = $('#html-preview-frame');
+  $f.show()[0].srcdoc = `<html><body style="margin:8px;font-family:sans-serif;font-size:13px">${html}</body></html>`;
+}
+function toggleHtmlPreview() {
+  showingHtmlPreview = !showingHtmlPreview;
+  if (showingHtmlPreview) updateHtmlPreview();
+  else $('#html-preview-frame').hide();
+}
+function beautifyHtml() {
+  // 簡易インデント整形
+  let html = $('#html-textarea').val();
+  html = html.replace(/>\s*</g, '>\n<');
+  const lines = html.split('\n');
+  let indent = 0, result = '';
+  const selfClose = /^<(br|hr|img|input|meta|link)/i;
+  const close     = /^<\//;
+  const open      = /^<[^/!][^>]*[^/]>$/;
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    if (close.test(line)) indent = Math.max(0, indent - 2);
+    result += ' '.repeat(indent) + line + '\n';
+    if (open.test(line) && !selfClose.test(line)) indent += 2;
+  });
+  $('#html-textarea').val(result.trim());
+}
+
+// ===== 保存 =====
+function saveArchive() {
+  const archiveId    = $('#modal-archive-id').val() || null;
+  const sourceViewId = $('#modal-archive-id').data('source_view_id') || null;
+  const title        = $('#modal-title-field').val().trim();
+  const description  = $('#modal-description').val().trim();
+  const isPublic     = $('#modal-is-public').val() === '1';
+  const db           = $('#modal-query-db').val();
+  const query        = $('#modal-query-text').val().trim();
+  const htmlContent  = $('#html-textarea').val().trim();
+
+  if (!title)       { toast('タイトルを入力してください（③メタ情報タブ）', 'err'); return; }
+  if (!htmlContent) { toast('HTMLコンテンツが空です（②HTML編集タブ）', 'err'); return; }
+
+  $.ajax({
+    url: '/table_master/archive/save',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({
+      id: archiveId, title, description,
+      source_view_id: sourceViewId, source_database: db, source_query: query,
+      html_content: htmlContent, is_public: isPublic
+    }),
+    success: function(res) {
+      if (res.success) {
+        toast(res.message, 'ok');
+        if (!archiveId) {
+          $('#modal-archive-id').val(res.id);
+          $('#modal-public-url').html(
+            `<a href="${BASE_URL}${res.archive_number}" target="_blank" style="color:#2e6da4">
+              ${BASE_URL}${res.archive_number}</a>`
+          );
+        }
+        loadArchives();
+      } else {
+        toast(res.error, 'err');
+      }
+    },
+    error: function(xhr) { toast(xhr.responseJSON?.error || '保存エラー', 'err'); }
+  });
+}
+
+// ===== 削除 =====
+function deleteArchive() {
+  const id = $('#modal-archive-id').val();
+  if (!id) return;
+  if (!confirm('このアーカイブを削除しますか？公開URLも無効になります。')) return;
+  $.ajax({
+    url: '/table_master/archive/delete',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ id }),
+    success: function(res) {
+      if (res.success) { toast(res.message, 'ok'); closeModal(); loadArchives(); }
+      else toast(res.error, 'err');
+    }
+  });
+}
+
+// ===== 公開切替 =====
+function togglePublic(id, newVal) {
+  $.ajax({
+    url: '/table_master/archive/toggle_public',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ id, is_public: newVal }),
+    success: function(res) {
+      if (res.success) { toast(res.message, 'ok'); loadArchives(); }
+      else toast(res.error, 'err');
+    }
+  });
+}
+
+// ===== ユーティリティ =====
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(s) {
+  return String(s ?? '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function toast(msg, type='ok') {
+  $('#toast').attr('class', type).text(msg).fadeIn(200);
+  setTimeout(() => $('#toast').fadeOut(400), 3200);
+}
+</script>
+</body>
+</html>

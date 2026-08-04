@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  FUJIN-P 配布雛形 / Distribution template
+  ------------------------------------------------------------
+  このファイルは雛形です。自サイトで公開する前に、下記の
+  プレースホルダを自組織の情報に置き換えてください。
+  置き換えないまま公開すると、他組織の名称・連絡先を掲示する
+  ことになります。
+
+    {{ORGANIZATION}}       アライアンス運営主体の組織名（例: ○○大学、○○市）
+
+  置き換え漏れは、二重波括弧に囲まれた記号が画面にそのまま残ります。
+  ブラウザで開いて、二重波括弧が残っていないことを確認してください。
+
+  本雛形は FUJIN-P の一部として AGPL v3 のもとで配布されます。
+  文面はそのまま使用せず、自組織の法務確認を経て用いてください。
+  Copyright (C) 2026 Toyoaki Nishida
+  ============================================================
+-->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUJIN-Pソムリエ同意書</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a2e;
+            --paper: #fafaf7;
+            --accent: #2c5f7c;
+            --accent-light: #e8f0f4;
+            --border: #c8c8be;
+            --subtle: #6b6b60;
+            --highlight: #f5f0e0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #e8e6e0 0%, #d8d6d0 100%);
+            font-family: "Noto Sans JP", sans-serif;
+            color: var(--ink);
+            line-height: 1.85;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+        .document {
+            max-width: 780px;
+            margin: 0 auto;
+            background: var(--paper);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+            padding: 3.5rem 3rem;
+            position: relative;
+        }
+        .document::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent), #4a8fa8, var(--accent));
+        }
+        .doc-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--ink);
+        }
+        .doc-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 0.2rem 0.8rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .doc-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.3rem;
+        }
+        .doc-subtitle {
+            font-size: 0.88rem;
+            color: var(--subtle);
+            font-weight: 300;
+        }
+        .body-text {
+            font-size: 0.93rem;
+            margin-bottom: 1.5rem;
+            text-align: justify;
+        }
+        .confirm-list {
+            background: var(--accent-light);
+            border-left: 4px solid var(--accent);
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .confirm-list p {
+            font-size: 0.92rem;
+            margin-bottom: 0.5rem;
+        }
+        .confirm-list .check-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+            margin-bottom: 0.6rem;
+            font-size: 0.92rem;
+        }
+        .confirm-list .check-box {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--accent);
+            margin-top: 0.25rem;
+        }
+        .ref-docs {
+            background: var(--highlight);
+            border: 1px solid #ddd6b8;
+            padding: 1rem 1.3rem;
+            margin-bottom: 2rem;
+            font-size: 0.88rem;
+        }
+        .ref-docs .ref-label {
+            font-weight: 700;
+            font-size: 0.82rem;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+        .ref-docs a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px dotted var(--accent);
+        }
+        .ref-docs a:hover { border-bottom-style: solid; }
+        .signature-area {
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .sig-section {
+            margin-bottom: 2rem;
+        }
+        .sig-section .sig-heading {
+            font-family: "Noto Serif JP", serif;
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--accent);
+        }
+        .sig-field {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 0.8rem;
+            font-size: 0.9rem;
+        }
+        .sig-field .sig-label {
+            width: 160px;
+            flex-shrink: 0;
+            color: var(--subtle);
+            font-size: 0.85rem;
+        }
+        .sig-field .sig-line {
+            flex: 1;
+            border-bottom: 1px solid var(--ink);
+            min-height: 1.5rem;
+        }
+        .doc-footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .doc-footer .note {
+            font-size: 0.8rem;
+            color: var(--subtle);
+            text-align: center;
+        }
+        @media (max-width: 640px) {
+            .document { padding: 2rem 1.5rem; }
+            .doc-title { font-size: 1.25rem; }
+            .sig-field { flex-direction: column; }
+            .sig-field .sig-label { width: auto; margin-bottom: 0.2rem; }
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .document { box-shadow: none; border: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="document">
+
+    <header class="doc-header">
+        <div class="doc-badge">{{ORGANIZATION}}におけるFUJIN-P Alliance</div>
+        <h1 class="doc-title">FUJIN-Pソムリエ同意書</h1>
+        <p class="doc-subtitle">Consent Form for FUJIN-P Sommelier Registration</p>
+    </header>
+
+    <p class="body-text">
+        私は、{{ORGANIZATION}}FUJIN-Pアライアンスの「FUJIN-Pソムリエ」として登録されるにあたり、以下の各事項を確認し、これに同意します。
+    </p>
+
+    <div class="confirm-list">
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>「{{ORGANIZATION}}FUJIN-Pアライアンス運用規程」の全文を読み、その内容を理解しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>「FUJIN-Pサイト利用規約」の内容を理解し、自身のサイトに掲示する義務を承知しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>「プライバシーポリシー」の内容を理解し、ユーザーの個人情報を適切に管理する義務を承知しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>自身のサイト名・URLおよびアライアンスへの所属が公開情報として掲示されることを理解しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>自身のメールアドレスの共有に関するオプトアウトの仕組み（運用規程 第7条）を理解し、下記の選択欄にて共有の可否を選択しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>ソムリエ資格は、運用規程に基づき取り消されることがあることを理解しました。</div>
+        </div>
+        <div class="check-item">
+            <div class="check-box"></div>
+            <div>所定の研修を修了しました。</div>
+        </div>
+    </div>
+
+    <div class="ref-docs">
+        <p class="ref-label">参照文書</p>
+        <p><a href="/static/alliance_regulation.html">{{ORGANIZATION}}FUJIN-Pアライアンス運用規程</a></p>
+        <p><a href="/static/terms_user.html">FUJIN-Pサイト利用規約</a></p>
+        <p><a href="/static/privacy_policy.html">プライバシーポリシー</a></p>
+    </div>
+
+    <div class="signature-area">
+        <div class="sig-section">
+            <p class="sig-heading">同意者（ソムリエ登録者）</p>
+            <div class="sig-field">
+                <span class="sig-label">氏名</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">連絡先メールアドレス</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">管理サイト名</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">管理サイトURL</span>
+                <span class="sig-line"></span>
+            </div>
+            <div style="margin: 1rem 0; padding: 0.8rem 1rem; background: #f5f0e0; border: 1px solid #ddd6b8; font-size: 0.88rem;">
+                <strong>メールアドレス共有の選択（運用規程 第7条）</strong><br>
+                □ 共有に同意する（他サイトにアライアンスソムリエとしてログイン可能）<br>
+                □ 共有しない（オプトアウト。他サイトでの特権ログイン不可）
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">研修修了日</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">同意日</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">署名</span>
+                <span class="sig-line"></span>
+            </div>
+        </div>
+
+        <div class="sig-section">
+            <p class="sig-heading">受理者（アライアンス運営主体）</p>
+            <div class="sig-field">
+                <span class="sig-label">受理者氏名</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">受理日</span>
+                <span class="sig-line"></span>
+            </div>
+            <div class="sig-field">
+                <span class="sig-label">署名</span>
+                <span class="sig-line"></span>
+            </div>
+        </div>
+    </div>
+
+    <footer class="doc-footer">
+        <p class="note">本同意書は、{{ORGANIZATION}}FUJIN-Pアライアンス運用規程 第4条第3項に基づくものです。</p>
+    </footer>
+</div>
+</body>
+</html>

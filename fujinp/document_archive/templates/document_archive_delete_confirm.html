@@ -1,0 +1,122 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{% extends "base.html" %}
+{% import 'document_archive_macros.html' as ui with context %}
+{% block title %}削除確認 - {{ document.title }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 削除確認</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger" role="alert">
+                        <h5><i class="fas fa-warning"></i> 重要な警告</h5>
+                        <p>以下の文書を本当に削除しますか？この操作は取り消せません。</p>
+                    </div>
+
+                    <!-- 文書詳細 -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">削除対象の文書</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <th style="width: 120px;">ID:</th>
+                                    <td>{{ document.id }}</td>
+                                </tr>
+                                <tr>
+                                    <th>タイトル:</th>
+                                    <td><strong>{{ document.title }}</strong></td>
+                                </tr>
+                                <tr>
+                                    <th>作成者:</th>
+                                    <td>{{ document.created_by_name or '不明' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>公開範囲:</th>
+                                    <td>{{ ui.policy_badge(document.access_policy, document.allowed_group_names) }}</td>
+                                </tr>
+                                <tr>
+                                    <th>作成日時:</th>
+                                    <td>{{ document.created_at.strftime('%Y-%m-%d %H:%M:%S') if document.created_at else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>更新日時:</th>
+                                    <td>{{ document.updated_at.strftime('%Y-%m-%d %H:%M:%S') if document.updated_at else 'N/A' }}</td>
+                                </tr>
+                                {% if document.public_description %}
+                                <tr>
+                                    <th>パブリック説明:</th>
+                                    <td>
+                                        <div style="max-height: 100px; overflow-y: auto;">
+                                            {{ document.public_description }}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% if document.owner_memo %}
+                                <tr>
+                                    <th>オーナーメモ:</th>
+                                    <td>
+                                        <div style="max-height: 100px; overflow-y: auto;">
+                                            {{ document.owner_memo }}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% if document.file_path %}
+                                <tr>
+                                    <th>添付ファイル:</th>
+                                    <td>
+                                        <span class="badge bg-dark">{{ document.file_type }}</span>
+                                        <span class="text-danger ms-2">削除するとサーバ上のファイル実体も消えます</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 削除フォーム -->
+                    <form method="POST" action="{{ url_for('document_archive.delete_archive', doc_id=document.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="referrer" value="{{ request.referrer }}">
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="confirmCheck" name="confirmation" value="delete" required>
+                            <label class="form-check-label text-danger" for="confirmCheck">
+                                <strong>上記の文書を完全に削除することを理解し、同意します</strong>
+                            </label>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('document_archive.dashboard') }}" class="btn btn-secondary me-md-2">
+                                <i class="fas fa-times"></i> キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-danger" id="deleteButton" disabled>
+                                <i class="fas fa-trash"></i> 削除実行
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// チェックボックスの状態に応じて削除ボタンを有効/無効化
+document.getElementById('confirmCheck').addEventListener('change', function() {
+    document.getElementById('deleteButton').disabled = !this.checked;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,355 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4" style="max-width: 700px;">
+
+  <h4 class="mb-1">テキストファイルと画像ファイル群に分けてダウンロード</h4>
+  <p class="text-muted mb-3">{{ document.title }}</p>
+
+  <!-- ① 開始前パネル -->
+  <div id="panel-ready">
+    <div class="alert alert-info">
+      画像ファイル <strong>{{ image_count }}</strong> 件をダウンロードしてZIPを作成します。
+    </div>
+    <button id="btn-start" class="btn btn-primary">エクスポート開始</button>
+    <a href="{{ url_for('document_archive.dashboard') }}"
+       class="btn btn-outline-secondary ms-2">キャンセル</a>
+  </div>
+
+  <!-- ② 処理中パネル -->
+  <div id="panel-progress" style="display:none;">
+    <div class="d-flex justify-content-between mb-1">
+      <span id="label-count" class="text-muted small">0 / {{ image_count }}</span>
+      <span id="label-pct"   class="text-muted small">0%</span>
+    </div>
+    <div class="progress mb-3" style="height:8px;">
+      <div id="progress-bar"
+           class="progress-bar progress-bar-striped progress-bar-animated"
+           role="progressbar" style="width:0%"></div>
+    </div>
+    <div id="log-box"
+         style="height:360px; overflow-y:auto; background:#1e1e1e;
+                border-radius:6px; padding:14px;
+                font-family:'Courier New',monospace; font-size:12.5px; line-height:1.6;">
+    </div>
+    <button id="btn-cancel-mid" class="btn btn-outline-danger btn-sm mt-3">
+      中断してキャンセル
+    </button>
+  </div>
+
+  <!-- ③ 完了パネル -->
+  <div id="panel-complete" style="display:none;">
+    <div id="result-alert" class="alert mb-3"></div>
+
+    <!-- 失敗リスト（失敗があるときだけ表示） -->
+    <div id="failed-section" style="display:none;" class="mb-3">
+      <p class="mb-1 fw-bold">失敗した画像：</p>
+      <ul id="failed-list"
+          style="font-size:12px; font-family:monospace; max-height:160px;
+                 overflow-y:auto; background:#fff8f0; border:1px solid #f0c0a0;
+                 border-radius:4px; padding:8px 12px;">
+      </ul>
+      <button id="btn-retry" class="btn btn-warning btn-sm mt-2">
+        ↩ 失敗分だけ再ダウンロード
+      </button>
+    </div>
+
+    <a id="btn-download" href="#" class="btn btn-success">
+      ⬇ ZIPを再ダウンロード
+    </a>
+    <a href="{{ url_for('document_archive.dashboard') }}"
+       class="btn btn-outline-secondary ms-2">ダッシュボードへ</a>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  /* ---- Flask から渡される値 ---- */
+  const TOKEN      = "{{ token }}";
+  const CSRF_TOKEN = "{{ csrf_token() }}";
+  const IMAGE_URLS = [
+    {% for url, fig_num in image_urls %}
+    { url: {{ url | tojson }}, fig_num: {{ fig_num }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const TOTAL = IMAGE_URLS.length;
+
+  const URL_DOWNLOAD_ONE = "{{ url_for('document_archive.export_download_one') }}";
+  const URL_FINALIZE     = "{{ url_for('document_archive.export_finalize', token='TOKEN') }}"
+                             .replace('TOKEN', TOKEN);
+  const URL_CLEANUP      = "{{ url_for('document_archive.export_cleanup', token='TOKEN') }}"
+                             .replace('TOKEN', TOKEN);
+
+  /* ---- DOM ---- */
+  const $ = id => document.getElementById(id);
+
+  /* ---- 状態 ---- */
+  let cancelled    = false;
+  let successCnt   = 0;
+  let failedItems  = [];    // { fig_num, url } の配列
+  let savedBlobUrl = null;
+
+  /* ---- ログ ---- */
+  function log(text, color) {
+    const box  = $('log-box');
+    const line = document.createElement('div');
+    line.style.color     = color || '#ccc';
+    line.style.wordBreak = 'break-all';
+    line.textContent     = text;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ---- プログレスバー ---- */
+  function setProgress(done, total) {
+    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+    $('progress-bar').style.width = pct + '%';
+    $('label-count').textContent  = `${done} / ${total}`;
+    $('label-pct').textContent    = `${pct}%`;
+  }
+
+  /* ---- 1件ダウンロード ---- */
+  async function downloadOne(item) {
+    const res = await fetch(URL_DOWNLOAD_ONE, {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      credentials: 'same-origin',
+      /* P0-1: URLはサーバ側のセッションから解決するため、fig_num のみ送る */
+      body   : JSON.stringify({ token: TOKEN, fig_num: item.fig_num })
+    });
+    return await res.json();
+  }
+
+  /* ---- blobダウンロード ---- */
+  function triggerBlobDownload(blobUrl, filename) {
+    const a    = document.createElement('a');
+    a.href     = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  /* ---- ZIP生成＆ダウンロード ---- */
+  async function finalizeAndDownload() {
+    log('ZIPを生成中...', '#e0e0e0');
+    const resp = await fetch(URL_FINALIZE);
+    if (!resp.ok) throw new Error(`サーバーエラー: ${resp.status}`);
+
+    const blob        = await resp.blob();
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const nameMatch   = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i);
+    const filename    = nameMatch
+                        ? decodeURIComponent(nameMatch[1].replace(/["']/g, ''))
+                        : 'export.zip';
+
+    if (savedBlobUrl) URL.revokeObjectURL(savedBlobUrl);
+    savedBlobUrl = URL.createObjectURL(blob);
+    triggerBlobDownload(savedBlobUrl, filename);
+
+    log(`ZIPダウンロード開始: ${filename}`, '#6fcf97');
+    return filename;
+  }
+
+  /* ---- 完了パネル表示 ---- */
+  function showCompletePanel(filename) {
+    $('panel-progress').style.display = 'none';
+    $('panel-complete').style.display = '';
+
+    const alertEl = $('result-alert');
+    if (failedItems.length === 0) {
+      alertEl.className = 'alert alert-success';
+      alertEl.innerHTML =
+        `<strong>✔ ダウンロード完了</strong><br>`
+        + `画像 <strong>${successCnt}</strong> 件・本文テキスト・READMEをZIPにまとめました。<br>`
+        + `<small class="text-muted">ファイル名: ${filename}</small>`;
+      $('failed-section').style.display = 'none';
+    } else {
+      alertEl.className = 'alert alert-warning';
+      alertEl.innerHTML =
+        `<strong>⚠ ダウンロード完了（一部失敗）</strong><br>`
+        + `成功: <strong>${successCnt}</strong> 件 ／ 失敗: <strong>${failedItems.length}</strong> 件<br>`
+        + `<small class="text-muted">ファイル名: ${filename}</small>`;
+
+      // 失敗リストを表示
+      const ul = $('failed-list');
+      ul.innerHTML = '';
+      failedItems.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = `図${String(item.fig_num).padStart(2,'0')}: ${item.url}`;
+        ul.appendChild(li);
+      });
+      $('failed-section').style.display = '';
+    }
+
+    /* 再ダウンロードボタン */
+    $('btn-download').onclick = e => {
+      e.preventDefault();
+      if (savedBlobUrl) triggerBlobDownload(savedBlobUrl, filename);
+    };
+  }
+
+  /* ---- リスト処理ループ（初回・リトライ共用） ---- */
+  async function runDownloads(items, labelTotal) {
+    for (let i = 0; i < items.length; i++) {
+      if (cancelled) return;
+      const item = items[i];
+
+      log(`Downloading ${item.fig_num} / ${labelTotal} ...`, '#e0e0e0');
+      log(`  ${item.url}`, '#888');
+      setProgress(successCnt + i, labelTotal);
+
+      let result;
+      try {
+        result = await downloadOne(item);
+      } catch (err) {
+        result = { success: false, fig_num: item.fig_num, error: String(err) };
+      }
+
+      if (result.success) {
+        successCnt++;
+        log(`  ✔ Completed (${item.fig_num})`, '#6fcf97');
+      } else {
+        log(`  ✘ Failed    (${item.fig_num})  ${result.error || ''}`, '#eb5757');
+      }
+    }
+  }
+
+  /* ---- キャンセル ---- */
+  async function doCancel() {
+    cancelled = true;
+    log('─── 中断しました ───', '#eb5757');
+    await fetch(URL_CLEANUP, {
+      method : 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+      credentials: 'same-origin'
+    });
+    $('panel-progress').style.display = 'none';
+    $('panel-ready').style.display    = '';
+  }
+  $('btn-cancel-mid').addEventListener('click', doCancel);
+  window.addEventListener('beforeunload', () => {
+    if (cancelled) return;
+    navigator.sendBeacon(URL_CLEANUP);
+  });
+
+  /* ---- 初回エクスポート開始 ---- */
+  $('btn-start').addEventListener('click', async function () {
+    $('panel-ready').style.display    = 'none';
+    $('panel-progress').style.display = '';
+
+    log(`ダウンロード対象: ${TOTAL} 件`, '#7ec8e3');
+    log('', '');
+
+    failedItems = [];
+    successCnt  = 0;
+
+    // 全件ダウンロード試行
+    for (let i = 0; i < IMAGE_URLS.length; i++) {
+      if (cancelled) return;
+      const item = IMAGE_URLS[i];
+
+      log(`Downloading ${item.fig_num} / ${TOTAL} ...`, '#e0e0e0');
+      log(`  ${item.url}`, '#888');
+      setProgress(i, TOTAL);
+
+      let result;
+      try {
+        result = await downloadOne(item);
+      } catch (err) {
+        result = { success: false, fig_num: item.fig_num, error: String(err) };
+      }
+
+      if (result.success) {
+        successCnt++;
+        log(`  ✔ Completed (${item.fig_num})`, '#6fcf97');
+      } else {
+        failedItems.push(item);
+        log(`  ✘ Failed    (${item.fig_num})  ${result.error || ''}`, '#eb5757');
+      }
+    }
+
+    setProgress(TOTAL, TOTAL);
+    log('', '');
+    log(`─── 全件処理完了 ─── 成功: ${successCnt}件  失敗: ${failedItems.length}件`, '#7ec8e3');
+
+    cancelled = true;  // beforeunload クリーンアップを抑制
+
+    try {
+      const filename = await finalizeAndDownload();
+      showCompletePanel(filename);
+    } catch (err) {
+      log(`ZIPの生成に失敗しました: ${err}`, '#eb5757');
+      $('panel-progress').style.display = 'none';
+      $('panel-complete').style.display = '';
+      $('result-alert').className   = 'alert alert-danger';
+      $('result-alert').textContent = `ZIPの生成に失敗しました: ${err}`;
+    }
+  });
+
+  /* ---- リトライ ---- */
+  $('btn-retry').addEventListener('click', async function () {
+    if (failedItems.length === 0) return;
+
+    const retryTargets = [...failedItems];  // コピー
+    failedItems = [];                        // リセット
+
+    $('panel-complete').style.display  = 'none';
+    $('panel-progress').style.display  = '';
+    $('log-box').innerHTML             = '';
+    cancelled = false;
+
+    log(`─── リトライ: ${retryTargets.length} 件 ───`, '#f2c94c');
+    log('', '');
+
+    for (let i = 0; i < retryTargets.length; i++) {
+      if (cancelled) return;
+      const item = retryTargets[i];
+
+      log(`Downloading ${item.fig_num} / ${TOTAL} ...`, '#e0e0e0');
+      log(`  ${item.url}`, '#888');
+      setProgress(successCnt + i, TOTAL);
+
+      let result;
+      try {
+        result = await downloadOne(item);
+      } catch (err) {
+        result = { success: false, fig_num: item.fig_num, error: String(err) };
+      }
+
+      if (result.success) {
+        successCnt++;
+        log(`  ✔ Completed (${item.fig_num})`, '#6fcf97');
+      } else {
+        failedItems.push(item);
+        log(`  ✘ Failed    (${item.fig_num})  ${result.error || ''}`, '#eb5757');
+      }
+    }
+
+    setProgress(TOTAL, TOTAL);
+    log('', '');
+    log(`─── リトライ完了 ─── 成功: ${successCnt}件  失敗: ${failedItems.length}件`, '#f2c94c');
+
+    cancelled = true;
+
+    try {
+      const filename = await finalizeAndDownload();
+      showCompletePanel(filename);
+    } catch (err) {
+      log(`ZIPの生成に失敗しました: ${err}`, '#eb5757');
+      $('panel-complete').style.display = '';
+      $('result-alert').className   = 'alert alert-danger';
+      $('result-alert').textContent = `ZIPの生成に失敗しました: ${err}`;
+    }
+  });
+
+}());
+</script>
+{% endblock %}

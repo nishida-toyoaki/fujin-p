@@ -1,0 +1,465 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>太陽系3Dシミュレータ - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* ---------- リセット・全体 ---------- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", sans-serif;
+            background: #05050d;
+            color: #e5e7eb;
+        }
+
+        /* 3D描画キャンバス（全画面） */
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+        }
+
+        /* ---------- ヘッダー ---------- */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 16px;
+            background: rgba(10, 10, 25, 0.75);
+            backdrop-filter: blur(6px);
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #f3f4f6;
+        }
+
+        .back-btn {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(99, 102, 241, 0.85);
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .back-btn:hover { background: rgba(79, 70, 229, 0.95); }
+
+        /* ---------- コントロールパネル ---------- */
+        .control-panel {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            padding: 14px 16px;
+            background: rgba(10, 10, 25, 0.78);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            border-radius: 10px;
+            z-index: 10;
+            min-width: 250px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .control-row:last-child { margin-bottom: 0; }
+
+        .ctrl-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(99, 102, 241, 0.6);
+            background: rgba(99, 102, 241, 0.25);
+            color: #e5e7eb;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .ctrl-btn:hover { background: rgba(99, 102, 241, 0.5); }
+
+        .ctrl-btn.wide { min-width: 92px; }
+
+        .readout {
+            font-size: 0.82rem;
+            color: #c7d2fe;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hint {
+            font-size: 0.72rem;
+            color: #9ca3af;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 600px) {
+            .control-panel { right: 16px; min-width: 0; }
+            .hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="header">
+        <a href="{{ url_for('solar_gl.return_to_fujin') }}" class="back-btn">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <h1>🪐 太陽系3Dシミュレータ</h1>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-row">
+            <button id="btn-pause" class="ctrl-btn wide">⏸ 一時停止</button>
+            <button id="btn-slower" class="ctrl-btn" title="時間を遅く（↓）">◀◀ 遅く</button>
+            <button id="btn-faster" class="ctrl-btn" title="時間を速く（↑）">速く ▶▶</button>
+        </div>
+        <div class="control-row">
+            <span class="readout">速さ: <span id="speed-value">0.200</span> 年/秒</span>
+            <span class="readout">経過: <span id="elapsed-value">0.00</span> 年</span>
+        </div>
+        <div class="control-row">
+            <button id="btn-reset" class="ctrl-btn">視点リセット</button>
+        </div>
+        <div class="hint">
+            マウスドラッグ: 視点回転 ／ ホイール: ズーム<br>
+            スペース: 一時停止・再開 ／ ↑↓: 時間の速さ変更
+        </div>
+    </div>
+
+    <script>
+    // =====================================================================
+    // 太陽系3Dシミュレータ（Three.js / WebGL）
+    // 元のデスクトップ版（glfw + PyOpenGL）と同じパラメータ・操作性を再現
+    // =====================================================================
+
+    // ---------- 惑星データ（描画上の縮尺は元実装と同一） ----------
+    // name: 名前, orbitRadius: 公転半径, radius: 惑星半径,
+    // period: 公転周期（地球=1）, color: 色, ring: 環の有無
+    const PLANETS = [
+        { name: 'Mercury', orbitRadius: 4.0,  radius: 0.30, period: 0.24,  color: 0xa6a6a6, ring: false },
+        { name: 'Venus',   orbitRadius: 5.6,  radius: 0.55, period: 0.62,  color: 0xe6bf73, ring: false },
+        { name: 'Earth',   orbitRadius: 7.2,  radius: 0.58, period: 1.00,  color: 0x4080f2, ring: false },
+        { name: 'Mars',    orbitRadius: 9.0,  radius: 0.42, period: 1.88,  color: 0xd95933, ring: false },
+        { name: 'Jupiter', orbitRadius: 13.0, radius: 1.30, period: 11.86, color: 0xcca673, ring: false },
+        { name: 'Saturn',  orbitRadius: 17.5, radius: 1.10, period: 29.46, color: 0xd9bf8c, ring: true  },
+        { name: 'Uranus',  orbitRadius: 21.0, radius: 0.85, period: 84.01, color: 0x8cccd9, ring: false },
+        { name: 'Neptune', orbitRadius: 24.5, radius: 0.82, period: 164.8, color: 0x4d73e6, ring: false }
+    ];
+
+    // 太陽・月のパラメータ
+    const SUN_RADIUS = 2.2;
+    const SUN_COLOR = 0xffd933;
+    const MOON_ORBIT_RADIUS = 1.1;   // 地球からの公転半径
+    const MOON_RADIUS = 0.16;
+    const MOON_PERIOD = 0.0748;      // 公転周期（地球年）
+    const MOON_COLOR = 0xbfbfb8;
+
+    // ---------- シミュレーション状態 ----------
+    const sim = {
+        paused: false,
+        time: 0.0,        // シミュレーション上の経過時間（地球年）
+        timeScale: 0.2    // 1秒あたりに進む地球年
+    };
+
+    // ---------- カメラ状態（yaw/pitch/distance 方式・元実装と同じ） ----------
+    const cam = {
+        yaw: 0.6,
+        pitch: 0.5,
+        distance: 45.0,
+        dragging: false,
+        lastX: 0,
+        lastY: 0
+    };
+
+    // ---------- Three.js 初期化 ----------
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05050d);
+
+    const camera = new THREE.PerspectiveCamera(
+        45, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    // ---------- 照明（太陽を光源とする） ----------
+    const sunLight = new THREE.PointLight(0xffffff, 1.0, 0, 0);  // 減衰なし
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.12));           // 環境光（弱め）
+
+    // ---------- 太陽（自ら光るので照明の影響を受けないマテリアル） ----------
+    const sun = new THREE.Mesh(
+        new THREE.SphereGeometry(SUN_RADIUS, 32, 24),
+        new THREE.MeshBasicMaterial({ color: SUN_COLOR })
+    );
+    scene.add(sun);
+
+    // ---------- 公転軌道（薄い灰色の円） ----------
+    function makeOrbitLine(radius, segments) {
+        segments = segments || 96;
+        const pts = [];
+        for (let i = 0; i < segments; i++) {
+            const a = 2 * Math.PI * i / segments;
+            pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+        }
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineBasicMaterial({ color: 0x40404d });
+        return new THREE.LineLoop(geo, mat);
+    }
+
+    // ---------- 惑星メッシュの生成 ----------
+    const planetMeshes = [];
+    let earthMesh = null;
+
+    PLANETS.forEach(function(p) {
+        scene.add(makeOrbitLine(p.orbitRadius));
+
+        const mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(p.radius, 24, 24),
+            new THREE.MeshLambertMaterial({ color: p.color })
+        );
+        scene.add(mesh);
+        planetMeshes.push({ data: p, mesh: mesh });
+
+        // 土星の環（内径 1.4R・外径 2.3R、元実装と同じ比率）
+        if (p.ring) {
+            const ringGeo = new THREE.RingGeometry(p.radius * 1.4, p.radius * 2.3, 64);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xbfad80,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.85
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;  // 公転面に合わせて水平に
+            mesh.add(ring);                  // 惑星に追従させる
+        }
+
+        if (p.name === 'Earth') earthMesh = mesh;
+    });
+
+    // ---------- 月（地球に追従して公転） ----------
+    const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(MOON_RADIUS, 16, 16),
+        new THREE.MeshLambertMaterial({ color: MOON_COLOR })
+    );
+    earthMesh.add(moon);  // 地球の座標系の中で公転させる
+
+    // ---------- 背景の星（雰囲気づけの小さな点） ----------
+    (function makeStars() {
+        const starCount = 800;
+        const positions = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            // 半径 200〜400 の球殻上にランダム配置
+            const r = 200 + Math.random() * 200;
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos(2 * Math.random() - 1);
+            positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = r * Math.cos(phi);
+            positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({ color: 0x8888aa, size: 0.7, sizeAttenuation: true });
+        scene.add(new THREE.Points(geo, mat));
+    })();
+
+    // ---------- カメラ位置の更新 ----------
+    function updateCamera() {
+        const cp = Math.cos(cam.pitch);
+        camera.position.set(
+            cam.distance * cp * Math.sin(cam.yaw),
+            cam.distance * Math.sin(cam.pitch),
+            cam.distance * cp * Math.cos(cam.yaw)
+        );
+        camera.lookAt(0, 0, 0);
+    }
+
+    // ---------- マウス・タッチ操作 ----------
+    const el = renderer.domElement;
+
+    el.addEventListener('mousedown', function(e) {
+        if (e.button === 0) {
+            cam.dragging = true;
+            cam.lastX = e.clientX;
+            cam.lastY = e.clientY;
+        }
+    });
+
+    window.addEventListener('mouseup', function() { cam.dragging = false; });
+
+    window.addEventListener('mousemove', function(e) {
+        if (!cam.dragging) return;
+        rotateBy(e.clientX - cam.lastX, e.clientY - cam.lastY);
+        cam.lastX = e.clientX;
+        cam.lastY = e.clientY;
+    });
+
+    el.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        // ホイールでズーム（近づく／離れる）
+        const steps = -e.deltaY / 100;
+        cam.distance *= Math.pow(0.9, steps);
+        cam.distance = Math.max(6.0, Math.min(150.0, cam.distance));
+    }, { passive: false });
+
+    // タッチ（1本指ドラッグで回転・ピンチでズーム）
+    let lastPinch = 0;
+    el.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            cam.dragging = true;
+            cam.lastX = e.touches[0].clientX;
+            cam.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            cam.dragging = false;
+            lastPinch = pinchDist(e);
+        }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 1 && cam.dragging) {
+            rotateBy(e.touches[0].clientX - cam.lastX, e.touches[0].clientY - cam.lastY);
+            cam.lastX = e.touches[0].clientX;
+            cam.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            const d = pinchDist(e);
+            if (lastPinch > 0) {
+                cam.distance *= lastPinch / d;
+                cam.distance = Math.max(6.0, Math.min(150.0, cam.distance));
+            }
+            lastPinch = d;
+        }
+        e.preventDefault();
+    }, { passive: false });
+
+    el.addEventListener('touchend', function() { cam.dragging = false; lastPinch = 0; });
+
+    function pinchDist(e) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function rotateBy(dx, dy) {
+        cam.yaw += dx * 0.01;
+        cam.pitch += dy * 0.01;
+        // 真上・真下を越えないよう制限
+        cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch));
+    }
+
+    // ---------- キーボード操作 ----------
+    window.addEventListener('keydown', function(e) {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            togglePause();
+        } else if (e.code === 'ArrowUp') {
+            e.preventDefault();
+            changeSpeed(1.25);
+        } else if (e.code === 'ArrowDown') {
+            e.preventDefault();
+            changeSpeed(1 / 1.25);
+        }
+    });
+
+    // ---------- UI 操作 ----------
+    function togglePause() {
+        sim.paused = !sim.paused;
+        $('#btn-pause').text(sim.paused ? '▶ 再開' : '⏸ 一時停止');
+    }
+
+    function changeSpeed(factor) {
+        sim.timeScale *= factor;
+        updateReadout();
+    }
+
+    function updateReadout() {
+        $('#speed-value').text(sim.timeScale.toFixed(3));
+        $('#elapsed-value').text(sim.time.toFixed(2));
+    }
+
+    $('#btn-pause').on('click', togglePause);
+    $('#btn-faster').on('click', function() { changeSpeed(1.25); });
+    $('#btn-slower').on('click', function() { changeSpeed(1 / 1.25); });
+    $('#btn-reset').on('click', function() {
+        cam.yaw = 0.6;
+        cam.pitch = 0.5;
+        cam.distance = 45.0;
+    });
+
+    // ---------- ウィンドウリサイズ対応 ----------
+    window.addEventListener('resize', function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ---------- メインループ ----------
+    let lastFrame = performance.now();
+
+    function animate(now) {
+        requestAnimationFrame(animate);
+
+        const dt = Math.min((now - lastFrame) / 1000, 0.1);  // 秒（タブ復帰時の飛びを抑制）
+        lastFrame = now;
+
+        // 時間を進める（一時停止中は進めない）
+        if (!sim.paused) {
+            sim.time += dt * sim.timeScale;
+        }
+
+        // 惑星の公転（周期が短いほど速く回る）
+        planetMeshes.forEach(function(pm) {
+            const angle = 2 * Math.PI * (sim.time / pm.data.period);
+            pm.mesh.position.set(
+                Math.cos(angle) * pm.data.orbitRadius,
+                0,
+                Math.sin(angle) * pm.data.orbitRadius
+            );
+        });
+
+        // 月の公転（地球ローカル座標系）
+        const moonAngle = 2 * Math.PI * (sim.time / MOON_PERIOD);
+        moon.position.set(
+            Math.cos(moonAngle) * MOON_ORBIT_RADIUS,
+            0,
+            Math.sin(moonAngle) * MOON_ORBIT_RADIUS
+        );
+
+        updateCamera();
+        updateReadout();
+        renderer.render(scene, camera);
+    }
+
+    updateCamera();
+    updateReadout();
+    requestAnimationFrame(animate);
+    </script>
+</body>
+</html>

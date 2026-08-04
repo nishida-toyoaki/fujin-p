@@ -1,0 +1,35 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{#
+  文書アーカイブ共通マクロ
+
+  P1-3: 公開範囲バッジをダッシュボード・詳細・検索・削除確認で共用する。
+        以前は各テンプレートに if 文が散らばっており、ポリシー追加時に
+        直し漏れが起きやすい状態だった。
+#}
+
+{% macro policy_badge(policy, group_names=None, width_class='') %}
+  {%- if policy == 'public' -%}
+    <span class="badge bg-success {{ width_class }}"><i class="fas fa-globe me-1"></i>一般公開</span>
+  {%- elif policy == 'domestic' -%}
+    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i>学内公開</span>
+  {%- elif policy == 'private' -%}
+    <span class="badge bg-secondary {{ width_class }}"><i class="fas fa-lock me-1"></i>非公開</span>
+  {%- elif policy == 'group' -%}
+    <span class="badge bg-info text-dark {{ width_class }}"><i class="fas fa-users me-1"></i>グループ</span>
+  {%- elif policy == 'domestic_group' -%}
+    <span class="badge bg-primary {{ width_class }}"><i class="fas fa-building me-1"></i><i class="fas fa-plus mx-1" style="font-size:0.6rem;"></i><i class="fas fa-users me-1"></i>学内＋グループ</span>
+  {%- else -%}
+    <span class="badge bg-light text-dark border {{ width_class }}">不明</span>
+  {%- endif -%}
+  {%- if group_names -%}
+    <div class="mt-1 text-muted fst-italic truncate-text" style="font-size: 0.7rem;">
+      {{ group_names|join(', ') }}
+    </div>
+  {%- endif -%}
+{% endmacro %}

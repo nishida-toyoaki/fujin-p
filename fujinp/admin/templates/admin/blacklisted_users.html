@@ -1,0 +1,162 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ブラックリストユーザー - FUJIN-P 管理画面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #5a6268; }
+        .content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-remove {
+            background: #28a745;
+            color: white;
+        }
+        .btn-remove:hover { background: #218838; }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .badge-blacklisted {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>ブラックリストユーザー</h1>
+                <p style="color: #666;">登録を拒否されたユーザーの管理</p>
+            </div>
+            <a href="{{ url_for('admin.dashboard') }}" class="back-btn">ダッシュボードに戻る</a>
+        </div>
+
+        <div class="content">
+            <div class="warning-box">
+                <strong>注意:</strong> ブラックリストに登録されたメールアドレスは、
+                登録申請時に自動的に却下されます。
+            </div>
+
+            {% if blacklisted %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>メールアドレス</th>
+                        <th>氏名</th>
+                        <th>所属</th>
+                        <th>登録日時</th>
+                        <th>処理者</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in blacklisted %}
+                    <tr>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.full_name }}</td>
+                        <td>{{ user.affiliation or '－' }}</td>
+                        <td>{{ user.processed_at }}</td>
+                        <td>{{ user.processor_name or '－' }}</td>
+                        <td>
+                            <form action="{{ url_for('admin.remove_from_blacklist', request_id=user.id) }}" 
+                                  method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-remove" 
+                                        onclick="return confirm('{{ user.email }}をブラックリストから解除しますか？')">
+                                    解除
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">
+                <p>ブラックリストに登録されているユーザーはいません</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

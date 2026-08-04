@@ -1,0 +1,673 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Saver - バックアップ & リストア</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+       font-size: 13px; background: #f0f2f5; color: #333; }
+
+/* ===== ヘッダー ===== */
+#header { background: #1a3a5c; color: #fff; padding: 12px 20px;
+          display: flex; align-items: center; gap: 12px; }
+#header h1 { font-size: 17px; font-weight: 600; }
+#header .sub { font-size: 11px; color: #aed6f1; }
+#header .nav-links { margin-left: auto; }
+#header a { color: #aed6f1; text-decoration: none; font-size: 12px; padding: 4px 8px;
+            border: 1px solid #2e6da4; border-radius: 3px; }
+#header a:hover { background: #2e6da4; }
+#header a.btn-return {
+    background: #ef4444; color: #fff; font-weight: 800;
+    border: none; border-radius: 20px; padding: 6px 14px;
+    font-size: 13px; white-space: nowrap;
+}
+#header a.btn-return:hover { background: #dc2626; }
+
+.container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+
+/* ===== タブ ===== */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #2e6da4; }
+.tab { padding: 8px 20px; cursor: pointer; font-size: 13px; font-weight: 600;
+       color: #888; border: 1px solid transparent; border-bottom: none;
+       border-radius: 4px 4px 0 0; }
+.tab.active { background: #fff; color: #1a3a5c; border-color: #ddd;
+              border-bottom: 2px solid #fff; margin-bottom: -2px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ===== カード ===== */
+.card { background: #fff; border: 1px solid #e0e6ed; border-radius: 6px;
+        padding: 18px 20px; margin-bottom: 16px; }
+.card h2 { font-size: 14px; color: #1a3a5c; margin-bottom: 4px; }
+.card .hint { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.6; }
+
+/* ===== DB一覧チェックリスト ===== */
+.db-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+          border: 1px solid #eee; border-radius: 4px; margin-bottom: 6px; }
+.db-row:hover { background: #f7fafd; }
+.db-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
+.db-row .db-name { font-weight: 600; color: #1a3a5c; }
+.db-row .db-meta { font-size: 11px; color: #999; }
+.db-row .badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; }
+.badge-ok  { background: #e8f5e9; color: #27ae60; }
+.badge-err { background: #fdecea; color: #e74c3c; }
+
+/* ===== ボタン ===== */
+.btn { padding: 7px 16px; border: none; border-radius: 4px; cursor: pointer;
+       font-size: 13px; font-weight: 600; transition: opacity .15s; }
+.btn:hover { opacity: .88; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: #2e6da4; color: #fff; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-danger  { background: #e74c3c; color: #fff; }
+.btn-secondary { background: #7f8c8d; color: #fff; }
+.btn-mini { padding: 2px 8px; font-size: 11px; font-weight: 600;
+            background: #eef3f8; color: #2e6da4; border: 1px solid #cfe0ef;
+            border-radius: 3px; cursor: pointer; }
+
+/* ===== 結果表示 ===== */
+.result-box { margin-top: 14px; font-size: 12px; }
+.result-box .ok  { color: #27ae60; font-weight: 600; }
+.result-box .err { color: #e74c3c; font-weight: 600; }
+.db-meta { font-size: 11px; color: #999; }
+.summary-table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 8px; }
+.summary-table th { background: #2e6da4; color: #fff; padding: 5px 10px; text-align: left; }
+.summary-table td { padding: 4px 10px; border: 1px solid #e6e6e6; }
+.summary-table tr:nth-child(even) td { background: #f7fafd; }
+.bar-outer { background:#e6eef6; border-radius:4px; height:10px; overflow:hidden; margin-bottom:10px; }
+.bar-inner { background:#27ae60; height:100%; transition: width .2s; }
+
+.download-link { display: inline-block; margin-top: 12px; padding: 9px 18px;
+                 background: #1a3a5c; color: #fff; text-decoration: none;
+                 border-radius: 4px; font-weight: 600; }
+.download-link:hover { background: #2e6da4; }
+
+/* ===== リストア: ファイル入力 ===== */
+.file-drop { border: 2px dashed #b8c8da; border-radius: 6px; padding: 22px;
+             text-align: center; color: #888; cursor: pointer; background: #fafcff;
+             display: block; }
+.file-drop:hover { border-color: #2e6da4; background: #f2f8ff; }
+.file-drop input { display: none; }
+
+/* ===== リストア: 解析レポート ===== */
+.restore-db { border: 1px solid #e0e6ed; border-radius: 6px; margin-bottom: 12px; }
+.restore-db-head { background: #f4f7fa; padding: 8px 12px; display: flex;
+                   align-items: center; gap: 10px; border-bottom: 1px solid #e0e6ed; }
+.restore-db-head .name { font-weight: 700; color: #1a3a5c; }
+.restore-db-head .stat { font-size: 11px; color: #888; }
+.restore-db-head .spacer { margin-left: auto; display: flex; gap: 6px; }
+.restore-db-body { padding: 6px 12px; max-height: 240px; overflow-y: auto; }
+.tbl-line { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+            font-size: 12px; border-bottom: 1px solid #f4f4f4; }
+.tag-overwrite { color: #e74c3c; font-weight: 600; font-size: 11px; }
+.tag-new { color: #27ae60; font-weight: 600; font-size: 11px; }
+.tag-blocked { color: #999; font-size: 11px; }
+.tag-invalid { color: #e67e22; font-weight: 600; font-size: 11px; }
+
+.warn-box { background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px;
+            padding: 14px 16px; margin: 14px 0; font-size: 13px; color: #8a6d00;
+            line-height: 1.7; }
+.warn-box strong { color: #e74c3c; }
+
+/* ===== 履歴 ===== */
+.audit-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.audit-table th { background: #2e6da4; color: #fff; padding: 5px 10px; text-align: left; }
+.audit-table td { padding: 4px 10px; border: 1px solid #e6e6e6; vertical-align: top; }
+.audit-table tr:nth-child(even) td { background: #f7fafd; }
+.audit-detail { font-family: monospace; font-size: 11px; color: #666;
+                white-space: pre-wrap; word-break: break-all; }
+.act-backup   { color: #2e6da4; font-weight: 700; }
+.act-restore  { color: #e74c3c; font-weight: 700; }
+.act-clear_all { color: #7f8c8d; font-weight: 700; }
+
+/* ===== トースト ===== */
+#toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+         border-radius: 4px; color: #fff; font-size: 13px; z-index: 9999;
+         display: none; max-width: 340px; }
+#toast.ok  { background: #27ae60; }
+#toast.err { background: #e74c3c; }
+
+.loading { color: #999; font-style: italic; padding: 14px; text-align: center; }
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid #ccc;
+           border-top-color:#2e6da4; border-radius:50%; animation: spin .8s linear infinite;
+           vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>💾 SQL Saver</h1>
+  <span class="sub">プラットフォーム DB バックアップ & リストア</span>
+    <div class="nav-links">
+        <a href="{{ url_for('sql_saver.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+</div>
+
+<div class="container">
+
+  <div class="tabs">
+    <div class="tab active" data-tab="backup" onclick="switchTab('backup')">📦 バックアップ</div>
+    <div class="tab" data-tab="restore" onclick="switchTab('restore')">♻️ リストア</div>
+    <div class="tab" data-tab="audit" onclick="switchTab('audit')">🧾 履歴</div>
+  </div>
+
+  <!-- ============ バックアップ ============ -->
+  <div class="tab-panel active" id="panel-backup">
+    <div class="card">
+      <h2>対象データベースを選択</h2>
+      <div class="hint">
+        選択したデータベースの全テーブルを「CREATE文 + 全行データ」を含む JSON として書き出し、
+        1つの zip にまとめてダウンロードします。zip は手元のPCに保存してください。
+        <strong>zip には users テーブル（メールアドレス・パスワードハッシュ）も含まれます。</strong>
+      </div>
+      <div id="backup-db-list"><div class="loading"><span class="spinner"></span> DB一覧を読み込み中...</div></div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-success" id="btn-backup" onclick="runBackup()">📦 バックアップを作成</button>
+      </div>
+      <div class="result-box" id="backup-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>サーバ上の作業ファイルを削除</h2>
+      <div class="hint">
+        zip を手元のPCにダウンロードして確認したら、こちらでサーバ上の作業ファイルを
+        全て削除できます（<strong>ダウンロード済みの zip も含めて全消去</strong>）。
+        情報を残さないため、確認できしだい実行してください。
+      </div>
+      <button class="btn btn-danger" id="btn-clear" onclick="clearAll(false)">🧹 作業ファイルを全て削除</button>
+      <div class="result-box" id="clear-result"></div>
+    </div>
+  </div>
+
+  <!-- ============ リストア ============ -->
+  <div class="tab-panel" id="panel-restore">
+    <div class="card">
+      <h2>バックアップ zip をアップロード</h2>
+      <div class="hint">
+        手元の zip をアップロードすると中身を解析します。復元は<strong>完全置換</strong>
+        （該当テーブルを削除してから作り直し）です。実行前に上書き対象を一括確認します。
+      </div>
+      <label class="file-drop" id="file-drop">
+        <input type="file" id="restore-file" accept=".zip" onchange="onFilePicked(this)">
+        <div id="file-drop-text">📁 クリックして zip ファイルを選択</div>
+      </label>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="btn-inspect" onclick="inspectRestore()" disabled>🔍 中身を解析</button>
+      </div>
+    </div>
+
+    <div class="card" id="restore-report-card" style="display:none;">
+      <h2>復元内容の確認</h2>
+      <div class="hint">
+        復元したいデータベースとテーブルにチェックを入れてください。
+        <span class="tag-overwrite">赤=上書き(既存削除)</span> /
+        <span class="tag-new">緑=新規作成</span> /
+        <span class="tag-blocked">灰=対象外DB</span> /
+        <span class="tag-invalid">橙=名前が不正（復元不可）</span>
+      </div>
+      <div id="restore-report"></div>
+      <div class="warn-box" id="restore-warn"></div>
+      <button class="btn btn-danger" id="btn-restore" onclick="executeRestore()">♻️ 復元を実行（完全置換）</button>
+      <button class="btn btn-secondary" id="btn-restore-cancel" onclick="cancelRestore()">キャンセル</button>
+      <div class="result-box" id="restore-result"></div>
+    </div>
+  </div>
+
+  <!-- ============ 履歴 ============ -->
+  <div class="tab-panel" id="panel-audit">
+    <div class="card">
+      <h2>操作履歴</h2>
+      <div class="hint">
+        バックアップ・リストア・作業ファイル削除の実行記録です（新しい順）。
+        記録先は <code>sql_saver_audit</code> テーブルです。
+      </div>
+      <button class="btn btn-primary" id="btn-audit-reload" onclick="loadAudit()">🔄 再読み込み</button>
+      <div id="audit-body" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 基点URL（url_prefix を変えてもJSを直さなくてよいように） =====
+const BASE = "{{ url_for('sql_saver.index') }}";
+const U = (p) => BASE + p;
+
+// ===== 状態 =====
+let backupDbs = [];
+let backupJobId = null;
+let backupRunning = false;
+let restoreToken = null;
+let restoreReport = [];
+let restoreRunning = false;
+
+// ===== 起動 =====
+$(function(){ loadDatabases(); });
+
+// ===== タブ =====
+function switchTab(name){
+  $('.tab').removeClass('active');
+  $('.tab[data-tab="' + name + '"]').addClass('active');
+  $('.tab-panel').removeClass('active');
+  $('#panel-' + name).addClass('active');
+  if(name === 'audit') loadAudit();
+}
+
+// ===== DB一覧（バックアップ用） =====
+function loadDatabases(){
+  $.get(U('databases'), function(data){
+    if(!data.success){ $('#backup-db-list').html('<div class="err">' + esc(data.error) + '</div>'); return; }
+    backupDbs = data.databases;
+    renderBackupDbList();
+  }).fail(function(xhr){
+    $('#backup-db-list').html('<div class="err">' + esc(xhr.responseJSON?.error || '読み込み失敗') + '</div>');
+  });
+}
+
+function renderBackupDbList(){
+  if(!backupDbs.length){ $('#backup-db-list').html('<div class="loading">対象DBがありません</div>'); return; }
+  let html = '';
+  backupDbs.forEach(d => {
+    const ok = d.reachable;
+    html += '<div class="db-row"><label>' +
+            '<input type="checkbox" class="backup-db-cb" value="' + esc(d.key) + '" ' + (ok ? 'checked' : 'disabled') + '>' +
+            '<span class="db-name">' + esc(d.db) + '</span>' +
+            '<span class="db-meta">(' + esc(d.key) + ')</span></label>' +
+            (ok ? '<span class="db-meta">' + d.table_count + ' テーブル</span><span class="badge badge-ok">接続OK</span>'
+                : '<span class="badge badge-err">接続不可</span>') +
+            '</div>';
+  });
+  $('#backup-db-list').html(html);
+}
+
+// ===== 進捗バーの共通描画 =====
+function progressHtml(progress, headLine, lastLine){
+  const pct = progress.total ? Math.round(progress.total_done / progress.total * 100) : 0;
+  let html = '<div class="ok">' + headLine + ' ' + progress.total_done + ' / ' + progress.total +
+             ' テーブル（' + pct + '%）</div>';
+  if(lastLine) html += '<div class="db-meta" style="margin:4px 0 8px;">' + lastLine + '</div>';
+  html += '<div class="bar-outer"><div class="bar-inner" style="width:' + pct + '%;"></div></div>';
+  (progress.per_db || []).forEach(d => {
+    const dpct = d.total ? Math.round(d.done / d.total * 100) : 0;
+    html += '<div class="db-meta">' + esc(d.db) + ': ' + d.done + ' / ' + d.total + '（' + dpct + '%）</div>';
+  });
+  return html;
+}
+
+// ===== バックアップ実行（start -> step×N -> finalize） =====
+function setBackupBtn(running, label){
+  backupRunning = running;
+  $('#btn-backup').prop('disabled', running);
+  if(label) $('#btn-backup').html(label);
+}
+
+function runBackup(){
+  const keys = $('.backup-db-cb:checked').map((i,el)=>el.value).get();
+  if(!keys.length){ toast('対象DBを選択してください','err'); return; }
+
+  setBackupBtn(true, '<span class="spinner"></span> 準備中...');
+  $('#backup-result').html('<div class="loading"><span class="spinner"></span> 対象テーブルを集計中...</div>');
+
+  const payload = { databases: keys };
+  if(backupJobId) payload.resume_job_id = backupJobId;   // 再開ボタンから来た場合
+
+  $.ajax({
+    url: U('backup/start'), type:'POST', contentType:'application/json',
+    data: JSON.stringify(payload),
+    success: function(res){
+      if(!res.success){
+        setBackupBtn(false, '📦 バックアップを作成');
+        $('#backup-result').html('<span class="err">エラー: ' + esc(res.error) + '</span>');
+        return;
+      }
+      backupJobId = res.job_id;
+      $('#backup-result').html(progressHtml(res.progress, 'バックアップ中...', null));
+      backupLoop();
+    },
+    error: function(xhr){
+      setBackupBtn(false, '📦 バックアップを作成');
+      $('#backup-result').html('<span class="err">エラー: ' + esc(xhr.responseJSON?.error || '通信エラー') + '</span>');
+    }
+  });
+}
+
+function backupLoop(){
+  $('#btn-backup').html('<span class="spinner"></span> 実行中...');
+  $.ajax({
+    url: U('backup/step'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ job_id: backupJobId }),
+    success: function(res){
+      if(!res.success){ showBackupInterrupted(res.error, res.progress); return; }
+      const last = res.processed.length ? res.processed[res.processed.length-1] : null;
+      const line = last ? ('処理中: ' + esc(last.db) + ' / ' + esc(last.table) + '（' + last.rows + '行）') : null;
+      $('#backup-result').html(progressHtml(res.progress, 'バックアップ中...', line));
+      if(res.complete){ backupFinalize(); } else { backupLoop(); }
+    },
+    error: function(xhr){
+      showBackupInterrupted(xhr.responseJSON?.error || '通信エラー（中断）', xhr.responseJSON?.progress);
+    }
+  });
+}
+
+function showBackupInterrupted(msg, progress){
+  // 中断: ジョブは残っているので「再開」を促す
+  setBackupBtn(false, '▶ 続きから再開');
+  let html = '<div class="err">中断しました: ' + esc(msg) + '</div>';
+  if(progress){
+    html += '<div class="db-meta" style="margin:6px 0;">完了 ' + progress.total_done + ' / ' +
+            progress.total + ' テーブル。「続きから再開」で残りを処理します。</div>';
+  }
+  $('#backup-result').html(html);
+}
+
+function backupFinalize(){
+  $('#btn-backup').html('<span class="spinner"></span> zip作成中...');
+  $.ajax({
+    url: U('backup/finalize'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ job_id: backupJobId }),
+    success: function(res){
+      setBackupBtn(false, '📦 バックアップを作成');
+      if(!res.success){ $('#backup-result').html('<span class="err">エラー: ' + esc(res.error) + '</span>'); return; }
+      backupJobId = null;
+      let html = '<div class="ok">✓ ' + esc(res.message) + '（' + fmtSize(res.zip_size) + '）</div>';
+      res.summary.forEach(db => {
+        html += '<table class="summary-table"><thead><tr><th colspan="2">' + esc(db.db) +
+                '（' + db.tables.length + 'テーブル）</th></tr>' +
+                '<tr><th>テーブル</th><th>行数</th></tr></thead><tbody>';
+        db.tables.forEach(t => { html += '<tr><td>' + esc(t.table) + '</td><td>' + t.rows + '</td></tr>'; });
+        html += '</tbody></table>';
+      });
+      html += '<a class="download-link" href="' + U('download/') + encodeURIComponent(res.zip_name) + '">⬇ ' +
+              esc(res.zip_name) + ' をダウンロード</a>';
+      $('#backup-result').html(html);
+    },
+    error: function(xhr){
+      showBackupInterrupted(xhr.responseJSON?.error || 'zip作成エラー', xhr.responseJSON?.progress);
+    }
+  });
+}
+
+// ===== 作業ファイル全クリア =====
+function clearAll(force){
+  if(backupRunning || restoreRunning){ toast('実行中は削除できません', 'err'); return; }
+  if(!force && !confirm('ダウンロード済みの zip も含めて、サーバ上の作業ファイルを全て削除します。よろしいですか？')) return;
+
+  $('#btn-clear').prop('disabled', true).html('<span class="spinner"></span> 削除中...');
+  $('#clear-result').html('');
+  $.ajax({
+    url: U('clear_all'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ force: !!force }),
+    success: function(res){
+      $('#btn-clear').prop('disabled', false).html('🧹 作業ファイルを全て削除');
+      if(!res.success){ $('#clear-result').html('<span class="err">エラー: ' + esc(res.error) + '</span>'); return; }
+      $('#clear-result').html('<span class="ok">✓ ' + esc(res.message) + '（' + fmtSize(res.freed) + ' 解放）</span>');
+      backupJobId = null;
+      $('#backup-result').empty();
+    },
+    error: function(xhr){
+      $('#btn-clear').prop('disabled', false).html('🧹 作業ファイルを全て削除');
+      const j = xhr.responseJSON || {};
+      if(xhr.status === 409 && j.need_force){
+        if(confirm(j.error + '\n\nそれでも全て削除しますか？')) { clearAll(true); return; }
+        $('#clear-result').html('<span class="db-meta">削除を中止しました。</span>');
+        return;
+      }
+      $('#clear-result').html('<span class="err">エラー: ' + esc(j.error || '通信エラー') + '</span>');
+    }
+  });
+}
+
+// ===== リストア: ファイル選択 =====
+function onFilePicked(input){
+  if(input.files.length){
+    $('#file-drop-text').text('📦 ' + input.files[0].name);
+    $('#btn-inspect').prop('disabled', false);
+  }
+}
+
+// ===== リストア: 解析 =====
+function inspectRestore(){
+  const f = $('#restore-file')[0].files[0];
+  if(!f){ toast('ファイルを選択してください','err'); return; }
+  const fd = new FormData(); fd.append('file', f);
+
+  $('#btn-inspect').prop('disabled', true).html('<span class="spinner"></span> 解析中...');
+  $('#restore-report-card').hide();
+  $('#restore-result').empty();
+
+  $.ajax({
+    url: U('restore/inspect'), type:'POST', data: fd,
+    processData:false, contentType:false,
+    success: function(res){
+      $('#btn-inspect').prop('disabled', false).html('🔍 中身を解析');
+      if(!res.success){ toast(res.error,'err'); return; }
+      restoreToken = res.token;
+      restoreReport = res.report;
+      renderRestoreReport();
+      $('#restore-report-card').show();
+    },
+    error: function(xhr){
+      $('#btn-inspect').prop('disabled', false).html('🔍 中身を解析');
+      toast(xhr.responseJSON?.error || '解析失敗','err');
+    }
+  });
+}
+
+function renderRestoreReport(){
+  let html = '';
+  restoreReport.forEach((db, idx) => {
+    const disabled = !db.allowed || !db.reachable;
+    html += '<div class="restore-db"><div class="restore-db-head">' +
+            '<input type="checkbox" class="restore-db-cb" data-idx="' + idx + '" value="' + esc(db.db) + '" ' +
+            (disabled ? 'disabled' : 'checked') + '>' +
+            '<span class="name">' + esc(db.db) + '</span>';
+    if(!db.allowed)        html += '<span class="tag-blocked">対象外DB（復元不可）</span>';
+    else if(!db.reachable) html += '<span class="badge badge-err">接続不可</span>';
+    else html += '<span class="stat">上書き ' + db.overwrite_count + ' / 新規 ' + db.new_count + '</span>';
+    if(!disabled){
+      html += '<span class="spacer">' +
+              '<button type="button" class="btn-mini" onclick="selectTables(' + idx + ', true)">全選択</button>' +
+              '<button type="button" class="btn-mini" onclick="selectTables(' + idx + ', false)">全解除</button>' +
+              '</span>';
+    }
+    html += '</div><div class="restore-db-body">';
+    db.tables.forEach(t => {
+      let tag;
+      if(t.invalid)           tag = '<span class="tag-invalid">不正な名前</span>';
+      else if(t.will_overwrite) tag = '<span class="tag-overwrite">上書き</span>';
+      else                    tag = '<span class="tag-new">新規</span>';
+      html += '<div class="tbl-line">' +
+              '<input type="checkbox" class="restore-tbl-cb" data-idx="' + idx + '" value="' + esc(t.table) + '" ' +
+              ((disabled || t.invalid) ? 'disabled' : 'checked') + '>' +
+              tag + ' <span>' + esc(t.table) + '</span></div>';
+    });
+    html += '</div></div>';
+  });
+  $('#restore-report').html(html);
+
+  $('.restore-db-cb').on('change', function(){
+    const idx = $(this).data('idx');
+    selectTables(idx, this.checked);
+  });
+  $('.restore-tbl-cb').on('change', updateRestoreWarn);
+  updateRestoreWarn();
+}
+
+function selectTables(idx, checked){
+  $('.restore-tbl-cb[data-idx="' + idx + '"]').not(':disabled').prop('checked', checked);
+  updateRestoreWarn();
+}
+
+function collectRestoreSelection(){
+  const dbs = [];
+  const tables = {};
+  let overwrite = 0, total = 0, partial = false;
+  $('.restore-db-cb:checked').each(function(){
+    const idx = $(this).data('idx');
+    const db = restoreReport[idx];
+    const all = $('.restore-tbl-cb[data-idx="' + idx + '"]').not(':disabled');
+    const sel = all.filter(':checked').map((i,el)=>el.value).get();
+    if(!sel.length) return;
+    dbs.push(db.db);
+    if(sel.length !== all.length){ tables[db.db] = sel; partial = true; }
+    total += sel.length;
+    db.tables.forEach(t => { if(sel.indexOf(t.table) >= 0 && t.will_overwrite) overwrite++; });
+  });
+  return { dbs, tables, overwrite, total, partial };
+}
+
+function updateRestoreWarn(){
+  const s = collectRestoreSelection();
+  let warn = '復元は<strong>完全置換</strong>です。選択した <strong>' + s.total + ' テーブル</strong>のうち、' +
+             '<strong>' + s.overwrite + ' 個の既存テーブル</strong>が削除され作り直されます。この操作は取り消せません。';
+  if(s.partial){
+    warn += '<br>一部のテーブルだけを選んでいます。外部キーで結ばれたテーブルを取りこぼすと' +
+            '整合性が崩れることがあります（整合性の確認は管理者の責任です）。';
+  }
+  $('#restore-warn').html(warn);
+  $('#btn-restore').prop('disabled', s.total === 0);
+}
+
+// ===== リストア: 実行（start -> step×N -> finish） =====
+function executeRestore(){
+  const s = collectRestoreSelection();
+  if(!s.total){ toast('復元するテーブルを選択してください','err'); return; }
+  if(!confirm('完全置換で復元します。既存テーブル ' + s.overwrite + ' 個が削除されます。実行しますか？')) return;
+
+  restoreRunning = true;
+  $('#btn-restore').prop('disabled', true).html('<span class="spinner"></span> 準備中...');
+  $('#btn-restore-cancel').prop('disabled', true);
+  $('#restore-result').html('<div class="loading"><span class="spinner"></span> 復元計画を作成中...</div>');
+
+  $.ajax({
+    url: U('restore/start'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ token: restoreToken, databases: s.dbs, tables: s.tables }),
+    success: function(res){
+      if(!res.success){ restoreFailed(res.error); return; }
+      $('#restore-result').html(progressHtml(res.progress, '復元中...', null));
+      restoreLoop();
+    },
+    error: function(xhr){ restoreFailed(xhr.responseJSON?.error || '通信エラー'); }
+  });
+}
+
+function restoreLoop(){
+  $('#btn-restore').html('<span class="spinner"></span> 復元中...');
+  $.ajax({
+    url: U('restore/step'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ token: restoreToken }),
+    success: function(res){
+      if(!res.success){ restoreFailed(res.error, res.progress); return; }
+      const last = res.processed.length ? res.processed[res.processed.length-1] : null;
+      const line = last ? ('処理中: ' + esc(last.db) + ' / ' + esc(last.table) +
+                           (last.ok ? '（' + last.rows + '行）' : '（失敗）')) : null;
+      $('#restore-result').html(progressHtml(res.progress, '復元中...', line));
+      if(res.complete){ restoreFinish(); } else { restoreLoop(); }
+    },
+    error: function(xhr){
+      restoreFailed(xhr.responseJSON?.error || '通信エラー（中断）', xhr.responseJSON?.progress);
+    }
+  });
+}
+
+function restoreFailed(msg, progress){
+  restoreRunning = false;
+  $('#btn-restore').prop('disabled', false).html('♻️ 復元を実行（完全置換）');
+  $('#btn-restore-cancel').prop('disabled', false);
+  let html = '<div class="err">中断しました: ' + esc(msg) + '</div>';
+  if(progress){
+    html += '<div class="db-meta" style="margin:6px 0;">処理済 ' + progress.total_done + ' / ' +
+            progress.total + ' テーブル。もう一度「復元を実行」を押すと、残りから続けます。</div>';
+  }
+  $('#restore-result').html(html);
+}
+
+function restoreFinish(){
+  $('#btn-restore').html('<span class="spinner"></span> 仕上げ中...');
+  $.ajax({
+    url: U('restore/finish'), type:'POST', contentType:'application/json',
+    data: JSON.stringify({ token: restoreToken }),
+    success: function(res){
+      restoreRunning = false;
+      $('#btn-restore').prop('disabled', false).html('♻️ 復元を実行（完全置換）');
+      $('#btn-restore-cancel').prop('disabled', false);
+      if(!res.success){ $('#restore-result').html('<span class="err">エラー: ' + esc(res.error) + '</span>'); return; }
+      let html = '<div class="ok">✓ ' + esc(res.message) + '</div>';
+      (res.skipped || []).forEach(s => {
+        html += '<div>⏭ ' + esc(s.db) + ': スキップ（' + esc(s.reason) + '）</div>';
+      });
+      res.results.forEach(r => {
+        html += '<table class="summary-table"><thead><tr><th colspan="2">' + esc(r.db) + '</th></tr>' +
+                '<tr><th>テーブル</th><th>結果</th></tr></thead><tbody>';
+        (r.restored||[]).forEach(t => { html += '<tr><td>' + esc(t.table) + '</td><td>✓ ' + t.rows + '行</td></tr>'; });
+        (r.errors||[]).forEach(t => { html += '<tr><td>' + esc(t.table) + '</td><td class="err">✗ ' + esc(t.error) + '</td></tr>'; });
+        html += '</tbody></table>';
+      });
+      $('#restore-result').html(html);
+      restoreToken = null;
+      $('#restore-file').val('');
+      $('#file-drop-text').text('📁 クリックして zip ファイルを選択');
+      $('#btn-inspect').prop('disabled', true);
+    },
+    error: function(xhr){ restoreFailed(xhr.responseJSON?.error || '通信エラー'); }
+  });
+}
+
+function cancelRestore(){
+  if(restoreRunning){ toast('復元中はキャンセルできません','err'); return; }
+  if(restoreToken){
+    $.ajax({ url: U('restore/cancel'), type:'POST', contentType:'application/json',
+             data: JSON.stringify({ token: restoreToken }) });
+  }
+  restoreToken = null; restoreReport = [];
+  $('#restore-report-card').hide();
+  $('#restore-file').val(''); $('#file-drop-text').text('📁 クリックして zip ファイルを選択');
+  $('#btn-inspect').prop('disabled', true);
+}
+
+// ===== 履歴 =====
+function loadAudit(){
+  $('#btn-audit-reload').prop('disabled', true);
+  $('#audit-body').html('<div class="loading"><span class="spinner"></span> 読み込み中...</div>');
+  $.get(U('audit'), function(res){
+    $('#btn-audit-reload').prop('disabled', false);
+    if(!res.success){ $('#audit-body').html('<div class="err">' + esc(res.error) + '</div>'); return; }
+    if(!res.rows.length){ $('#audit-body').html('<div class="loading">記録はまだありません</div>'); return; }
+    let html = '<table class="audit-table"><thead><tr>' +
+               '<th>日時(JST)</th><th>操作</th><th>実行者</th><th>結果</th><th>内容</th>' +
+               '</tr></thead><tbody>';
+    res.rows.forEach(r => {
+      html += '<tr><td>' + esc(r.created_at) + '</td>' +
+              '<td class="act-' + esc(r.action) + '">' + esc(r.action) + '</td>' +
+              '<td>' + esc(r.user_name || ('#' + r.user_id)) + '</td>' +
+              '<td>' + (r.succeeded ? '<span class="ok">✓</span>' : '<span class="err">✗</span>') + '</td>' +
+              '<td class="audit-detail">' + esc(r.detail || '') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    $('#audit-body').html(html);
+  }).fail(function(xhr){
+    $('#btn-audit-reload').prop('disabled', false);
+    $('#audit-body').html('<div class="err">' + esc(xhr.responseJSON?.error || '読み込み失敗') + '</div>');
+  });
+}
+
+// ===== ユーティリティ =====
+function esc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
+function toast(msg, type='ok'){ $('#toast').attr('class',type).text(msg).fadeIn(200); setTimeout(()=>$('#toast').fadeOut(400),3000); }
+</script>
+</body>
+</html>

@@ -1,0 +1,2315 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>時系列指標ビジュアル | FUJIN-P</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary:    #6366f1; --primary-dk: #4f46e5; --primary-lt: #e0e7ff;
+  --success:    #10b981; --warning:    #f59e0b; --danger:     #ef4444;
+  --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db;
+  --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563;
+  --gray-700:#374151; --gray-800:#1f2937;
+  --radius:8px; --shadow:0 1px 4px rgba(0,0,0,.10); --shadow-lg:0 4px 16px rgba(0,0,0,.12);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:13px;line-height:1.6;color:var(--gray-800);background:var(--gray-50);}
+
+/* ── ヘッダー ── */
+#app-header{background:linear-gradient(135deg,var(--primary) 0%,#8b5cf6 100%);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(99,102,241,.4);flex-wrap:wrap;}
+#app-header h1{font-size:.95rem;font-weight:700;}
+#app-header .subtitle{font-size:.72rem;opacity:.8;}
+.hdr-btn{padding:4px 11px;border-radius:20px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.15);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:background .15s;text-decoration:none;}
+.hdr-btn:hover{background:rgba(255,255,255,.3);}
+.hdr-btn.active{background:rgba(255,255,255,.35);}
+.btn-return{padding:4px 11px;border-radius:20px;border:1.5px solid rgba(255,255,255,.5);
+            background:#e74c3c;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;
+            display:inline-flex;align-items:center;gap:4px;white-space:nowrap;
+            text-decoration:none;transition:background .15s;}
+.btn-return:hover{background:#c0392b;color:#fff;}
+/* ── レイアウト ── */
+#layout{
+  display:grid;
+  grid-template-columns:200px minmax(0, 1fr);
+  gap:10px;
+  max-width:1600px;
+  margin:0 auto;
+  padding:10px 10px 40px;
+  align-items:start;
+}
+#layout.editor-open{grid-template-columns:200px minmax(0, 1fr) minmax(320px, 2fr);}
+
+/* ── 左カラム ── */
+#left-col{display:flex;flex-direction:column;gap:8px;position:sticky;top:50px;max-height:calc(100vh - 62px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--gray-300) transparent;}
+#left-col::-webkit-scrollbar{width:4px;}
+#left-col::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:2px;}
+
+/* ── 右カラム ── */
+#right-col{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-width:0;
+}
+/* ── エディタ列 ── */
+#editor-col{
+  display:none;
+  flex-direction:column;
+  gap:10px;
+  position:sticky;
+  top:50px;
+  max-height:calc(100vh - 62px);
+  overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:var(--gray-300) transparent;
+  min-width:0;
+}
+#editor-col::-webkit-scrollbar{width:4px;}
+#editor-col::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:2px;}
+#layout.editor-open #editor-col{display:flex;}
+
+/* ── カード ── */
+.card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:11px 13px;}
+.card-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:7px;display:flex;align-items:center;gap:5px;}
+
+/* ── プロジェクトパネル ── */
+#project-select{width:100%;padding:5px 7px;border:1.5px solid var(--gray-300);border-radius:5px;font-size:.78rem;color:var(--gray-800);background:#fff;cursor:pointer;margin-bottom:6px;}
+#project-select:focus{outline:none;border-color:var(--primary);}
+#project-info{font-size:.7rem;color:var(--gray-600);padding:6px 8px;background:var(--gray-50);border-radius:5px;border:1px solid var(--gray-200);}
+#project-info .pi-policy{display:inline-block;padding:1px 7px;border-radius:10px;font-size:.63rem;font-weight:700;margin-bottom:4px;}
+.policy-public{background:#d1fae5;color:#065f46;}
+.policy-group{background:#dbeafe;color:#1e40af;}
+.policy-private{background:#fef3c7;color:#92400e;}
+.policy-domestic{background:#fce7f3;color:#9d174d;}
+#project-info .pi-actions{display:flex;gap:5px;margin-top:6px;}
+
+/* ── 指標パネル ── */
+.ind-row{display:flex;align-items:center;gap:5px;padding:3px 4px;border-radius:5px;cursor:pointer;transition:background .1s;}
+.ind-row:hover{background:var(--gray-100);}
+.ind-row input[type="checkbox"]{width:13px;height:13px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;}
+.ind-row-label{flex:1;font-size:.73rem;color:var(--gray-700);line-height:1.3;}
+.ind-row-label small{color:var(--gray-400);font-size:.62rem;}
+.ind-color-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;opacity:0;transition:opacity .15s;}
+.ind-row.active .ind-color-dot{opacity:1;}
+.ind-del-btn,.ind-edit-btn{background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:.8rem;padding:0 1px;line-height:1;transition:color .1s;flex-shrink:0;}
+.ind-del-btn:hover{color:var(--danger);}
+.ind-edit-btn:hover{color:var(--primary);}
+.ind-edit-btn.disabled{opacity:.25;cursor:not-allowed;}
+.badge-count{font-size:.63rem;border-radius:10px;padding:1px 6px;background:var(--primary-lt);color:var(--primary);}
+.badge-selected{font-size:.63rem;border-radius:10px;padding:1px 6px;background:#fef3c7;color:#92400e;display:none;}
+
+/* ── グラフ ── */
+#chart-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:7px;}
+.btn-type{padding:3px 11px;border:1.5px solid var(--primary);border-radius:20px;background:#fff;color:var(--primary);font-size:.73rem;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn-type.active{background:var(--primary);color:#fff;}
+.btn-type:hover:not(.active){background:var(--primary-lt);}
+#zoom-control{display:flex;align-items:center;gap:4px;margin-left:4px;background:var(--gray-100);border-radius:20px;padding:2px 8px;}
+#zoom-control>span{font-size:.68rem;color:var(--gray-500);}
+.btn-zoom{width:20px;height:20px;border:1.5px solid var(--gray-300);border-radius:50%;background:#fff;color:var(--gray-600);font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s;line-height:1;}
+.btn-zoom:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
+.btn-zoom:disabled{opacity:.35;cursor:not-allowed;}
+#zoom-label{font-size:.68rem;color:var(--gray-600);min-width:40px;text-align:center;}
+#chart-legend{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:5px;}
+.legend-btn{display:inline-flex;align-items:center;gap:4px;padding:2px 9px 2px 6px;border:1.5px solid var(--lc,#6366f1);border-radius:20px;background:#fff;cursor:pointer;font-size:.7rem;color:var(--gray-700);transition:all .15s;white-space:nowrap;}
+.legend-btn:hover{background:color-mix(in srgb,var(--lc) 12%,#fff);}
+.legend-dot{width:9px;height:9px;border-radius:50%;background:var(--lc,#6366f1);flex-shrink:0;}
+.legend-btn.legend-hidden{border-color:var(--gray-300);color:var(--gray-400);background:var(--gray-100);}
+.legend-btn.legend-hidden .legend-dot{background:var(--gray-300);}
+.legend-btn.legend-hidden .legend-name{text-decoration:line-through;}
+#chart-container{position:relative;height:300px;}
+#chart-no-data{display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--gray-400);font-size:.85rem;pointer-events:none;}
+#chart-no-data.show{display:flex;}
+#scale-info{font-size:.6rem;color:var(--gray-400);text-align:right;margin-top:2px;}
+
+/* ── 統計 ── */
+#stats-bar{display:flex;flex-wrap:wrap;gap:7px;min-height:48px;align-items:flex-start;}
+.stat-card{background:var(--gray-50);border:1.5px solid var(--gray-200);border-left-width:4px;border-radius:var(--radius);padding:7px 11px;min-width:175px;flex:1 1 175px;max-width:300px;}
+.stat-label{font-size:.68rem;font-weight:700;color:var(--gray-600);margin-bottom:4px;display:flex;align-items:center;gap:4px;}
+.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 7px;}
+.stat-item{font-size:.65rem;color:var(--gray-500);}
+.stat-item .val{font-weight:700;color:var(--gray-800);font-size:.74rem;}
+.stat-item .pos{color:var(--success);}
+.stat-item .neg{color:var(--danger);}
+
+/* ── ボタン ── */
+.btn{padding:5px 12px;border-radius:6px;border:none;font-size:.73rem;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:4px;}
+.btn-outline{background:#fff;border:1.5px solid var(--gray-300);color:var(--gray-700);}
+.btn-outline:hover{border-color:var(--primary);color:var(--primary);}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-dk);}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-danger{background:#ef4444;color:#fff;}
+.btn-danger:hover{background:#dc2626;}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;}
+
+/* ── SQLエディタ ── */
+#table-list-toggle{font-size:.7rem;color:var(--primary);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none;margin-bottom:3px;}
+#table-list-box{display:none;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:5px;padding:5px;max-height:90px;overflow-y:auto;margin-bottom:4px;font-size:.68rem;columns:2;column-gap:8px;}
+#table-list-box.open{display:block;}
+.tname{color:var(--gray-700);cursor:pointer;padding:1px 2px;border-radius:2px;display:inline-block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;break-inside:avoid;}
+.tname:hover{background:var(--primary-lt);color:var(--primary);}
+#sql-hint{font-size:.65rem;color:var(--gray-500);background:var(--gray-50);border:1px solid var(--gray-200);border-radius:5px;padding:5px 7px;margin-bottom:5px;line-height:1.7;}
+#sql-hint code{background:var(--gray-100);padding:1px 4px;border-radius:3px;font-size:.63rem;}
+#sql-editor{width:100%;height:90px;font-family:"SF Mono",Consolas,"Courier New",monospace;font-size:.75rem;line-height:1.5;padding:7px;border:1.5px solid var(--gray-300);border-radius:var(--radius);resize:vertical;color:var(--gray-800);background:#fafafe;transition:border-color .15s;}
+#sql-editor:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+#sql-result{margin-top:4px;}
+.result-table-wrap{overflow-x:auto;max-height:110px;border:1px solid var(--gray-200);border-radius:5px;}
+.result-table{width:100%;border-collapse:collapse;font-size:.66rem;}
+.result-table th{background:var(--gray-100);padding:3px 7px;text-align:left;border-bottom:1.5px solid var(--gray-200);white-space:nowrap;position:sticky;top:0;font-weight:700;color:var(--gray-600);}
+.result-table td{padding:3px 7px;border-bottom:1px solid var(--gray-100);white-space:nowrap;color:var(--gray-700);}
+.result-info{font-size:.66rem;color:var(--gray-500);margin-bottom:3px;}
+.err-msg{background:#fef2f2;border:1px solid #fecaca;color:var(--danger);border-radius:5px;padding:5px 9px;font-size:.71rem;}
+#save-form{background:var(--gray-50);border:1.5px solid var(--primary-lt);border-radius:var(--radius);padding:9px;display:none;margin-top:5px;}
+#save-form.show{display:block;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 9px;margin-bottom:7px;}
+.form-group{display:flex;flex-direction:column;gap:2px;}
+.form-group.full{grid-column:1/-1;}
+.form-label{font-size:.65rem;font-weight:700;color:var(--gray-600);}
+.form-label .req{color:var(--danger);}
+.form-input,.form-select{padding:4px 7px;border:1.5px solid var(--gray-300);border-radius:5px;font-size:.73rem;color:var(--gray-800);background:#fff;transition:border-color .15s;}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px rgba(99,102,241,.12);}
+
+/* ── スピナー・トースト ── */
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#toast-container{position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:6px;}
+.toast{padding:7px 14px;border-radius:7px;font-size:.76rem;font-weight:600;color:#fff;box-shadow:var(--shadow-lg);animation:toastIn .2s ease;}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.toast.info{background:var(--primary);}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* ── モーダル共通 ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;}
+.modal-hdr{background:linear-gradient(135deg,#1a3a5c,#2e6da4);color:#fff;padding:10px 15px;display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.modal-hdr h2{font-size:.92rem;font-weight:700;margin:0;}
+.modal-close{margin-left:auto;background:none;border:1.5px solid rgba(255,255,255,.5);color:#fff;border-radius:6px;padding:3px 11px;cursor:pointer;font-size:.75rem;font-weight:600;}
+.modal-body{padding:14px 16px;overflow-y:auto;}
+
+/* ── プロジェクトモーダル ── */
+#proj-modal .modal-box{width:min(500px,94vw);}
+
+/* ── テーブルブラウザ ── */
+#tb-modal .modal-box{width:min(1260px,96vw);height:min(840px,92vh);}
+#tb-body{display:flex;flex:1;overflow:hidden;}
+#tb-left{width:260px;min-width:200px;border-right:2px solid #e0e0e0;display:flex;flex-direction:column;background:#fafbfc;flex-shrink:0;}
+#tb-left-search{padding:7px 9px;border:none;border-bottom:1px solid #e0e0e0;font-size:.76rem;outline:none;background:#f0f4f8;}
+#tb-list{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;}
+.tb-group-hd{position:sticky;top:0;background:#34495e;color:#ecf0f1;padding:4px 11px;font-size:.68rem;font-weight:700;letter-spacing:.05em;z-index:1;cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;}
+.tb-group-hd:hover{background:#2c3e50;}
+.tb-item{display:flex;align-items:center;gap:5px;padding:6px 11px;cursor:pointer;border-bottom:1px solid #eee;font-size:.73rem;color:#2c3e50;transition:background .1s;}
+.tb-item:hover{background:#e8f0fe;}
+.tb-item.active{background:#d0e4f7;border-left:3px solid #2e6da4;font-weight:600;}
+.tb-item .tb-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tb-item .tb-cnt{font-size:.65rem;color:#95a5a6;white-space:nowrap;}
+.tb-back-btn{display:flex;align-items:center;gap:5px;padding:7px 11px;background:#ebf5fb;border-bottom:2px solid #aed6f1;font-size:.73rem;color:#1a5276;font-weight:600;cursor:pointer;flex-shrink:0;}
+.tb-back-btn:hover{background:#d6eaf8;}
+#tb-right{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+#tb-right-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aab;gap:8px;font-size:.88rem;}
+#tb-right-placeholder .ph-icon{font-size:2.5rem;opacity:.4;}
+#tb-tabs{display:flex;border-bottom:2px solid #e0e0e0;background:#f5f7fa;flex-shrink:0;}
+.tb-tab{padding:7px 18px;font-size:.76rem;font-weight:600;border:none;background:none;cursor:pointer;color:var(--gray-500);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tb-tab.active{color:#2e6da4;border-bottom-color:#2e6da4;background:#fff;}
+#tb-pane{flex:1;overflow:auto;padding:11px 14px;font-size:.76rem;}
+#tb-schema-pre{background:#f4f6f8;border:1px solid #dde3ea;border-radius:5px;padding:12px;font-family:'Courier New',Consolas,monospace;font-size:.71rem;line-height:1.7;color:#2c3e50;white-space:pre-wrap;word-break:break-all;margin:0;}
+#tb-data-info{font-size:.7rem;color:var(--gray-500);margin-bottom:7px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.tb-data-table-wrap{overflow:auto;border:1px solid #e0e0e0;border-radius:5px;max-height:calc(100% - 60px);}
+.tb-data-table{border-collapse:collapse;width:100%;font-size:.7rem;}
+.tb-data-table th{background:#2e6da4;color:#fff;padding:6px 9px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:1;font-weight:600;}
+.tb-data-table td{padding:5px 9px;border-bottom:1px solid #eee;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;}
+.tb-data-table tr:hover td{background:#f0f6ff;}
+.tb-null{color:#e74c3c;font-style:italic;opacity:.7;}
+.tb-proj-card{display:flex;flex-direction:column;gap:2px;padding:7px 11px;border-bottom:1px solid #eee;cursor:pointer;transition:background .1s;}
+.tb-proj-card:hover{background:#e8f0fe;}
+.tb-proj-card.active{background:#d0e4f7;border-left:3px solid #2e6da4;}
+.tb-proj-name{font-weight:600;font-size:.76rem;color:#1a3a5c;}
+.tb-proj-desc{font-size:.66rem;color:var(--gray-500);}
+.tb-proj-meta{font-size:.63rem;color:var(--gray-400);}
+
+/* ── インポート・エクスポートモーダル ── */
+#import-modal .modal-box{width:min(600px,94vw);}
+#exp-modal .modal-box{width:min(860px,92vw);max-height:88vh;}
+#schema-modal .modal-box{width:min(820px,94vw);max-height:88vh;}
+
+/* ── レスポンシブ ── */
+@media(max-width:899px){
+  #layout,#layout.editor-open{grid-template-columns:1fr;}
+  #left-col,#editor-col{position:static;max-height:none;}
+  #chart-container{height:240px;}
+}
+@media(max-width:599px){
+  body{font-size:12px;}
+  #app-header{padding:7px 10px;}
+  #app-header h1{font-size:.86rem;}
+  #layout{padding:7px 7px 28px;gap:7px;}
+  .card{padding:9px;}
+  #chart-container{height:200px;}
+}
+</style>
+</head>
+<body>
+
+<div id="app-header">
+  <span style="font-size:1.2rem">📈</span>
+  <div>
+    <h1>時系列指標ビジュアル</h1>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+    <a href="{{ url_for('index_review.table_manager') }}" class="hdr-btn">📁 テーブル管理</a>
+    <button id="btn-refresh-layout" class="hdr-btn" title="レイアウト再計算">🔄 画面調整</button>
+    <button id="btn-toggle-editor" class="hdr-btn">✏️ 指標エディタ</button>
+    <button id="btn-export-json" class="hdr-btn">📤 指標エクスポート</button>
+    <button id="btn-import-json" class="hdr-btn">📥 指標インポート</button>
+    <button id="btn-export-chart" class="hdr-btn">📊 グラフ出力</button>
+    <a href="{{ url_for('index_review.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+  </div>
+</div>
+
+<div id="layout">
+
+  <!-- ═══ 左カラム ═══ -->
+  <div id="left-col">
+
+    <!-- プロジェクトパネル -->
+    <div class="card" id="project-panel">
+      <div class="card-title">📁 プロジェクト
+        <button id="btn-new-project" class="btn btn-primary"
+                style="margin-left:auto;padding:2px 8px;font-size:.65rem;">＋ 新規</button>
+      </div>
+      <select id="project-select">
+        <option value="">— プロジェクトを選択 —</option>
+      </select>
+      <div id="project-info" style="display:none;"></div>
+    </div>
+
+    <!-- 指標パネル -->
+    <div class="card">
+      <div class="card-title">📋 指標
+        <span id="ind-count" class="badge-count">—</span>
+        <span id="selected-count" class="badge-selected">選択中 0</span>
+            <button id="btn-select-all" style="margin-left:auto;padding:2px 6px;font-size:.63rem;display:none;">
+          ✅ 全選択
+        </button>
+        <button id="btn-clear-all" class="btn btn-outline"
+                style="margin-left:auto;padding:2px 6px;font-size:.63rem;display:none;">✕ 全解除</button>
+      </div>
+      <!-- ★追加：指標検索 -->
+        <div id="ind-search-wrap" style="display:none;margin-bottom:5px;">
+          <input id="ind-search" type="text" placeholder="🔍 指標名を検索…"
+                 style="width:100%;padding:4px 8px;border:1.5px solid var(--gray-300);
+                        border-radius:5px;font-size:.72rem;color:var(--gray-800);
+                        background:#fff;outline:none;transition:border-color .15s;"
+                 autocomplete="off">
+          <div id="ind-search-info"
+               style="font-size:.63rem;color:var(--gray-400);margin-top:2px;min-height:14px;"></div>
+      </div>
+      <div id="ind-list">
+        <span style="color:var(--gray-400);font-size:.75rem;">プロジェクトを選択してください</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 中央カラム ═══ -->
+  <div id="right-col">
+    <div class="card">
+      <div class="card-title">📈 推移グラフ</div>
+      <div id="chart-toolbar">
+        <button class="btn-type active" data-type="line">折れ線</button>
+        <button class="btn-type" data-type="bar">棒グラフ</button>
+        <div style="width:1px;height:16px;background:var(--gray-300);margin:0 2px;"></div>
+        <button class="btn-type active" id="btn-scale-zero" data-scale="zero">絶対値</button>
+        <button class="btn-type" id="btn-scale-abs"  data-scale="abs">絶対値変動</button>
+        <button class="btn-type" id="btn-scale-norm" data-scale="norm">相対値</button>
+        <div id="zoom-control">
+          <span>ズーム</span>
+          <button class="btn-zoom" id="btn-zoom-in">＋</button>
+          <span id="zoom-label">標準</span>
+          <button class="btn-zoom" id="btn-zoom-out">－</button>
+        </div>
+      </div>
+      <div id="chart-legend"></div>
+      <div id="chart-container">
+        <canvas id="myChart"></canvas>
+        <div id="chart-no-data" class="show">
+          <span style="font-size:2rem">🔍</span>
+          <span>左パネルで指標を選択してください</span>
+        </div>
+      </div>
+      <div id="scale-info">縦軸：絶対値表示（全系列共通スケール / 線形）</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔢 統計サマリー</div>
+      <div id="stats-bar">
+        <span id="stats-empty">指標を選択すると統計が表示されます</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ エディタ列 ═══ -->
+  <div id="editor-col">
+    <div class="card">
+      <div class="card-title">✏️ 指標エディタ
+        <button id="btn-close-editor"
+                style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:.95rem;">✕</button>
+      </div>
+      <div id="editor-proj-notice"
+           style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:5px;padding:5px 8px;font-size:.68rem;color:#92400e;margin-bottom:6px;">
+        ⚠️ プロジェクトを選択してから指標を編集・追加してください
+      </div>
+      <div id="table-list-toggle">
+        <span id="tl-arrow">▶</span> 利用可能なテーブル一覧
+        <span style="font-size:.61rem;color:var(--gray-400)">(クリックでSQLに挿入)</span>
+      </div>
+      <div id="table-list-box"></div>
+      <div id="sql-hint">
+        <strong>指標名のプレフィクスで表示順を制御：</strong><br>
+        例）<code>I01_標準年限卒業率_地域経営</code>　<code>I02_就職率_全体</code><br>
+        <strong>SQL形式：</strong><code>SELECT `年度`, &lt;値カラム&gt; AS 値 FROM `テーブル` ORDER BY `年度`</code>
+      </div>
+      <textarea id="sql-editor" placeholder="SELECT文を入力…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-sql-run">▶ SQLを実行</button>
+        <button class="btn btn-outline" id="btn-sql-clear">クリア</button>
+        <div id="edit-action-sep" style="display:none;width:1px;height:22px;background:var(--gray-300);margin:0 4px;align-self:center;"></div>
+        <button class="btn btn-danger" id="btn-update-confirm" style="display:none;">💾 更新する</button>
+        <button class="btn btn-outline" id="btn-update-cancel" style="display:none;">✕ キャンセル</button>
+      </div>
+      <div id="sql-result"></div>
+      <div id="save-form">
+        <div id="save-form-title" style="font-size:.68rem;font-weight:700;color:var(--primary);margin-bottom:6px;">
+          ✅ SQL が実行できました。指標として登録します：
+        </div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <label class="form-label">指標名 <span class="req">*</span></label>
+            <input class="form-input" id="f-name" type="text" placeholder="例：I01_標準年限卒業率_地域経営">
+          </div>
+          <div class="form-group">
+            <label class="form-label">年度カラム <span class="req">*</span></label>
+            <select class="form-select" id="f-year-col"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">値カラム <span class="req">*</span></label>
+            <select class="form-select" id="f-val-col"></select>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">説明（任意）</label>
+            <input class="form-input" id="f-desc" type="text" placeholder="指標の内容・出典など">
+          </div>
+        </div>
+        <div class="btn-row" id="save-form-btns">
+          <button class="btn btn-primary" id="btn-save">💾 <span id="btn-save-label">登録する</span></button>
+          <button class="btn btn-outline" id="btn-save-cancel">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 基準値ラインカード ═══ -->
+    <div class="card" id="ann-card">
+      <div class="card-title">📏 基準値ライン
+        <span id="ann-ind-name"
+              style="font-size:.68rem;font-weight:400;color:var(--gray-500);margin-left:4px;"></span>
+      </div>
+      <div id="ann-list" style="margin-bottom:6px;min-height:18px;">
+        <span style="color:var(--gray-400);font-size:.71rem;">指標を1件選択すると管理できます</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 88px 36px;gap:5px;align-items:end;margin-bottom:5px;">
+        <div class="form-group">
+          <label class="form-label">ラベル</label>
+          <input class="form-input" id="ann-label" type="text" placeholder="例：上限" style="font-size:.72rem;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">値</label>
+          <input class="form-input" id="ann-value" type="number" step="any" placeholder="0.9" style="font-size:.72rem;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">色</label>
+          <input type="color" id="ann-color" value="#ef4444"
+                 style="width:36px;height:32px;border:1.5px solid var(--gray-300);border-radius:5px;padding:2px;cursor:pointer;display:block;">
+        </div>
+      </div>
+      <button class="btn btn-outline" id="btn-ann-add" style="width:100%;font-size:.72rem;">＋ 追加</button>
+      <button class="btn btn-outline" id="btn-ann-cancel-edit"
+        style="width:100%;font-size:.72rem;margin-top:4px;display:none;">✕ キャンセル</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ プロジェクト作成・編集モーダル ═══ -->
+<div id="proj-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">📁</span>
+      <h2 id="proj-modal-title">プロジェクトを作成</h2>
+      <button class="modal-close" id="proj-modal-close">✕ 閉じる</button>
+    </div>
+    <div class="modal-body" style="min-width:400px;">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label class="form-label">プロジェクト名 <span class="req">*</span></label>
+          <input class="form-input" id="pf-name" type="text" placeholder="例：2024年度評価指標集">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">説明（任意）</label>
+          <textarea class="form-input" id="pf-desc" rows="2" placeholder="このプロジェクトの目的・対象など" style="resize:vertical;"></textarea>
+        </div>
+        <div class="form-group full">
+          <label class="form-label">編集権限グループ（まいぐる）
+            <span style="font-weight:400;color:var(--gray-400);margin-left:4px;">未選択=オーナーのみ編集可</span>
+          </label>
+          <select class="form-select" id="pf-group">
+            <option value="">— なし（オーナーのみ）—</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label class="form-label">公開範囲</label>
+            <select class="form-select" id="pf-policy">
+              <option value="public">🔓 パブリック（全ユーザが閲覧可）</option>
+              <option value="domestic">🏫 学内公開（regularユーザのみ閲覧可）</option>
+              <option value="group">👥 グループのみ（設定グループメンバーが閲覧可）</option>
+              <option value="private">🔒 プライベート（オーナーのみ閲覧可）</option>
+            </select>
+        </div>
+
+        <!-- ★ここに追加 -->
+        <div class="form-group full" id="access-group-wrap" style="display:none;">
+          <label class="form-label">閲覧可能グループ（複数選択可）</label>
+          <div id="access-group-list"
+               style="max-height:120px;overflow-y:auto;border:1.5px solid var(--gray-300);
+                      border-radius:5px;padding:5px 8px;background:#fff;font-size:.73rem;">
+          </div>
+        </div>
+
+      </div><!-- /.form-grid -->
+      <div style="display:flex;gap:7px;margin-top:10px;">
+        <button class="btn btn-primary" id="pf-save">💾 <span id="pf-save-label">作成する</span></button>
+        <button class="btn btn-outline" id="pf-cancel">キャンセル</button>
+      </div>
+    </div><!-- /.modal-body -->
+  </div><!-- /.modal-box -->
+</div><!-- /#proj-modal -->
+
+<!-- ═══ 指標インポートモーダル ═══ -->
+<div id="import-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">📥</span>
+      <h2>指標インポート</h2>
+      <button class="modal-close" id="import-modal-close">✕ 閉じる</button>
+    </div>
+    <div class="modal-body" style="min-width:420px;">
+      <div style="font-size:.72rem;color:var(--gray-600);margin-bottom:8px;">
+        💡 エクスポートしたJSONをここに貼り付けると、現在のプロジェクトに指標を一括追加できます。<br>
+        同名の指標はスキップされます。
+      </div>
+      <textarea id="import-json-text" rows="10"
+                style="width:100%;font-family:monospace;font-size:.73rem;border:1.5px solid var(--gray-300);border-radius:6px;padding:8px;resize:vertical;"
+                placeholder='[{"name":"I01_例","sql_query":"SELECT ...","value_column":"値","year_column":"年度"}]'></textarea>
+      <div id="import-result" style="margin-top:6px;font-size:.72rem;"></div>
+      <div style="display:flex;gap:7px;margin-top:8px;">
+        <button class="btn btn-primary" id="import-execute">📥 インポート実行</button>
+        <button class="btn btn-outline" id="import-cancel">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ テーブルブラウザモーダル ═══ -->
+<div id="tb-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">🗂️</span>
+      <h2>テーブルブラウザ</h2>
+      <button class="tb-mode-btn active" data-mode="tables">全テーブル</button>
+      <button class="tb-mode-btn" data-mode="projects">プロジェクト</button>
+      <button class="modal-close" id="tb-close">✕ 閉じる</button>
+    </div>
+    <div id="tb-body">
+      <div id="tb-left">
+        <input id="tb-left-search" type="text" placeholder="🔍 検索...">
+        <div id="tb-list"><div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div></div>
+      </div>
+      <div id="tb-right">
+        <div id="tb-right-placeholder"><span class="ph-icon">📋</span><span>左のリストからテーブルを選んでください</span></div>
+        <div id="tb-tabs" style="display:none;">
+          <button class="tb-tab active" data-pane="schema">📐 スキーマ</button>
+          <button class="tb-tab" data-pane="data">📊 データ</button>
+          <span id="tb-table-label" style="margin-left:auto;padding:0 13px;font-size:.7rem;color:var(--gray-500);align-self:center;"></span>
+        </div>
+        <div id="tb-pane" style="display:none;">
+          <div id="tb-pane-schema"><pre id="tb-schema-pre">取得中...</pre></div>
+          <div id="tb-pane-data" style="display:none;">
+            <div id="tb-data-info"></div>
+            <div class="tb-data-table-wrap"><table class="tb-data-table" id="tb-data-table"></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ エクスポートモーダル ═══ -->
+<div id="exp-modal" class="modal-overlay">
+  <div class="modal-box" style="max-height:88vh;">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">📤</span>
+      <h2>指標エクスポート（AI連携用JSON）</h2>
+      <span id="exp-count" style="background:rgba(255,255,255,.2);border-radius:10px;padding:1px 8px;font-size:.7rem;"></span>
+      <button id="exp-copy-selected" style="margin-left:auto;padding:4px 14px;border-radius:6px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.2);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;">📋 選択中をコピー</button>
+      <button id="exp-copy-all" style="padding:4px 14px;border-radius:6px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.2);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;">📋 全件をコピー</button>
+      <button class="modal-close" id="exp-close">✕ 閉じる</button>
+    </div>
+    <div style="padding:7px 14px;background:#f0f6ff;border-bottom:1px solid #dde8f5;font-size:.7rem;color:#1a3a5c;">
+      💡 このJSONをコピーして生成AIに貼り付けると、指標レビューや合成指標の提案を依頼できます。
+    </div>
+    <pre id="exp-json" style="flex:1;overflow:auto;margin:0;padding:14px;font-family:'Courier New',Consolas,monospace;font-size:.71rem;line-height:1.7;color:#2c3e50;background:#f8f9fa;white-space:pre-wrap;word-break:break-all;"></pre>
+  </div>
+</div>
+
+<!-- ═══ スキーマダンプモーダル ═══ -->
+<div id="schema-modal" class="modal-overlay">
+  <div class="modal-box" style="max-height:88vh;">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">📄</span>
+      <h2>スキーマダンプ（AI連携用）</h2>
+      <span id="schema-count" style="font-size:.72rem;margin-left:4px;opacity:.8;"></span>
+      <button id="schema-copy" style="margin-left:auto;padding:4px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.2);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;">📋 コピー</button>
+      <button id="schema-dl" style="padding:4px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.2);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;">⬇ DL</button>
+      <button class="modal-close" id="schema-close">✕ 閉じる</button>
+    </div>
+    <pre id="schema-text" style="flex:1;overflow:auto;margin:0;padding:14px;font-size:.7rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;background:#f8f9fa;">読込中…</pre>
+  </div>
+</div>
+
+<!-- ═══ SVG出力モーダル ═══ -->
+<div id="svg-modal" class="modal-overlay">
+  <div class="modal-box" style="max-height:88vh;">
+    <div class="modal-hdr">
+      <span style="font-size:1.1rem">📊</span>
+      <h2>グラフ出力（SVG）</h2>
+      <span id="svg-ind-count" style="font-size:.72rem;margin-left:4px;opacity:.8;"></span>
+      <button id="svg-copy" style="margin-left:auto;padding:4px 12px;border-radius:6px;
+              border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.2);
+              color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;">📋 コピー</button>
+      <button class="modal-close" id="svg-close">✕ 閉じる</button>
+    </div>
+    <div style="padding:7px 14px;background:#f0f6ff;border-bottom:1px solid #dde8f5;
+                font-size:.7rem;color:#1a3a5c;">
+      💡 このSVGテキストをコピーして、.svg ファイルとして保存するか、
+      Inkscape・Illustratorなどに貼り付けて利用できます。
+    </div>
+    <pre id="svg-text" style="flex:1;overflow:auto;margin:0;padding:14px;
+         font-family:'Courier New',Consolas,monospace;font-size:.68rem;line-height:1.6;
+         color:#2c3e50;background:#f8f9fa;white-space:pre-wrap;word-break:break-all;"></pre>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+/* ====================================================
+   定数・グローバル
+   ==================================================== */
+const API = {
+  projects    : "{{ url_for('index_review.api_projects') }}",
+  groups      : "{{ url_for('index_review.api_groups') }}",
+  sqlTest     : "{{ url_for('index_review.api_sql_test') }}",
+  tableList   : "{{ url_for('index_review.api_table_list') }}",
+  browserTables        : "{{ url_for('index_review.api_browser_tables') }}",
+  browserProjects      : "{{ url_for('index_review.api_browser_projects') }}",
+  browserProjectTables : "{{ url_for('index_review.api_browser_project_tables') }}",
+  browserSchema        : "{{ url_for('index_review.api_browser_schema') }}",
+  browserData          : "{{ url_for('index_review.api_browser_data') }}",
+  schemaDump  : "{{ url_for('index_review.api_schema_dump') }}",
+  // 動的（プロジェクトスコープ）
+  projIndicators : (pid)      => `${API.projects}/${pid}/indicators`,
+  projIndicator  : (pid, iid) => `${API.projects}/${pid}/indicators/${iid}`,
+  projIndData    : (pid, iid) => `${API.projects}/${pid}/indicators/${iid}/data`,
+  projExport     : (pid)      => `${API.projects}/${pid}/export`,
+  projImport     : (pid)      => `${API.projects}/${pid}/import`,
+  projIndAnnotations : (pid, iid)       => `${API.projects}/${pid}/indicators/${iid}/annotations`,
+  projIndAnnotation  : (pid, iid, aid)  => `${API.projects}/${pid}/indicators/${iid}/annotations/${aid}`,
+};
+
+const PALETTE = [
+  '#6366f1','#10b981','#f59e0b','#ef4444',
+  '#8b5cf6','#06b6d4','#f97316','#84cc16',
+  '#ec4899','#14b8a6','#a855f7','#3b82f6',
+];
+
+/* ── 状態 ── */
+let activeDatasets   = {};
+let hiddenDatasets   = new Set();
+let colorCounter     = 0;
+let myChart          = null;
+let currentChartType = 'line';
+let currentScaleMode = 'zero';
+let lastSqlTestResult = null;
+let editingIndicatorId = null;
+let editModeBackup     = null;
+
+// プロジェクト管理状態
+let allProjects      = [];
+let currentProjectId = null;
+let currentProject   = null;
+let editingProjectId = null;  // null=新規、数値=編集中
+let annotationsByKey = {};
+let editingAnnId = null;   // アノテーション編集中のID
+
+const ZOOM_LEVELS = [0.5,1,2,3,5,8];
+const ZOOM_LABELS = ['×6拡大','×3拡大','×1.5拡大','標準','広域','超広域'];
+let zoomIdx = 3;
+
+
+/* ====================================================
+   ユーティリティ
+   ==================================================== */
+function toast(msg, type='info') {
+  const el = $('<div>').addClass(`toast ${type}`).text(msg);
+  $('#toast-container').append(el);
+  setTimeout(() => el.fadeOut(300, () => el.remove()), 3200);
+}
+
+function fmt(n, unit='') {
+  if (n===null||n===undefined||isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  let s;
+  if      (abs>=1_000_000) s=(n/1_000_000).toFixed(1)+'M';
+  else if (abs>=10_000)    s=n.toLocaleString('ja-JP',{maximumFractionDigits:0});
+  else                     s=n.toLocaleString('ja-JP',{maximumFractionDigits:3});
+  return unit ? `${s} ${unit}` : s;
+}
+function fmtPct(n){
+  if(n===null||n===undefined||isNaN(n))return'—';
+  return`${n>=0?'+':''}${n.toFixed(1)}%`;
+}
+
+
+/* ====================================================
+   tanh 正規化
+   ==================================================== */
+function seriesMeanSigma(data){
+  const vals=data.map(d=>d.値).filter(v=>v!==null&&v!==undefined);
+  if(!vals.length)return{mean:0,sigma:0};
+  const n=vals.length,mu=vals.reduce((a,b)=>a+b,0)/n;
+  const sig=Math.sqrt(vals.reduce((a,b)=>a+(b-mu)**2,0)/n);
+  return{mean:mu,sigma:sig};
+}
+function applyTanh(v,mean,sigma,zoom){
+  if(sigma===0)return 0;
+  return Math.tanh((v-mean)/(zoom*sigma));
+}
+
+Chart.register({
+  id: 'hAnnotations',
+  afterDraw(chart) {
+    const { ctx, scales: { x, y } } = chart;
+    Object.keys(activeDatasets).forEach(key => {
+      const dataset = activeDatasets[key];
+      const { mean, sigma } = seriesMeanSigma(dataset.data);
+      (annotationsByKey[key] || []).forEach(ann => {
+        const displayValue = currentScaleMode === 'norm'
+          ? applyTanh(ann.value, mean, sigma, ZOOM_LEVELS[zoomIdx])
+          : ann.value;
+        const yPx = y.getPixelForValue(displayValue);
+        if (yPx < y.top - 1 || yPx > y.bottom + 1) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x.left, yPx);
+        ctx.lineTo(x.right, yPx);
+        ctx.strokeStyle = ann.color;
+        ctx.lineWidth   = 1.5;
+        ctx.setLineDash([6, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle    = ann.color;
+        ctx.font         = 'bold 11px sans-serif';
+        ctx.textAlign    = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(ann.label, x.right - 4, yPx - 2);
+        ctx.restore();
+      });
+    });
+  }
+});
+
+
+/* ====================================================
+   Chart.js
+   ==================================================== */
+function initChart(){
+  const ctx=document.getElementById('myChart').getContext('2d');
+  myChart=new Chart(ctx,{
+    type:'line',
+    data:{labels:[],datasets:[]},
+    options:{
+      responsive:true,maintainAspectRatio:false,resizeDelay:0,
+      interaction:{mode:'nearest',intersect:true},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label(ctx){
+          const raw=ctx.dataset._rawData?.[ctx.dataIndex];
+          const unit=ctx.dataset._unit||'';
+          if(raw===null||raw===undefined)return` ${ctx.dataset.label}: —`;
+          return` ${ctx.dataset.label}: ${fmt(raw,unit)}`;
+        }}}
+      },
+      scales:{
+        x:{grid:{color:'#f0f0f0'},ticks:{font:{size:11}}},
+        y:{min:-1.05,max:1.05,grid:{color:'#f0f0f0'},ticks:{display:true,font:{size:10},color:'#9ca3af',
+          callback:v=>{
+            if(Math.abs(v-1)<.01)return'+1';
+            if(Math.abs(v)<.01)return'0';
+            if(Math.abs(v+1)<.01)return'−1';
+            return null;
+          }
+        }}
+      },
+      animation:{duration:350}
+    }
+  });
+}
+
+function rebuildChart(){
+  const keys=Object.keys(activeDatasets);
+  if(!keys.length){
+    myChart.data.labels=[]; myChart.data.datasets=[];
+    myChart.update();
+    $('#chart-no-data').addClass('show');
+    $('#chart-legend').empty();
+    return;
+  }
+  $('#chart-no-data').removeClass('show');
+  const years=[2016,2017,2018,2019,2020,2021,2022,2023,2024,2025];
+  const zoom=ZOOM_LEVELS[zoomIdx];
+
+  // ── スケール計算（datasets構築の前に確定） ──
+  let globalMin=Infinity, globalMax=-Infinity;
+  if(currentScaleMode==='abs'){
+    keys.forEach(k=>activeDatasets[k].data.forEach(d=>{
+      if(d.値!==null&&d.値!==undefined){
+        globalMin=Math.min(globalMin,d.値);
+        globalMax=Math.max(globalMax,d.値);
+      }
+    }));
+    const pad=(globalMax-globalMin)*.08||Math.abs(globalMax)*.1||1;
+    globalMin-=pad; globalMax+=pad;
+  } else if(currentScaleMode==='zero'){
+    keys.forEach(k=>activeDatasets[k].data.forEach(d=>{
+      if(d.値!==null&&d.値!==undefined) globalMax=Math.max(globalMax,d.値);
+    }));
+    globalMin=0;
+    globalMax+=globalMax*.08||1;
+  }
+
+  // ── datasets構築 ──
+  myChart.data.labels=years.map(String);
+  myChart.data.datasets=keys.map(k=>{
+    const ds=activeDatasets[k];
+    const color=PALETTE[ds.colorIdx%PALETTE.length];
+    const yearMap={};
+    ds.data.forEach(d=>yearMap[d.年度]=d.値);
+    const rawData=years.map(y=>yearMap[y]??null);
+
+    let displayData;
+    if(currentScaleMode==='norm'){
+      const{mean,sigma}=seriesMeanSigma(ds.data);
+      displayData=rawData.map(v=>v===null?null:applyTanh(v,mean,sigma,zoom));
+    } else {
+      displayData=rawData;  // abs / zero ともに実値をそのまま使う
+    }
+
+    const base={
+      label:ds.label, data:displayData, _rawData:rawData, _unit:ds.unit,
+      borderColor:color,
+      backgroundColor:color+(currentChartType==='bar'?'cc':'22'),
+      tension:0, pointRadius:4, pointHoverRadius:7, borderWidth:2,
+      fill:false, spanGaps:false,
+      hidden:hiddenDatasets.has(k),
+    };
+    if(currentChartType==='bar'){
+      base.type='bar';
+      delete base.tension; delete base.pointRadius;
+      delete base.pointHoverRadius; delete base.fill;
+    }
+    return base;
+  });
+
+  // ── Y軸スケール設定 ──
+  if(currentScaleMode==='norm'){
+    myChart.options.scales.y.min=-1.05;
+    myChart.options.scales.y.max=1.05;
+    myChart.options.scales.y.ticks={
+      display:true, font:{size:10}, color:'var(--gray-400)',
+      callback:v=>{
+        if(Math.abs(v-1)<.01)return'+1';
+        if(Math.abs(v)<.01)return'0';
+        if(Math.abs(v+1)<.01)return'−1';
+        return null;
+      }
+    };
+  } else {
+    myChart.options.scales.y.min=globalMin;
+    myChart.options.scales.y.max=globalMax;
+    myChart.options.scales.y.ticks={
+      display:true, font:{size:10}, color:'var(--gray-400)', maxTicksLimit:6,
+      callback:v=>{
+        const abs=Math.abs(v);
+        if(abs>=1_000_000) return(v/1_000_000).toFixed(1)+'M';
+        if(abs>=10_000)    return v.toLocaleString('ja-JP',{maximumFractionDigits:0});
+        return v.toLocaleString('ja-JP',{maximumFractionDigits:3});
+      }
+    };
+  }
+
+  myChart.config.type=currentChartType;
+  myChart.update();
+  renderLegend();
+}
+
+function renderLegend(){
+  const keys=Object.keys(activeDatasets);
+  const container=$('#chart-legend');
+  container.empty();
+  if(!keys.length)return;
+  keys.forEach(k=>{
+    const ds=activeDatasets[k],color=PALETTE[ds.colorIdx%PALETTE.length],hidden=hiddenDatasets.has(k);
+    container.append(`<button class="legend-btn ${hidden?'legend-hidden':''}" data-dskey="${k}" style="--lc:${color}"><span class="legend-dot"></span><span class="legend-name">${ds.label}</span></button>`);
+  });
+  const allHidden=keys.every(k=>hiddenDatasets.has(k));
+  container.append(`<button id="btn-legend-hide-all" style="margin-left:auto;padding:2px 9px;border:1.5px solid var(--gray-300);border-radius:20px;background:#fff;font-size:.68rem;color:var(--gray-600);cursor:pointer;white-space:nowrap;">${allHidden?'◎ 全表示':'◉ 全非表示'}</button>`);
+}
+
+function updateZoomLabel(){
+  $('#zoom-label').text(ZOOM_LABELS[zoomIdx]);
+  $('#btn-zoom-in').prop('disabled',zoomIdx===0);
+  $('#btn-zoom-out').prop('disabled',zoomIdx===ZOOM_LEVELS.length-1);
+}
+
+
+/* ====================================================
+   統計
+   ==================================================== */
+function computeStats(label,unit,data){
+  if(!data.length)return null;
+  const sorted=[...data].sort((a,b)=>a.年度-b.年度);
+  const years=sorted.map(d=>d.年度),vals=sorted.map(d=>d.値),n=vals.length;
+  const mean=vals.reduce((a,b)=>a+b,0)/n,min=Math.min(...vals),max=Math.max(...vals);
+  const latest=vals[n-1];
+  let avgAnnual=null,cagr=null;
+  if(n>=2&&years[n-1]!==years[0]){avgAnnual=(vals[n-1]-vals[0])/(years[n-1]-years[0]);}
+  if(n>=2&&vals[0]>0&&vals[n-1]>0&&years[n-1]!==years[0]){cagr=(Math.pow(vals[n-1]/vals[0],1/(years[n-1]-years[0]))-1)*100;}
+  return{label,unit,n,mean,min,minYear:years[vals.indexOf(min)],max,maxYear:years[vals.indexOf(max)],avgAnnual,cagr,latest,latestYear:years[n-1]};
+}
+
+function renderStats(){
+  const keys=Object.keys(activeDatasets),bar=$('#stats-bar');
+  bar.empty();
+  if(!keys.length){bar.html('<span id="stats-empty">指標を選択すると統計が表示されます</span>');return;}
+  keys.forEach(k=>{
+    const ds=activeDatasets[k],s=computeStats(ds.label,ds.unit,ds.data);
+    if(!s)return;
+    const color=PALETTE[ds.colorIdx%PALETTE.length];
+    const cagrHtml=s.cagr!==null?`<span class="${s.cagr>=0?'pos':'neg'}">${fmtPct(s.cagr)}/年</span>`:'—';
+    const trendHtml=s.avgAnnual!==null?`<span class="${s.avgAnnual>=0?'pos':'neg'}">${s.avgAnnual>=0?'+':''}${fmt(s.avgAnnual,s.unit)}/年</span>`:'—';
+    const card=$(`<div class="stat-card"><div class="stat-label"><span class="stat-dot" style="background:${color}"></span>${s.label}<span style="font-size:.61rem;color:var(--gray-400)">(${s.n}年分)</span></div><div class="stat-grid"><div class="stat-item">最新(${s.latestYear})<br><span class="val">${fmt(s.latest,s.unit)}</span></div><div class="stat-item">平均<br><span class="val">${fmt(s.mean,s.unit)}</span></div><div class="stat-item">最大(${s.maxYear})<br><span class="val">${fmt(s.max,s.unit)}</span></div><div class="stat-item">最小(${s.minYear})<br><span class="val">${fmt(s.min,s.unit)}</span></div><div class="stat-item">平均年増<br><span class="val">${trendHtml}</span></div><div class="stat-item">CAGR<br><span class="val">${cagrHtml}</span></div></div></div>`);
+    card.css('border-left-color',color);
+    bar.append(card);
+  });
+}
+
+
+/* ====================================================
+   プロジェクト管理
+   ==================================================== */
+function loadProjects(){
+  $.get(API.projects).done(res=>{
+    if(!res.success){toast('プロジェクトの読込に失敗','error');return;}
+    allProjects=res.projects;
+    renderProjectSelector(res.projects);
+  }).fail(()=>toast('通信エラー','error'));
+}
+
+function renderProjectSelector(projects){
+  const sel=$('#project-select');
+  const prevId=currentProjectId;
+  sel.empty().append('<option value="">— プロジェクトを選択 —</option>');
+  projects.forEach(p=>{
+    const icon={'public':'🔓','domestic':'🏫','group':'👥','private':'🔒'}[p.access_policy]||'🔒';
+    sel.append(`<option value="${p.id}">${icon} ${p.name} (${p.indicator_count}件)</option>`);
+  });
+  if(prevId) sel.val(prevId);
+}
+
+function renderProjectInfo(p){
+  if(!p){$('#project-info').hide();return;}
+    const policyLabel={'public':'🔓 パブリック','domestic':'🏫 学内公開','group':'👥 グループ','private':'🔒 プライベート'}[p.access_policy]||p.access_policy;
+    const policyClass={'public':'policy-public','domestic':'policy-domestic','group':'policy-group','private':'policy-private'}[p.access_policy]||'policy-public';
+  let html=`<div><span class="pi-policy ${policyClass}">${policyLabel}</span></div>`;
+  if(p.group_name) html+=`<div style="font-size:.67rem;color:var(--gray-500);">👥 ${p.group_name}</div>`;
+  html+=`<div style="font-size:.67rem;color:var(--gray-500);">👤 ${p.owner_name||'—'}</div>`;
+  if(p.description) html+=`<div style="font-size:.67rem;color:var(--gray-500);margin-top:3px;">${p.description}</div>`;
+  if(p.can_edit){
+    html+=`<div class="pi-actions"><button class="btn btn-outline" id="btn-edit-project" style="font-size:.67rem;padding:2px 7px;">✏️ 編集</button><button class="btn" id="btn-delete-project" style="font-size:.67rem;padding:2px 7px;background:#fee2e2;color:#b91c1c;border:none;">🗑 削除</button></div>`;
+  }
+  $('#project-info').html(html).show();
+}
+
+$('#project-select').on('change',function(){
+  const pid=parseInt($(this).val());
+  if(!pid){
+    currentProjectId=null;currentProject=null;
+    $('#project-info').hide();
+    clearAllDatasets();
+    $('#ind-list').html('<span style="color:var(--gray-400);font-size:.75rem;">プロジェクトを選択してください</span>');
+    $('#ind-count').text('—');
+    return;
+  }
+  currentProjectId=pid;
+  currentProject=allProjects.find(p=>p.id===pid)||null;
+  renderProjectInfo(currentProject);
+  clearAllDatasets();
+  loadProjectIndicators(pid);
+});
+
+$(document).on('click','#btn-edit-project',function(){
+  openProjectModal(currentProject);
+});
+
+$(document).on('click','#btn-delete-project',function(){
+  if(!currentProject)return;
+  if(!confirm(`プロジェクト「${currentProject.name}」を削除しますか？\n含まれる全指標も削除されます。`))return;
+  $.ajax({url:`${API.projects}/${currentProjectId}`,method:'DELETE'})
+    .done(res=>{
+      if(res.success){
+        toast('プロジェクトを削除しました','success');
+        currentProjectId=null;currentProject=null;
+        clearAllDatasets();
+        $('#ind-list').html('<span style="color:var(--gray-400);font-size:.75rem;">プロジェクトを選択してください</span>');
+        $('#ind-count').text('—');
+        $('#project-info').hide();
+        loadProjects();
+      }else toast(res.error||'削除に失敗','error');
+    }).fail(()=>toast('通信エラー','error'));
+});
+
+/* ── プロジェクトモーダル ── */
+function openProjectModal(project=null){
+  editingProjectId = project ? project.id : null;
+  $('#proj-modal-title').text(project ? 'プロジェクトを編集' : 'プロジェクトを作成');
+  $('#pf-save-label').text(project ? '更新する' : '作成する');
+  $('#pf-name').val(project ? (project.name || '') : '');
+  $('#pf-desc').val(project ? (project.description || '') : '');
+
+  const policyVal = (project && project.access_policy) ? project.access_policy : 'public';
+  document.getElementById('pf-policy').value = policyVal;
+  toggleAccessGroupWrap(policyVal);
+
+  $.get(API.groups).done(res => {
+    const sel = $('#pf-group');
+    sel.empty().append('<option value="">— なし（オーナーのみ）—</option>');
+    const agList = $('#access-group-list');
+    agList.empty();
+    if(res.success){
+      res.groups.forEach(g => {
+        sel.append(`<option value="${g.id}">${g.name}</option>`);
+        const checked = (project && (project.access_group_ids||[]).includes(g.id)) ? 'checked' : '';
+        agList.append(`
+          <label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;">
+            <input type="checkbox" class="ag-check" value="${g.id}" ${checked}
+                   style="width:13px;height:13px;accent-color:var(--primary);">
+            ${g.name}
+          </label>`);
+      });
+    }
+    if(project && project.group_id) sel.val(project.group_id);
+  });
+
+  $('#proj-modal').addClass('open');
+}
+
+$('#btn-new-project').on('click',()=>openProjectModal(null));
+$('#proj-modal-close,#pf-cancel').on('click',()=>$('#proj-modal').removeClass('open'));
+$('#proj-modal').on('click',function(e){if(e.target===this)$(this).removeClass('open');});
+
+$('#pf-save').on('click',function(){
+  const name=$('#pf-name').val().trim();
+  if(!name){toast('プロジェクト名を入力してください','info');return;}
+        const payload={
+          name,
+          description:$('#pf-desc').val().trim(),
+          group_id:$('#pf-group').val()||null,
+          access_policy:$('#pf-policy').val(),
+          access_group_ids:$('.ag-check:checked').map(function(){ return parseInt($(this).val()); }).get()
+        };
+  const $btn=$(this);
+  $btn.prop('disabled',true).html('<span class="spinner"></span> 処理中…');
+
+  const isEdit=editingProjectId!==null;
+  const req=isEdit
+    ?$.ajax({url:`${API.projects}/${editingProjectId}`,method:'PUT',contentType:'application/json',data:JSON.stringify(payload)})
+    :$.ajax({url:API.projects,method:'POST',contentType:'application/json',data:JSON.stringify(payload)});
+
+  req.done(res=>{
+    if(res.success){
+      toast(isEdit?'プロジェクトを更新しました':'プロジェクトを作成しました','success');
+      $('#proj-modal').removeClass('open');
+      // ★ loadProjects().then?... を削除し、以下だけに統一
+      $.get(API.projects).done(r=>{
+        if(r.success){
+          allProjects=r.projects;
+          renderProjectSelector(r.projects);
+          if(currentProjectId){
+            currentProject=r.projects.find(p=>p.id===currentProjectId)||null;
+            renderProjectInfo(currentProject);
+          }
+          if(!isEdit&&res.id){
+            currentProjectId=res.id;
+            currentProject=r.projects.find(p=>p.id===res.id)||null;
+            $('#project-select').val(res.id);
+            renderProjectInfo(currentProject);
+            loadProjectIndicators(res.id);
+          }
+        }
+      });
+    }else toast(res.error||'処理に失敗','error');
+  }).fail(()=>toast('通信エラー','error'))
+    .always(()=>$btn.prop('disabled',false).html(`💾 <span id="pf-save-label">${isEdit?'更新する':'作成する'}</span>`));
+});
+
+/* ====================================================
+   policy切替でグループ選択欄を表示切替
+   ==================================================== */
+
+function toggleAccessGroupWrap(val){
+  $('#access-group-wrap').toggle(val === 'group');
+}
+
+$('#pf-policy').on('change', function(){
+  toggleAccessGroupWrap($(this).val());
+});
+
+/* ====================================================
+   指標パネル（プロジェクトスコープ）
+   ==================================================== */
+function loadProjectIndicators(pid){
+  $('#ind-list').html('<span style="color:var(--gray-400);font-size:.75rem;">読込中…</span>');
+  $('#ind-count').text('読込中…');
+  $.get(API.projIndicators(pid)).done(res=>{
+    if(!res.success){toast('指標の読込に失敗','error');return;}
+    renderIndicatorList(res.indicators,res.can_edit,pid);
+    $('#ind-count').text(res.indicators.length+'件');
+    updateEditBtnStates();
+  }).fail(()=>toast('通信エラー','error'));
+}
+
+function renderIndicatorList(indicators, canEdit, pid){
+  const list=$('#ind-list');
+  list.empty();
+  // ★追加：指標が存在する場合のみ検索ボックスを表示
+  if (indicators.length) {
+      $('#ind-search').val('');
+      $('#ind-search-info').text('');
+      $('#ind-search-wrap').show();
+    } else {
+      $('#ind-search-wrap').hide();
+  }
+  if(!indicators.length){
+    list.html('<span style="color:var(--gray-400);font-size:.73rem;">指標がありません。<br>右のエディタで追加できます。</span>');
+    return;
+  }
+  indicators.forEach(ind=>{
+    const row=$(`
+      <div class="ind-row" data-id="${ind.id}" data-pid="${pid}">
+        <input type="checkbox">
+        <span class="ind-color-dot"></span>
+        <span class="ind-row-label">${ind.name}
+          ${ind.description?`<div class="ind-meta" style="font-size:.61rem;color:var(--gray-400);">${ind.description}</div>`:''}
+        </span>
+        ${canEdit?`<button class="ind-edit-btn" data-id="${ind.id}" title="編集">✏️</button><button class="ind-del-btn" data-id="${ind.id}" title="削除">🗑</button>`:''}
+      </div>`);
+    list.append(row);
+    // 既に activeDatasets にあれば復元
+    const dsKey=`ind_${pid}_${ind.id}`;
+    if(activeDatasets[dsKey]){
+      const color=PALETTE[activeDatasets[dsKey].colorIdx%PALETTE.length];
+      row.addClass('active');
+      row.find('.ind-color-dot').css('background',color);
+      row.find('input[type="checkbox"]').prop('checked',true);
+    }
+  });
+
+  list.off('change','input[type="checkbox"]').on('change','input[type="checkbox"]',function(){
+    const row=$(this).closest('.ind-row');
+    toggleDataset(row.data('id'),row.find('.ind-row-label').contents().first().text().trim(),'',row.data('pid'));
+  });
+
+  list.off('click','.ind-edit-btn').on('click','.ind-edit-btn',function(e){
+    e.stopPropagation();
+    startEditIndicator($(this).data('id'));
+  });
+
+  list.off('click','.ind-del-btn').on('click','.ind-del-btn',function(e){
+    e.stopPropagation();
+    const iid=$(this).data('id');
+    const name=$(this).closest('.ind-row').find('.ind-row-label').contents().first().text().trim();
+    if(!confirm(`「${name}」を削除しますか？`))return;
+    $.ajax({url:API.projIndicator(currentProjectId,iid),method:'DELETE'})
+      .done(res=>{
+        if(res.success){removeDataset(currentProjectId,iid);loadProjectIndicators(currentProjectId);toast('削除しました','success');}
+        else toast(res.error||'削除に失敗','error');
+      });
+  });
+  updateEditBtnStates();
+}
+
+
+/* ====================================================
+   データセット管理
+   ==================================================== */
+function addDataset(pid, iid, label, unit, data){
+  const dsKey=`ind_${pid}_${iid}`;
+  if(activeDatasets[dsKey])return;
+  activeDatasets[dsKey]={label,unit,data,id:iid,pid,colorIdx:colorCounter++};
+  const color=PALETTE[activeDatasets[dsKey].colorIdx%PALETTE.length];
+  const row=$(`.ind-row[data-id="${iid}"]`);
+  row.addClass('active').find('.ind-color-dot').css('background',color);
+  row.find('input[type="checkbox"]').prop('checked',true);
+  updateSelectedCount();rebuildChart();renderStats();updateEditBtnStates();
+  loadAnnotationsForIndicator(pid, iid);   // ★追加
+  renderAnnotationList();
+}
+
+function removeDataset(pid, iid){
+  const dsKey=`ind_${pid}_${iid}`;
+  delete activeDatasets[dsKey];
+  hiddenDatasets.delete(dsKey);
+  const row=$(`.ind-row[data-id="${iid}"]`);
+  row.removeClass('active').find('.ind-color-dot').css('background','');
+  row.find('input[type="checkbox"]').prop('checked',false);
+  updateSelectedCount();rebuildChart();renderStats();updateEditBtnStates();
+  renderAnnotationList();   // ★追加
+}
+
+function clearAllDatasets(){
+  activeDatasets={};hiddenDatasets.clear();colorCounter=0;
+  $('.ind-row').removeClass('active');
+  $('.ind-color-dot').css('background','');
+  $('input[type="checkbox"]').prop('checked',false);
+  updateSelectedCount();rebuildChart();renderStats();
+  // ★追加
+  $('#ind-search').val('');
+  $('#ind-search-info').text('');
+  $('#ind-search-wrap').hide();
+  clearAnnotations();        // ★追加
+  renderAnnotationList();    // ★追加
+}
+
+function toggleDataset(iid, label, unit, pid){
+  const dsKey=`ind_${pid}_${iid}`;
+  if(activeDatasets[dsKey]){
+    removeDataset(pid,iid);
+    // 編集中の指標を外したら編集モードを抜ける（グラフの他系列は維持）
+    if(editingIndicatorId===iid) exitEditModeKeepEditorOpen();
+    return;
+  }
+  $.get(API.projIndData(pid,iid)).done(res=>{
+    if(res.success){
+      addDataset(pid,iid,label,unit||res.unit||'',res.data);
+      // ★チェックした瞬間にエディタを開いてこの指標を編集対象にする
+      startEditIndicator(iid,{scroll:false});
+    }
+    else{toast(res.error||'データ取得に失敗','error');$(`.ind-row[data-id="${iid}"] input`).prop('checked',false);}
+  }).fail(()=>{toast('通信エラー','error');$(`.ind-row[data-id="${iid}"] input`).prop('checked',false);});
+}
+
+function exitEditModeKeepEditorOpen(){
+  editingIndicatorId=null;
+  editModeBackup=null;
+  lastSqlTestResult=null;
+  $('#sql-editor').val('');
+  $('#sql-result').empty();
+  $('#save-form').removeClass('show');
+  $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+  $('#save-form-btns').show();
+  $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+  $('#btn-save-label').text('登録する');
+  renderAnnotationList();
+}
+
+
+function updateSelectedCount(){
+  const n=Object.keys(activeDatasets).length;
+  if(n>0){$('#selected-count').text(`選択中 ${n}`).show();$('#btn-clear-all').show();}
+  else{$('#selected-count').hide();$('#btn-clear-all').hide();}
+}
+
+function updateEditBtnStates(){
+  // 鉛筆ボタンは常時有効（SQLが壊れて選択不能な指標も修復できるようにする）
+  $('.ind-edit-btn').each(function(){
+    const iid=$(this).data('id');
+    const pid=currentProjectId;
+    const active=!!activeDatasets[`ind_${pid}_${iid}`];
+    $(this).removeClass('disabled').attr('title',active?'編集（グラフ表示中）':'編集');
+  });
+}
+
+
+/* ====================================================
+   レイアウト
+   ==================================================== */
+function forceRelayout(){
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      if(myChart){
+        myChart.resize();
+        myChart.update('none');
+      }
+    });
+  });
+}
+
+$('#btn-refresh-layout').on('click',function(){
+  forceRelayout();
+  const $btn=$(this);
+  $btn.css('background','rgba(255,255,255,.4)');
+  setTimeout(()=>$btn.css('background','rgba(255,255,255,.15)'),400);
+});
+
+$(window).on('resize', function(){
+  forceRelayout();
+});
+
+
+/* ====================================================
+   エディタパネル
+   ==================================================== */
+function openEditor(){
+  $('#editor-col').css('display','flex');
+  $('#layout').addClass('editor-open');
+
+  if(!currentProjectId){
+    $('#editor-proj-notice').show();
+  }else{
+    $('#editor-proj-notice').hide();
+  }
+
+  $('#btn-toggle-editor').addClass('active');
+
+  if($('#table-list-box').hasClass('open') && !$('#table-list-box').children().length){
+    loadTableList();
+  }
+
+  requestAnimationFrame(() => forceRelayout());
+}
+
+function closeEditor(){
+  $('#editor-col').css('display','none');
+  $('#layout').removeClass('editor-open');
+  $('#btn-toggle-editor').removeClass('active');
+
+  if(editingIndicatorId!==null){
+    if(editModeBackup){
+      const { dsKey, data } = editModeBackup;
+      if(activeDatasets[dsKey]){
+        activeDatasets[dsKey].data = data;
+        rebuildChart();
+        renderStats();
+      }
+    }
+    editingIndicatorId = null;
+    editModeBackup = null;
+    lastSqlTestResult = null;
+    $('#sql-editor').val('');
+    $('#sql-result').empty();
+    $('#save-form').removeClass('show');
+    $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+    $('#save-form-btns').show();
+    $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+    $('#btn-save-label').text('登録する');
+  }
+
+  requestAnimationFrame(() => forceRelayout());
+}
+
+$('#btn-toggle-editor').on('click',function(){
+  if($('#layout').hasClass('editor-open'))closeEditor();else openEditor();
+});
+$('#btn-close-editor').on('click',()=>closeEditor());
+
+
+/* ====================================================
+   テーブル一覧（エディタ補助）
+   ==================================================== */
+function loadTableList(){
+  $.get(API.tableList).done(res=>{
+    if(!res.success)return;
+    const box=$('#table-list-box');
+    box.empty();
+    res.tables.forEach(t=>{
+      const span=$(`<span class="tname">\`${t}\`</span>`);
+      span.on('click',function(){
+        const ta=document.getElementById('sql-editor');
+        const s=ta.selectionStart,ins='`'+t+'`';
+        ta.value=ta.value.slice(0,s)+ins+ta.value.slice(ta.selectionEnd);
+        ta.focus();ta.setSelectionRange(s+ins.length,s+ins.length);
+      });
+      box.append(span);
+    });
+  });
+}
+
+$('#table-list-toggle').on('click',function(){
+  const box=$('#table-list-box');
+  box.toggleClass('open');
+  $('#tl-arrow').text(box.hasClass('open')?'▼':'▶');
+  if(box.hasClass('open')&&!box.children().length)loadTableList();
+});
+
+
+/* ====================================================
+   SQL エディタ
+   ==================================================== */
+$('#btn-sql-run').on('click',function(){
+  const sql=$('#sql-editor').val().trim();
+  if(!sql){toast('SQLを入力してください','info');return;}
+  const $btn=$(this);
+  $btn.prop('disabled',true).html('<span class="spinner"></span> 実行中…');
+  $('#sql-result').empty();
+  if(editingIndicatorId===null)$('#save-form').removeClass('show');
+  lastSqlTestResult=null;
+
+  $.ajax({url:API.sqlTest,method:'POST',contentType:'application/json',data:JSON.stringify({sql})})
+    .done(res=>{
+      if(res.success){
+        renderSqlResult(res);lastSqlTestResult=res;
+        if(editingIndicatorId!==null){
+          prepSaveForm(res.columns);
+          // グラフプレビュー更新
+          const dsKey=`ind_${currentProjectId}_${editingIndicatorId}`;
+          const yearCol=$('#f-year-col').val(),valCol=$('#f-val-col').val();
+          if(activeDatasets[dsKey]){
+            const newData=res.rows.map(r=>({年度:parseInt(r[yearCol]),値:parseFloat(r[valCol])})).filter(d=>!isNaN(d.年度)&&!isNaN(d.値));
+            if(newData.length){activeDatasets[dsKey].data=newData;rebuildChart();renderStats();}
+          }
+          $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').show();
+          $('#save-form-btns').hide();
+        }else{
+          prepSaveForm(res.columns);
+        }
+      }else{
+        $('#sql-result').html(`<div class="err-msg">⚠️ ${res.error}</div>`);
+      }
+    })
+    .fail(xhr=>{
+      let msg='通信エラー';
+      try{const r=JSON.parse(xhr.responseText);if(r&&r.error)msg=r.error;}catch(e){}
+      $('#sql-result').html(`<div class="err-msg">⚠️ ${msg}</div>`);
+    })
+    .always(()=>$btn.prop('disabled',false).html('▶ SQLを実行'));
+});
+
+$('#btn-sql-clear').on('click',function(){
+  if(editingIndicatorId!==null&&editModeBackup){
+    const{dsKey,data}=editModeBackup;
+    if(activeDatasets[dsKey]){activeDatasets[dsKey].data=data;rebuildChart();renderStats();}
+  }
+  $('#sql-editor').val('');$('#sql-result').empty();$('#save-form').removeClass('show');
+  lastSqlTestResult=null;editingIndicatorId=null;editModeBackup=null;
+  $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+  $('#save-form-btns').show();
+  $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+  $('#btn-save-label').text('登録する');
+});
+
+function renderSqlResult(res){
+  if(!res.rows.length){$('#sql-result').html('<div class="result-info">✅ 実行成功（0件）</div>');return;}
+  let html=`<div class="result-info">✅ ${res.rows.length}行（最大20行）</div><div class="result-table-wrap"><table class="result-table"><thead><tr>`;
+  res.columns.forEach(c=>{html+=`<th>${c}</th>`;});
+  html+='</tr></thead><tbody>';
+  res.rows.forEach(r=>{
+    html+='<tr>';
+    res.columns.forEach(c=>{const v=r[c];html+=`<td>${v===null?'<span style="color:#ccc">NULL</span>':v}</td>`;});
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  $('#sql-result').html(html);
+}
+
+function prepSaveForm(columns){
+  const yearSel=$('#f-year-col'),valSel=$('#f-val-col');
+  yearSel.empty();valSel.empty();
+  columns.forEach(c=>{yearSel.append(`<option value="${c}">${c}</option>`);valSel.append(`<option value="${c}">${c}</option>`);});
+  yearSel.val(columns.find(c=>c.includes('年度')||c.toLowerCase().includes('year'))||columns[0]);
+  valSel.val(columns.find(c=>c==='値'||c.includes('値'))||columns[columns.length-1]);
+  $('#save-form').addClass('show');
+}
+
+
+/* ── 新規登録ボタン ── */
+$('#btn-save').on('click',function(){
+  if(!lastSqlTestResult||editingIndicatorId!==null)return;
+  if(!currentProjectId){toast('プロジェクトを選択してください','info');return;}
+  let name=$('#f-name').val().trim();
+  const $btn=$(this);
+  $btn.prop('disabled',true).html('<span class="spinner"></span> 保存中…');
+
+  const doSave=(resolvedName,autoNamed)=>{
+    $.ajax({url:API.projIndicators(currentProjectId),method:'POST',contentType:'application/json',
+      data:JSON.stringify({name:resolvedName,sql_query:$('#sql-editor').val().trim(),
+        value_column:$('#f-val-col').val(),year_column:$('#f-year-col').val(),
+        description:$('#f-desc').val().trim()})})
+      .done(res=>{
+        if(res.success){
+          toast(autoNamed?`「${resolvedName}」として自動登録しました`:`「${resolvedName}」を登録しました`,autoNamed?'info':'success');
+          resetForm();loadProjectIndicators(currentProjectId);
+        }else toast(res.error||'保存に失敗','error');
+      })
+      .fail(()=>toast('通信エラー','error'))
+      .always(()=>$btn.prop('disabled',false).html('💾 <span id="btn-save-label">登録する</span>'));
+  };
+
+  if(name){doSave(name,false);return;}
+  // 名前省略 → I999_N 自動採番
+  $.get(API.projIndicators(currentProjectId)).done(res=>{
+    let maxN=0;
+    if(res.success)res.indicators.forEach(ind=>{const m=ind.name.match(/^I999_(\d+)/);if(m)maxN=Math.max(maxN,parseInt(m[1],10));});
+    doSave(`I999_${maxN+1}`,true);
+  }).fail(()=>doSave('I999_1',true));
+});
+
+$('#btn-save-cancel').on('click',function(){
+  $('#save-form').removeClass('show');lastSqlTestResult=null;editingIndicatorId=null;editModeBackup=null;
+  $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+  $('#btn-save-label').text('登録する');
+  $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+  $('#save-form-btns').show();
+});
+
+
+/* ── 編集モード開始 ── */
+function startEditIndicator(iid, opts){
+  opts = opts || {};
+  if(!currentProjectId)return;
+  const dsKey=`ind_${currentProjectId}_${iid}`;
+  // 選択中ならグラフ復元用にバックアップ。未選択（SQLエラー等で選択不能含む）でも編集は可能。
+  editModeBackup=activeDatasets[dsKey]
+    ?{dsKey,data:activeDatasets[dsKey].data.map(d=>({...d}))}
+    :null;
+
+  $.get(API.projIndicator(currentProjectId,iid)).done(res=>{
+    if(!res.success){toast('指標の取得に失敗','error');return;}
+    const g=res.indicator;
+    editingIndicatorId=g.id;
+    renderAnnotationList();   // ★追加（編集モード開始時にリストを更新）
+    openEditor();
+    $('#sql-editor').val(g.sql_query);
+    $('#f-name').val(g.name);$('#f-desc').val(g.description||'');
+    $('#sql-result').empty();lastSqlTestResult=null;
+    $('#save-form-title').text('✏️ 指標を編集します（SQLを実行でグラフも更新されます）：');
+    $('#save-form-btns').hide();
+    $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+
+    $.ajax({url:API.sqlTest,method:'POST',contentType:'application/json',data:JSON.stringify({sql:g.sql_query})})
+      .done(sr=>{
+        const columns=sr.success?sr.columns:[g.year_column,g.value_column];
+        const yearSel=$('#f-year-col'),valSel=$('#f-val-col');
+        yearSel.empty();valSel.empty();
+        columns.forEach(c=>{yearSel.append(`<option value="${c}">${c}</option>`);valSel.append(`<option value="${c}">${c}</option>`);});
+        yearSel.val(g.year_column);valSel.val(g.value_column);
+        if(sr.success){lastSqlTestResult=sr;renderSqlResult(sr);$('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').show();$('#save-form-btns').hide();}
+        else{$('#sql-result').html(`<div class="err-msg">⚠️ 保存されているSQLの実行に失敗しています：${sr.error||''}<br>SQLを修正して「SQLを実行」→「更新する」で修復できます。</div>`);}
+      });
+    $('#save-form').addClass('show');
+    if(opts.scroll!==false){
+      document.getElementById('sql-editor').scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  }).fail(()=>toast('通信エラー','error'));
+}
+
+
+/* ── 更新確定 ── */
+$('#btn-update-confirm').on('click',function(){
+  if(!lastSqlTestResult||editingIndicatorId===null){toast('先にSQLを実行してください','info');return;}
+  const name=$('#f-name').val().trim();
+  if(!name){toast('指標名を入力してください','info');return;}
+  const $btn=$(this),updatedId=editingIndicatorId;
+  const dsKey=`ind_${currentProjectId}_${updatedId}`;
+  $btn.prop('disabled',true).html('<span class="spinner"></span> 更新中…');
+
+  $.ajax({url:API.projIndicator(currentProjectId,updatedId),method:'PUT',contentType:'application/json',
+    data:JSON.stringify({name,sql_query:$('#sql-editor').val().trim(),value_column:$('#f-val-col').val(),year_column:$('#f-year-col').val(),description:$('#f-desc').val().trim()})})
+    .done(res=>{
+      if(res.success){
+        toast(`「${name}」を更新しました`,'success');
+        resetForm();loadProjectIndicators(currentProjectId);
+        if(activeDatasets[dsKey]){
+          $.get(API.projIndData(currentProjectId,updatedId)).done(dr=>{
+            if(dr.success&&activeDatasets[dsKey]){activeDatasets[dsKey].data=dr.data;rebuildChart();renderStats();}
+          });
+        }
+      }else toast(res.error||'更新に失敗','error');
+    })
+    .fail(()=>toast('通信エラー','error'))
+    .always(()=>$btn.prop('disabled',false).html('💾 更新する'));
+});
+
+$('#btn-update-cancel').on('click',function(){
+  if(editModeBackup){const{dsKey,data}=editModeBackup;if(activeDatasets[dsKey]){activeDatasets[dsKey].data=data;rebuildChart();renderStats();}}
+  editingIndicatorId=null;editModeBackup=null;lastSqlTestResult=null;
+  $('#save-form').removeClass('show');$('#sql-editor').val('');$('#sql-result').empty();
+  $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+  $('#save-form-btns').show();
+  $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+});
+
+function resetForm(){
+  $('#save-form').removeClass('show');$('#sql-editor').val('');$('#sql-result').empty();$('#f-name,#f-desc').val('');
+  lastSqlTestResult=null;editingIndicatorId=null;editModeBackup=null;
+  $('#save-form-title').text('✅ SQL が実行できました。指標として登録します：');
+  $('#btn-save-label').text('登録する');
+  $('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').hide();
+  $('#save-form-btns').show();
+}
+
+
+/* ====================================================
+   凡例・ズーム・スケール
+   ==================================================== */
+$('#chart-legend').on('click','.legend-btn',function(){
+  const k=$(this).data('dskey');
+  if(hiddenDatasets.has(k))hiddenDatasets.delete(k);else hiddenDatasets.add(k);
+  rebuildChart();
+});
+$('#chart-legend').on('click','#btn-legend-hide-all',function(){
+  const keys=Object.keys(activeDatasets),allHidden=keys.every(k=>hiddenDatasets.has(k));
+  if(allHidden)keys.forEach(k=>hiddenDatasets.delete(k));else keys.forEach(k=>hiddenDatasets.add(k));
+  rebuildChart();
+});
+
+$('#btn-zoom-in').on('click',function(){if(zoomIdx>0){zoomIdx--;updateZoomLabel();rebuildChart();}});
+$('#btn-zoom-out').on('click',function(){if(zoomIdx<ZOOM_LEVELS.length-1){zoomIdx++;updateZoomLabel();rebuildChart();}});
+
+$('#btn-scale-norm,#btn-scale-abs,#btn-scale-zero').on('click',function(){
+  currentScaleMode=$(this).data('scale');
+  $('#btn-scale-norm,#btn-scale-abs,#btn-scale-zero').removeClass('active');
+  $(this).addClass('active');
+  const isNorm=(currentScaleMode==='norm');
+  $('#zoom-control').css('opacity',isNorm?'1':'0.3').find('.btn-zoom').prop('disabled',!isNorm);
+  const infoMap={
+    abs : '縦軸：絶対値表示（全系列共通スケール / 線形）',
+    zero: '縦軸：0ベース表示（最小値=0固定 / 上限自動調整）',
+    norm: '縦軸：相対値表示（各系列の平均=中央 / tanh圧縮）| ツールチップで実値表示'
+  };
+  $('#scale-info').text(infoMap[currentScaleMode]);
+  rebuildChart();
+});
+
+/* ====================================================
+   指標検索（部分一致フィルタ）
+   ==================================================== */
+$('#ind-search').on('input', function() {
+  const kw = $(this).val().trim().toLowerCase();
+  let visible = 0, total = 0;
+
+  $('#ind-list .ind-row').each(function() {
+    const name = $(this).find('.ind-row-label').contents().first().text().trim().toLowerCase();
+    const desc = $(this).find('.ind-meta').text().toLowerCase();
+    const match = !kw || name.includes(kw) || desc.includes(kw);
+    $(this).toggle(match);
+    if (match) visible++;
+    total++;
+  });
+
+  if (kw) {
+    $('#ind-search-info').text(`${visible} / ${total} 件表示`);
+  } else {
+    $('#ind-search-info').text('');
+  }
+}).on('focus', function() {
+  $(this).css('border-color', 'var(--primary)');
+}).on('blur', function() {
+  $(this).css('border-color', 'var(--gray-300)');
+});
+
+// 検索中は全選択を「表示中のみ」に限定する
+$('#btn-select-all').off('click').on('click', function() {
+  $('#ind-list .ind-row:visible input[type="checkbox"]').each(function() {
+    if (!$(this).prop('checked')) {
+      $(this).prop('checked', true).trigger('change');
+    }
+  });
+});
+
+/* 全選択 */
+
+
+
+$('#btn-clear-all').on('click',function(){clearAllDatasets();updateEditBtnStates();});
+
+$('.btn-type[data-type]').on('click',function(){
+  currentChartType=$(this).data('type');$('.btn-type[data-type]').removeClass('active');$(this).addClass('active');
+  currentScaleMode='zero';
+  $('#btn-scale-norm,#btn-scale-abs,#btn-scale-zero').removeClass('active');
+  $('#btn-scale-zero').addClass('active');
+  $('#scale-info').text('縦軸：0ベース表示（最小値=0固定 / 上限自動調整）');
+  rebuildChart();
+});
+
+
+/* ====================================================
+   アノテーション（基準値ライン）管理 — 指標単位DB連動
+   ==================================================== */
+
+/** 指標のアノテーションをDBから取得してキャッシュ */
+function loadAnnotationsForIndicator(pid, iid) {
+  const key = `ind_${pid}_${iid}`;
+  return $.get(API.projIndAnnotations(pid, iid)).done(res => {
+    if (res.success) {
+      annotationsByKey[key] = res.annotations;
+      rebuildChart();
+      renderAnnotationList();   // ★追加
+    }
+  });
+}
+
+/** プロジェクト切替時：全キャッシュをクリア */
+function clearAnnotations() {
+  annotationsByKey = {};
+  rebuildChart();
+}
+
+/**
+ * エディタ上のアノテーションリストを描画
+ * editing中の指標（editingIndicatorId）またはチェック中1件に対応
+ */
+function renderAnnotationList() {
+  const list    = $('#ann-list');
+  const canEdit = currentProject && currentProject.can_edit;
+  const iid     = currentAnnIndicatorId();
+  const pid     = currentProjectId;
+
+  list.empty();
+
+  if (!iid) {
+    list.html('<span style="color:var(--gray-400);font-size:.71rem;">指標を1件選択すると管理できます</span>');
+    $('#ann-ind-name').text('');
+    return;
+  }
+
+  const key  = `ind_${pid}_${iid}`;
+  const anns = annotationsByKey[key] || [];
+  const ds   = activeDatasets[key];
+  $('#ann-ind-name').text(ds ? ds.label : '');
+
+  if (!anns.length) {
+    list.html('<span style="color:var(--gray-400);font-size:.71rem;">ラインなし</span>');
+    return;
+  }
+
+  anns.forEach(ann => {
+    const editBtn = canEdit
+      ? `<button class="ann-edit-btn" data-id="${ann.id}"
+                 style="background:none;border:none;cursor:pointer;
+                        color:var(--gray-400);font-size:.78rem;line-height:1;padding:0 2px;"
+                 title="編集">✏️</button>
+         <button class="ann-del-btn" data-id="${ann.id}"
+                 style="background:none;border:none;cursor:pointer;
+                        color:var(--gray-400);font-size:.78rem;line-height:1;padding:0;"
+                 title="削除">🗑</button>`
+      : '';
+    list.append(`
+      <div style="display:flex;align-items:center;gap:5px;padding:3px 5px;
+                  border-radius:4px;background:var(--gray-50);margin-bottom:3px;">
+        <span style="width:11px;height:11px;border-radius:2px;flex-shrink:0;
+                     background:${ann.color};border:1px solid rgba(0,0,0,.12);"></span>
+        <span style="flex:1;font-size:.71rem;color:var(--gray-700);">
+          ${ann.label}
+          <span style="color:var(--gray-400)">= ${ann.value}</span>
+        </span>
+        ${editBtn}
+      </div>`);
+  });
+}
+
+/**
+ * 現在アノテーション操作対象の indicator_id を返す。
+ * 編集モード中はその指標、そうでなければ選択中の指標が1件だけのときその指標。
+ */
+function currentAnnIndicatorId() {
+  if (editingIndicatorId !== null) return editingIndicatorId;
+  const keys = Object.keys(activeDatasets);
+  if (keys.length === 1) {
+    return activeDatasets[keys[0]].id;
+  }
+  return null;
+}
+
+$('#btn-ann-add').on('click', function () {
+  if (!currentProjectId) { toast('プロジェクトを選択してください', 'info'); return; }
+  if (!currentProject || !currentProject.can_edit) { toast('編集権限がありません', 'error'); return; }
+  const iid = currentAnnIndicatorId();
+  if (!iid) { toast('指標を1件だけ選択してください', 'info'); return; }
+
+  const label = $('#ann-label').val().trim();
+  const value = parseFloat($('#ann-value').val());
+  const color = $('#ann-color').val();
+  if (!label)       { toast('ラベルを入力してください', 'info'); return; }
+  if (isNaN(value)) { toast('値を入力してください',   'info'); return; }
+
+  const $btn = $(this);
+  $btn.prop('disabled', true);
+
+  // ── 更新モード ──
+  if (editingAnnId !== null) {
+    const aid = editingAnnId;
+    $.ajax({
+      url: API.projIndAnnotation(currentProjectId, iid, aid),
+      method: 'PUT', contentType: 'application/json',
+      data: JSON.stringify({ label, value, color })
+    }).done(res => {
+      if (res.success) {
+        const key = `ind_${currentProjectId}_${iid}`;
+        const ann = (annotationsByKey[key] || []).find(a => a.id === aid);
+        if (ann) { ann.label = label; ann.value = value; ann.color = color; }
+        renderAnnotationList();
+        rebuildChart();
+        cancelAnnEdit();
+        toast('基準線を更新しました', 'success');
+      } else {
+        toast(res.error || '更新に失敗', 'error');
+      }
+    }).fail(() => toast('通信エラー', 'error'))
+      .always(() => $btn.prop('disabled', false));
+    return;
+  }
+
+  // ── 追加モード ──
+  $.ajax({
+    url: API.projIndAnnotations(currentProjectId, iid),
+    method: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ label, value, color })
+  }).done(res => {
+    if (res.success) {
+      const key = `ind_${currentProjectId}_${iid}`;
+      if (!annotationsByKey[key]) annotationsByKey[key] = [];
+      annotationsByKey[key].push({ id: res.id, label, value, color });
+      renderAnnotationList();
+      rebuildChart();
+      $('#ann-label').val('');
+      $('#ann-value').val('');
+      toast('基準線を追加しました', 'success');
+    } else {
+      toast(res.error || '追加に失敗', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'))
+    .always(() => $btn.prop('disabled', false));
+});
+
+$('#ann-list').on('click', '.ann-del-btn', function () {
+  const aid = parseInt($(this).data('id'));
+  const iid = currentAnnIndicatorId();
+  if (!iid) return;
+  $.ajax({
+    url: API.projIndAnnotation(currentProjectId, iid, aid),
+    method: 'DELETE'
+  }).done(res => {
+    if (res.success) {
+      const key = `ind_${currentProjectId}_${iid}`;
+      annotationsByKey[key] = (annotationsByKey[key] || []).filter(a => a.id !== aid);
+      renderAnnotationList();
+      rebuildChart();
+      toast('削除しました', 'success');
+    } else {
+      toast(res.error || '削除に失敗', 'error');
+    }
+  }).fail(() => toast('通信エラー', 'error'));
+});
+
+// ── 編集ボタン：フォームに値を流し込む ──
+
+$('#ann-list').on('click', '.ann-edit-btn', function () {
+  const aid  = parseInt($(this).data('id'));
+  const iid  = currentAnnIndicatorId();
+  if (!iid) return;
+  const key  = `ind_${currentProjectId}_${iid}`;
+  const ann  = (annotationsByKey[key] || []).find(a => a.id === aid);
+  if (!ann) return;
+
+  // フォームに値を設定
+  $('#ann-label').val(ann.label);
+  $('#ann-value').val(ann.value);
+  $('#ann-color').val(ann.color);
+  editingAnnId = aid;
+
+  // ボタンを「更新」モードに切替
+  $('#btn-ann-add')
+    .text('💾 更新する')
+    .removeClass('btn-outline')
+    .addClass('btn-primary');
+  $('#btn-ann-cancel-edit').show();
+});
+
+// ── 編集キャンセル ──
+$('#btn-ann-cancel-edit').on('click', function () {
+  cancelAnnEdit();
+});
+
+function cancelAnnEdit() {
+  editingAnnId = null;
+  $('#ann-label').val('');
+  $('#ann-value').val('');
+  $('#ann-color').val('#ef4444');
+  $('#btn-ann-add')
+    .text('＋ 追加')
+    .removeClass('btn-primary')
+    .addClass('btn-outline');
+  $('#btn-ann-cancel-edit').hide();
+}
+
+/* ====================================================
+   エクスポート
+   ==================================================== */
+$('#btn-export-json').on('click', function() {
+  const $pre   = $('#exp-json');
+  const $count = $('#exp-count');
+
+  if (!currentProjectId) {
+    toast('プロジェクトを選択してください', 'info');
+    return;
+  }
+
+  // activeDatasets の label（= 指標名）を収集
+  const selectedNames = Object.values(activeDatasets).map(ds => ds.label);
+
+  if (selectedNames.length === 0) {
+    $pre.text('指標が選択されていません。\n左カラムのチェックボックスで指標を選択してから\nエクスポートしてください。');
+    $count.text('0件（選択中）');
+    $('#exp-modal').addClass('open');
+    return;
+  }
+
+  $pre.text('読込中...');
+  $count.text('');
+  $('#exp-modal').addClass('open');
+
+  // プロジェクトの全指標を取得してから選択中のものだけ絞り込む
+  $.get(API.projExport(currentProjectId)).done(res => {
+    if (!res.success) {
+      $pre.text('エラー: ' + (res.error || '取得失敗'));
+      return;
+    }
+    const payload = res.indicators
+      .filter(ind => selectedNames.includes(ind.name))
+      .map(ind => ({
+        name        : ind.name,
+        sql_query   : ind.sql_query,
+        value_column: ind.value_column,
+        year_column : ind.year_column,
+        description : ind.description || ''
+      }));
+
+    if (payload.length === 0) {
+      $pre.text('選択中の指標がデータベースに見つかりませんでした。');
+      $count.text('0件（選択中）');
+      return;
+    }
+    $pre.text(JSON.stringify(payload, null, 2));
+    $count.text(payload.length + '件（選択中）');
+  }).fail(() => {
+    $pre.text('通信エラーが発生しました');
+  });
+});
+
+
+$('#exp-close').on('click', () => $('#exp-modal').removeClass('open'));
+$('#exp-modal').on('click', function(e) { if (e.target === this) $(this).removeClass('open'); });
+
+// 選択中をコピー
+$('#exp-copy-selected').on('click', function() {
+  const text = $('#exp-json').text();
+  if (!text || text === '読込中...') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const $b = $(this);
+    $b.text('✓ コピー完了');
+    setTimeout(() => $b.text('📋 選択中をコピー'), 2000);
+  });
+});
+
+// 全件をモーダルに表示してコピー
+$('#exp-copy-all').on('click', function() {
+  if (!currentProjectId) { toast('プロジェクトを選択してください', 'info'); return; }
+  const $btn = $(this);
+  const $pre   = $('#exp-json');
+  const $count = $('#exp-count');
+  $btn.text('読込中...').prop('disabled', true);
+
+  $.get(API.projExport(currentProjectId)).done(res => {
+    if (!res.success) {
+      toast('取得失敗: ' + (res.error || ''), 'error');
+      $btn.text('📋 全件をコピー').prop('disabled', false);
+      return;
+    }
+    const payload = res.indicators.map(ind => ({
+      name        : ind.name,
+      sql_query   : ind.sql_query,
+      value_column: ind.value_column,
+      year_column : ind.year_column,
+      description : ind.description || ''
+    }));
+    const text = JSON.stringify(payload, null, 2);
+    $pre.text(text);
+    $count.text(payload.length + '件（全件）');
+    navigator.clipboard.writeText(text).then(() => {
+      $btn.text('✓ 全件コピー完了');
+      setTimeout(() => $btn.text('📋 全件をコピー').prop('disabled', false), 2000);
+    }).catch(() => {
+      toast('クリップボードへのコピーに失敗しました。画面のJSONを手動でコピーしてください。', 'info');
+      $btn.text('📋 全件をコピー').prop('disabled', false);
+    });
+  }).fail(() => {
+    toast('通信エラー', 'error');
+    $btn.text('📋 全件をコピー').prop('disabled', false);
+  });
+});
+
+
+/* ====================================================
+   インポート
+   ==================================================== */
+$('#btn-import-json').on('click',function(){
+  if(!currentProjectId){toast('プロジェクトを選択してください','info');return;}
+  if(!currentProject||!currentProject.can_edit){toast('このプロジェクトへの編集権限がありません','error');return;}
+  $('#import-json-text').val('');$('#import-result').empty();
+  $('#import-modal').addClass('open');
+});
+
+$('#import-modal-close,#import-cancel').on('click',()=>$('#import-modal').removeClass('open'));
+$('#import-modal').on('click',function(e){if(e.target===this)$(this).removeClass('open');});
+
+$('#import-execute').on('click',function(){
+  const text=$('#import-json-text').val().trim();
+  if(!text){toast('JSONを入力してください','info');return;}
+  let indicators;
+  try{indicators=JSON.parse(text);}catch(e){toast('JSONの形式が正しくありません: '+e.message,'error');return;}
+  if(!Array.isArray(indicators)){toast('JSONは配列形式にしてください','error');return;}
+
+  const $btn=$(this);
+  $btn.prop('disabled',true).html('<span class="spinner"></span> インポート中…');
+  $('#import-result').empty();
+
+  $.ajax({url:API.projImport(currentProjectId),method:'POST',contentType:'application/json',data:JSON.stringify({indicators})})
+    .done(res=>{
+      if(res.success){
+        let html=`<div style="color:var(--success);font-weight:600;">✅ ${res.imported}件をインポートしました（スキップ: ${res.skipped}件）</div>`;
+        if(res.messages&&res.messages.length){
+          html+=`<ul style="margin-top:4px;font-size:.68rem;color:var(--gray-500);">`;
+          res.messages.forEach(m=>{html+=`<li>${m}</li>`;});
+          html+=`</ul>`;
+        }
+        $('#import-result').html(html);
+        loadProjectIndicators(currentProjectId);
+        setTimeout(()=>$('#import-modal').removeClass('open'),2000);
+      }else $('#import-result').html(`<div class="err-msg">⚠️ ${res.error}</div>`);
+    })
+    .fail(()=>$('#import-result').html('<div class="err-msg">⚠️ 通信エラー</div>'))
+    .always(()=>$btn.prop('disabled',false).html('📥 インポート実行'));
+});
+
+
+/* ====================================================
+   スキーマダンプ
+   ==================================================== */
+$('#btn-schema-dump').on('click',function(){
+  $('#schema-text').text('読込中…');$('#schema-count').text('');
+  $('#schema-modal').addClass('open');
+  $.get(API.schemaDump).done(res=>{
+    if(!res.success){$('#schema-text').text('エラー: '+res.error);return;}
+    $('#schema-text').text(res.text);$('#schema-count').text(res.table_count+' テーブル');
+  }).fail(()=>$('#schema-text').text('通信エラー'));
+});
+$('#schema-close').on('click',()=>$('#schema-modal').removeClass('open'));
+$('#schema-modal').on('click',function(e){if(e.target===this)$(this).removeClass('open');});
+$('#schema-copy').on('click',function(){
+  const text=$('#schema-text').text();if(!text||text==='読込中…')return;
+  navigator.clipboard.writeText(text).then(()=>{const $b=$(this);$b.text('✓ コピー完了');setTimeout(()=>$b.text('📋 コピー'),2000);});
+});
+$('#schema-dl').on('click',function(){
+  const text=$('#schema-text').text();if(!text||text==='読込中…')return;
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='schema_dump_'+new Date().toISOString().slice(0,10)+'.txt';
+  a.click();URL.revokeObjectURL(url);
+});
+
+
+/* ====================================================
+   テーブルブラウザ（変更なし）
+   ==================================================== */
+const TBrowser=(()=>{
+  let mode='tables',allTables=[],allProjects=[],projTables=[],selectedProj=null,currentDb=null,currentTbl=null,currentPane='schema';
+
+  function open(){$('#tb-modal').addClass('open');if(mode==='tables'&&!allTables.length)loadTables();else if(mode==='projects'&&!allProjects.length)loadProjects_tb();}
+  function close(){$('#tb-modal').removeClass('open');}
+  function setMode(m){mode=m;$('.tb-mode-btn').removeClass('active');$(`.tb-mode-btn[data-mode="${m}"]`).addClass('active');selectedProj=null;currentDb=currentTbl=null;resetRight();if(m==='tables'){if(!allTables.length)loadTables();else renderTableList();}else{if(!allProjects.length)loadProjects_tb();else renderProjectList_tb();}}
+
+  function loadTables(){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserTables).done(res=>{if(res.success){allTables=res.tables;renderTableList();}else $('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
+
+  function renderTableList(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allTables;if(kw)filtered=allTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database.toLowerCase().includes(kw));const byDb={};filtered.forEach(t=>(byDb[t.database]=byDb[t.database]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${db}</div>`);byDb[db].sort((a,b)=>a.table_name.localeCompare(b.table_name)).forEach(t=>{const active=(currentDb===t.database&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${t.database}" data-tbl="${t.table_name}"><span class="tb-name">${t.table_name}</span><span class="tb-cnt">${t.row_count}行</span></div>`);});});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">該当なし</div>');}
+
+  function loadProjects_tb(){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserProjects).done(res=>{if(res.success){allProjects=res.projects;renderProjectList_tb();}else $('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
+
+  function renderProjectList_tb(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allProjects;if(kw)filtered=allProjects.filter(p=>p.name.toLowerCase().includes(kw));filtered.forEach(p=>{const active=(selectedProj&&selectedProj.id===p.id)?' active':'';$list.append(`<div class="tb-proj-card${active}" data-proj-id="${p.id}"><span class="tb-proj-name">📁 ${p.name}</span>${p.description?`<span class="tb-proj-desc">${p.description}</span>`:''}<span class="tb-proj-meta">テーブル ${p.table_count}件 / ビュー ${p.view_count}件</span></div>`);});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">プロジェクトなし</div>');}
+
+  function loadProjectTables_tb(projId){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserProjectTables+'?project_id='+projId).done(res=>{if(!res.success){$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');return;}projTables=res.tables||[];renderProjectTables_tb(selectedProj?selectedProj.name:'');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
+
+  function renderProjectTables_tb(projName){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();$list.append(`<div class="tb-back-btn" id="tb-proj-back">← プロジェクト一覧</div>`);let filtered=projTables;if(kw)filtered=projTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database_name.toLowerCase().includes(kw));if(!filtered.length){$list.append('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">テーブルなし</div>');return;}const byDb={};filtered.forEach(t=>(byDb[t.database_name]=byDb[t.database_name]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${db}</div>`);byDb[db].forEach(t=>{const active=(currentDb===t.database_name&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${t.database_name}" data-tbl="${t.table_name}"><span class="tb-name">${t.table_name}</span></div>`);});});}
+
+  function selectTable(db,tbl){currentDb=db;currentTbl=tbl;$('.tb-item').removeClass('active');$(`.tb-item[data-db="${db}"][data-tbl="${tbl}"]`).addClass('active');$('#tb-right-placeholder').hide();$('#tb-tabs,#tb-pane').show();$('#tb-table-label').text(`${db}.${tbl}`);showPane(currentPane);}
+  function resetRight(){currentDb=currentTbl=null;$('#tb-right-placeholder').show();$('#tb-tabs,#tb-pane').hide();$('#tb-table-label').text('');}
+  function showPane(pane){currentPane=pane;$('.tb-tab').removeClass('active');$(`.tb-tab[data-pane="${pane}"]`).addClass('active');$('#tb-pane-schema,#tb-pane-data').hide();if(pane==='schema'){$('#tb-pane-schema').show();loadSchema();}else{$('#tb-pane-data').show();loadData();}}
+  function loadSchema(){$('#tb-schema-pre').text('取得中...');$.ajax({url:API.browserSchema,method:'POST',contentType:'application/json',data:JSON.stringify({database:currentDb,table_name:currentTbl})}).done(res=>$('#tb-schema-pre').text(res.success?res.schema:'エラー: '+res.error)).fail(()=>$('#tb-schema-pre').text('通信エラー'));}
+  function loadData(){$('#tb-data-info').text('取得中...');$('#tb-data-table').empty();$.ajax({url:API.browserData,method:'POST',contentType:'application/json',data:JSON.stringify({database:currentDb,table_name:currentTbl,limit:500,offset:0})}).done(res=>{if(!res.success){$('#tb-data-info').html(`<span style="color:#e74c3c;">エラー: ${res.error}</span>`);return;}const{columns,rows,total_count}=res;$('#tb-data-info').html(`<span>${rows.length} 行表示（全 ${total_count} 行）</span><span style="color:var(--gray-400);font-size:.66rem;">※最大500行 / 読み取り専用</span>`);let html='<thead><tr>'+columns.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';rows.forEach(row=>{html+='<tr>'+columns.map(c=>{const v=row[c];return v===null||v===undefined?'<td><span class="tb-null">NULL</span></td>':`<td title="${String(v).replace(/"/g,'&quot;')}">${String(v)}</td>`;}).join('')+'</tr>';});html+='</tbody>';$('#tb-data-table').html(html);}).fail(()=>$('#tb-data-info').html('<span style="color:#e74c3c;">通信エラー</span>'));}
+
+  function init(){
+    $('#tb-close').on('click',close);
+    $('#tb-modal').on('click',function(e){if(e.target===this)close();});
+    $(document).on('click','.tb-mode-btn',function(){setMode($(this).data('mode'));});
+    $('#tb-left-search').on('input',function(){if(mode==='tables')renderTableList();else if(selectedProj)renderProjectTables_tb(selectedProj.name);else renderProjectList_tb();});
+    $(document).on('click','#tb-list .tb-item',function(){selectTable($(this).data('db'),$(this).data('tbl'));});
+    $(document).on('click','#tb-list .tb-proj-card',function(){const id=parseInt($(this).data('proj-id'));selectedProj=allProjects.find(p=>p.id===id);$('.tb-proj-card').removeClass('active');$(this).addClass('active');resetRight();loadProjectTables_tb(id);});
+    $(document).on('click','#tb-proj-back',function(){selectedProj=null;projTables=[];resetRight();renderProjectList_tb();});
+    $(document).on('click','.tb-tab',function(){if(currentDb&&currentTbl)showPane($(this).data('pane'));});
+    $(document).on('click','#tb-list .tb-group-hd',function(){$(this).nextUntil('.tb-group-hd').toggle();});
+  }
+  return{init};
+})();
+
+/* ====================================================
+   グラフHTML出力
+   ==================================================== */
+$('#btn-export-chart').on('click', function() {
+  const keys = Object.keys(activeDatasets);
+  if (!keys.length) { toast('指標を選択してください', 'info'); return; }
+
+  const years = [2016,2017,2018,2019,2020,2021,2022,2023,2024,2025];
+  const PAL   = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6',
+                 '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6','#a855f7','#3b82f6'];
+
+  const W=960, H=520, MT=20, MR=30, MB=60, ML=80;
+  const PW=W-ML-MR, PH=H-MT-MB;
+
+  const series = keys.map(k => {
+    const ds = activeDatasets[k];
+    const yearMap = {};
+    ds.data.forEach(d => yearMap[d.年度] = d.値);
+    const rawValues = years.map(y => yearMap[y] ?? null);
+    let values = rawValues;
+    if (currentScaleMode === 'norm') {
+      const { mean, sigma } = seriesMeanSigma(ds.data);
+      values = rawValues.map(v => v == null
+        ? null
+        : applyTanh(v, mean, sigma, ZOOM_LEVELS[zoomIdx]));
+    }
+    return { key: k, label: ds.label, color: PAL[ds.colorIdx % PAL.length],
+             rawValues, values };
+  });
+
+  // ── Y軸範囲計算（共通） ──
+  let yMin = 0, yMax = -Infinity;
+  if (currentScaleMode === 'norm') {
+    yMin = -1.05; yMax = 1.05;
+  } else if (currentScaleMode === 'abs') {
+    let rawMin = Infinity;
+    series.forEach(s => s.values.forEach(v => {
+      if (v != null) { rawMin = Math.min(rawMin, v); yMax = Math.max(yMax, v); }
+    }));
+    const pad = (yMax - rawMin) * 0.08 || Math.abs(yMax) * 0.1 || 1;
+    yMin = rawMin - pad; yMax += pad;
+  } else {
+    series.forEach(s => s.values.forEach(v => {
+      if (v != null) yMax = Math.max(yMax, v);
+    }));
+    yMax += yMax * 0.08 || 1;
+  }
+
+  const yPos = v => MT + PH - ((v - yMin) / (yMax - yMin)) * PH;
+
+  const tickCount = 6;
+  const ticks = [];
+  for (let i = 0; i <= tickCount; i++) ticks.push(yMin + (yMax - yMin) * i / tickCount);
+
+  function fmtTick(v) {
+    const a = Math.abs(v);
+    if (a >= 1000000) return (v/1000000).toFixed(1) + 'M';
+    if (a >= 10000)   return v.toLocaleString('ja-JP', {maximumFractionDigits:0});
+    return v.toLocaleString('ja-JP', {maximumFractionDigits:3});
+  }
+
+  // ── SVG共通部分（背景・グリッド・軸ラベル） ──
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  svg += `<rect width="${W}" height="${H}" fill="#fff"/>`;
+
+  ticks.forEach(v => {
+    const y = yPos(v);
+    svg += `<line x1="${ML}" y1="${y}" x2="${ML+PW}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>`;
+    svg += `<text x="${ML-6}" y="${y+4}" text-anchor="end" font-family="sans-serif" font-size="10" fill="#9ca3af">${fmtTick(v)}</text>`;
+  });
+
+  svg += `<rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
+  svg += `<text x="${ML+PW/2}" y="${H-8}" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#374151">年度</text>`;
+  svg += `<text x="14" y="${MT+PH/2}" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#374151" transform="rotate(-90,14,${MT+PH/2})">値</text>`;
+
+  // ── 基準値ライン（共通） ──
+  const drawnAnns = new Map();
+  Object.keys(activeDatasets).forEach(k => {
+    const dataset = activeDatasets[k];
+    const { mean, sigma } = seriesMeanSigma(dataset.data);
+    (annotationsByKey[k] || []).forEach(ann => {
+      const displayValue = currentScaleMode === 'norm'
+        ? applyTanh(ann.value, mean, sigma, ZOOM_LEVELS[zoomIdx])
+        : ann.value;
+      const dupKey = `${displayValue}_${ann.color}_${ann.label}`;
+      if (drawnAnns.has(dupKey)) return;
+      drawnAnns.set(dupKey, true);
+      if (displayValue < yMin || displayValue > yMax) return;
+      const yPx = yPos(displayValue);
+      svg += `<line x1="${ML}" y1="${yPx}" x2="${ML+PW}" y2="${yPx}" stroke="${ann.color}" stroke-width="1.5" stroke-dasharray="6,3"/>`;
+      svg += `<text x="${ML+PW-4}" y="${yPx-3}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="bold" fill="${ann.color}">${ann.label}</text>`;
+    });
+  });
+
+  // ── 折れ線 / 棒グラフ 分岐 ──
+  if (currentChartType === 'bar') {
+    // ── 棒グラフ ──
+    // データがある年度のみ表示対象
+    const activeYearIndices = years.map((y, i) => i).filter(i =>
+      series.some(s => s.values[i] != null)
+    );
+    const nYears   = activeYearIndices.length;
+    const nSeries  = series.length;
+    const slotW    = PW / years.length;           // 年度1コマの幅
+    const barGap   = slotW * 0.12;               // コマ両端の余白
+    const groupW   = slotW - barGap * 2;          // グループ全体の幅
+    const barW     = Math.max(4, groupW / nSeries - 2); // 1本の棒幅
+    const groupGap = (groupW - barW * nSeries) / Math.max(nSeries - 1, 1);
+
+    activeYearIndices.forEach(i => {
+      const yr  = years[i];
+      const cx  = ML + (i + 0.5) * slotW;        // 年度コマの中心X
+      const gx0 = cx - groupW / 2;               // グループ左端
+
+      // X軸ラベル
+      svg += `<text x="${cx}" y="${MT+PH+16}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6b7280">${yr}</text>`;
+
+      series.forEach((s, si) => {
+        const v = s.values[i];
+        if (v == null) return;
+        const bx  = gx0 + si * (barW + groupGap);
+        const baseValue = Math.min(Math.max(0, yMin), yMax);
+        const valueY = yPos(v);
+        const baseY  = yPos(baseValue);
+        const by  = Math.min(valueY, baseY);
+        const bh  = Math.abs(baseY - valueY);
+        const rx  = Math.min(3, barW / 4);
+        // 角丸上部のみの棒
+        svg += `<path d="M${bx},${by+bh} L${bx},${by+rx} Q${bx},${by} ${bx+rx},${by} L${bx+barW-rx},${by} Q${bx+barW},${by} ${bx+barW},${by+rx} L${bx+barW},${by+bh} Z" fill="${s.color}cc"/>`;
+        // 値ラベル（棒の上）
+        if (bh > 12) {
+          svg += `<text x="${bx+barW/2}" y="${by-3}" text-anchor="middle" font-family="sans-serif" font-size="9" fill="${s.color}">${fmtTick(v)}</text>`;
+        }
+      });
+    });
+
+  } else {
+    // ── 折れ線グラフ ──
+    const xPos = i => ML + (i / (years.length - 1)) * PW;
+
+    years.forEach((yr, i) => {
+      const x = xPos(i);
+      svg += `<line x1="${x}" y1="${MT}" x2="${x}" y2="${MT+PH}" stroke="#f0f0f0" stroke-width="1"/>`;
+      svg += `<text x="${x}" y="${MT+PH+16}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6b7280">${yr}</text>`;
+    });
+
+    series.forEach(s => {
+      let pathD = '';
+      s.values.forEach((v, i) => {
+        if (v == null) return;
+        const x = xPos(i), y = yPos(v);
+        pathD += pathD === '' ? `M${x},${y}` : `L${x},${y}`;
+      });
+      if (pathD) svg += `<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+      s.values.forEach((v, i) => {
+        if (v == null) return;
+        svg += `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="#fff" stroke="${s.color}" stroke-width="2"/>`;
+      });
+    });
+  }
+
+  // ── 凡例（共通） ──
+  const legY = MT + PH + 38;
+  let legX = ML;
+  series.forEach(s => {
+    if (currentChartType === 'bar') {
+      // 棒グラフ凡例：四角
+      svg += `<rect x="${legX}" y="${legY-9}" width="12" height="12" rx="2" fill="${s.color}cc"/>`;
+    } else {
+      // 折れ線凡例：丸
+      svg += `<rect x="${legX}" y="${legY-9}" width="12" height="12" rx="6" fill="${s.color}"/>`;
+    }
+    svg += `<text x="${legX+16}" y="${legY}" font-family="sans-serif" font-size="11" fill="#374151">${s.label}</text>`;
+    legX += 16 + s.label.length * 7 + 20;
+  });
+
+  svg += `</svg>`;
+
+  // ── HTMLとしてモーダルに埋め込んでプレビュー ──
+  const html = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<style>body{margin:0;background:#fff;display:flex;justify-content:center;padding:16px;}</style>
+</head><body>${svg}</body></html>`;
+
+  $('#svg-text').text(svg);
+  $('#svg-ind-count').text(series.length + '系列 / ' + (currentChartType === 'bar' ? '棒グラフ' : '折れ線'));
+  $('#svg-modal').addClass('open');
+});
+
+
+$('#svg-close').on('click', () => $('#svg-modal').removeClass('open'));
+$('#svg-modal').on('click', function(e) { if (e.target === this) $(this).removeClass('open'); });
+$('#svg-copy').on('click', function() {
+  const text = $('#svg-text').text();
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const $b = $(this);
+    $b.text('✓ コピー完了');
+    setTimeout(() => $b.text('📋 コピー'), 2000);
+  });
+});
+/* ====================================================
+   初期化
+   ==================================================== */
+$(document).ready(function(){
+  initChart();
+  updateZoomLabel();
+  TBrowser.init();
+  loadProjects();
+});
+</script>
+</body>
+</html>

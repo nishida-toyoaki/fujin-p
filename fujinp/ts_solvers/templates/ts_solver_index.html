@@ -1,0 +1,158 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TS Solvers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .version-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .version-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .version-card:hover {
+            transform: translateY(-8px);
+            border-color: #667eea;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .version-card .icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+
+        .version-card h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .version-card p {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .back-button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .back-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>&#128558;&#8205;&#128168; 巡回セールスマンソルバー</h1>
+            <p> - 3つのバージョンから選択してください</p>
+        </div>
+
+        <div class="version-grid">
+            <a href="{{ url_for('ts_solvers.plain') }}" class="version-card">
+                <div class="icon">🔷</div>
+                <h2>Plain TS Solver</h2>
+                <p>基本的なバージョン</p>
+            </a>
+
+            <a href="{{ url_for('ts_solvers.improved') }}" class="version-card">
+                <div class="icon">🔶</div>
+                <h2>Improved TS Solver</h2>
+                <p>改良されたバージョン</p>
+            </a>
+
+            <a href="{{ url_for('ts_solvers.further_improved') }}" class="version-card">
+                <div class="icon">🔴</div>
+                <h2>Further Improved TS Solver</h2>
+                <p>さらに改良されたバージョン</p>
+            </a>
+        </div>
+
+        <div class="footer">
+            <a href="{{ url_for('ts_solvers.finish') }}" class="back-button">終了</a>
+        </div>
+    </div>
+</body>
+</html>

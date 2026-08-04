@@ -1,0 +1,718 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作業ダッシュボード - CoRePo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .status-selector {
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 65px;
+            padding: 8px 12px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: white;
+            position: relative;
+        }
+
+        .action-btn i {
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+
+        .action-btn .btn-label {
+            display: block;
+            font-size: 0.65rem;
+            white-space: nowrap;
+            text-align: center;
+            width: 100%;
+            margin-top: 2px;
+        }
+
+        .edit-content-btn {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        }
+
+        .edit-content-btn:hover {
+            background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+            transform: scale(1.1);
+        }
+
+        .preview-content-btn {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        }
+
+        .preview-content-btn:hover {
+            background: linear-gradient(135deg, #1e7e34 0%, #165c2d 100%);
+            transform: scale(1.1);
+        }
+
+        .full-preview-btn {
+            background: linear-gradient(135deg, #6f42c1 0%, #5035a4 100%);
+        }
+
+        .full-preview-btn:hover {
+            background: linear-gradient(135deg, #5035a4 0%, #3d2684 100%);
+            transform: scale(1.1);
+        }
+
+        /* ★追加: 責任者用「担当管理」ボタン */
+        .manage-btn {
+            background: linear-gradient(135deg, #fd7e14 0%, #c96209 100%);
+        }
+
+        .manage-btn:hover {
+            background: linear-gradient(135deg, #c96209 0%, #9a4a06 100%);
+            transform: scale(1.1);
+            color: white;
+        }
+
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('colrep.index') }}">
+                <i class="bi bi-file-text"></i> CoRePo
+            </a>
+            <a href="{{ url_for('colrep.return_to_fujin') }}" class="btn btn-danger btn-sm ms-auto">
+                <i class="bi bi-house"></i> FUJINダッシュボードに戻る
+            </a>
+        </div>
+    </nav>
+
+    <main class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1><i class="bi bi-person-workspace"></i> 作業ダッシュボード</h1>
+                <p class="text-muted">あなたにアサインされたタスク一覧</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                {# ★追加: クイック作成（CoRePo管理者以上のみ表示） #}
+                {% if permissions and (permissions.is_colrep_admin or permissions.is_colrep_manager) %}
+                <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#quickCreateModal">
+                    <i class="bi bi-pencil-square"></i> 新規執筆を開始
+                </button>
+                {% endif %}
+                <span class="badge bg-info" style="font-size: 1.5rem; padding: 0.6rem 1.2rem;">作業者</span>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}" role="alert">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h3 class="text-primary">{{ stats.total_tasks if stats and stats.total_tasks is not none else 0 }}</h3>
+                        <small class="text-muted">総タスク数</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning">{{ stats.pending_tasks }}</h3>
+                        <small class="text-muted">未完了</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h3 class="text-success">{{ stats.completed_tasks }}</h3>
+                        <small class="text-muted">完了済み</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h3 class="text-info">{{ stats.projects_count }}</h3>
+                        <small class="text-muted">プロジェクト数</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if tasks %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-list-task"></i> アサインされたタスク一覧
+                    (<span id="visibleCount">{{ tasks|length }}</span> / {{ tasks|length }}件)</h5>
+                {# ★追加: 表示範囲・並び順の設定 #}
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="表示範囲">
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterAll" value="all" checked>
+                        <label class="btn btn-outline-primary" for="filterAll">すべて</label>
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterActive" value="active">
+                        <label class="btn btn-outline-primary" for="filterActive">完了を除く</label>
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterWorking" value="working">
+                        <label class="btn btn-outline-primary" for="filterWorking">作業中のみ</label>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="並び順">
+                        <input type="radio" class="btn-check" name="taskSort" id="sortDefault" value="default" checked>
+                        <label class="btn btn-outline-secondary" for="sortDefault">標準</label>
+                        <input type="radio" class="btn-check" name="taskSort" id="sortUpdated" value="updated">
+                        <label class="btn btn-outline-secondary" for="sortUpdated">更新が新しい順</label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>プロジェクト</th>
+                                <th>公開範囲</th>
+                                <th>カラム名</th>
+                                <th>説明</th>
+                                <th>進捗状況</th>
+                                <th>更新日時</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            {# ★追加: 絞り込み/並び替え用のデータ属性 #}
+                            <tr class="task-row"
+                                data-status="{{ task.status }}"
+                                data-updated="{{ task.更新日時.strftime('%Y%m%d%H%M%S') if task.更新日時 else '' }}"
+                                data-origindex="{{ loop.index0 }}">
+                                <td>
+                                    <strong>{{ task.プロジェクト名 }}</strong>
+                                    {% if task.is_owner %}
+                                        <span class="badge bg-warning text-dark" title="あなたが責任者のプロジェクトです">責任者</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.is_public %}
+                                        <span class="badge bg-success"><i class="bi bi-globe"></i> 公開</span>
+                                    {% else %}
+                                        <span class="badge bg-warning"><i class="bi bi-lock"></i> 限定</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">#{{ task.id }}</span>
+                                    <strong>{{ task.カラム名 }}</strong>
+                                </td>
+                                <td>
+                                    {% if task.説明 %}
+                                        <div class="d-flex align-items-center">
+                                            <small class="me-2">
+                                                {{ task.説明[:20] }}{% if task.説明|length > 20 %}...{% endif %}
+                                            </small>
+                                            <button class="btn btn-outline-info btn-sm py-0 px-2 view-description-btn"
+                                                    style="font-size: 0.75rem;"
+                                                    data-task-id="{{ task.id }}"
+                                                    data-project-id="{{ task.project_id }}"
+                                                    title="説明の詳細を表示">
+                                                <i class="bi bi-info-circle"></i> 詳細表示
+                                            </button>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">説明なし</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm status-selector"
+                                            data-task-id="{{ task.id }}"
+                                            data-project-id="{{ task.project_id }}"
+                                            style="width: 140px;">
+                                        <option value="作業中" {% if task.status == '作業中' %}selected{% endif %}>作業中</option>
+                                        <option value="改訂中" {% if task.status == '改訂中' %}selected{% endif %}>改訂中</option>
+                                        <option value="完了" {% if task.status == '完了' %}selected{% endif %}>完了</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <small>
+                                        {% if task.更新日時 %}
+                                            {{ task.更新日時.strftime('%m/%d %H:%M') }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="action-btn edit-content-btn"
+                                                data-task-id="{{ task.id }}"
+                                                data-project-id="{{ task.project_id }}"
+                                                data-task-title="{{ task.カラム名 }}"
+                                                data-content="{{ (task.content or '')|replace('\"', '&quot;')|replace('\n', '&#10;')|replace('\r', '&#13;') }}"
+                                                title="編集">
+                                            <i class="bi bi-pencil"></i><span class="btn-label">編集</span>
+                                        </button>
+
+                                        <button class="action-btn preview-content-btn"
+                                                data-task-id="{{ task.id }}"
+                                                data-project-id="{{ task.project_id }}"
+                                                title="プレビュー">
+                                            <i class="bi bi-eye"></i><span class="btn-label">プレビュー</span>
+                                        </button>
+
+                                        <button class="action-btn full-preview-btn"
+                                                data-project-id="{{ task.project_id }}"
+                                                title="全体プレビュー">
+                                            <i class="bi bi-file-earmark-text"></i><span class="btn-label">全体</span>
+                                        </button>
+
+                                        {# ★追加: 責任者なら担当変更（タスク管理）へ直接遷移できる #}
+                                        {% if task.is_owner %}
+                                        <a class="action-btn manage-btn"
+                                           href="{{ url_for('colrep.manage_project_table', project_id=task.project_id) }}"
+                                           title="タスク管理（担当者の変更・タスク追加）">
+                                            <i class="bi bi-people"></i><span class="btn-label">担当管理</span>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-inbox" style="font-size: 3rem; color: #6c757d;"></i>
+                        <h4 class="mt-3 text-muted">アサインされたタスクがありません</h4>
+                        <p class="text-muted">現在、あなたにアサインされた作業はありません。</p>
+                        {# ★追加: タスクがなくてもここから書き始められる #}
+                        {% if permissions and (permissions.is_colrep_admin or permissions.is_colrep_manager) %}
+                        <button class="btn btn-success mt-2" data-bs-toggle="modal" data-bs-target="#quickCreateModal">
+                            <i class="bi bi-pencil-square"></i> 新規執筆を開始
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    {# ★追加: クイック作成モーダル #}
+    {% if permissions and (permissions.is_colrep_admin or permissions.is_colrep_manager) %}
+    <div class="modal fade" id="quickCreateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square"></i> 新規執筆を開始</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        「本文」タスクだけのプロジェクトを作成し、あなたが<strong>責任者兼執筆者</strong>になります。
+                        作成後すぐにエディタが開きます。分担執筆に移行したくなったら、
+                        「担当管理」から担当者を変更したりタスクを追加したりできます。
+                    </p>
+                    <div class="mb-3">
+                        <label for="quickProjectName" class="form-label">プロジェクト名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="quickProjectName"
+                               maxlength="255" placeholder="例: 研究会報告書">
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="quickIsPublic">
+                        <label class="form-check-label" for="quickIsPublic">
+                            公開プロジェクトにする <small class="text-muted">（既定は限定プロジェクト）</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-success" id="quickCreateSubmit">
+                        <i class="bi bi-pencil-square"></i> 作成して執筆開始
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ===== ステータス変更時の処理 =====
+            document.querySelectorAll('.status-selector').forEach(selector => {
+                selector.addEventListener('change', function() {
+                    const taskId = this.dataset.taskId;
+                    const projectId = this.dataset.projectId;
+                    const newStatus = this.value;
+
+                    updateTaskStatus(projectId, taskId, newStatus);
+
+                    // ★追加: 行のデータ属性を更新し、表示範囲・並び順を再適用
+                    const row = this.closest('tr');
+                    if (row) row.dataset.status = newStatus;
+                    applyTaskView();
+                });
+            });
+
+            // 編集ボタンクリック時の処理
+            document.querySelectorAll('.edit-content-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    if (!taskId || taskId === 'undefined' || taskId === 'null') {
+                        alert('タスクIDが無効です');
+                        return;
+                    }
+                    const projectId = this.dataset.projectId;
+                    const taskTitle = this.dataset.taskTitle;
+                    const content = this.dataset.content;
+
+                    openMeditEditor(projectId, taskId, taskTitle, content);
+                });
+            });
+
+            // プレビューボタンクリック時の処理（作業内容）
+            document.querySelectorAll('.preview-content-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    const projectId = this.dataset.projectId;
+                    showContentPreview(projectId, taskId);
+                });
+            });
+
+            // ★★★ 修正箇所：説明詳細ボタンクリック時の処理 ★★★
+            document.querySelectorAll('.view-description-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    const projectId = this.dataset.projectId;
+                    showDescriptionPreview(projectId, taskId);
+                });
+            });
+
+            // 全体プレビューボタンクリック時の処理
+            document.querySelectorAll('.full-preview-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const projectId = this.dataset.projectId;
+                    showFullPreview(projectId);
+                });
+            });
+
+            // ★追加: クイック作成（作成して執筆開始）
+            const quickCreateBtn = document.getElementById('quickCreateSubmit');
+            if (quickCreateBtn) {
+                quickCreateBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('quickProjectName');
+                    const projectName = nameInput.value.trim();
+                    if (!projectName) {
+                        alert('プロジェクト名を入力してください');
+                        nameInput.focus();
+                        return;
+                    }
+                    const isPublic = document.getElementById('quickIsPublic').checked;
+
+                    // ポップアップブロック回避のため、クリック時に先にウィンドウを開いておく
+                    const uniqueWindowId = 'meditEditor_' + Date.now();
+                    const editorWindow = window.open(
+                        '',
+                        uniqueWindowId,
+                        'width=1200,height=800,scrollbars=yes,resizable=yes'
+                    );
+                    if (!editorWindow) {
+                        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+                        return;
+                    }
+                    editorWindow.document.write(
+                        '<p style="font-family:sans-serif;padding:20px;">プロジェクトを作成しています…</p>'
+                    );
+
+                    const submitBtn = this;
+                    submitBtn.disabled = true;
+
+                    fetch('/colrep/quick_create_project', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_name: projectName,
+                            is_public: isPublic
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            throw new Error(data.error || '作成に失敗しました');
+                        }
+
+                        // エディタ保存/中断時にダッシュボードを更新
+                        window.editorCallback = function(result) {
+                            location.reload();
+                        };
+
+                        editorWindow.location.href =
+                            `/colrep/edit_content_external/${data.project_id}/${data.task_id}`;
+
+                        const modalEl = document.getElementById('quickCreateModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        nameInput.value = '';
+                        submitBtn.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        editorWindow.close();
+                        submitBtn.disabled = false;
+                        alert('プロジェクト作成中にエラーが発生しました: ' + error.message);
+                    });
+                });
+            }
+
+            // ★追加: 表示範囲・並び順の復元とリスナー登録
+            try {
+                const savedFilter = localStorage.getItem('colrepTaskFilter');
+                const savedSort = localStorage.getItem('colrepTaskSort');
+                if (savedFilter) {
+                    const el = document.querySelector(`input[name="taskFilter"][value="${savedFilter}"]`);
+                    if (el) el.checked = true;
+                }
+                if (savedSort) {
+                    const el = document.querySelector(`input[name="taskSort"][value="${savedSort}"]`);
+                    if (el) el.checked = true;
+                }
+            } catch (e) { /* localStorage不可でも動作継続 */ }
+
+            document.querySelectorAll('input[name="taskFilter"], input[name="taskSort"]').forEach(r => {
+                r.addEventListener('change', applyTaskView);
+            });
+            applyTaskView();
+        });
+
+        // ===== ★追加: 表示範囲・並び順の適用 =====
+        function applyTaskView() {
+            const filterEl = document.querySelector('input[name="taskFilter"]:checked');
+            const sortEl = document.querySelector('input[name="taskSort"]:checked');
+            const filter = filterEl ? filterEl.value : 'all';
+            const sort = sortEl ? sortEl.value : 'default';
+
+            const tbody = document.querySelector('.table tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.querySelectorAll('.task-row'));
+            if (rows.length === 0) return;
+
+            // 絞り込み（進捗: 作業中 → 改訂中 → 完了）
+            let visible = 0;
+            rows.forEach(row => {
+                const st = row.dataset.status || '作業中';
+                let show = true;
+                if (filter === 'active') {
+                    show = (st !== '完了');           // 完了を除く
+                } else if (filter === 'working') {
+                    show = (st === '作業中');          // 作業中のみ
+                }
+                row.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            const vc = document.getElementById('visibleCount');
+            if (vc) vc.textContent = visible;
+
+            // 並び替え
+            rows.sort((a, b) => {
+                if (sort === 'updated') {
+                    // 更新日時の新しい順（同時刻や不明は標準順）
+                    const cmp = (b.dataset.updated || '').localeCompare(a.dataset.updated || '');
+                    if (cmp !== 0) return cmp;
+                }
+                return parseInt(a.dataset.origindex, 10) - parseInt(b.dataset.origindex, 10);
+            });
+            rows.forEach(row => tbody.appendChild(row));
+
+            // 選択を記憶（次回表示時に復元）
+            try {
+                localStorage.setItem('colrepTaskFilter', filter);
+                localStorage.setItem('colrepTaskSort', sort);
+            } catch (e) { /* 無視 */ }
+        }
+
+        // ===== ステータス更新関数 =====
+        function updateTaskStatus(projectId, taskId, status) {
+            fetch(`/colrep/update_task_status/${projectId}/${taskId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    status: status
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('ステータスの更新に失敗しました: ' + (data.error || '不明なエラー'));
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('ステータスの更新中にエラーが発生しました');
+            });
+        }
+
+        function openMeditEditor(projectId, taskId, taskTitle, content) {
+            const uniqueWindowId = 'meditEditor_' + Date.now();
+            const editorUrl = `/colrep/edit_content_external/${projectId}/${taskId}`;
+
+            const editorWindow = window.open(
+                editorUrl,
+                uniqueWindowId,
+                'width=1200,height=800,scrollbars=yes,resizable=yes'
+            );
+
+            if (!editorWindow) {
+                alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+                return;
+            }
+
+            window.editorCallback = function(result) {
+                if (result.success) {
+                    window.location.reload();
+                } else if (result.aborted) {
+                    console.log('編集が中断されました');
+                } else {
+                    alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+                }
+                editorWindow.close();
+            };
+        }
+
+        function showContentPreview(projectId, taskId) {
+            const uniqueWindowId = 'preview_' + Date.now() + '_' + taskId;
+
+            fetch(`/colrep/get_task_content/${projectId}/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error);
+                    }
+                    return fetch('/colrep/preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ markdown: data.md_content })
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    openPreviewWindow(uniqueWindowId, data.html, '作業内容プレビュー');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('プレビューの取得に失敗しました: ' + error.message);
+                });
+        }
+
+        // ★★★ 追加関数：説明詳細プレビュー ★★★
+        function showDescriptionPreview(projectId, taskId) {
+            const uniqueWindowId = 'desc_preview_' + Date.now() + '_' + taskId;
+
+            fetch(`/colrep/get_task_description/${projectId}/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error);
+                    }
+                    // MarkdownをHTMLに変換して表示
+                    return fetch('/colrep/preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ markdown: data.description })
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    openPreviewWindow(uniqueWindowId, data.html, '説明詳細');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('説明の取得に失敗しました: ' + error.message);
+                });
+        }
+
+        // 共通プレビューウィンドウ表示関数
+        function openPreviewWindow(windowName, htmlContent, title) {
+            const newWindow = window.open('', windowName, 'width=1000,height=800,scrollbars=yes');
+            newWindow.document.open();
+            newWindow.document.write('<!DOCTYPE html>');
+            newWindow.document.write('<html lang="ja">');
+            newWindow.document.write('<head>');
+            newWindow.document.write('<meta charset="UTF-8">');
+            newWindow.document.write('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+            newWindow.document.write('<title>' + title + '</title>');
+            newWindow.document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">');
+            newWindow.document.write('<style>body { padding: 20px; }</style>');
+            newWindow.document.write('</head>');
+            newWindow.document.write('<body>');
+            newWindow.document.write(htmlContent);
+            newWindow.document.write('</body>');
+            newWindow.document.write('</html>');
+            newWindow.document.close();
+        }
+
+        function showFullPreview(projectId) {
+            const uniqueWindowId = 'fullpreview_' + Date.now() + '_' + projectId;
+
+            fetch(`/colrep/get_integrated_preview/${projectId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('統合プレビューの取得に失敗しました');
+                    }
+                    return response.text();
+                })
+                .then(htmlContent => {
+                    const newWindow = window.open('', uniqueWindowId, 'width=1200,height=900,scrollbars=yes');
+                    newWindow.document.open();
+                    newWindow.document.write(htmlContent);
+                    newWindow.document.close();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('統合プレビューの取得に失敗しました: ' + error.message);
+                });
+        }
+    </script>
+</body>
+</html>

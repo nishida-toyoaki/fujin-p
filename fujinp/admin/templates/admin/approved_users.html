@@ -1,0 +1,186 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>承認済みユーザー - FUJIN-P 管理画面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #5a6268; }
+        .content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .info-box {
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-resend {
+            background: #007bff;
+            color: white;
+        }
+        .btn-resend:hover { background: #0056b3; }
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-delete:hover { background: #c82333; }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .badge-approved {
+            background: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>承認済みユーザー</h1>
+                <p style="color: #666;">パスワード未設定のユーザー管理</p>
+            </div>
+            <a href="{{ url_for('admin.dashboard') }}" class="back-btn">ダッシュボードに戻る</a>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <strong>承認済みユーザーとは:</strong> 
+                管理者が承認したものの、まだパスワード設定が完了していないユーザーです。
+                これらのユーザーには承認通知メールが送信されており、パスワード設定を待っている状態です。
+            </div>
+
+            {% if approved %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>メールアドレス</th>
+                        <th>氏名</th>
+                        <th>カテゴリ</th>
+                        <th>所属</th>
+                        <th>承認日時</th>
+                        <th>承認者</th>
+                        <th>メモ</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in approved %}
+                    <tr>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.full_name }}</td>
+                        <td><span class="badge badge-approved">{{ user.category }}</span></td>
+                        <td>{{ user.affiliation or '－' }}</td>
+                        <td>{{ user.approved_at }}</td>
+                        <td>{{ user.approver_name or '－' }}</td>
+                        <td>{{ user.notes or '－' }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <form action="{{ url_for('admin.resend_approval_email', approved_id=user.id) }}" 
+                                      method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-resend" 
+                                            title="承認メールを再送信">
+                                        再送信
+                                    </button>
+                                </form>
+                                
+                                <form action="{{ url_for('admin.delete_approved_user', approved_id=user.id) }}" 
+                                      method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-delete" 
+                                            onclick="return confirm('{{ user.email }}を削除しますか？')">
+                                        削除
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">
+                <p>承認済み（パスワード未設定）のユーザーはいません</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

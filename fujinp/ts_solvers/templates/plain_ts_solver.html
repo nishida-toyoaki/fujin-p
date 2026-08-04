@@ -1,0 +1,299 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>巡回セールスマン問題（都市選択版）</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        .section {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .city-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            max-height: 400px; /* スクロール可能にする */
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .city-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px;
+            background-color: #e9f5ff;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        .city-item:hover {
+            background-color: #d3ebff;
+        }
+        input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            margin-top: 15px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e0f2f7;
+            border-left: 5px solid #3498db;
+            border-radius: 8px;
+        }
+        .warning {
+            color: #e74c3c;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>巡回セールスマン問題（都市選択版）</h1>
+    <p>リストから巡回する都市を選択してください。ナイーブな全探索アルゴリズムを使用するため、<strong>選択する都市は最大12個程度に留めてください。</strong>それ以上選択すると計算に膨大な時間がかかります。</p>
+
+    <div class="section">
+        <h2>巡回する都市を選択</h2>
+        <div class="city-grid" id="citySelectionGrid">
+            </div>
+        <p class="warning" id="cityCountWarning"></p>
+        <button onclick="calculateTSP()">選択した都市で計算実行</button>
+    </div>
+
+    <div class="section">
+        <h2>計算結果</h2>
+        <div id="results">
+            都市を選択し、「計算実行」ボタンを押してください。
+        </div>
+    </div>
+
+    <script>
+        // 全国主要50都市データ (都市名と緯度経度 - 距離計算に使用)
+        // 緯度経度データは OpenStreetMap の中心座標などを参考にしています。
+        // 実際の距離計算は簡略化されており、概算です。
+        const allCities = [
+            { name: "札幌", lat: 43.0642, lon: 141.3469 },
+            { name: "青森", lat: 40.8246, lon: 140.7401 },
+            { name: "盛岡", lat: 39.7036, lon: 141.1527 },
+            { name: "仙台", lat: 38.2682, lon: 140.8701 },
+            { name: "秋田", lat: 39.7186, lon: 140.1024 },
+            { name: "山形", lat: 38.2554, lon: 140.3633 },
+            { name: "福島", lat: 37.7502, lon: 140.4676 },
+            { name: "水戸", lat: 36.3658, lon: 140.4735 },
+            { name: "宇都宮", lat: 36.5551, lon: 139.8824 },
+            { name: "前橋", lat: 36.3912, lon: 139.0601 },
+            { name: "さいたま", lat: 35.8569, lon: 139.6489 },
+            { name: "千葉", lat: 35.6048, lon: 140.1233 },
+            { name: "東京", lat: 35.6895, lon: 139.6917 },
+            { name: "横浜", lat: 35.4437, lon: 139.6380 },
+            { name: "新潟", lat: 37.9022, lon: 139.0232 },
+            { name: "富山", lat: 36.6953, lon: 137.2117 },
+            { name: "金沢", lat: 36.5619, lon: 136.6565 },
+            { name: "福井", lat: 36.0655, lon: 136.2217 },
+            { name: "甲府", lat: 35.6638, lon: 138.5683 },
+            { name: "長野", lat: 36.6517, lon: 138.1887 },
+            { name: "岐阜", lat: 35.3979, lon: 136.7222 },
+            { name: "静岡", lat: 34.9701, lon: 138.3838 },
+            { name: "名古屋", lat: 35.1815, lon: 136.9066 },
+            { name: "津", lat: 34.7303, lon: 136.5085 },
+            { name: "大津", lat: 35.0045, lon: 135.8679 },
+            { name: "京都", lat: 35.0116, lon: 135.7681 },
+            { name: "大阪", lat: 34.6937, lon: 135.5022 },
+            { name: "神戸", lat: 34.6901, lon: 135.1956 },
+            { name: "奈良", lat: 34.6851, lon: 135.8328 },
+            { name: "和歌山", lat: 34.2259, lon: 135.1675 },
+            { name: "鳥取", lat: 35.5037, lon: 134.2381 },
+            { name: "松江", lat: 35.4723, lon: 133.0505 },
+            { name: "岡山", lat: 34.6617, lon: 133.9180 },
+            { name: "広島", lat: 34.3965, lon: 132.4596 },
+            { name: "山口", lat: 34.1857, lon: 131.4706 },
+            { name: "徳島", lat: 34.0725, lon: 134.5594 },
+            { name: "高松", lat: 34.3402, lon: 134.0468 },
+            { name: "松山", lat: 33.8417, lon: 132.7661 },
+            { name: "高知", lat: 33.5597, lon: 133.5311 },
+            { name: "福岡", lat: 33.5904, lon: 130.4017 },
+            { name: "佐賀", lat: 33.5855, lon: 130.2987 },
+            { name: "長崎", lat: 32.7503, lon: 129.8778 },
+            { name: "熊本", lat: 32.7803, lon: 130.7661 },
+            { name: "大分", lat: 33.2382, lon: 131.6127 },
+            { name: "宮崎", lat: 31.9111, lon: 131.4239 },
+            { name: "鹿児島", lat: 31.5603, lon: 130.5579 },
+            { name: "那覇", lat: 26.2124, lon: 127.6809 },
+            { name: "函館", lat: 41.7687, lon: 140.7289 }, /* 北海道地方追加 */
+            { name: "福島", lat: 37.7502, lon: 140.4676 }, /* 福島市重複のため修正 */
+            { name: "釧路", lat: 42.9818, lon: 144.3813 }  /* 北海道地方追加 */
+        ];
+
+        // 緯度経度から球面コサインの法則で距離を計算する関数 (km)
+        // 簡易的な距離計算であり、地球が完全な球体であると仮定
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // 地球の半径 (km)
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        /**
+         * 配列の全ての順列を生成するヘルパー関数
+         * (Heap's algorithm を使用)
+         * @param {Array<number>} array - 順列を生成する元の配列
+         * @returns {Array<Array<number>>} - 全ての順列の配列
+         */
+        function generatePermutations(array) {
+            const result = [];
+            function permute(arr, l, r) {
+                if (l === r) {
+                    result.push([...arr]);
+                } else {
+                    for (let i = l; i <= r; i++) {
+                        [arr[l], arr[i]] = [arr[i], arr[l]]; // Swap
+                        permute(arr, l + 1, r);
+                        [arr[l], arr[i]] = [arr[i], arr[l]]; // Backtrack
+                    }
+                }
+            }
+            permute(array, 0, array.length - 1);
+            return result;
+        }
+
+        function solveTspNaive(selectedCities, distancesMatrix) {
+            const numCities = selectedCities.length;
+            if (numCities === 0) return { minDistance: 0, bestPathNames: [] };
+            if (numCities === 1) return { minDistance: 0, bestPathNames: [selectedCities[0].name] };
+
+            let minDistance = Infinity;
+            let bestPathIndices = [];
+
+            const initialPath = Array.from({ length: numCities }, (_, i) => i);
+            const allPermutations = generatePermutations(initialPath);
+
+            for (const pathIndices of allPermutations) {
+                let currentDistance = 0;
+                for (let i = 0; i < numCities - 1; i++) {
+                    currentDistance += distancesMatrix[pathIndices[i]][pathIndices[i+1]];
+                }
+                currentDistance += distancesMatrix[pathIndices[numCities-1]][pathIndices[0]];
+
+                if (currentDistance < minDistance) {
+                    minDistance = currentDistance;
+                    bestPathIndices = [...pathIndices];
+                }
+            }
+            const bestPathNames = bestPathIndices.map(index => selectedCities[index].name);
+            return { minDistance, bestPathNames };
+        }
+
+        // 初期表示時に都市選択グリッドを生成
+        window.onload = function() {
+            const cityGrid = document.getElementById('citySelectionGrid');
+            allCities.forEach((city, index) => {
+                const label = document.createElement('label');
+                label.className = 'city-item';
+                label.innerHTML = `
+                    <input type="checkbox" value="${index}" onchange="checkCityCount()">
+                    ${city.name}
+                `;
+                cityGrid.appendChild(label);
+            });
+        };
+
+        const MAX_CITIES_WARNING = 12; // 警告を出す閾値
+        function checkCityCount() {
+            const checkboxes = Array.from(document.querySelectorAll('#citySelectionGrid input[type="checkbox"]:checked'));
+            const warningDiv = document.getElementById('cityCountWarning');
+            if (checkboxes.length > MAX_CITIES_WARNING) {
+                warningDiv.textContent = `警告: ${checkboxes.length}都市選択されています。 ${MAX_CITIES_WARNING}都市を超えると計算に非常に時間がかかります。`;
+            } else {
+                warningDiv.textContent = '';
+            }
+        }
+
+        function calculateTSP() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '計算中...';
+
+            const selectedCheckboxes = Array.from(document.querySelectorAll('#citySelectionGrid input[type="checkbox"]:checked'));
+            if (selectedCheckboxes.length < 2) {
+                resultsDiv.innerHTML = '<p class="warning">少なくとも2つの都市を選択してください。</p>';
+                return;
+            }
+
+            // 選択された都市オブジェクトの配列を作成
+            const selectedCities = selectedCheckboxes.map(checkbox => allCities[parseInt(checkbox.value)]);
+
+            // 選択された都市間の距離行列を動的に生成
+            const numSelected = selectedCities.length;
+            const distancesMatrix = Array(numSelected).fill(0).map(() => Array(numSelected).fill(0));
+
+            for (let i = 0; i < numSelected; i++) {
+                for (let j = 0; j < numSelected; j++) {
+                    if (i === j) {
+                        distancesMatrix[i][j] = 0;
+                    } else {
+                        distancesMatrix[i][j] = haversineDistance(
+                            selectedCities[i].lat, selectedCities[i].lon,
+                            selectedCities[j].lat, selectedCities[j].lon
+                        );
+                    }
+                }
+            }
+
+            // 非同期処理でUIをブロックしないようにする
+            setTimeout(() => {
+                const startTime = performance.now(); // 計算開始時刻
+                const { minDistance, bestPathNames } = solveTspNaive(selectedCities, distancesMatrix);
+                const endTime = performance.now();   // 計算終了時刻
+                const timeTaken = ((endTime - startTime) / 1000).toFixed(3); // 秒単位で表示
+
+                let resultHtml = `
+                    <p><strong>計算にかかった時間:</strong> ${timeTaken} 秒</p>
+                    <p><strong>選択された都市数:</strong> ${selectedCities.length}</p>
+                    <p><strong>最短距離:</strong> ${minDistance.toFixed(2)} km</p>
+                    <p><strong>最短経路:</strong> ${bestPathNames.join(' &rarr; ')} &rarr; ${bestPathNames[0]}</p>
+                `;
+                resultsDiv.innerHTML = resultHtml;
+            }, 10); // 短いディレイ
+        }
+    </script>
+</body>
+</html>

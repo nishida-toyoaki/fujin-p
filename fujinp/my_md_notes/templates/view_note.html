@@ -1,0 +1,674 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ note.名前 }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background-color: #f5f7fa;
+            color: #2d3748;
+        }
+
+        .top-bar {
+            background-color: #2d3748;
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .top-bar-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-bar h1 {
+            margin: 0;
+            font-size: 1.3rem;
+            font-weight: 500;
+        }
+
+        .top-bar-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .top-bar button, .top-bar a {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+
+        .edit-btn {
+            background-color: #48bb78;
+            color: white;
+        }
+
+        .edit-btn:hover {
+            background-color: #38a169;
+        }
+
+        .source-btn {
+            background-color: #f6ad55;
+            color: #744210;
+        }
+
+        .source-btn:hover {
+            background-color: #ed8936;
+            color: white;
+        }
+
+        .back-btn {
+            background-color: #4299e1;
+            color: white;
+        }
+
+        .back-btn:hover {
+            background-color: #3182ce;
+        }
+
+        .content-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .meta-info {
+            background-color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .meta-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .meta-info-item strong {
+            color: #4a5568;
+        }
+
+        .content-area {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            line-height: 1.7;
+        }
+
+        /* Markdown コンテンツスタイル */
+        .content-area h1, .content-area h2, .content-area h3,
+        .content-area h4, .content-area h5, .content-area h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #2d3748;
+        }
+
+        .content-area h1 {
+            font-size: 2em;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.3em;
+        }
+
+        .content-area h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.3em;
+        }
+
+        .content-area h3 {
+            font-size: 1.25em;
+        }
+
+        .content-area p {
+            margin-bottom: 1em;
+        }
+
+        .content-area a {
+            color: #4299e1;
+            text-decoration: none;
+        }
+
+        .content-area a:hover {
+            text-decoration: underline;
+        }
+
+        .content-area ul, .content-area ol {
+            padding-left: 2em;
+            margin-bottom: 1em;
+        }
+
+        .content-area li {
+            margin-bottom: 0.25em;
+        }
+
+        .content-area blockquote {
+            border-left: 4px solid #e2e8f0;
+            padding-left: 1em;
+            margin-left: 0;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .content-area code {
+            background-color: #f7fafc;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e53e3e;
+        }
+
+        .content-area pre {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+
+        .content-area pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 0.9em;
+        }
+
+        .content-area table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1em;
+            overflow-x: auto;
+            display: block;
+        }
+
+        .content-area th, .content-area td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .content-area th {
+            background-color: #f7fafc;
+            font-weight: 600;
+        }
+
+        .content-area tbody tr:nth-child(even) {
+            background-color: #f7fafc;
+        }
+
+        .content-area img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin: 1em 0;
+        }
+
+        .content-area hr {
+            border: none;
+            border-top: 2px solid #e2e8f0;
+            margin: 2em 0;
+        }
+
+        /* SQL結果テーブル */
+        .sql-result-table {
+            font-size: 0.85em;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+
+        /* フラッシュメッセージ */
+        .alert {
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+
+        .alert-success {
+            color: #22543d;
+            background-color: #c6f6d5;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            color: #742a2a;
+            background-color: #fed7d7;
+            border: 1px solid #fc8181;
+        }
+
+        /* KaTeX数式 */
+        .katex-display {
+            margin: 1em 0;
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 768px) {
+            .content-area {
+                padding: 20px;
+            }
+
+            .top-bar-content {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .top-bar h1 {
+                font-size: 1.1rem;
+            }
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        .modal.show {
+            display: block;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 3% auto;
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            background-color: #2d3748;
+            color: white;
+            padding: 20px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .copy-modal-btn {
+            background-color: #f6ad55;
+            color: #744210;
+        }
+
+        .copy-modal-btn:hover {
+            background-color: #ed8936;
+            color: white;
+        }
+
+        .close-modal-btn {
+            background-color: #718096;
+            color: white;
+        }
+
+        .close-modal-btn:hover {
+            background-color: #4a5568;
+        }
+
+        .modal-body {
+            padding: 0;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-info {
+            background-color: #fef5e7;
+            border-left: 4px solid #f6ad55;
+            padding: 15px 20px;
+            color: #744210;
+            font-size: 0.9rem;
+        }
+
+        .source-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .source-stats {
+            background-color: #f7fafc;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+
+        .source-code-wrapper {
+            flex: 1;
+            overflow: auto;
+            background-color: #1e1e1e;
+        }
+
+        .source-code {
+            margin: 0;
+            padding: 20px;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .copy-success-toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background-color: #48bb78;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1100;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .copy-success-toast.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="top-bar-content">
+            <h1>{{ note.名前 }}</h1>
+            <div class="top-bar-buttons">
+                {% if session.user_category == 'admin' or note.オーナーID == session.user_id or note.権限 == '編集' %}
+                <a href="{{ url_for('my_md_notes.edit_note', note_id=note.id) }}" class="edit-btn">編集</a>
+                {% endif %}
+                <button class="source-btn" onclick="showSourceModal()">ソース</button>
+                <a href="{{ url_for('my_md_notes.index') }}" class="back-btn">一覧に戻る</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-container">
+        <!-- フラッシュメッセージ -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- メタ情報 -->
+        <div class="meta-info">
+            <div class="meta-info-item">
+                <strong>ID:</strong>
+                <span>{{ note.id }}</span>
+            </div>
+            <div class="meta-info-item">
+                <strong>作成:</strong>
+                <span>{{ note.作成日時表示 }}</span>
+            </div>
+            {% if note.更新日時表示 %}
+            <div class="meta-info-item">
+                <strong>更新:</strong>
+                <span>{{ note.更新日時表示 }}</span>
+            </div>
+            {% endif %}
+            <div class="meta-info-item">
+                <strong>共有設定:</strong>
+                <span>
+                    {%- if note.共有キー == 'public' -%}公開
+                    {%- elif note.共有キー == 'shared' -%}特定のユーザーと共有
+                    {%- else -%}非公開{%- endif -%}
+                </span>
+            </div>
+        </div>
+
+        {% if public_url %}
+        <!-- 公開URL表示 -->
+        <div class="meta-info" style="background-color: #f0fff4; border-left: 4px solid #48bb78;">
+            <div style="flex: 1;">
+                <strong>🌐 公開URL:</strong>
+                <div style="margin-top: 8px;">
+                    <code id="publicUrlText" style="background-color: white; padding: 8px 12px; border-radius: 4px; display: inline-block; font-size: 0.85rem;">{{ public_url }}</code>
+                    <br><small style="color: #718096; margin-top: 5px; display: block;">ログイン不要で閲覧できます。IDは連番のため推測可能です。</small>
+                </div>
+            </div>
+            <button onclick="copyPublicUrl()" style="background-color: #48bb78; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">
+                📋 URLをコピー
+            </button>
+        </div>
+        {% endif %}
+
+        <!-- コンテンツ -->
+        <div class="content-area">
+            {{ html_content|safe }}
+        </div>
+    </div>
+
+    <!-- コピー成功トースト -->
+    <div class="copy-success-toast" id="copySuccessToast">
+        ✓ ソースコードをクリップボードにコピーしました！
+    </div>
+
+    <!-- Markdownソースモーダル -->
+    <div id="sourceModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📄 Markdownソース - {{ note.名前 }}</h2>
+                <div class="modal-buttons">
+                    <button class="modal-btn copy-modal-btn" onclick="copySourceCode()">📋 コピー</button>
+                    <button class="modal-btn close-modal-btn" onclick="closeSourceModal()">✕ 閉じる</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    💡 このページではノートの生のMarkdownソースコードを確認できます。Markdownの学習や、安全性の確認にご利用ください。
+                </div>
+                <div class="source-container">
+                    <div class="source-stats">
+                        {% if note.内容 %}
+                        📊 {{ note.内容|length }} 文字 / {{ note.内容.count('\n') + 1 }} 行
+                        {% else %}
+                        📊 0 文字 / 0 行
+                        {% endif %}
+                    </div>
+                    <div class="source-code-wrapper">
+                        <pre class="source-code" id="sourceCodeContent">{{ note.内容 if note.内容 else '(空のノートです)' }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <script>
+        // KaTeX数式レンダリング
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.querySelector('.content-area'), {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '\\(', right: '\\)', display: false}
+                ],
+                throwOnError: false
+            });
+        });
+
+        // 公開URLをコピー
+        function copyPublicUrl() {
+            const el = document.getElementById('publicUrlText');
+            const url = el ? el.textContent.trim() : '';
+
+            if (url) {
+                navigator.clipboard.writeText(url).then(function() {
+                    alert('公開URLをクリップボードにコピーしました！\n\n' + url);
+                }, function() {
+                    // フォールバック
+                    const textArea = document.createElement('textarea');
+                    textArea.value = url;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('公開URLをコピーしました！\n\n' + url);
+                });
+            }
+        }
+
+        // モーダルの表示
+        function showSourceModal() {
+            document.getElementById('sourceModal').classList.add('show');
+            document.body.style.overflow = 'hidden'; // 背景のスクロールを防ぐ
+        }
+
+        // モーダルを閉じる
+        function closeSourceModal() {
+            document.getElementById('sourceModal').classList.remove('show');
+            document.body.style.overflow = 'auto'; // スクロールを再開
+        }
+
+        // モーダル外をクリックで閉じる
+        window.onclick = function(event) {
+            const modal = document.getElementById('sourceModal');
+            if (event.target === modal) {
+                closeSourceModal();
+            }
+        }
+
+        // ESCキーでモーダルを閉じる
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeSourceModal();
+            }
+        });
+
+        // ソースコードをコピー
+        function copySourceCode() {
+            const sourceCode = document.getElementById('sourceCodeContent');
+            const text = sourceCode.textContent;
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showCopySuccess();
+                }).catch(function(err) {
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        // フォールバックコピー（古いブラウザ用）
+        function fallbackCopy(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showCopySuccess();
+            } catch (err) {
+                alert('コピーに失敗しました: ' + err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // コピー成功メッセージを表示
+        function showCopySuccess() {
+            const toast = document.getElementById('copySuccessToast');
+            toast.classList.add('show');
+            setTimeout(function() {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

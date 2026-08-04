@@ -1,0 +1,625 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ストーリー編集 - データセンター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#f0f2f5;color:#333;display:flex;flex-direction:column}
+
+/* ヘッダー */
+#header{background:#1a3a5c;color:#fff;padding:8px 14px;
+        display:flex;align-items:center;gap:10px;flex-shrink:0}
+#header h1{font-size:14px;font-weight:600}
+#story-title-disp{font-size:13px;color:#aed6f1;font-style:italic}
+.nav-links{margin-left:auto;display:flex;gap:8px}
+.nav-links a{color:#aed6f1;text-decoration:none;font-size:12px;
+             padding:3px 8px;border:1px solid #2e6da4;border-radius:3px}
+.nav-links a:hover{background:#2e6da4}
+
+/* 2ペインレイアウト */
+#workspace{display:flex;flex:1;overflow:hidden}
+
+/* 左ペイン：ツリー */
+#tree-pane{width:320px;min-width:220px;background:#fff;border-right:2px solid #dde3ea;
+           display:flex;flex-direction:column;flex-shrink:0}
+#tree-toolbar{padding:8px 10px;border-bottom:1px solid #dde3ea;
+              display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#f8f9fb}
+#tree-toolbar .tp-label{font-size:12px;font-weight:600;color:#1a3a5c;flex:1}
+.btn{padding:4px 9px;border:none;border-radius:3px;cursor:pointer;
+     font-size:11px;font-weight:600;transition:opacity .15s;white-space:nowrap}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:#2e6da4;color:#fff}
+.btn-success{background:#27ae60;color:#fff}
+.btn-danger {background:#e74c3c;color:#fff}
+.btn-warn   {background:#e67e22;color:#fff}
+.btn-cut    {background:#8e44ad;color:#fff}
+.btn-paste  {background:#16a085;color:#fff}
+.btn-muted  {background:#95a5a6;color:#fff}
+#tree-scroll{flex:1;overflow-y:auto;padding:8px 0}
+.tree-empty{padding:24px;text-align:center;color:#bbb;font-style:italic;font-size:12px}
+
+/* ツリーノード */
+.tree-node{position:relative}
+.tree-node-row{display:flex;align-items:center;padding:4px 6px;
+               border-radius:3px;cursor:pointer;gap:4px;
+               border-left:3px solid transparent;margin:1px 6px}
+.tree-node-row:hover{background:#f0f5ff}
+.tree-node-row.selected{background:#e8f0fb;border-left-color:#2e6da4}
+.tree-node-row.cut-source{background:#fdf3fb;border-left-color:#8e44ad;opacity:.7}
+.tn-toggle{width:14px;height:14px;border:none;background:none;cursor:pointer;
+           font-size:10px;color:#aaa;flex-shrink:0;padding:0;line-height:1}
+.tn-toggle:hover{color:#333}
+.tn-spacer{width:14px;flex-shrink:0}
+.tn-num{font-size:11px;color:#888;min-width:32px;flex-shrink:0;font-family:monospace}
+.tn-icon{font-size:12px;flex-shrink:0}
+.tn-title{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tn-title.no-content{color:#bbb;font-style:italic}
+.tn-badges{display:flex;gap:3px;flex-shrink:0}
+.tn-badge-html{background:#2e6da4;color:#fff;font-size:9px;padding:1px 4px;border-radius:2px}
+.tree-children{padding-left:18px}
+
+/* 右ペイン：ノード編集フォーム */
+#edit-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#edit-header{padding:10px 14px;background:#f8f9fb;border-bottom:1px solid #dde3ea;
+             display:flex;align-items:center;gap:8px;flex-shrink:0}
+#edit-header h2{font-size:14px;color:#1a3a5c;flex:1}
+#edit-scroll{flex:1;overflow-y:auto;padding:14px}
+#no-selection{display:flex;align-items:center;justify-content:center;height:100%;
+              color:#bbb;font-size:13px;flex-direction:column;gap:8px}
+
+.field{margin-bottom:14px}
+.field label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px}
+.field textarea{width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:3px;
+                font-size:12px;font-family:'Courier New',monospace;resize:vertical}
+.field .field-hint{font-size:10px;color:#aaa;margin-top:3px}
+#fld-body-md{min-height:90px}
+#fld-part-html{min-height:80px}
+#fld-meta-note{min-height:60px;background:#fffbf0;border-color:#f0d060}
+#edit-footer{padding:10px 14px;border-top:1px solid #dde3ea;
+             display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;
+             background:#f8f9fb}
+
+/* 切り貼りバナー */
+#cut-banner{display:none;background:#f3e5ff;border:1px solid #c39bd3;
+            padding:6px 12px;font-size:12px;color:#6c3483;
+            display:none;align-items:center;gap:8px;flex-shrink:0}
+#cut-banner.show{display:flex}
+
+/* ノード追加ダイアログ */
+#addnode-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100}
+#addnode-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+               width:360px;max-width:92vw;background:#fff;border-radius:6px;
+               box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:101}
+#addnode-modal .mh{background:#27ae60;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;
+                   display:flex;justify-content:space-between;align-items:center}
+#addnode-modal .mh span{font-size:14px;font-weight:600}
+#addnode-modal .mh button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+#addnode-modal .mb{padding:16px}
+#addnode-modal .mb .field{margin-bottom:10px}
+#addnode-modal .mf{padding:10px 16px;border-top:1px solid #eee;
+                   display:flex;gap:8px;justify-content:flex-end}
+
+/* トースト */
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:4px;
+       color:#fff;font-size:13px;z-index:9999;display:none;max-width:320px}
+#toast.ok {background:#27ae60}
+#toast.err{background:#e74c3c}
+.loading-txt{color:#aaa;font-style:italic;font-size:12px;padding:20px;text-align:center}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🌳 ストーリー編集</h1>
+  <span id="story-title-disp">読み込み中...</span>
+  <div class="nav-links">
+    <a id="view-link" href="#">▶ 閲覧</a>
+    <a href="{{ url_for('data_center.index') }}">← 一覧へ</a>
+  </div>
+</div>
+
+<div id="workspace">
+
+  <!-- 左ペイン：ツリー -->
+  <div id="tree-pane">
+    <div id="tree-toolbar">
+      <span class="tp-label">ノードツリー</span>
+      <button class="btn btn-success" onclick="openAddNode('child')" id="btn-add-child"
+              title="選択ノードの子として追加">＋ 子</button>
+      <button class="btn btn-primary" onclick="openAddNode('sibling')" id="btn-add-sibling"
+              title="選択ノードの次の兄弟として追加">＋ 次</button>
+      <button class="btn btn-cut" onclick="cutNode()" id="btn-cut" disabled
+              title="選択ノードを切り取り（移動元をマーク）">✂ 切取</button>
+      <button class="btn btn-warn" onclick="moveNodeUp()" id="btn-up" disabled title="上へ">↑</button>
+      <button class="btn btn-warn" onclick="moveNodeDown()" id="btn-down" disabled title="下へ">↓</button>
+      <button class="btn btn-danger" onclick="deleteNode()" id="btn-delete" disabled title="削除">🗑</button>
+    </div>
+
+    <!-- 切り取りバナー -->
+    <div id="cut-banner">
+      <span id="cut-banner-text"></span>
+      <button class="btn btn-muted" style="margin-left:auto" onclick="cancelCut()">キャンセル</button>
+    </div>
+
+    <div id="tree-scroll">
+      <div class="loading-txt">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- 右ペイン：ノード編集 -->
+  <div id="edit-pane">
+    <div id="edit-header">
+      <h2 id="edit-node-title">ノードを選択してください</h2>
+      <div id="edit-header-btns" style="display:none">
+        <button class="btn btn-success" onclick="saveNode()">💾 保存</button>
+      </div>
+    </div>
+
+    <div id="edit-scroll">
+      <div id="no-selection">
+        <span style="font-size:32px">🌳</span>
+        <span>左のツリーからノードを選択するか<br>「＋ 子」「＋ 次」で新規ノードを追加してください</span>
+      </div>
+      <div id="node-form" style="display:none">
+        <div class="field">
+          <label>📝 解説（Markdown）<span style="font-weight:normal;color:#aaa"> ― 標題はここに含めてください（例: ## 教員数の推移）</span></label>
+          <textarea id="fld-body-md" placeholder="## ノードタイトル&#10;&#10;解説テキスト（Markdown記法）..."></textarea>
+        </div>
+        <div class="field">
+          <label>📊 HTML部品<span style="font-weight:normal;color:#aaa"> ― テーブル/グラフのHTML。空欄はテキストのみノード</span></label>
+          <textarea id="fld-part-html" placeholder="table_master や index_review からエクスポートしたHTMLを貼り付け..."></textarea>
+          <div class="field-hint">貼り付け後、下のプレビューボタンで確認できます</div>
+        </div>
+        <div class="field">
+          <label>🗒 制作ノート<span style="font-weight:normal;color:#aaa"> ― 閲覧者には表示されません</span></label>
+          <textarea id="fld-meta-note" placeholder="データの出所、更新予定、注意事項など..."></textarea>
+        </div>
+        <div style="margin-bottom:14px">
+          <button class="btn btn-primary" onclick="togglePreview()" id="btn-preview">👁 HTMLプレビュー</button>
+        </div>
+        <div id="html-preview" style="display:none;border:1px solid #ccc;border-radius:4px;
+             padding:10px;background:#fff;margin-bottom:14px;overflow:auto;max-height:300px">
+        </div>
+      </div>
+    </div>
+
+    <div id="edit-footer" style="display:none">
+      <span id="node-path-disp" style="font-size:11px;color:#888;flex:1;align-self:center"></span>
+      <button class="btn btn-muted" onclick="cancelEdit()">元に戻す</button>
+      <button class="btn btn-success" onclick="saveNode()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ノード追加ダイアログ -->
+<div id="addnode-overlay" onclick="closeAddNode()"></div>
+<div id="addnode-modal">
+  <div class="mh">
+    <span id="addnode-title">ノード追加</span>
+    <button onclick="closeAddNode()">✕</button>
+  </div>
+  <div class="mb">
+    <input type="hidden" id="addnode-mode">
+    <div class="field">
+      <label>最初の解説（Markdown）</label>
+      <textarea id="addnode-body-md" rows="3" placeholder="## タイトル&#10;&#10;解説..."></textarea>
+    </div>
+  </div>
+  <div class="mf">
+    <button class="btn" onclick="closeAddNode()">キャンセル</button>
+    <button class="btn btn-success" onclick="doAddNode()">追加</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const STORY_ID = {{ story_id }};
+let treeData   = [];     // フラットなノード配列（サーバーから返ったツリー）
+let selectedId = null;   // 選択中ノードID
+let cutNodeId  = null;   // 切り取り中ノードID
+let dirtyForm  = false;  // フォームが編集済みか
+let origFormData = {};   // 保存前のフォームデータ
+
+// ============================================================
+// 初期ロード
+// ============================================================
+function loadTree(){
+  $.get('{{ url_for("data_center.api_node_tree", story_id=0) }}'.replace('/0/','/'+STORY_ID+'/'),
+  function(data){
+    if(!data.success){ toast(data.error,'err'); return; }
+    $('#story-title-disp').text(data.story.title);
+    $('#view-link').attr('href',
+      '{{ url_for("data_center.view", story_id=0) }}'.replace('/0','/'+STORY_ID));
+    treeData = data.tree;
+    renderTree(treeData);
+    if(selectedId) reselect();
+  }).fail(function(xhr){ toast('ツリー読み込みエラー: '+xhr.status,'err'); });
+}
+
+// ============================================================
+// ツリー描画
+// ============================================================
+function renderTree(nodes){
+  const $scroll = $('#tree-scroll').empty();
+  if(!nodes.length){
+    $scroll.html('<div class="tree-empty">ノードがありません<br>「＋ 子」で追加してください</div>');
+    return;
+  }
+  nodes.forEach(function(n){ $scroll.append(buildNodeEl(n)); });
+}
+
+function buildNodeEl(node){
+  const $wrap = $('<div class="tree-node">');
+  const hasChildren = node.children && node.children.length > 0;
+  const $row = $('<div class="tree-node-row">').attr('data-id', node.id);
+  if(node.id === selectedId) $row.addClass('selected');
+  if(node.id === cutNodeId)  $row.addClass('cut-source');
+
+  // 展開トグル
+  if(hasChildren){
+    $('<button class="tn-toggle">').text('▾')
+      .on('click', function(e){
+        e.stopPropagation();
+        const $ch = $wrap.children('.tree-children');
+        const open = $ch.is(':visible');
+        $ch.toggle(!open);
+        $(this).text(open ? '▸' : '▾');
+      }).appendTo($row);
+  } else {
+    $('<span class="tn-spacer">').appendTo($row);
+  }
+
+  $('<span class="tn-num">').text(node.node_number).appendTo($row);
+  $('<span class="tn-icon">').text(node.has_part ? '📊' : '📝').appendTo($row);
+
+  // タイトルプレビュー（body_md の最初の行、## を除去）
+  const preview = (node.body_preview||'').replace(/^#+\s*/,'').replace(/\n.*/,'').trim();
+  $('<span class="tn-title'+(preview?'':' no-content')+'">').text(preview||'（未記入）').appendTo($row);
+
+  // 貼り付けボタン（切り取り中で、自分が切り取り元でない場合）
+  if(cutNodeId && node.id !== cutNodeId){
+    $('<button class="btn btn-paste" style="font-size:10px;padding:2px 6px;margin-left:4px">貼付</button>')
+      .on('click', function(e){
+        e.stopPropagation();
+        pasteNode(node.id);
+      }).appendTo($row);
+  }
+
+  $row.on('click', function(){ selectNode(node.id); });
+  $wrap.append($row);
+
+  // 子ノード
+  if(hasChildren){
+    const $ch = $('<div class="tree-children">');
+    node.children.forEach(function(c){ $ch.append(buildNodeEl(c)); });
+    $wrap.append($ch);
+  }
+  return $wrap;
+}
+
+// ============================================================
+// ノード選択
+// ============================================================
+function selectNode(nodeId){
+  if(dirtyForm && !confirm('変更が保存されていません。破棄しますか？')) return;
+  dirtyForm = false;
+  selectedId = nodeId;
+  // ツリーUI更新
+  $('.tree-node-row').removeClass('selected');
+  $(`.tree-node-row[data-id="${nodeId}"]`).addClass('selected');
+  // ボタン活性化
+  $('#btn-cut,#btn-delete,#btn-up,#btn-down').prop('disabled', false);
+  // ノードフォームロード
+  loadNodeForm(nodeId);
+}
+
+function reselect(){
+  if(!selectedId) return;
+  const $row = $(`.tree-node-row[data-id="${selectedId}"]`);
+  if($row.length){ $row.addClass('selected'); }
+  else { selectedId = null; clearForm(); }
+}
+
+function clearForm(){
+  $('#no-selection').show();$('#node-form').hide();$('#edit-footer').hide();
+  $('#edit-header-btns').hide();
+  $('#edit-node-title').text('ノードを選択してください');
+  $('#btn-cut,#btn-delete,#btn-up,#btn-down').prop('disabled',true);
+}
+
+// ============================================================
+// ノードフォームロード
+// ============================================================
+function loadNodeForm(nodeId){
+  $.get('{{ url_for("data_center.api_node_get", node_id=0) }}'.replace('/0','/'+nodeId),
+  function(data){
+    if(!data.success){ toast(data.error,'err'); return; }
+    const n = data.node;
+    const nodeNum = findNodeNumber(nodeId, treeData);
+    $('#edit-node-title').text('ノード ' + (nodeNum||'') + ' を編集');
+    $('#node-path-disp').text('ID: ' + nodeId + (nodeNum ? '  /  ' + nodeNum : ''));
+    $('#fld-body-md').val(n.body_md||'');
+    $('#fld-part-html').val(n.part_html||'');
+    $('#fld-meta-note').val(n.meta_note||'');
+    origFormData = { body_md: n.body_md||'', part_html: n.part_html||'', meta_note: n.meta_note||'' };
+    $('#html-preview').hide().empty();
+    $('#btn-preview').text('👁 HTMLプレビュー');
+    $('#no-selection').hide();$('#node-form').show();
+    $('#edit-footer').show();$('#edit-header-btns').show();
+    dirtyForm = false;
+
+    // フォーム変更検知
+    $('#fld-body-md,#fld-part-html,#fld-meta-note').off('input.dirty').on('input.dirty', function(){
+      dirtyForm = true;
+    });
+  }).fail(function(xhr){ toast('ノード読み込みエラー','err'); });
+}
+
+function cancelEdit(){
+  if(!dirtyForm || confirm('変更を破棄しますか？')){
+    $('#fld-body-md').val(origFormData.body_md);
+    $('#fld-part-html').val(origFormData.part_html);
+    $('#fld-meta-note').val(origFormData.meta_note);
+    $('#html-preview').hide().empty();
+    dirtyForm = false;
+  }
+}
+
+// ============================================================
+// ノード保存
+// ============================================================
+function saveNode(){
+  if(!selectedId){ toast('ノードが選択されていません','err'); return; }
+  $.ajax({
+    url: '{{ url_for("data_center.api_node_save") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({
+      id       : selectedId,
+      body_md  : $('#fld-body-md').val(),
+      part_html: $('#fld-part-html').val()||null,
+      meta_note: $('#fld-meta-note').val()
+    }),
+    success: function(r){
+      if(r.success){
+        toast(r.message,'ok');
+        origFormData = {
+          body_md: $('#fld-body-md').val(),
+          part_html: $('#fld-part-html').val(),
+          meta_note: $('#fld-meta-note').val()
+        };
+        dirtyForm = false;
+        loadTree();
+      } else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'保存エラー'),'err'); }
+  });
+}
+
+// ============================================================
+// HTMLプレビュー
+// ============================================================
+function togglePreview(){
+  const $prev = $('#html-preview');
+  if($prev.is(':visible')){
+    $prev.hide().empty();
+    $('#btn-preview').text('👁 HTMLプレビュー');
+  } else {
+    const html = $('#fld-part-html').val();
+    if(!html.trim()){ toast('HTML部品が入力されていません','err'); return; }
+    $prev.html(html).show();
+    $('#btn-preview').text('✕ プレビューを閉じる');
+  }
+}
+
+// ============================================================
+// ノード追加ダイアログ
+// ============================================================
+function openAddNode(mode){
+  // mode = 'child' (選択ノードの子) or 'sibling' (選択ノードの次)
+  if(mode === 'sibling' && !selectedId){
+    // 選択なしのときはルートに追加
+    mode = 'root';
+  }
+  $('#addnode-mode').val(mode);
+  const label = mode === 'child' ? '子ノードを追加' :
+                mode === 'sibling' ? '兄弟ノードを追加（次）' : 'ルートノードを追加';
+  $('#addnode-title').text(label);
+  $('#addnode-body-md').val('');
+  $('#addnode-overlay,#addnode-modal').show();
+  setTimeout(()=>$('#addnode-body-md').focus(), 100);
+}
+function closeAddNode(){ $('#addnode-overlay,#addnode-modal').hide(); }
+
+function doAddNode(){
+  const mode    = $('#addnode-mode').val();
+  const body_md = $('#addnode-body-md').val();
+  let parent_id = null;
+  let story_id  = STORY_ID;
+
+  if(mode === 'child' && selectedId){
+    parent_id = selectedId;
+  } else if(mode === 'sibling' && selectedId){
+    // 選択ノードの parent_id を探す
+    parent_id = findParentId(selectedId, treeData);
+  }
+  // mode === 'root' or 'sibling' with no selection → parent_id = null
+
+  $.ajax({
+    url: '{{ url_for("data_center.api_node_save") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ story_id, parent_id, body_md }),
+    success: function(r){
+      if(r.success){
+        toast(r.message,'ok');
+        closeAddNode();
+        const newId = r.id;
+        loadTree();
+        setTimeout(function(){
+          selectedId = newId;
+          selectNode(newId);
+        }, 300);
+      } else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'追加エラー'),'err'); }
+  });
+}
+
+// ============================================================
+// ノード削除
+// ============================================================
+function deleteNode(){
+  if(!selectedId){ toast('ノードを選択してください','err'); return; }
+  const nodeNum = findNodeNumber(selectedId, treeData);
+  if(!confirm(`ノード ${nodeNum} を削除しますか？\n（子孫ノードも全て削除されます）`)) return;
+  $.ajax({
+    url: '{{ url_for("data_center.api_node_delete") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({id: selectedId}),
+    success: function(r){
+      if(r.success){
+        toast(r.message,'ok');
+        selectedId = null;
+        dirtyForm = false;
+        clearForm();
+        loadTree();
+      } else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'削除エラー'),'err'); }
+  });
+}
+
+// ============================================================
+// 切り取り・貼り付け（ノード移動）
+// ============================================================
+function cutNode(){
+  if(!selectedId){ toast('ノードを選択してください','err'); return; }
+  cutNodeId = selectedId;
+  const num = findNodeNumber(cutNodeId, treeData);
+  $('#cut-banner-text').text(`ノード ${num} を切り取り中。貼り付け先ノードを選んでください`);
+  $('#cut-banner').addClass('show');
+  renderTree(treeData);  // cut-source クラスを反映
+}
+function cancelCut(){
+  cutNodeId = null;
+  $('#cut-banner').removeClass('show');
+  renderTree(treeData);
+}
+function pasteNode(targetParentId){
+  if(!cutNodeId){ return; }
+  if(!confirm(`ノードをここに移動しますか？`)) return;
+  $.ajax({
+    url: '{{ url_for("data_center.api_node_move") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({
+      id: cutNodeId,
+      new_parent_id: targetParentId,
+      new_sort_order: 9999   // 末尾へ
+    }),
+    success: function(r){
+      if(r.success){
+        toast(r.message,'ok');
+        cutNodeId = null;
+        $('#cut-banner').removeClass('show');
+        loadTree();
+      } else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'移動エラー'),'err'); }
+  });
+}
+
+// ============================================================
+// 上下移動（兄弟内並び替え）
+// ============================================================
+function moveNodeUp(){ moveNode(-1); }
+function moveNodeDown(){ moveNode(1); }
+
+function moveNode(direction){
+  if(!selectedId) return;
+  const siblings = findSiblings(selectedId, treeData);
+  if(!siblings) return;
+  const idx = siblings.findIndex(n => n.id === selectedId);
+  const swapIdx = idx + direction;
+  if(swapIdx < 0 || swapIdx >= siblings.length){ return; }
+
+  // siblings の id の順序を入れ替えて reorder
+  const newOrder = siblings.map(n => n.id);
+  [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+
+  $.ajax({
+    url: '{{ url_for("data_center.api_node_reorder") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({ story_id: STORY_ID, ordered_ids: newOrder }),
+    success: function(r){
+      if(r.success){ loadTree(); }
+      else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'並び替えエラー'),'err'); }
+  });
+}
+
+// ============================================================
+// ツリー走査ユーティリティ
+// ============================================================
+function findNodeNumber(nodeId, nodes){
+  for(let n of nodes){
+    if(n.id === nodeId) return n.node_number;
+    if(n.children?.length){
+      const found = findNodeNumber(nodeId, n.children);
+      if(found) return found;
+    }
+  }
+  return null;
+}
+function findParentId(nodeId, nodes, parentId=null){
+  for(let n of nodes){
+    if(n.id === nodeId) return parentId;
+    if(n.children?.length){
+      const found = findParentId(nodeId, n.children, n.id);
+      if(found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+function findSiblings(nodeId, nodes, parent=null){
+  for(let n of nodes){
+    if(n.id === nodeId) return nodes;  // nodes = siblings at this level
+    if(n.children?.length){
+      const found = findSiblings(nodeId, n.children, n);
+      if(found) return found;
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// トースト
+// ============================================================
+function toast(msg, type='ok'){
+  $('#toast').attr('class',type).text(msg).fadeIn(200);
+  setTimeout(()=>$('#toast').fadeOut(400), 3000);
+}
+
+$(function(){
+  loadTree();
+  // 未保存変更を離脱前に警告
+  $(window).on('beforeunload', function(){
+    if(dirtyForm) return '変更が保存されていません。';
+  });
+});
+</script>
+</body>
+</html>
+

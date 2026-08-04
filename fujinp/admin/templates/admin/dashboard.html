@@ -1,0 +1,609 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/static/sw.js')
+        .then(function() { console.log('Service Worker Registered'); });
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者ダッシュボード - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 10px 17px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 2px;
+            font-size: 1rem;
+        }
+        .welcome {
+            color: #666;
+            font-size: 0.6rem;
+            margin-bottom: 3px;
+        }
+
+        .features-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin-top: 3px;
+        }
+        .feature-badge {
+            display: inline-block;
+            font-size: 0.47rem;
+            padding: 1px 5px;
+            border-radius: 12px;
+            background-color: #e0e7ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+            white-space: nowrap;
+        }
+
+        .user-actions {
+            float: right;
+            display: flex;
+            gap: 5px;
+        }
+        .profile-btn {
+            padding: 4px 8px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.57rem;
+        }
+        .profile-btn:hover { background: #059669; }
+        .logout-btn {
+            padding: 4px 8px;
+            background: #dc2626;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.57rem;
+        }
+        .logout-btn:hover { background: #b91c1c; }
+
+        /* 統計カードセクション */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .stat-card {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+        .stat-info h3 {
+            color: #666;
+            font-size: 0.55rem;
+            margin-bottom: 3px;
+        }
+        .stat-info .number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+        .stat-pending .stat-icon {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .stat-blacklist .stat-icon {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .stat-approved .stat-icon {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .section-separator {
+            color: #fff;
+            font-size: 0.73rem;
+            margin: 7px 0 7px 3px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 17px;
+        }
+
+        .app-card {
+            background: white;
+            padding: 4px 6px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            border: 2px solid transparent;
+        }
+
+        .app-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+
+        .app-card.clickable {
+            cursor: pointer;
+        }
+
+        .app-card.non-clickable {
+            opacity: 0.7;
+            cursor: default;
+        }
+
+        .app-card.non-clickable:hover {
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-color: transparent;
+        }
+
+        .app-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+
+        .app-icon {
+            font-size: 1rem;
+        }
+
+        .app-card h3 {
+            color: #333;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .app-card p {
+            color: #666;
+            font-size: 0.55rem;
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .app-card.highlight {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .app-card.highlight h3,
+        .app-card.highlight p {
+            color: white;
+        }
+
+        .app-card.admin-function {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .app-card.admin-function h3,
+        .app-card.admin-function p {
+            color: white;
+        }
+
+        .app-card.admin-function:hover {
+            border-color: #a5b4fc;
+        }
+
+        .app-card.feature-app {
+            background: linear-gradient(135deg, #7fb3d5 0%, #6a9cc2 100%);
+            color: white;
+        }
+
+        .app-card.feature-app:hover {
+            border-color: #aed6f1;
+        }
+
+        .app-card.feature-app h3,
+        .app-card.feature-app p {
+            color: white;
+        }
+
+        .app-card.dev-app {
+            background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+            color: white;
+        }
+
+        .app-card.dev-app:hover {
+            border-color: #cbd5e1;
+        }
+
+        .app-card.dev-app h3,
+        .app-card.dev-app p {
+            color: white;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.3);
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="user-actions">
+                <a href="{{ url_for('profile.edit_profile') }}" class="profile-btn">プロフィール</a>
+                <form action="{{ url_for('auth.logout') }}" method="post" style="display: inline;">
+                    <button type="submit" class="logout-btn">ログアウト</button>
+                </form>
+            </div>
+            <h1>FUJIN-P 管理者ダッシュボード</h1>
+            <p class="welcome">ようこそ、{{ session.user_name }}さん</p>
+
+            {% if features %}
+            <div class="features-list">
+                {% for feature in features %}
+                    <span class="feature-badge">{{ feature.feature_name }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 登録申請統計 -->
+        <h3 class="section-separator">📊 登録申請状況</h3>
+        <div class="stats-grid">
+            <a href="{{ url_for('admin.pending_requests') }}" class="stat-card stat-pending">
+                <div class="stat-info">
+                    <h3>承認待ち</h3>
+                    <div class="number">{{ statistics.pending_count if statistics else 0 }}</div>
+                </div>
+                <div class="stat-icon">⏳</div>
+            </a>
+
+            <a href="{{ url_for('admin.approved_users_list') }}" class="stat-card stat-approved">
+                <div class="stat-info">
+                    <h3>承認済み（未設定）</h3>
+                    <div class="number">{{ statistics.approved_count if statistics else 0 }}</div>
+                </div>
+                <div class="stat-icon">✓</div>
+            </a>
+
+            <a href="{{ url_for('admin.blacklisted_users') }}" class="stat-card stat-blacklist">
+                <div class="stat-info">
+                    <h3>ブラックリスト</h3>
+                    <div class="number">{{ statistics.blacklisted_count if statistics else 0 }}</div>
+                </div>
+                <div class="stat-icon">🚫</div>
+            </a>
+        </div>
+
+        <!-- システム管理機能 -->
+        <h3 class="section-separator">⚙️ システム管理</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('admin.users') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">👥</span>
+                    <h3>ユーザ管理</h3>
+                </div>
+                <p>既存ユーザーの管理</p>
+            </a>
+
+            <a href="{{ url_for('admin.deleted_users') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🗑️</span>
+                    <h3>削除済みユーザー</h3>
+                </div>
+                <p>復元可能なユーザー</p>
+            </a>
+
+            <a href="{{ url_for('admin.features') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🔐</span>
+                    <h3>フィーチャー管理</h3>
+                </div>
+                <p>権限設定</p>
+            </a>
+
+            <a href="{{ url_for('admin.pending_requests') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">⏳</span>
+                    <h3>承認待ちユーザー</h3>
+                </div>
+                <p>{{ statistics.pending_count if statistics else 0 }}件</p>
+            </a>
+
+            <a href="{{ url_for('admin.approved_users_list') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">✅</span>
+                    <h3>承認済みユーザー</h3>
+                </div>
+                <p>パスワード未設定</p>
+            </a>
+
+            <a href="{{ url_for('admin.blacklisted_users') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🚫</span>
+                    <h3>ブラックリスト</h3>
+                </div>
+                <p>拒否リスト</p>
+            </a>
+
+            <a href="{{ url_for('table_cycle.table_cycle_dashboard') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🔃</span>
+                    <h3>テーブルサイクル</h3>
+                </div>
+                <p>SQLファイル⇔.xlsxファイル</p>
+            </a>
+
+            <a href="{{ url_for('migration_assistant_exporter.index') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🛫</span>
+                    <h3>アプリエクスポート支援</h3>
+                </div>
+                <p>エクスポートパッケージ作成</p>
+            </a>
+
+            <a href="{{ url_for('migration_assistant_importer.index') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">🛬</span>
+                    <h3>アプリインポート支援</h3>
+                </div>
+                <p>パッケージインポート</p>
+            </a>
+
+            <a href="{{ url_for('stats.stat_main') }}" class="app-card admin-function">
+                <div class="app-title">
+                    <span class="app-icon">📊</span>
+                    <h3>スタッツ</h3>
+                </div>
+                <p>利用状況の表示</p>
+            </a>
+
+            </div>
+
+        <!-- 標準アプリケーション（guestと同じ） -->
+        <h3 class="section-separator">📌 標準機能</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('document_archive.dashboard') }}" class="app-card highlight">
+                <div class="app-title">
+                    <span class="app-icon">🏛️</span>
+                    <h3>文書アーカイブ</h3>
+                </div>
+                <p>文書アーカイブの閲覧と管理</p>
+            </a>
+
+            <a href="{{ url_for('colrep.worker_dashboard') }}" class="app-card highlight">
+                <div class="app-title">
+                    <span class="app-icon">🏀</span>
+                    <h3>コレポ執筆</h3>
+                </div>
+                <p>協調的レポート制作</p>
+            </a>
+
+            <a href="{{ url_for('stats.stat_main') }}" class="app-card highlight">
+                <div class="app-title">
+                    <span class="app-icon">📊</span>
+                    <h3>スタッツ</h3>
+                </div>
+                <p>利用状況の表示</p>
+            </a>
+
+            <a href="{{ url_for('office_hour_ms.office_hour_ms_index') }}" class="app-card highlight">
+                <div class="app-title">
+                    <span class="app-icon">👩</span>
+                    <h3>オフィスアワー<br>（実験版）</h3>
+                </div>
+                <p>教員オフィスアワー管理</p>
+            </a>
+
+
+        </div>
+
+        <!-- フィーチャー別アプリケーション（guestと全く同じロジック） -->
+        {% for feature in features %}
+
+        {% if feature.feature_name == 'colrep総管理者' or feature.feature_name == 'CoRePo管理者' %}
+        <h3 class="section-separator">👑 {{ feature.feature_name }}</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('colrep.index') }}" class="app-card feature-app">
+                <div class="app-title">
+                    <span class="app-icon">🏀</span>
+                    <h3>コレポ管理</h3>
+                </div>
+                <p>プロジェクトの作成・管理</p>
+            </a>
+        </div>
+
+        {% elif feature.feature_code == 'test_user' %}
+        <h3 class="section-separator">🧪 {{ feature.feature_name }}</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('sample_app.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">🚀</span>
+                    <h3>サンプルアプリ</h3>
+                </div>
+                <p>テストユーザー専用アプリ</p>
+            </a>
+            <a href="{{ url_for('calculator.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">👛</span>
+                    <h3>簡単な電卓</h3>
+                </div>
+                <p>サンプルです</p>
+            </a>
+            <a href="{{ url_for('free_hand_curve.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">➿</span>
+                    <h3>フリーハンド曲線</h3>
+                </div>
+                <p>休息時のおたのしみ</p>
+            </a>
+            <a href="{{ url_for('ts_solvers.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">&#128558;&#8205;&#128168;</span>
+                    <h3>巡回セールスマン問題ソルバー</h3>
+                </div>
+                <p>NP困難問題に挑戦！</p>
+            </a>
+            <a href="{{ url_for('toi_no_mori.welcome') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">🌲</span>
+                    <h3>といの森</h3>
+                </div>
+                <p>CMS学習プラットフォーム</p>
+            </a>
+            <a href="{{ url_for('user_groups.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">👥</span>
+                    <h3>まいぐる</h3>
+                </div>
+                <p>ユーザによるグループ管理</p>
+            </a>
+            <a href="{{ url_for('migration_assistant.index') }}" class="app-card feature-app clickable">
+                <div class="app-title">
+                    <span class="app-icon">👣</span>
+                    <h3>まいあし</h3>
+                </div>
+                <p>FUJIN-Pスタブマイグレーションアシスタント</p>
+            </a>
+        </div>
+
+        {% elif feature.feature_code == 'under_development' %}
+        <h3 class="section-separator">📦 {{ feature.feature_name }}</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('c_flow.index') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">🚣</span>
+                    <h3>Cフロー</h3>
+                </div>
+                <p>フロー概念でのカード管理</p>
+            </a>
+
+            <a href="{{ url_for('comemo.dashboard') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">🧿</span>
+                    <h3>CoMeMo</h3>
+                </div>
+                <p>連想記憶</p>
+            </a>
+
+            <a href="{{ url_for('comemo.dashboard2') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">🧿</span>
+                    <h3>CoMeMo Matrix</h3>
+                </div>
+                <p>連想記憶（先進インタフェース）</p>
+            </a>
+
+            <a href="{{ url_for('annual_report.dashboard') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">★</span>
+                    <h3>けいこく年度</h3>
+                </div>
+                <p>年度計画・報告書管理システム</p>
+            </a>
+
+            <a href="{{ url_for('midterm.midterm_dashboard') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">★</span>
+                    <h3>けいこく中期</h3>
+                </div>
+                <p>中期目標・計画管理システム</p>
+            </a>
+
+            <a href="{{ url_for('data_post.data_post_index') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">📮</span>
+                    <h3>データポスト</h3>
+                </div>
+                <p>エクセルファイル→SQLテーブル</p>
+            </a>
+
+            <a href="{{ url_for('colrep_public.public_projects_list') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">🏀</span>
+                    <h3>コレポ閲覧</h3>
+                </div>
+                <p>協調的レポート制作</p>
+            </a>
+
+            <a href="{{ url_for('lanes.lanes_entrance') }}" class="app-card dev-app">
+                <div class="app-title">
+                    <span class="app-icon">🚣</span>
+                    <h3>Lanes</h3>
+                </div>
+                <p>グループ活動支援</p>
+            </a>
+
+
+        </div>
+        {% endif %}
+
+        {% endfor %}
+
+    </div>
+</body>
+</html>

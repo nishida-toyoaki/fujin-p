@@ -1,0 +1,1114 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ゆーまい - ユーザ・グループ マイグレーション</title>
+<style>
+:root {
+  --primary: #6366f1; --primary-dark: #4f46e5;
+  --success: #10b981; --warning: #f59e0b;
+  --danger: #ef4444;  --info: #3b82f6;
+  --gray-50: #f9fafb; --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb; --gray-400: #9ca3af;
+  --gray-600: #4b5563; --gray-800: #1f2937;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+       background: var(--gray-50); color: var(--gray-800); line-height: 1.6; }
+
+.page-header {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white; padding: 24px 32px; display: flex; align-items: center; gap: 16px;
+}
+.page-header h1 { font-size: 1.6rem; font-weight: 700; }
+.page-header p  { font-size: 0.9rem; opacity: 0.85; margin-top: 2px; }
+
+.btn-return {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; background: var(--danger); color: #fff;
+    border-radius: 20px; text-decoration: none;
+    font-size: 0.875rem; font-weight: 700; white-space: nowrap;
+}
+.btn-return:hover { background: #dc2626; color: #fff; }
+.tabs { background: white; border-bottom: 2px solid var(--gray-200);
+        display: flex; padding: 0 32px; }
+.tab-btn { padding: 14px 22px; font-size: 0.9rem; font-weight: 500;
+           color: var(--gray-600); cursor: pointer; border: none; background: none;
+           border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-btn:hover:not(.active) { color: var(--gray-800); }
+.tab-content { display: none; padding: 28px 32px; max-width: 960px; }
+.tab-content.active { display: block; }
+
+.card { background: white; border-radius: 10px; padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 20px; }
+.card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--gray-800); }
+
+.form-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.form-row input, .form-row select {
+  flex: 1; min-width: 160px; padding: 8px 12px;
+  border: 1px solid var(--gray-200); border-radius: 6px; font-size: 0.875rem;
+}
+label { font-size: 0.8rem; color: var(--gray-600); display: block; margin-bottom: 4px; }
+
+.btn { padding: 8px 16px; border: none; border-radius: 6px;
+       font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all .15s; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: white; }
+.btn-warning { background: var(--warning); color: white; }
+.btn-danger  { background: var(--danger);  color: white; }
+.btn-outline { background: white; color: var(--gray-600); border: 1px solid var(--gray-200); }
+.btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th { background: var(--gray-50); padding: 10px 12px; text-align: left;
+     font-weight: 600; color: var(--gray-600); border-bottom: 1px solid var(--gray-200); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--gray-50); }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
+         font-size: 0.75rem; font-weight: 500; }
+.badge-admin   { background: #fef3c7; color: #92400e; }
+.badge-regular { background: #dbeafe; color: #1e40af; }
+.badge-guest   { background: var(--gray-100); color: var(--gray-600); }
+.badge-done    { background: #d1fae5; color: #065f46; }
+.badge-error   { background: #fee2e2; color: #991b1b; }
+.badge-pending { background: #fef3c7; color: #92400e; }
+.badge-conflict{ background: #fce7f3; color: #9d174d; }
+.badge-group   { background: #ede9fe; color: #5b21b6; }
+
+.alert { padding: 12px 16px; border-radius: 8px; font-size: 0.875rem;
+         margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+.alert-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.alert-warning { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+.alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #065f46; }
+.alert-danger  { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+.steps { display: flex; gap: 0; margin-bottom: 28px; }
+.step { flex: 1; text-align: center; padding: 12px; background: var(--gray-100);
+        border: 1px solid var(--gray-200); font-size: 0.8rem; color: var(--gray-400); }
+.step:first-child { border-radius: 8px 0 0 8px; }
+.step:last-child  { border-radius: 0 8px 8px 0; }
+.step.active { background: var(--primary); color: white; border-color: var(--primary); }
+.step.done   { background: var(--success); color: white; border-color: var(--success); }
+.step-num { display: block; font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
+
+.conflict-item { border: 1px solid var(--gray-200); border-radius: 8px;
+                 margin-bottom: 12px; overflow: hidden; }
+.conflict-header { display: flex; align-items: center; justify-content: space-between;
+                   padding: 12px 16px; background: var(--gray-50);
+                   border-bottom: 1px solid var(--gray-200); }
+.conflict-email { font-weight: 600; font-size: 0.9rem; }
+.conflict-body { display: grid; grid-template-columns: 1fr 1fr; }
+.conflict-side { padding: 14px 16px; font-size: 0.8rem; }
+.conflict-side:first-child { border-right: 1px solid var(--gray-200); }
+.conflict-side h4 { font-size: 0.75rem; font-weight: 600; color: var(--gray-400);
+                    margin-bottom: 6px; text-transform: uppercase; }
+.conflict-actions { padding: 12px 16px; border-top: 1px solid var(--gray-200);
+                    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.conflict-resolved { font-size: 0.8rem; color: var(--success); font-weight: 600; }
+
+.section-divider { font-size: 0.8rem; font-weight: 700; color: var(--gray-600);
+                   padding: 8px 0; margin: 16px 0 8px; border-bottom: 2px solid var(--gray-200); }
+
+.spinner { display: inline-block; width: 16px; height: 16px;
+           border: 2px solid rgba(255,255,255,.4); border-top-color: white;
+           border-radius: 50%; animation: spin .6s linear infinite; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state { text-align: center; padding: 40px; color: var(--gray-400); }
+.empty-state .icon { font-size: 2.5rem; margin-bottom: 8px; }
+
+#toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+                   display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--gray-800); color: white; padding: 12px 18px;
+         border-radius: 8px; font-size: 0.875rem; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+         animation: slideIn .2s ease; max-width: 360px; }
+.toast.success { background: var(--success); }
+.toast.error   { background: var(--danger); }
+@keyframes slideIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div style="font-size:2rem;">🛳️</div>
+  <div>
+    <h1>ゆーまい</h1>
+    <p>FUJIN-P ユーザ・グループ 統合マイグレーションシステム</p>
+  </div>
+  <a href="{{ url_for('user_migration.return_to_fujin') }}" class="btn-return" style="margin-left:auto;">🏠 FUJIN-Pダッシュボードに戻る</a>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab(event,'tab-migrate')">📦 マイグレーション</button>
+  <button class="tab-btn"       onclick="showTab(event,'tab-sites')">🔗 アライアンスサイト</button>
+  <button class="tab-btn"       onclick="showTab(event,'tab-permissions')">🔐 エクスポート許可</button>
+  <button class="tab-btn"       onclick="showTab(event,'tab-history')">📋 ジョブ履歴</button>
+</div>
+
+<!-- ═══ タブ1: マイグレーション ═══ -->
+<div id="tab-migrate" class="tab-content active">
+
+  <div class="steps">
+    <div class="step active" id="step1"><span class="step-num">1</span>取得・分析</div>
+    <div class="step"        id="step2"><span class="step-num">2</span>コンフリクト解決</div>
+    <div class="step"        id="step3"><span class="step-num">3</span>実行・完了</div>
+  </div>
+
+  <!-- Step1 -->
+  <div id="panel-step1" class="card">
+    <h3>🔍 Step 1：移行元サイトを選択してユーザ・グループを一括取得</h3>
+    <div class="alert alert-info">
+      <span>ℹ️</span>
+      <span>ユーザとグループを一度に取得・分析します。コンフリクトを解決したら一括実行（ユーザ→グループの順）します。</span>
+    </div>
+    <div class="form-row">
+      <div style="flex:1">
+        <label>移行元サイト</label>
+        <select id="sel-site" style="width:100%">
+          <option value="">-- サイトを選択 --</option>
+        </select>
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn btn-primary" onclick="fetchAndAnalyze()" id="btn-fetch">
+          取得・分析
+        </button>
+      </div>
+    </div>
+
+    <!-- サイト選択後に表示するリクエストボタン -->
+    <div id="permission-request-area" style="display:none; margin-top:8px;">
+        <div style="font-size:.8rem; color:var(--gray-600); margin-bottom:6px;">
+            「リモート接続エラー: 401」になる場合など、このサイトからのエクスポート許可がまだ有効でないとき：
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="requestFromMigrationTab(event)">
+            📤 エクスポート許可をリクエスト
+        </button>
+        <div style="font-size:.75rem; color:var(--gray-400); margin-top:6px;">
+            一覧に無いサイトへの申請は「🔐 エクスポート許可」タブからURLを直接指定してください。
+        </div>
+        <div id="inline-req-result" style="margin-top:8px;"></div>
+    </div>
+
+
+    <div id="analysis-result" style="display:none;">
+      <hr style="margin:16px 0; border-color:var(--gray-100);">
+      <h4 style="font-size:.875rem; font-weight:600; margin-bottom:12px;">分析結果</h4>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:8px;">
+        <div style="grid-column:span 3; font-size:.8rem; font-weight:600; color:var(--gray-600);">👤 ユーザ</div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-remote-u" style="font-size:1.6rem; font-weight:700; color:var(--primary);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">取得件数</div>
+        </div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-new-u" style="font-size:1.6rem; font-weight:700; color:var(--success);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">新規追加</div>
+        </div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-conf-u" style="font-size:1.6rem; font-weight:700; color:var(--warning);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">コンフリクト</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
+        <div style="grid-column:span 3; font-size:.8rem; font-weight:600; color:var(--gray-600);">👥 グループ</div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-remote-g" style="font-size:1.6rem; font-weight:700; color:var(--primary);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">取得件数</div>
+        </div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-new-g" style="font-size:1.6rem; font-weight:700; color:var(--success);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">新規追加</div>
+        </div>
+        <div style="text-align:center; padding:12px; background:var(--gray-50); border-radius:8px;">
+          <div id="cnt-conf-g" style="font-size:1.6rem; font-weight:700; color:var(--warning);">0</div>
+          <div style="font-size:.75rem; color:var(--gray-600);">コンフリクト</div>
+        </div>
+      </div>
+      <div style="margin-top:14px; text-align:right;">
+        <button class="btn btn-primary" onclick="goToStep2()" id="btn-next1">
+          コンフリクト解決へ →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step2 -->
+  <div id="panel-step2" class="card" style="display:none;">
+    <h3>⚡ Step 2：コンフリクト解決</h3>
+    <div class="alert alert-warning">
+      <span>⚠️</span>
+      <div>全てのコンフリクトを解決してから実行してください。<br>
+           <small>解決すると、ユーザとグループが一括で実行されます（ユーザ→グループの順）。</small></div>
+    </div>
+    <div id="pending-count-bar" style="font-size:.875rem; margin-bottom:14px; color:var(--gray-600);">
+      未解決：<b id="cnt-pending">0</b> 件
+    </div>
+    <div id="conflict-list-container"></div>
+    <div style="margin-top:16px; text-align:right;">
+      <button class="btn btn-outline" onclick="goToStep1()" style="margin-right:8px;">← 戻る</button>
+      <button class="btn btn-primary" onclick="goToStep3()" id="btn-next2" disabled>実行へ →</button>
+    </div>
+  </div>
+
+  <!-- Step3 -->
+  <div id="panel-step3" class="card" style="display:none;">
+    <h3>✅ Step 3：マイグレーション実行</h3>
+    <div id="execute-summary"></div>
+    <div style="margin-top:16px; display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="goToStep2()" id="btn-back3">← 戻る</button>
+      <button class="btn btn-success" onclick="executeMigration()" id="btn-execute">
+        🚀 マイグレーション実行
+      </button>
+    </div>
+    <div id="execute-result" style="margin-top:16px;"></div>
+  </div>
+
+</div>
+
+<!-- ═══ タブ2: アライアンスサイト ═══ -->
+<div id="tab-sites" class="tab-content">
+  <div class="card">
+    <h3>🔗 アライアンスサイト管理</h3>
+    <div class="alert alert-info">
+      <span>ℹ️</span>
+      <div>サイトの追加・削除は <a href="/table_share/" style="color:var(--primary); font-weight:600;">テーシャの管理画面</a> で行ってください。</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>サイト名</th><th>URL</th><th>説明</th><th>登録日</th></tr></thead>
+        <tbody id="tbody-sites">
+          <tr><td colspan="4" class="empty-state">読み込み中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px; text-align:right;">
+      <a href="/table_share/" class="btn btn-outline">テーシャで管理する →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     追加箇所：エクスポート許可
+     ══════════════════════════════════════════════════════ -->
+<div id="tab-permissions" class="tab-content">
+
+  <!-- ── 受け取る側：許可をリクエストする ── -->
+  <div class="card">
+    <h3>📤 このサイトが受け取る：エクスポート許可をリクエスト</h3>
+    <div class="alert alert-info">
+      <span>ℹ️</span>
+      <div>
+        データを引き取りたい移行元サイトのURLを指定して申請を送ります。<br>
+        相手サイトのadminが承認すると、APIキーが自動で届き、アライアンスサイトに登録されます。
+      </div>
+    </div>
+    <div class="form-row">
+      <div style="flex:1">
+        <label>移行元サイトのURL</label>
+        <input type="url" id="req-exporter-url" placeholder="https://example.pythonanywhere.com"
+               style="width:100%">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn btn-primary" id="btn-req" onclick="sendPermissionRequest()">
+          許可をリクエスト
+        </button>
+      </div>
+    </div>
+    <div id="req-result"></div>
+
+    <div class="section-divider">送信済みの申請</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>移行元サイト</th><th>URL</th><th>状態</th><th>申請日時</th><th>キー受領日時</th></tr>
+        </thead>
+        <tbody id="tbody-outgoing">
+          <tr><td colspan="5" class="empty-state">読み込み中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 送る側：受け取った申請を管理 ── -->
+  <div class="card">
+    <h3>📥 このサイトが送る：エクスポート許可申請の管理</h3>
+    <div class="alert alert-info">
+      <span>ℹ️</span>
+      <div>
+        他のサイトから「データを受け取りたい」という申請が届きます。<br>
+        承認すると、APIキーが相手サイトに自動送信され、相手はマイグレーションを実行できるようになります。
+      </div>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="loadPermissions()"
+            style="margin-bottom:12px;">🔄 更新</button>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>申請サイト</th><th>URL</th><th>状態</th>
+            <th>申請日時</th><th>処理日時</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-permissions">
+          <tr><td colspan="6" class="empty-state">読み込み中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ タブ3: ジョブ履歴 ═══ -->
+<div id="tab-history" class="tab-content">
+  <div class="card">
+    <h3>📋 マイグレーションジョブ履歴</h3>
+    <button class="btn btn-outline btn-sm" onclick="loadJobs()" style="margin-bottom:12px;">🔄 更新</button>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>移行元</th><th>状態</th>
+            <th>U取得</th><th>U適用</th><th>G取得</th><th>G適用</th>
+            <th>開始</th><th>完了</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-jobs">
+          <tr><td colspan="9" class="empty-state">履歴なし</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+let currentJobId = null;
+let pendingCount = 0;
+let conflictsEditable = true;   // 実行済みジョブでは false
+
+document.addEventListener('DOMContentLoaded', () => { loadSites(); loadJobs(); loadPermissions(); });
+
+function showTab(ev, id) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
+    if (id === 'tab-history')     loadJobs();
+    if (id === 'tab-permissions') loadPermissions();
+}
+
+function toast(msg, type='info') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+}
+
+function categoryBadge(cat) {
+    const map = { admin:'badge-admin', regular:'badge-regular', guest:'badge-guest' };
+    return `<span class="badge ${map[cat]||'badge-regular'}">${cat||'-'}</span>`;
+}
+function statusBadge(s) {
+    const map   = { fetched:'badge-pending', conflict_review:'badge-conflict',
+                    executing:'badge-pending', done:'badge-done', error:'badge-error' };
+    const label = { fetched:'取得済', conflict_review:'照会中',
+                    executing:'実行中', done:'完了', error:'エラー' };
+    return `<span class="badge ${map[s]||''}">${label[s]||s}</span>`;
+}
+function escapeHtml(t) {
+    const d = document.createElement('div'); d.textContent = t||''; return d.innerHTML;
+}
+
+// ─── サイト一覧 ──────────────────────────────────────────
+async function loadSites() {
+    const resp = await fetch('/user_migration/get_alliance_sites');
+    const data = await resp.json();
+    const sel   = document.getElementById('sel-site');
+    const tbody = document.getElementById('tbody-sites');
+    sel.innerHTML = '<option value="">-- サイトを選択 --</option>';
+    if (!data.success || !data.sites.length) {
+        tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="icon">🌐</div>登録済みサイトはありません</div></td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.sites.map(s => `
+        <tr>
+            <td><b>${escapeHtml(s.site_name)}</b></td>
+            <td><a href="${s.site_url}" target="_blank" style="color:var(--primary)">${escapeHtml(s.site_url)}</a></td>
+            <td>${escapeHtml(s.description||'-')}</td>
+            <td>${s.created_at||'-'}</td>
+        </tr>`).join('');
+    data.sites.forEach(s => {
+        sel.innerHTML += `<option value="${s.id}"
+            data-url="${escapeHtml(s.site_url)}">${escapeHtml(s.site_name)}</option>`;
+    });
+
+    // サイト選択時にエクスポート許可リクエストボタンを表示
+    sel.onchange = function() {
+        const area = document.getElementById('permission-request-area');
+        area.style.display = this.value ? 'block' : 'none';
+        document.getElementById('inline-req-result').innerHTML = '';
+    };
+}
+
+// ─── Step1: 取得・分析 ───────────────────────────────────
+async function fetchAndAnalyze() {
+    const siteId = document.getElementById('sel-site').value;
+    if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+
+    const btn = document.getElementById('btn-fetch');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>取得・分析中…';
+
+    const resp = await fetch('/user_migration/fetch_and_analyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ alliance_site_id: siteId })
+    });
+    const data = await resp.json();
+    btn.disabled = false;
+    btn.textContent = '取得・分析';
+
+    if (!data.success) { toast(data.error, 'error'); return; }
+
+    currentJobId = data.job_id;
+
+    document.getElementById('cnt-remote-u').textContent = data.total_remote_users;
+    document.getElementById('cnt-new-u').textContent    = data.new_users;
+    document.getElementById('cnt-conf-u').textContent   = data.user_conflicts + data.admin_sources;
+    document.getElementById('cnt-remote-g').textContent = data.total_remote_groups;
+    document.getElementById('cnt-new-g').textContent    = data.new_groups;
+    document.getElementById('cnt-conf-g').textContent   = data.group_conflicts;
+    document.getElementById('analysis-result').style.display = 'block';
+
+    toast(`ユーザ ${data.total_remote_users} 件、グループ ${data.total_remote_groups} 件 取得完了`, 'success');
+}
+
+function setStep(n) {
+    [1,2,3].forEach(i => {
+        const el = document.getElementById(`step${i}`);
+        el.classList.remove('active','done');
+        if (i < n)  el.classList.add('done');
+        if (i === n) el.classList.add('active');
+    });
+}
+
+function goToStep1() {
+    document.getElementById('panel-step1').style.display = 'block';
+    document.getElementById('panel-step2').style.display = 'none';
+    document.getElementById('panel-step3').style.display = 'none';
+    setStep(1);
+}
+function goToStep2() {
+    if (!currentJobId) { toast('先に取得・分析してください', 'error'); return; }
+    document.getElementById('panel-step1').style.display = 'none';
+    document.getElementById('panel-step2').style.display = 'block';
+    document.getElementById('panel-step3').style.display = 'none';
+    setStep(2);
+    loadConflicts();
+}
+function goToStep3() {
+    document.getElementById('panel-step1').style.display = 'none';
+    document.getElementById('panel-step2').style.display = 'none';
+    document.getElementById('panel-step3').style.display = 'block';
+    setStep(3);
+    renderExecuteSummary();
+}
+
+// ─── Step2: コンフリクト ─────────────────────────────────
+async function loadConflicts() {
+    const resp = await fetch(`/user_migration/get_conflicts?job_id=${currentJobId}`);
+    const data = await resp.json();
+    if (!data.success) { toast(data.error, 'error'); return; }
+
+    pendingCount      = data.pending_count;
+    conflictsEditable = data.editable !== false;
+    document.getElementById('cnt-pending').textContent = pendingCount;
+
+    const container = document.getElementById('conflict-list-container');
+    container.innerHTML = '';
+
+    if (!conflictsEditable) {
+        container.innerHTML += `
+            <div class="alert alert-info">
+                <span>🔒</span>
+                <span>このジョブは既に実行中または実行済みのため、選択内容は変更できません。</span>
+            </div>`;
+    }
+
+    if (!data.user_conflicts.length && !data.group_conflicts.length) {
+        container.innerHTML += '<div class="empty-state"><div class="icon">✅</div>コンフリクトはありません</div>';
+        document.getElementById('btn-next2').disabled = false;
+        return;
+    }
+
+    const dis = conflictsEditable ? '' : ' disabled';
+
+    // ── ユーザコンフリクト ──────────────────────────────────
+    if (data.user_conflicts.length) {
+        // 一括選択ボタン
+        container.innerHTML += `
+            <div class="section-divider">👤 ユーザコンフリクト</div>
+            <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+                <span style="font-size:.8rem; color:var(--gray-600); font-weight:600;">一括選択：</span>
+                <button class="btn btn-primary btn-sm"${dis}
+                        onclick="bulkResolve('user','use_remote')">
+                    全て移行元を使用
+                </button>
+                <button class="btn btn-outline btn-sm"${dis}
+                        onclick="bulkResolve('user','use_local')">
+                    全て移行先を維持
+                </button>
+                <button class="btn btn-danger btn-sm"${dis}
+                        onclick="bulkResolve('user','skip')">
+                    全てスキップ
+                </button>
+            </div>
+            <div style="font-size:.75rem; color:var(--gray-600); margin-bottom:12px;">
+                ※ 一括選択では admin処理は安全側に倒し、「全て移行元を使用」→ regularに設定、
+                「全て移行先を維持」→ スキップ に変換されます。
+            </div>`;
+        container.innerHTML += data.user_conflicts.map(c => renderUserConflict(c)).join('');
+    }
+
+    // ── グループコンフリクト ────────────────────────────────
+    if (data.group_conflicts.length) {
+        container.innerHTML += `
+            <div class="section-divider">👥 グループコンフリクト</div>
+            <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+                <span style="font-size:.8rem; color:var(--gray-600); font-weight:600;">一括選択：</span>
+                <button class="btn btn-primary btn-sm"${dis}
+                        onclick="bulkResolve('group','use_remote')">
+                    全てリモートで適用
+                </button>
+                <button class="btn btn-outline btn-sm"${dis}
+                        onclick="bulkResolve('group','use_local')">
+                    全てローカルを維持
+                </button>
+                <button class="btn btn-danger btn-sm"${dis}
+                        onclick="bulkResolve('group','skip')">
+                    全てスキップ
+                </button>
+            </div>`;
+        container.innerHTML += data.group_conflicts.map(c => renderGroupConflict(c)).join('');
+    }
+
+    document.getElementById('btn-next2').disabled = pendingCount > 0;
+}
+
+
+function renderUserConflict(c) {
+    const ru = c.remote_user || {};
+    const lu = c.local_user  || {};
+    const resolved = c.resolution !== 'pending';
+
+    // 解決済みの場合は現在の選択を強調表示しつつ、全ボタンを残す
+    const resLabels = {
+        use_remote: '移行元を使用',
+        use_local:  '移行先を維持',
+        skip:       'スキップ',
+        set_admin:  'adminに設定',
+        set_regular:'regularに設定',
+        set_guest:  'guestに設定'
+    };
+
+    const currentBadge = resolved
+        ? `<span style="font-size:.75rem; color:var(--success); font-weight:600; margin-left:8px;">
+               ✅ 現在：${resLabels[c.resolution] || c.resolution}
+           </span>`
+        : '';
+
+    const dis = conflictsEditable ? '' : ' disabled';
+
+    let actionHtml = '';
+    if (c.conflict_type === 'regular_guest') {
+        actionHtml = `
+            <button class="btn btn-sm ${c.resolution==='use_remote' ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','use_remote')">移行元を使用</button>
+            <button class="btn btn-sm ${c.resolution==='use_local'  ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','use_local')">移行先を維持</button>
+            <button class="btn btn-sm ${c.resolution==='skip'       ? 'btn-danger'  : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','skip')">スキップ</button>
+            ${currentBadge}`;
+    } else {
+        // admin_source
+        actionHtml = `
+            <button class="btn btn-sm ${c.resolution==='set_admin'   ? 'btn-warning' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','set_admin')">adminに設定</button>
+            <button class="btn btn-sm ${c.resolution==='set_regular' ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','set_regular')">regularに設定</button>
+            <button class="btn btn-sm ${c.resolution==='set_guest'   ? 'btn-primary'  : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','set_guest')">guestに設定</button>
+            <button class="btn btn-sm ${c.resolution==='skip'        ? 'btn-danger'  : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'user','skip')">スキップ</button>
+            ${currentBadge}`;
+    }
+
+    const deletedBadge = (lu && lu.inactive)
+        ? ' <span class="badge badge-error">削除済み</span>' : '';
+
+    return `
+        <div class="conflict-item" id="conflict-u-${c.id}">
+            <div class="conflict-header">
+                <span class="conflict-email">✉️ ${escapeHtml(c.email)}</span>
+                <span class="badge ${c.conflict_type==='admin_source' ? 'badge-admin' : 'badge-conflict'}">
+                    ${c.conflict_type==='admin_source' ? 'admin処理' : 'コンフリクト'}
+                </span>
+            </div>
+            <div class="conflict-body">
+                <div class="conflict-side">
+                    <h4>🔵 移行元</h4>
+                    <div>名前：${escapeHtml(ru.name||'-')}</div>
+                    <div>カテゴリ：${categoryBadge(ru.category)}</div>
+                </div>
+                <div class="conflict-side">
+                    <h4>🟢 移行先</h4>
+                    ${lu && lu.id
+                        ? `<div>名前：${escapeHtml(lu.name||'-')}${deletedBadge}</div>
+                           <div>カテゴリ：${categoryBadge(lu.category)}</div>
+                           ${lu.inactive ? '<div style="font-size:.75rem; color:var(--danger); margin-top:4px;">「移行元を使用」を選ぶとこのユーザは再有効化されます</div>' : ''}`
+                        : '<div style="color:var(--gray-400)">（存在しない）</div>'}
+                </div>
+            </div>
+            <div class="conflict-actions">${actionHtml}</div>
+        </div>`;
+}
+
+
+function renderGroupConflict(c) {
+    const rg = c.remote_group || {};
+    const resolved = c.resolution !== 'pending';
+
+    const badgeFor = {
+        name_conflict:   '<span class="badge badge-conflict">同名グループ</span>',
+        manager_missing: '<span class="badge badge-admin">管理者不在</span>',
+        members_missing: '<span class="badge badge-pending">メンバー不在</span>'
+    };
+    // 複数の問題を抱えるグループは全てのバッジを表示する
+    const types = (c.issue_types && c.issue_types.length)
+        ? c.issue_types : [c.conflict_type];
+    const typeLabel = types.map(t => badgeFor[t] || '').join(' ');
+
+    const resLabels = { use_remote:'リモートで適用', use_local:'ローカルを維持', skip:'スキップ' };
+    const currentBadge = resolved
+        ? `<span style="font-size:.75rem; color:var(--success); font-weight:600; margin-left:8px;">
+               ✅ 現在：${resLabels[c.resolution] || c.resolution}
+           </span>`
+        : '';
+
+    const dis = conflictsEditable ? '' : ' disabled';
+
+    let actionHtml = '';
+    if (types.indexOf('name_conflict') >= 0) {
+        actionHtml = `
+            <button class="btn btn-sm ${c.resolution==='use_remote' ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'group','use_remote')">リモートで上書き</button>
+            <button class="btn btn-sm ${c.resolution==='use_local'  ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'group','use_local')">ローカルを維持</button>
+            <button class="btn btn-sm ${c.resolution==='skip'       ? 'btn-danger'  : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'group','skip')">スキップ</button>
+            ${currentBadge}`;
+    } else {
+        // manager_missing / members_missing
+        actionHtml = `
+            <button class="btn btn-sm ${c.resolution==='use_remote' ? 'btn-primary' : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'group','use_remote')">不在ユーザをスキップして適用</button>
+            <button class="btn btn-sm ${c.resolution==='skip'       ? 'btn-danger'  : 'btn-outline'}"${dis}
+                    onclick="resolve(${c.id},'group','skip')">このグループをスキップ</button>
+            ${currentBadge}`;
+    }
+
+    const missingHtml = (c.missing_emails && c.missing_emails.length)
+        ? `<div style="font-size:.75rem; color:var(--danger); margin-top:4px;">
+               不在: ${c.missing_emails.map(e => escapeHtml(e)).join(', ')}
+           </div>` : '';
+
+    const managerNote = (types.indexOf('manager_missing') >= 0)
+        ? `<div style="font-size:.75rem; color:var(--warning); margin-top:4px;">
+               適用すると、管理者は暫定的に実行者（あなた）に設定されます
+           </div>` : '';
+
+    return `
+        <div class="conflict-item" id="conflict-g-${c.id}">
+            <div class="conflict-header">
+                <span class="conflict-email">📂 ${escapeHtml(c.remote_group_name)}</span>
+                <span>${typeLabel}</span>
+            </div>
+            <div style="padding:12px 16px; font-size:.8rem; color:var(--gray-600);">
+                管理者: ${escapeHtml(rg.manager_email||'-')} ／ メンバー ${(rg.members||[]).length} 名
+                ${missingHtml}
+                ${managerNote}
+            </div>
+            <div class="conflict-actions">${actionHtml}</div>
+        </div>`;
+}
+
+
+// やり直し対応：pendingCount の増減を再計算する
+async function resolve(cid, kind, resolution) {
+    if (!conflictsEditable) { toast('このジョブは変更できません', 'error'); return; }
+
+    const resp = await fetch('/user_migration/resolve_conflict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ conflict_id: cid, conflict_kind: kind, resolution })
+    });
+    const data = await resp.json();
+    if (!data.success) { toast(data.error, 'error'); return; }
+
+    // 個別アイテムだけ再描画（全リロードより高速）
+    await reloadSingleConflict(cid, kind);
+
+    // pending件数を再集計（やり直し時に正確にカウントするため）
+    await refreshPendingCount();
+}
+
+async function reloadSingleConflict(cid, kind) {
+    const resp = await fetch(`/user_migration/get_conflicts?job_id=${currentJobId}`);
+    const data = await resp.json();
+    if (!data.success) return;
+
+    if (kind === 'user') {
+        const c = data.user_conflicts.find(x => x.id === cid);
+        if (c) {
+            const el = document.getElementById(`conflict-u-${cid}`);
+            if (el) el.outerHTML = renderUserConflict(c);
+        }
+    } else {
+        const c = data.group_conflicts.find(x => x.id === cid);
+        if (c) {
+            const el = document.getElementById(`conflict-g-${cid}`);
+            if (el) el.outerHTML = renderGroupConflict(c);
+        }
+    }
+}
+
+async function refreshPendingCount() {
+    const resp = await fetch(`/user_migration/get_conflicts?job_id=${currentJobId}`);
+    const data = await resp.json();
+    if (!data.success) return;
+    pendingCount = data.pending_count;
+    document.getElementById('cnt-pending').textContent = pendingCount;
+    document.getElementById('btn-next2').disabled = pendingCount > 0;
+}
+
+
+// ユーザまたはグループのコンフリクトを一括解決する
+async function bulkResolve(kind, resolution) {
+    if (!conflictsEditable) { toast('このジョブは変更できません', 'error'); return; }
+
+    const kindLabel = kind === 'user' ? 'ユーザ' : 'グループ';
+    const labelMap  = kind === 'user'
+        ? { use_remote:'移行元を使用', use_local:'移行先を維持', skip:'スキップ' }
+        : { use_remote:'リモートで適用', use_local:'ローカルを維持', skip:'スキップ' };
+    const resLabel  = labelMap[resolution] || resolution;
+
+    const extraNote = (kind === 'user' && resolution !== 'skip')
+        ? '\nadmin処理の項目は、' +
+          (resolution === 'use_remote' ? '「regularに設定」' : '「スキップ」') +
+          'に変換されます。'
+        : '';
+
+    if (!confirm(`${kindLabel}コンフリクトを全て「${resLabel}」に設定しますか？${extraNote}\n後から個別に変更することもできます。`)) return;
+
+    // 現在のコンフリクト一覧を取得
+    const resp = await fetch(`/user_migration/get_conflicts?job_id=${currentJobId}`);
+    const data = await resp.json();
+    if (!data.success) { toast(data.error, 'error'); return; }
+
+    const targets = kind === 'user' ? data.user_conflicts : data.group_conflicts;
+
+    // 一括送信（順番に処理）
+    let count = 0;
+    for (const c of targets) {
+        // admin_source の場合は resolution を変換
+        let actualResolution = resolution;
+        if (kind === 'user' && c.conflict_type === 'admin_source') {
+            // use_remote → set_regular に変換（adminは一括でregularが安全）
+            if (resolution === 'use_remote') actualResolution = 'set_regular';
+            if (resolution === 'use_local')  actualResolution = 'skip';  // ローカル維持=スキップ
+        }
+
+        const r = await fetch('/user_migration/resolve_conflict', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                conflict_id:   c.id,
+                conflict_kind: kind,
+                resolution:    actualResolution
+            })
+        });
+        if ((await r.json()).success) count++;
+    }
+
+    toast(`${count} 件を「${resLabel}」に設定しました`, 'success');
+
+    // 全体を再描画
+    await loadConflicts();
+}
+// ─── Step3: 実行 ─────────────────────────────────────────
+function renderExecuteSummary() {
+    document.getElementById('execute-summary').innerHTML = `
+        <div class="alert alert-warning">
+            <span>⚠️</span>
+            <div>
+                <b>以下の順序で実行されます。元に戻せません。</b><br>
+                <small>① ユーザのマイグレーション → ② グループ・メンバーシップのマイグレーション</small>
+            </div>
+        </div>`;
+    document.getElementById('execute-result').innerHTML = '';
+    const btn = document.getElementById('btn-execute');
+    btn.disabled = false;
+    btn.textContent = '🚀 マイグレーション実行';
+}
+
+async function executeMigration() {
+    if (!confirm('マイグレーションを実行しますか？')) return;
+    const btn = document.getElementById('btn-execute');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>実行中…';
+    document.getElementById('btn-back3').disabled = true;
+
+    const resp = await fetch('/user_migration/execute_migration', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ job_id: currentJobId })
+    });
+    const data = await resp.json();
+    btn.disabled = false;
+    btn.textContent = '🚀 マイグレーション実行';
+    document.getElementById('btn-back3').disabled = false;
+
+    const div = document.getElementById('execute-result');
+    if (data.success) {
+        document.getElementById('step3').classList.add('done');
+        const warnHtml = data.warnings && data.warnings.length
+            ? `<div style="margin-top:6px; font-size:.8rem; color:var(--warning);">
+                   ⚠️ ${data.warnings.map(w => escapeHtml(w)).join('<br>')}
+               </div>` : '';
+        const errHtml = data.errors && data.errors.length
+            ? `<div style="margin-top:6px; font-size:.8rem; color:var(--danger);">
+                   ❌ ${data.errors.map(e => escapeHtml(e.email + ': ' + e.error)).join('<br>')}
+               </div>` : '';
+        div.innerHTML = `
+            <div class="alert alert-success">
+                <span>✅</span>
+                <div><b>${escapeHtml(data.message)}</b>${warnHtml}${errHtml}</div>
+            </div>`;
+        toast(data.message, 'success');
+        loadJobs();
+    } else {
+        div.innerHTML = `<div class="alert alert-danger">❌ ${escapeHtml(data.error)}</div>`;
+        toast(data.error, 'error');
+    }
+}
+
+// ─── 履歴 ─────────────────────────────────────────────────
+async function loadJobs() {
+    const resp = await fetch('/user_migration/get_jobs');
+    const data = await resp.json();
+    const tbody = document.getElementById('tbody-jobs');
+    if (!data.success || !data.jobs.length) {
+        tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div>履歴なし</div></td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.jobs.map(j => `
+        <tr>
+            <td>${j.id}</td>
+            <td>${escapeHtml(j.site_name||'-')}</td>
+            <td>${statusBadge(j.status)}</td>
+            <td style="text-align:center">${j.total_remote_users||0}</td>
+            <td style="text-align:center">${j.total_applied_users||0}</td>
+            <td style="text-align:center">${j.total_remote_groups||0}</td>
+            <td style="text-align:center">${j.total_applied_groups||0}</td>
+            <td>${j.created_at||'-'}</td>
+            <td>${j.finished_at||'-'}</td>
+        </tr>`).join('');
+}
+
+// ─── 許可リクエスト送信（受け取る側） ────────────────────
+async function postPermissionRequest(exporterUrl, btn, divId, btnLabel) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>送信中…';
+
+    let data;
+    try {
+        const resp = await fetch('/user_migration/request_export_permission', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ exporter_url: exporterUrl })
+        });
+        data = await resp.json();
+    } catch (e) {
+        data = { success: false, error: '通信に失敗しました: ' + e };
+    }
+
+    btn.disabled = false;
+    btn.textContent = btnLabel;
+
+    const div = document.getElementById(divId);
+    if (data.success) {
+        div.innerHTML = `<div class="alert alert-success" style="margin:0;">
+            <span>✅</span><span>${escapeHtml(data.message || '申請を送信しました')}</span>
+        </div>`;
+        toast('申請を送信しました', 'success');
+    } else {
+        div.innerHTML = `<div class="alert alert-danger" style="margin:0;">
+            <span>❌</span><span>${escapeHtml(data.error || '申請に失敗しました')}</span>
+        </div>`;
+        toast(data.error || '申請に失敗しました', 'error');
+    }
+    loadPermissions();
+}
+
+async function sendPermissionRequest() {
+    const input = document.getElementById('req-exporter-url');
+    const url   = input.value.trim().replace(/\/$/, '');
+    if (!url) { toast('URLを入力してください', 'error'); return; }
+    if (!/^https?:\/\//.test(url)) {
+        toast('URLは http:// または https:// で始めてください', 'error'); return;
+    }
+    await postPermissionRequest(url, document.getElementById('btn-req'),
+                                'req-result', '許可をリクエスト');
+}
+
+async function requestFromMigrationTab(ev) {
+    const sel = document.getElementById('sel-site');
+    const selectedOption = sel.options[sel.selectedIndex];
+    const exporterUrl = selectedOption && selectedOption.dataset.url;
+    if (!exporterUrl) { toast('URLが取得できません', 'error'); return; }
+
+    await postPermissionRequest(exporterUrl, ev.currentTarget,
+                                'inline-req-result', '📤 エクスポート許可をリクエスト');
+}
+
+// ─── 許可申請一覧（送る側） ──────────────────────────────
+async function loadPermissions() {
+    const resp = await fetch('/user_migration/get_export_permissions');
+    const data = await resp.json();
+    const tbody = document.getElementById('tbody-permissions');
+
+    renderOutgoing(data.success ? (data.outgoing || []) : []);
+
+    if (!data.success || !data.permissions.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">'
+            + '<div class="icon">🔐</div>申請はありません</div></td></tr>';
+        return;
+    }
+
+    const statusBadgeP = (s) => {
+        const map = {
+            pending:  ['badge-pending',  '保留中'],
+            approved: ['badge-done',     '承認済み'],
+            rejected: ['badge-error',    '却下']
+        };
+        const [cls, label] = map[s] || ['badge-regular', s];
+        return `<span class="badge ${cls}">${label}</span>`;
+    };
+
+    tbody.innerHTML = data.permissions.map(p => `
+        <tr id="perm-row-${p.id}">
+            <td><b>${escapeHtml(p.requester_name || '-')}</b></td>
+            <td style="font-size:.8rem;">
+                <a href="${escapeHtml(p.requester_url)}" target="_blank"
+                   style="color:var(--primary);">${escapeHtml(p.requester_url)}</a>
+            </td>
+            <td>${statusBadgeP(p.status)}</td>
+            <td style="font-size:.8rem;">${p.requested_at || '-'}</td>
+            <td style="font-size:.8rem;">${p.processed_at || '-'}</td>
+            <td>
+                ${p.status === 'pending' ? `
+                    <button class="btn btn-success btn-sm"
+                            onclick="approvePermission(${p.id})">承認</button>
+                    <button class="btn btn-danger btn-sm"
+                            onclick="rejectPermission(${p.id})"
+                            style="margin-left:4px;">却下</button>
+                ` : '-'}
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ─── 送信済み申請の一覧（受け取る側） ────────────────────
+function renderOutgoing(rows) {
+    const tbody = document.getElementById('tbody-outgoing');
+    if (!tbody) return;
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">'
+            + '<div class="icon">📤</div>送信済みの申請はありません</div></td></tr>';
+        return;
+    }
+
+    const badgeO = (s) => {
+        const map = {
+            pending:  ['badge-pending', '承認待ち'],
+            received: ['badge-done',    'キー受領済み'],
+            expired:  ['badge-error',   '期限切れ']
+        };
+        const [cls, label] = map[s] || ['badge-regular', s];
+        return `<span class="badge ${cls}">${label}</span>`;
+    };
+
+    tbody.innerHTML = rows.map(o => `
+        <tr>
+            <td><b>${escapeHtml(o.exporter_name || '-')}</b></td>
+            <td style="font-size:.8rem;">
+                <a href="${escapeHtml(o.exporter_url)}" target="_blank"
+                   style="color:var(--primary);">${escapeHtml(o.exporter_url)}</a>
+            </td>
+            <td>${badgeO(o.status)}</td>
+            <td style="font-size:.8rem;">${o.requested_at || '-'}</td>
+            <td style="font-size:.8rem;">${o.received_at || '-'}</td>
+        </tr>`).join('');
+}
+
+async function approvePermission(permId) {
+    if (!confirm('このサイトへのエクスポートを承認しますか？\nAPIキーが相手サイトに自動送信されます。')) return;
+
+    const resp = await fetch(`/user_migration/approve_export_permission/${permId}`, {
+        method: 'POST'
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+        toast(data.message, data.push_ok ? 'success' : 'info');
+        loadPermissions();
+    } else {
+        toast(data.error, 'error');
+    }
+}
+
+async function rejectPermission(permId) {
+    if (!confirm('この申請を却下しますか？')) return;
+
+    const resp = await fetch(`/user_migration/reject_export_permission/${permId}`, {
+        method: 'POST'
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+        toast('却下しました', 'info');
+        loadPermissions();
+    } else {
+        toast(data.error, 'error');
+    }
+}
+
+</script>
+</body>
+</html>

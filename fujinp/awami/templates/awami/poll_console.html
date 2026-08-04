@@ -1,0 +1,110 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>司会コンソール - あわみ</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.6; padding: 18px; }
+h1 { font-size: 1.15em; margin-bottom: 4px; }
+.sub { color: #7a8694; font-size: .82em; margin-bottom: 14px; }
+.card { background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+        padding: 16px 18px; margin-bottom: 12px; }
+.btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
+       background: #35618f; color: #fff; font-size: .95em; cursor: pointer; }
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+.btn.big { font-size: 1.1em; padding: 12px 26px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: .85em; color: #5a6672; margin-bottom: 4px; }
+.form-row input[type=text], .form-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccd4dc; border-radius: 6px;
+    font-size: .95em; font-family: inherit; }
+.form-row textarea { min-height: 110px; resize: vertical; }
+#result { display: none; padding: 9px 13px; border-radius: 6px; margin-bottom: 12px; font-size: .9em; }
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+.chip { display: inline-block; font-size: .76em; padding: 2px 10px; border-radius: 10px; }
+.chip.open { background: #e4f3e8; color: #21663a; }
+.chip.closed { background: #fbe4e4; color: #8f2323; }
+.q { font-size: 1.02em; font-weight: bold; margin-bottom: 8px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.bar-label { width: 32%; min-width: 110px; font-size: .92em; text-align: right; }
+.bar-track { flex: 1; background: #eef2f6; border-radius: 5px; height: 22px; position: relative; }
+.bar-fill { background: #4a7ebb; height: 100%; border-radius: 5px;
+            transition: width .4s; min-width: 2px; }
+.bar-count { width: 46px; font-size: .95em; font-weight: bold; }
+.wi-item { border-top: 1px solid #eef2f6; padding: 8px 2px; }
+.wi-meta { color: #98a3ae; font-size: .76em; margin-bottom: 2px; }
+.wi-body { white-space: pre-wrap; font-size: .95em; }
+.muted { color: #98a3ae; font-size: .85em; }
+
+.url-box { font-family: Consolas, monospace; background: #f9fafc; border: 1px dashed #ccd4dc;
+           border-radius: 6px; padding: 10px 12px; word-break: break-all; font-size: .95em; }
+.ops { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>🎛 司会コンソール　<span class="chip {{ poll.status }}">{{ '受付中' if poll.status == 'open' else '締切' }}</span></h1>
+<div class="sub">キャンバス：{{ poll.canvas_name }}</div>
+<div id="result"></div>
+
+<div class="card">
+    {% if poll.choice_question %}<div class="q">n択：{{ poll.choice_question }}</div>
+    <div class="muted">{% for o in options %}{{ loop.index }}. {{ o.label }}　{% endfor %}</div>{% endif %}
+    {% if poll.writein_question %}<div class="q" style="margin-top:8px;">write-in：{{ poll.writein_question }}</div>{% endif %}
+</div>
+
+<div class="card">
+    <div class="form-row"><label>参加者URL（このURLを知っている人だけがアクセスできます）</label>
+        <div class="url-box" id="voteUrl">{{ vote_url }}</div>
+    </div>
+    <div class="ops">
+        <button class="btn" id="btnDisplay">🖥 URLを大きく表示（投影用）</button>
+        <button class="btn" id="btnStats">📊 stats表示</button>
+        <button class="btn secondary" id="btnVoteTest">🗳 投票画面を開く（確認用）</button>
+        <button class="btn secondary" id="btnCopy">URLをコピー</button>
+        <button class="btn" id="btnToggle" style="background:#a53d3d;">
+            {{ '締め切る' if poll.status == 'open' else '再開する' }}</button>
+    </div>
+</div>
+
+<script>
+const TOKEN = '{{ poll.token }}';
+function showResult(m, e) {
+    $('#result').text(m).removeClass('success error')
+        .addClass(e ? 'error' : 'success').show();
+    setTimeout(() => $('#result').fadeOut(), 4000);
+}
+$('#btnDisplay').on('click', () =>
+    window.open('/awami/poll/' + TOKEN + '/display', 'awamiDisp' + TOKEN, 'width=1100,height=520'));
+$('#btnStats').on('click', () =>
+    window.open('/awami/poll/' + TOKEN + '/stats', 'awamiStats' + TOKEN, 'width=900,height=820'));
+$('#btnVoteTest').on('click', () =>
+    window.open('/awami/vote/' + TOKEN, 'awamiVote' + TOKEN, 'width=560,height=820'));
+$('#btnCopy').on('click', function() {
+    navigator.clipboard.writeText($('#voteUrl').text().trim())
+        .then(() => showResult('コピーしました', false));
+});
+$('#btnToggle').on('click', function() {
+    $.ajax({ url: '/awami/api/poll/' + TOKEN + '/toggle', method: 'POST',
+             contentType: 'application/json', data: '{}',
+        success: function(resp) {
+            if (resp.success) location.reload();
+            else showResult('エラー: ' + resp.error, true);
+        },
+        error: () => showResult('通信エラー', true) });
+});
+</script>
+</body>
+</html>

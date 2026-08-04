@@ -1,0 +1,271 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ユーザー追加 - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        .back-btn {
+            padding: 10px 20px;
+            background: #e5e7eb;
+            color: #333;
+            text-decoration: none;
+            border-radius: 6px;
+        }
+        .back-btn:hover { background: #d1d5db; }
+        .form-container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        input[type="email"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .radio-option:hover {
+            border-color: #667eea;
+            background: #f9fafb;
+        }
+        .radio-option input[type="radio"] {
+            margin-top: 3px;
+            cursor: pointer;
+        }
+        .radio-option.selected {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+        .radio-label {
+            flex: 1;
+            cursor: pointer;
+        }
+        .radio-label strong {
+            display: block;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .radio-label .description {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .submit-btn:hover { background: #5568d3; }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        .flash-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        .flash-message.error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        .flash-message.success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+        .note {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        .info-box {
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box strong {
+            color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="header">
+            <h1>ユーザー追加</h1>
+            <a href="{{ url_for('admin.users') }}" class="back-btn">戻る</a>
+        </div>
+
+        <div class="form-container">
+            <form method="POST">
+                <div class="form-group">
+                    <label for="email">メールアドレス *</label>
+                    <input type="email" id="email" name="email" required>
+                    <p class="note">ユーザーのログインIDになります</p>
+                </div>
+
+                <!-- Gmail判定用の情報ボックス（非表示） -->
+                <div id="gmail-notice" class="info-box" style="display: none;">
+                    <strong>📧 Google認証ドメインが入力されています</strong><br>
+                    このユーザーはGoogleアカウントで自動的にログインできます。パスワード設定は不要です。
+                </div>
+
+                <div class="form-group">
+                    <label for="full_name">氏名 *</label>
+                    <input type="text" id="full_name" name="full_name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="category">カテゴリ *</label>
+                    <select id="category" name="category" required>
+                        <option value="regular">構成員 (regular)</option>
+                        <option value="guest">ゲスト (guest)</option>
+                        <option value="admin">管理者 (admin)</option>
+                    </select>
+                </div>
+
+                <!-- 招待方法（Gmailの場合は非表示） -->
+                <div class="form-group" id="invitation-method-group">
+                    <label>招待方法 *</label>
+                    <div class="radio-group">
+                        <label class="radio-option selected" data-value="send_now">
+                            <input type="radio" name="invitation_mode" value="send_now" checked>
+                            <div class="radio-label">
+                                <strong>今すぐ招待メールを送信 (Case 1)</strong>
+                                <span class="description">ユーザーに即座にパスワード設定用のメールを送信します</span>
+                            </div>
+                        </label>
+
+                        <label class="radio-option" data-value="send_later">
+                            <input type="radio" name="invitation_mode" value="send_later">
+                            <div class="radio-label">
+                                <strong>後で招待メールを送信 (Case 2)</strong>
+                                <span class="description">ユーザーを登録し、後から招待メールを送信します。フィーチャーの割り当てなどが先に可能です</span>
+                            </div>
+                        </label>
+
+                        <label class="radio-option" data-value="show_password">
+                            <input type="radio" name="invitation_mode" value="show_password">
+                            <div class="radio-label">
+                                <strong>ランダムパスワードを表示</strong>
+                                <span class="description">メールを送らず、ランダムパスワードを画面に表示します</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">ユーザーを追加</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ラジオボタンの選択状態をビジュアル化
+        document.querySelectorAll('.radio-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.radio-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                this.classList.add('selected');
+                this.querySelector('input[type="radio"]').checked = true;
+            });
+        });
+
+        // メールアドレスの入力を監視
+        const emailInput = document.getElementById('email');
+        const gmailNotice = document.getElementById('gmail-notice');
+        const invitationMethodGroup = document.getElementById('invitation-method-group');
+
+        emailInput.addEventListener('input', function() {
+            const email = this.value.toLowerCase();
+            const isGoogleAuth = email.endsWith('@gmail.com');
+
+            if (isGoogleAuth) {
+                // Google認証の場合：招待方法を非表示、通知を表示
+                invitationMethodGroup.style.display = 'none';
+                gmailNotice.style.display = 'block';
+            } else {
+                // その他の場合：招待方法を表示、通知を非表示
+                invitationMethodGroup.style.display = 'block';
+                gmailNotice.style.display = 'none';
+            }
+        });
+
+
+        // 初期状態をチェック
+        emailInput.dispatchEvent(new Event('input'));
+    </script>
+</body>
+</html>

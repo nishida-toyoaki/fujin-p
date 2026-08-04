@@ -1,0 +1,309 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>あわみ - FUJIN-P</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: #f4f6f8; color: #2b3440; line-height: 1.6;
+}
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+.header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.header h1 { font-size: 1.5em; letter-spacing: .04em; }
+.header .sub { color: #7a8694; font-size: .85em; }
+.btn-return {
+    display: inline-block; padding: 6px 14px; background: #e74c3c;
+    border-radius: 20px; color: #fff; text-decoration: none;
+    font-size: .82em; font-weight: 700; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.btn-return:hover { background: #c0392b; }
+.lead { color: #5a6672; font-size: .9em; margin: 8px 0 18px; }
+#result {
+    display: none; padding: 10px 14px; border-radius: 6px;
+    margin-bottom: 14px; font-size: .92em;
+}
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+.toolbar { margin-bottom: 14px; }
+.btn {
+    display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
+    background: #35618f; color: #fff; font-size: .92em; cursor: pointer;
+}
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+.btn.danger { background: #a53d3d; }
+.btn.small { padding: 4px 10px; font-size: .82em; }
+.canvas-list { list-style: none; }
+.canvas-item {
+    background: #fff; border: 1px solid #dde3ea; border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 10px;
+    display: flex; align-items: flex-start; gap: 12px;
+}
+.canvas-item .info { flex: 1; min-width: 0; }
+.canvas-item .name { font-size: 1.05em; font-weight: bold; }
+.canvas-item .name a { color: #35618f; text-decoration: none; }
+.canvas-item .name a:hover { text-decoration: underline; }
+.canvas-item .desc { color: #5a6672; font-size: .88em; margin-top: 2px; }
+.canvas-item .meta { color: #98a3ae; font-size: .78em; margin-top: 4px; }
+.canvas-item .ops { display: flex; gap: 6px; flex-shrink: 0; }
+.empty { color: #7a8694; padding: 30px 0; text-align: center; }
+/* モーダル */
+.modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(20,28,36,.45);
+    z-index: 100;
+}
+.modal {
+    background: #fff; border-radius: 10px; width: min(560px, 92vw);
+    margin: 8vh auto 0; padding: 22px 24px; max-height: 82vh; overflow-y: auto;
+}
+.modal h2 { font-size: 1.1em; margin-bottom: 14px; }
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: .85em; color: #5a6672; margin-bottom: 4px; }
+.form-row input[type=text], .form-row textarea, .form-row select {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccd4dc;
+    border-radius: 6px; font-size: .95em; font-family: inherit;
+}
+.form-row textarea { min-height: 60px; resize: vertical; }
+.acl-box {
+    border: 1px solid #dde3ea; border-radius: 6px; padding: 10px 12px;
+    background: #f9fafc;
+}
+.acl-box .hint { font-size: .78em; color: #98a3ae; margin-top: 6px; }
+.acl-groups { margin-top: 8px; }
+.acl-groups select { width: 100%; min-height: 76px; }
+.group-checklist {
+    margin-top: 4px; max-height: 170px; overflow-y: auto;
+    border: 1px solid #ccd4dc; border-radius: 6px; background: #fff;
+    padding: 4px 2px;
+}
+.group-checklist label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px; font-size: .92em; color: #2b3440;
+    cursor: pointer; border-radius: 4px;
+}
+.group-checklist label:hover { background: #eef2f6; }
+.group-checklist input { width: 15px; height: 15px; flex-shrink: 0; }
+.policy-list { display: flex; flex-direction: column; gap: 4px; }
+.policy-item {
+    display: flex; align-items: center; gap: 8px; font-size: .88em;
+    padding: 3px 4px; border-radius: 5px; cursor: pointer;
+}
+.policy-item:hover { background: #eef2f6; }
+.pbadge {
+    display: inline-block; min-width: 128px; text-align: center;
+    padding: 2px 8px; border-radius: 10px; color: #fff; font-size: .92em;
+}
+.pbadge.small { min-width: 0; font-size: .74em; padding: 1px 8px; }
+.pb-public { background: #2e8b57; }
+.pb-domestic { background: #35618f; }
+.pb-private { background: #6c757d; }
+.pb-group { background: #3aa6b9; }
+.pb-domgroup { background: #35618f; box-shadow: inset 0 0 0 2px #3aa6b9; }
+.pdesc { color: #7a8694; font-size: .9em; }
+.canvas-item .gnames { color: #98a3ae; font-size: .74em; font-style: italic; }
+.modal-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <a href="{{ url_for('our_meeting.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <h1>🕸 あわみ</h1>
+        <span class="sub">our_meeting — ナラティブ・ネットワーク</span>
+    </div>
+    <p class="lead">ナラティブ素を結合子でつなぎ，語りを網として共有します．キャンバスを開くと，あなたのアクセス権に応じたネットワークが表示されます．</p>
+
+    <div id="result"></div>
+
+    <div class="toolbar">
+        <button class="btn" id="btnNewCanvas">＋ 新しいキャンバス</button>
+        {# あわならからの取り込みボタンは2026-07-21に撤去（移行完了のため） #}
+    </div>
+
+    <ul class="canvas-list">
+        {% for c in canvases %}
+        <li class="canvas-item" data-id="{{ c.id }}">
+            <div class="info">
+                <div class="name"><a href="{{ url_for('our_meeting.canvas_view', canvas_id=c.id) }}">{{ c.name }}</a>
+                    {% if c.access_policy == 'public' %}<span class="pbadge small pb-public">🌐 一般公開</span>
+                    {% elif c.access_policy == 'domestic' %}<span class="pbadge small pb-domestic">🏢 学内公開</span>
+                    {% elif c.access_policy == 'group' %}<span class="pbadge small pb-group">👥 グループ</span>
+                    {% elif c.access_policy == 'domestic_group' %}<span class="pbadge small pb-domgroup">🏢＋👥 学内＋グループ</span>
+                    {% else %}<span class="pbadge small pb-private">🔒 非公開</span>{% endif %}
+                    {% if c.group_names %}<span class="gnames">{{ c.group_names | join('，') }}</span>{% endif %}
+                </div>
+                {% if c.description %}<div class="desc">{{ c.description }}</div>{% endif %}
+                <div class="meta">作成者: {{ c.owner_name }}　更新: {{ c.updated_at }}{% if c.is_owner %}　（あなたのキャンバス）{% endif %}</div>
+            </div>
+            {% if c.is_owner %}
+            <div class="ops">
+                <button class="btn secondary small btn-edit"
+                        data-id="{{ c.id }}" data-name="{{ c.name }}"
+                        data-desc="{{ c.description }}"
+                        data-policy="{{ c.access_policy }}"
+                        data-groups="{{ c.group_ids | join(',') }}">設定</button>
+                <button class="btn danger small btn-del" data-id="{{ c.id }}" data-name="{{ c.name }}">削除</button>
+            </div>
+            {% endif %}
+        </li>
+        {% else %}
+        <li class="empty">アクセスできるキャンバスはまだありません．最初のキャンバスを作りましょう．</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- キャンバス作成／設定モーダル -->
+<div class="modal-bg" id="canvasModalBg">
+    <div class="modal">
+        <h2 id="canvasModalTitle">新しいキャンバス</h2>
+        <div class="form-row">
+            <label>キャンバス名（必須）</label>
+            <input type="text" id="cvName" maxlength="200">
+        </div>
+        <div class="form-row">
+            <label>説明</label>
+            <textarea id="cvDesc"></textarea>
+        </div>
+        <div class="form-row">
+            <label>公開範囲（文書アーカイブと同じ区分）</label>
+            <div class="acl-box">
+                <div class="policy-list">
+                    <label class="policy-item">
+                        <input type="radio" name="cvPolicy" value="private" checked>
+                        <span class="pbadge pb-private">🔒 非公開</span>
+                        <span class="pdesc">作成者とadminのみ（既定）</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="cvPolicy" value="public">
+                        <span class="pbadge pb-public">🌐 一般公開</span>
+                        <span class="pdesc">ログイン済みユーザなら誰でも</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="cvPolicy" value="domestic">
+                        <span class="pbadge pb-domestic">🏢 学内公開</span>
+                        <span class="pdesc">regularユーザ（学内者）のみ</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="cvPolicy" value="group">
+                        <span class="pbadge pb-group">👥 グループ</span>
+                        <span class="pdesc">指定グループの所属者（カテゴリ不問）</span>
+                    </label>
+                    <label class="policy-item">
+                        <input type="radio" name="cvPolicy" value="domestic_group">
+                        <span class="pbadge pb-domgroup">🏢＋👥 学内＋グループ</span>
+                        <span class="pdesc">regularユーザ，または指定グループの所属者</span>
+                    </label>
+                </div>
+                <div class="acl-groups" id="cvGroupBox" style="display:none;">
+                    <label style="font-size:.8em;color:#5a6672;">許可するまいぐるグループ（複数選択可）</label>
+                    <div id="cvGroups" class="group-checklist">
+                        {% for g in groups %}
+                        <label><input type="checkbox" class="cvGroupChk" value="{{ g.id }}"><span>{{ g.name }}</span></label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="hint">「キャンバスに従う」設定のノードは，この公開範囲で見える人に表示されます．作成者とadminには常に表示されます．</div>
+            </div>
+        </div>
+        <div class="modal-ops">
+            <button class="btn secondary" id="cvCancel">キャンセル</button>
+            <button class="btn" id="cvSave">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let editingCanvasId = null;
+
+function showResult(message, isError) {
+    const $r = $('#result');
+    $r.text(message).removeClass('success error')
+      .addClass(isError ? 'error' : 'success').show();
+    setTimeout(() => $r.fadeOut(), 5000);
+}
+
+function toggleCvGroupBox() {
+    const p = $('input[name=cvPolicy]:checked').val();
+    $('#cvGroupBox').toggle(p === 'group' || p === 'domestic_group');
+}
+$(document).on('change', 'input[name=cvPolicy]', toggleCvGroupBox);
+
+function openCanvasModal(id, name, desc, policy, groups) {
+    editingCanvasId = id;
+    $('#canvasModalTitle').text(id ? 'キャンバスの設定' : '新しいキャンバス');
+    $('#cvName').val(name || '');
+    $('#cvDesc').val(desc || '');
+    $('input[name=cvPolicy][value="' + (policy || 'private') + '"]').prop('checked', true);
+    $('.cvGroupChk').prop('checked', false);
+    (groups || []).forEach(g => $('.cvGroupChk[value="' + g + '"]').prop('checked', true));
+    toggleCvGroupBox();
+    $('#canvasModalBg').show();
+}
+
+$('#btnNewCanvas').on('click', () => openCanvasModal(null));
+
+$('#cvCancel').on('click', () => $('#canvasModalBg').hide());
+
+$('.btn-edit').on('click', function() {
+    const groups = ($(this).data('groups') + '').split(',').filter(s => s);
+    openCanvasModal($(this).data('id'), $(this).data('name'),
+                    $(this).data('desc'), $(this).data('policy'), groups);
+});
+
+$('.btn-del').on('click', function() {
+    const id = $(this).data('id');
+    if (!confirm('キャンバス「' + $(this).data('name') +
+                 '」を削除します．中のノードとエッジもすべて削除されます．よろしいですか？')) return;
+    $.ajax({
+        url: '{{ url_for("our_meeting.index") }}api/canvas/' + id + '/delete',
+        method: 'POST', contentType: 'application/json', data: '{}',
+        success: resp => resp.success ? location.reload()
+                                      : showResult('エラー: ' + resp.error, true),
+        error: xhr => showResult('エラー（HTTP ' + (xhr.status || '応答なし') + '）: ' +
+            (xhr.responseText || '').replace(/<[^>]*>/g, ' ').trim().slice(0, 160), true)
+    });
+});
+
+$('#cvSave').on('click', function() {
+    const name = $('#cvName').val().trim();
+    if (!name) { showResult('キャンバス名は必須です', true); return; }
+    const policy = $('input[name=cvPolicy]:checked').val();
+    const groupIds = $('.cvGroupChk:checked').map((i, e) => parseInt(e.value)).get();
+    if ((policy === 'group' || policy === 'domestic_group') && groupIds.length === 0) {
+        showResult('グループ公開では，許可するグループを1つ以上選んでください', true);
+        return;
+    }
+    const payload = {
+        name: name,
+        description: $('#cvDesc').val(),
+        access_policy: policy,
+        access_group_ids: groupIds
+    };
+    const url = editingCanvasId
+        ? '{{ url_for("our_meeting.index") }}api/canvas/' + editingCanvasId + '/update'
+        : '{{ url_for("our_meeting.api_canvas_create") }}';
+    $.ajax({
+        url: url, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify(payload),
+        success: resp => resp.success ? location.reload()
+                                      : showResult('エラー: ' + resp.error, true),
+        error: xhr => showResult('エラー（HTTP ' + (xhr.status || '応答なし') + '）: ' +
+            (xhr.responseText || '').replace(/<[^>]*>/g, ' ').trim().slice(0, 160), true)
+    });
+});
+</script>
+</body>
+</html>

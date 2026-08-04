@@ -1,0 +1,872 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日本50都市選択式TSPソルバー</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .city-selection {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border: 2px solid #e2e8f0;
+        }
+        .region-group {
+            margin-bottom: 20px;
+        }
+        .region-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: #2d3748;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        .cities-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 8px;
+        }
+        .city-checkbox {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .city-checkbox:hover {
+            background: #ebf8ff;
+            border-color: #667eea;
+        }
+        .city-checkbox.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .city-checkbox input {
+            margin-right: 8px;
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .quick-select {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .quick-btn {
+            background: #48bb78;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        .selected-info {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e6fffa;
+            border-radius: 8px;
+            border-left: 4px solid #48bb78;
+        }
+        .distance-matrix {
+            overflow: auto;
+            margin-bottom: 30px;
+            max-height: 400px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 10px;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 4px;
+            text-align: center;
+        }
+        th {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .row-header {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+        .diagonal {
+            background: #f7fafc;
+            color: #a0aec0;
+        }
+        .results {
+            background: #f0fff4;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 5px solid #48bb78;
+            margin-top: 20px;
+        }
+        .route {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2d3748;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .distance {
+            font-size: 24px;
+            color: #e53e3e;
+            font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        .computation-info {
+            background: #ebf8ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #2c5282;
+        }
+        .algorithm-warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+            font-size: 14px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚅 日本50都市選択式TSPソルバー</h1>
+        
+        <div class="city-selection">
+            <h2>都市選択（複数選択可能）</h2>
+            
+            <div class="quick-select">
+                <button class="quick-btn" onclick="selectPreset('major10')">主要10都市</button>
+                <button class="quick-btn" onclick="selectPreset('major20')">主要20都市</button>
+                <button class="quick-btn" onclick="selectPreset('all')">全選択</button>
+                <button class="quick-btn" onclick="selectPreset('clear')">全解除</button>
+            </div>
+            
+            <div id="citySelection">
+                <!-- 都市選択エリアはJavaScriptで生成 -->
+            </div>
+        </div>
+        
+        <div class="selected-info" id="selectedInfo" style="display: none;">
+            選択中: <span id="selectedCount">0</span>都市 - <span id="selectedNames"></span>
+        </div>
+        
+        <div class="algorithm-warning" id="algorithmWarning" style="display: none;">
+            ⚠️ 注意: 選択都市数に応じてアルゴリズムを自動選択します。11都市以上は全探索ができません。
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="topNInput">表示する経路数:</label>
+                <input type="number" id="topNInput" min="1" value="10" style="padding: 8px; border-radius: 4px; border: 2px solid #667eea; width: 80px;">
+            </div>
+            <button id="solveBtn" onclick="solveTSP()">最短経路を計算</button>
+        </div>
+
+        <div class="distance-matrix" id="matrixContainer" style="display: none;">
+            <h3>選択都市間距離行列（km）</h3>
+            <table id="distanceMatrix">
+                <!-- 距離行列はJavaScriptで生成 -->
+            </table>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            計算中...
+        </div>
+
+        <div id="results" class="results" style="display: none;">
+            <h2>🏆 計算結果</h2>
+            <div class="route" id="bestRoute"></div>
+            <div class="distance" id="totalDistance"></div>
+            <div class="computation-info" id="computationInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        // 日本全国50都市データ
+        const allCities = [
+            // 北海道
+            { name: "札幌", region: "北海道", lat: 43.064, lng: 141.347 },
+            { name: "函館", region: "北海道", lat: 41.768, lng: 140.729 },
+            { name: "旭川", region: "北海道", lat: 43.771, lng: 142.365 },
+            // 東北
+            { name: "青森", region: "東北", lat: 40.824, lng: 140.740 },
+            { name: "盛岡", region: "東北", lat: 39.704, lng: 141.153 },
+            { name: "仙台", region: "東北", lat: 38.268, lng: 140.869 },
+            { name: "秋田", region: "東北", lat: 39.718, lng: 140.103 },
+            { name: "山形", region: "東北", lat: 38.240, lng: 140.363 },
+            { name: "福島", region: "東北", lat: 37.750, lng: 140.468 },
+            // 関東
+            { name: "水戸", region: "関東", lat: 36.342, lng: 140.447 },
+            { name: "宇都宮", region: "関東", lat: 36.566, lng: 139.883 },
+            { name: "前橋", region: "関東", lat: 36.391, lng: 139.061 },
+            { name: "さいたま", region: "関東", lat: 35.858, lng: 139.649 },
+            { name: "千葉", region: "関東", lat: 35.605, lng: 140.123 },
+            { name: "東京", region: "関東", lat: 35.676, lng: 139.650 },
+            { name: "横浜", region: "関東", lat: 35.448, lng: 139.643 },
+            // 中部
+            { name: "新潟", region: "中部", lat: 37.902, lng: 139.023 },
+            { name: "富山", region: "中部", lat: 36.696, lng: 137.213 },
+            { name: "金沢", region: "中部", lat: 36.561, lng: 136.656 },
+            { name: "福井", region: "中部", lat: 36.065, lng: 136.222 },
+            { name: "甲府", region: "中部", lat: 35.664, lng: 138.568 },
+            { name: "長野", region: "中部", lat: 36.651, lng: 138.181 },
+            { name: "岐阜", region: "中部", lat: 35.391, lng: 136.722 },
+            { name: "静岡", region: "中部", lat: 34.977, lng: 138.383 },
+            { name: "名古屋", region: "中部", lat: 35.181, lng: 136.906 },
+            // 関西
+            { name: "津", region: "関西", lat: 34.730, lng: 136.509 },
+            { name: "大津", region: "関西", lat: 35.004, lng: 135.869 },
+            { name: "京都", region: "関西", lat: 35.012, lng: 135.768 },
+            { name: "大阪", region: "関西", lat: 34.686, lng: 135.520 },
+            { name: "神戸", region: "関西", lat: 34.691, lng: 135.183 },
+            { name: "奈良", region: "関西", lat: 34.685, lng: 135.805 },
+            { name: "和歌山", region: "関西", lat: 34.226, lng: 135.168 },
+            // 中国
+            { name: "鳥取", region: "中国", lat: 35.504, lng: 134.238 },
+            { name: "松江", region: "中国", lat: 35.472, lng: 133.051 },
+            { name: "岡山", region: "中国", lat: 34.662, lng: 133.935 },
+            { name: "広島", region: "中国", lat: 34.385, lng: 132.455 },
+            { name: "山口", region: "中国", lat: 34.186, lng: 131.471 },
+            // 四国
+            { name: "徳島", region: "四国", lat: 34.066, lng: 134.559 },
+            { name: "高松", region: "四国", lat: 34.340, lng: 134.043 },
+            { name: "松山", region: "四国", lat: 33.842, lng: 132.766 },
+            { name: "高知", region: "四国", lat: 33.560, lng: 133.531 },
+            // 九州・沖縄
+            { name: "福岡", region: "九州", lat: 33.606, lng: 130.418 },
+            { name: "佐賀", region: "九州", lat: 33.250, lng: 130.299 },
+            { name: "長崎", region: "九州", lat: 32.745, lng: 129.874 },
+            { name: "熊本", region: "九州", lat: 32.790, lng: 130.742 },
+            { name: "大分", region: "九州", lat: 33.238, lng: 131.613 },
+            { name: "宮崎", region: "九州", lat: 31.911, lng: 131.424 },
+            { name: "鹿児島", region: "九州", lat: 31.560, lng: 130.558 },
+            { name: "那覇", region: "沖縄", lat: 26.212, lng: 127.679 }
+        ];
+
+        let selectedCities = [];
+        let selectedIndices = [];
+        let currentDistanceMatrix = [];
+        let bestRoute = [];
+        let bestDistance = Infinity;
+        let allSolutions = [];
+
+        // 事前定義プリセット
+        const presets = {
+            major10: [0, 5, 14, 16, 24, 27, 34, 37, 40, 46], // 札幌,仙台,東京,新潟,名古屋,京都,岡山,高松,福岡,鹿児島
+            major20: [0, 3, 5, 14, 15, 16, 17, 18, 24, 26, 27, 28, 29, 34, 35, 37, 40, 43, 46, 47] // 主要20都市
+        };
+
+        function initializeUI() {
+            createCitySelection();
+            updateSelectedInfo();
+        }
+
+        function createCitySelection() {
+            const container = document.getElementById('citySelection');
+            const regions = {};
+            
+            // 地方別にグループ化
+            allCities.forEach((city, index) => {
+                if (!regions[city.region]) {
+                    regions[city.region] = [];
+                }
+                regions[city.region].push({...city, index});
+            });
+
+            // 地方別に表示
+            Object.keys(regions).forEach(regionName => {
+                const regionDiv = document.createElement('div');
+                regionDiv.className = 'region-group';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'region-title';
+                titleDiv.textContent = `${regionName}地方`;
+                regionDiv.appendChild(titleDiv);
+                
+                const citiesGrid = document.createElement('div');
+                citiesGrid.className = 'cities-grid';
+                
+                regions[regionName].forEach(city => {
+                    const cityDiv = document.createElement('div');
+                    cityDiv.className = 'city-checkbox';
+                    cityDiv.onclick = () => toggleCity(city.index);
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `city-${city.index}`;
+                    
+                    const label = document.createElement('label');
+                    label.textContent = city.name;
+                    label.setAttribute('for', `city-${city.index}`);
+                    
+                    cityDiv.appendChild(checkbox);
+                    cityDiv.appendChild(label);
+                    citiesGrid.appendChild(cityDiv);
+                });
+                
+                regionDiv.appendChild(citiesGrid);
+                container.appendChild(regionDiv);
+            });
+        }
+
+        function toggleCity(index) {
+            const checkbox = document.getElementById(`city-${index}`);
+            const cityDiv = checkbox.parentElement;
+            
+            if (selectedIndices.includes(index)) {
+                // 選択解除
+                selectedIndices = selectedIndices.filter(i => i !== index);
+                checkbox.checked = false;
+                cityDiv.classList.remove('selected');
+            } else {
+                // 選択追加
+                selectedIndices.push(index);
+                checkbox.checked = true;
+                cityDiv.classList.add('selected');
+            }
+            
+            updateSelectedInfo();
+        }
+
+        function selectPreset(type) {
+            // 全解除
+            selectedIndices = [];
+            document.querySelectorAll('.city-checkbox').forEach(div => {
+                const checkbox = div.querySelector('input');
+                checkbox.checked = false;
+                div.classList.remove('selected');
+            });
+            
+            // プリセット選択
+            if (type === 'all') {
+                selectedIndices = Array.from({length: allCities.length}, (_, i) => i);
+            } else if (presets[type]) {
+                selectedIndices = [...presets[type]];
+            }
+            
+            // UI更新
+            selectedIndices.forEach(index => {
+                const checkbox = document.getElementById(`city-${index}`);
+                const cityDiv = checkbox.parentElement;
+                checkbox.checked = true;
+                cityDiv.classList.add('selected');
+            });
+            
+            updateSelectedInfo();
+        }
+
+        function updateSelectedInfo() {
+            const infoDiv = document.getElementById('selectedInfo');
+            const countSpan = document.getElementById('selectedCount');
+            const namesSpan = document.getElementById('selectedNames');
+            const warningDiv = document.getElementById('algorithmWarning');
+            
+            if (selectedIndices.length === 0) {
+                infoDiv.style.display = 'none';
+                warningDiv.style.display = 'none';
+                return;
+            }
+            
+            selectedCities = selectedIndices.map(i => allCities[i]);
+            countSpan.textContent = selectedCities.length;
+            
+            const names = selectedCities.map(city => city.name);
+            namesSpan.textContent = names.length > 10 
+                ? names.slice(0, 10).join(', ') + ` ... (+${names.length - 10}都市)`
+                : names.join(', ');
+            
+            infoDiv.style.display = 'block';
+            
+            // アルゴリズム警告
+            if (selectedCities.length >= 11) {
+                warningDiv.style.display = 'block';
+                warningDiv.innerHTML = `
+                    ⚠️ 注意: ${selectedCities.length}都市の全探索は計算量が膨大です（${factorial(selectedCities.length - 1).toExponential(2)}通り）。
+                    ヒューリスティックアルゴリズムを使用します。
+                `;
+            } else {
+                warningDiv.style.display = 'none';
+            }
+            
+            // 距離行列作成・表示
+            if (selectedCities.length >= 2) {
+                createDistanceMatrix();
+                document.getElementById('matrixContainer').style.display = 'block';
+            } else {
+                document.getElementById('matrixContainer').style.display = 'none';
+            }
+        }
+
+        function factorial(n) {
+            if (n <= 1) return 1;
+            return n * factorial(n - 1);
+        }
+
+        function createDistanceMatrix() {
+            // 距離計算（ユークリッド距離の概算）
+            currentDistanceMatrix = [];
+            const n = selectedCities.length;
+            
+            for (let i = 0; i < n; i++) {
+                currentDistanceMatrix[i] = [];
+                for (let j = 0; j < n; j++) {
+                    if (i === j) {
+                        currentDistanceMatrix[i][j] = 0;
+                    } else {
+                        const city1 = selectedCities[i];
+                        const city2 = selectedCities[j];
+                        const distance = calculateDistance(city1.lat, city1.lng, city2.lat, city2.lng);
+                        currentDistanceMatrix[i][j] = Math.round(distance);
+                    }
+                }
+            }
+            
+            // テーブル表示
+            displayDistanceMatrix();
+        }
+
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            // ハバーサイン公式による大圏距離計算
+            const R = 6371; // 地球の半径（km）
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function displayDistanceMatrix() {
+            const table = document.getElementById('distanceMatrix');
+            table.innerHTML = '';
+            
+            // ヘッダー行
+            const headerRow = document.createElement('tr');
+            const emptyHeader = document.createElement('th');
+            emptyHeader.className = 'row-header';
+            headerRow.appendChild(emptyHeader);
+            
+            selectedCities.forEach(city => {
+                const th = document.createElement('th');
+                th.textContent = city.name;
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+
+            // データ行
+            selectedCities.forEach((city, i) => {
+                const row = document.createElement('tr');
+                
+                const rowHeader = document.createElement('th');
+                rowHeader.textContent = city.name;
+                rowHeader.className = 'row-header';
+                row.appendChild(rowHeader);
+
+                selectedCities.forEach((_, j) => {
+                    const cell = document.createElement('td');
+                    if (i === j) {
+                        cell.textContent = '0';
+                        cell.className = 'diagonal';
+                    } else {
+                        cell.textContent = currentDistanceMatrix[i][j];
+                    }
+                    row.appendChild(cell);
+                });
+
+                table.appendChild(row);
+            });
+        }
+
+        // 順列生成（全探索用）
+        function permutations(arr) {
+            if (arr.length <= 1) return [arr];
+            
+            const result = [];
+            for (let i = 0; i < arr.length; i++) {
+                const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+                const perms = permutations(rest);
+                for (const perm of perms) {
+                    result.push([arr[i], ...perm]);
+                }
+            }
+            return result;
+        }
+
+        // 最近傍法
+        function nearestNeighborTSP() {
+            const visited = new Array(selectedCities.length).fill(false);
+            const route = [0]; // 最初の都市から開始
+            visited[0] = true;
+            let totalDistance = 0;
+
+            for (let i = 0; i < selectedCities.length - 1; i++) {
+                let nearestCity = -1;
+                let nearestDistance = Infinity;
+
+                for (let j = 0; j < selectedCities.length; j++) {
+                    if (!visited[j] && currentDistanceMatrix[route[route.length - 1]][j] < nearestDistance) {
+                        nearestDistance = currentDistanceMatrix[route[route.length - 1]][j];
+                        nearestCity = j;
+                    }
+                }
+
+                route.push(nearestCity);
+                visited[nearestCity] = true;
+                totalDistance += nearestDistance;
+            }
+
+            totalDistance += currentDistanceMatrix[route[route.length - 1]][route[0]]; // 出発地に戻る
+            return { route, distance: totalDistance };
+        }
+
+        // 2-opt改善法
+        function twoOptImprovement(initialRoute) {
+            let route = [...initialRoute];
+            let improved = true;
+            let iterations = 0;
+            const maxIterations = 1000;
+
+            function calculateDistance(r) {
+                let dist = 0;
+                for (let i = 0; i < r.length; i++) {
+                    dist += currentDistanceMatrix[r[i]][r[(i + 1) % r.length]];
+                }
+                return dist;
+            }
+
+            function twoOptSwap(route, i, k) {
+                const newRoute = [...route];
+                while (i < k) {
+                    [newRoute[i], newRoute[k]] = [newRoute[k], newRoute[i]];
+                    i++;
+                    k--;
+                }
+                return newRoute;
+            }
+
+            let bestDistance = calculateDistance(route);
+
+            while (improved && iterations < maxIterations) {
+                improved = false;
+                iterations++;
+
+                for (let i = 1; i < route.length - 2; i++) {
+                    for (let k = i + 1; k < route.length; k++) {
+                        if (k - i === 1) continue;
+                        
+                        const newRoute = twoOptSwap(route, i, k);
+                        const newDistance = calculateDistance(newRoute);
+
+                        if (newDistance < bestDistance) {
+                            route = newRoute;
+                            bestDistance = newDistance;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+
+            return { route, distance: bestDistance, iterations };
+        }
+
+        function calculateRouteDistance(route) {
+            let totalDistance = 0;
+            for (let i = 0; i < route.length; i++) {
+                const from = route[i];
+                const to = route[(i + 1) % route.length];
+                totalDistance += currentDistanceMatrix[from][to];
+            }
+            return totalDistance;
+        }
+
+        async function solveTSP() {
+            if (selectedCities.length < 2) {
+                alert('最低2都市を選択してください。');
+                return;
+            }
+
+            const solveBtn = document.getElementById('solveBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            solveBtn.disabled = true;
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            
+            bestRoute = [];
+            bestDistance = Infinity;
+            allSolutions = [];
+
+            setTimeout(async () => {
+                const startTime = performance.now();
+                let algorithm = '';
+                let computationsCount = 0;
+
+                try {
+                    if (selectedCities.length <= 10) {
+                        // 全探索
+                        algorithm = '全探索（ブルートフォース法）';
+                        const remainingCities = Array.from({length: selectedCities.length - 1}, (_, i) => i + 1);
+                        const allPermutations = permutations(remainingCities);
+                        
+                        for (const perm of allPermutations) {
+                            const route = [0, ...perm];
+                            const distance = calculateRouteDistance(route);
+                            computationsCount++;
+                            
+                            allSolutions.push({
+                                route: [...route],
+                                distance: distance,
+                                routeNames: route.map(i => selectedCities[i].name)
+                            });
+                            
+                            if (distance < bestDistance) {
+                                bestDistance = distance;
+                                bestRoute = [...route];
+                            }
+                        }
+                        
+                        allSolutions.sort((a, b) => a.distance - b.distance);
+                        
+                    } else {
+                        // ヒューリスティック
+                        algorithm = '2-opt改善法（ヒューリスティック）';
+                        const initial = nearestNeighborTSP();
+                        const result = twoOptImprovement(initial.route);
+                        
+                        bestRoute = result.route;
+                        bestDistance = result.distance;
+                        computationsCount = result.iterations || 1;
+                        
+                        // 単一解として記録
+                        allSolutions = [{
+                            route: [...bestRoute],
+                            distance: bestDistance,
+                            routeNames: bestRoute.map(i => selectedCities[i].name)
+                        }];
+                    }
+                    
+                    const endTime = performance.now();
+                    const computationTime = (endTime - startTime).toFixed(2);
+                    
+                    displayResults(algorithm, computationTime, computationsCount);
+                    
+                } catch (error) {
+                    console.error('計算エラー:', error);
+                    loading.textContent = 'エラーが発生しました';
+                }
+
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                    results.style.display = 'block';
+                    solveBtn.disabled = false;
+                }, 500);
+            }, 100);
+        }
+
+        function displayResults(algorithm, computationTime, computationsCount) {
+            const routeElement = document.getElementById('bestRoute');
+            const distanceElement = document.getElementById('totalDistance');
+            const infoElement = document.getElementById('computationInfo');
+            
+            // 最適経路を表示
+            const routeNames = bestRoute.map(i => selectedCities[i].name);
+            const displayRoute = routeNames.length > 10 
+                ? routeNames.slice(0, 5).join(' → ') + ' ... ' + routeNames.slice(-3).join(' → ')
+                : routeNames.join(' → ');
+            
+            routeElement.innerHTML = `
+                <strong>最適経路:</strong><br>
+                ${displayRoute} → ${selectedCities[bestRoute[0]].name}<br>
+                <small>完全経路: ${routeNames.join(' → ')} → ${selectedCities[bestRoute[0]].name}</small>
+            `;
+            
+            distanceElement.textContent = `総距離: ${bestDistance.toLocaleString()} km`;
+            
+            // トップN経路の表示（全探索の場合のみ）
+            const topNInput = document.getElementById('topNInput');
+            let topN = parseInt(topNInput.value) || 10;
+            
+            if (allSolutions.length > 1) {
+                // 全探索結果の表示
+                if (topN > allSolutions.length) {
+                    topN = allSolutions.length;
+                    topNInput.value = allSolutions.length;
+                }
+                
+                const warningMsg = topN > 1000 ? 
+                    `<div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 10px;">
+                        ⚠️ 警告: ${topN.toLocaleString()}件の表示はブラウザを重くする可能性があります
+                    </div>` : '';
+                
+                let topRoutesHtml = `
+                    <strong>計算統計:</strong><br>
+                    • 選択都市数: ${selectedCities.length}都市<br>
+                    • 探索した経路数: ${computationsCount.toLocaleString()} 通り<br>
+                    • 計算時間: ${computationTime} ms<br>
+                    • アルゴリズム: ${algorithm}<br>
+                    • 計算量: O((n-1)!) = O(${selectedCities.length-1}!) = ${computationsCount.toLocaleString()}通り<br><br>
+                    
+                    ${warningMsg}
+                    <strong>🏆 トップ${topN.toLocaleString()}経路（完全経路表示）:</strong><br>
+                    <div style="max-height: 600px; overflow-y: auto; border: 1px solid #ddd;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto;">
+                        <tr style="background: #667eea; color: white; position: sticky; top: 0; z-index: 10;">
+                            <th style="padding: 6px; border: 1px solid #ddd; width: 8%;">順位</th>
+                            <th style="padding: 6px; border: 1px solid #ddd; width: 12%;">総距離 (km)</th>
+                            <th style="padding: 6px; border: 1px solid #ddd; width: 12%;">最適解との差</th>
+                            <th style="padding: 6px; border: 1px solid #ddd; width: 10%;">差分率</th>
+                            <th style="padding: 6px; border: 1px solid #ddd; width: 58%;">完全経路</th>
+                        </tr>
+                `;
+                
+                for (let i = 0; i < topN; i++) {
+                    const solution = allSolutions[i];
+                    const diff = solution.distance - allSolutions[0].distance;
+                    const diffPercent = allSolutions[0].distance > 0 ? ((diff / allSolutions[0].distance) * 100).toFixed(2) : '0.00';
+                    const isOptimal = i === 0;
+                    const rowStyle = isOptimal ? 'background: #f0fff4;' : (i < 10 ? 'background: #f8f9fa;' : '');
+                    
+                    // 完全な経路を表示（省略なし）
+                    const fullRoute = solution.routeNames.join(' → ');
+                    
+                    topRoutesHtml += `
+                        <tr style="${rowStyle}">
+                            <td style="padding: 4px 6px; border: 1px solid #ddd; text-align: center; font-weight: ${isOptimal ? 'bold' : 'normal'};">${(i + 1).toLocaleString()}</td>
+                            <td style="padding: 4px 6px; border: 1px solid #ddd; text-align: right;">${solution.distance.toLocaleString()}</td>
+                            <td style="padding: 4px 6px; border: 1px solid #ddd; text-align: right;">+${diff}</td>
+                            <td style="padding: 4px 6px; border: 1px solid #ddd; text-align: right;">+${diffPercent}%</td>
+                            <td style="padding: 4px 6px; border: 1px solid #ddd; font-size: 10px; line-height: 1.2; word-break: break-all;">${fullRoute}</td>
+                        </tr>
+                    `;
+                }
+                
+                topRoutesHtml += '</table></div>';
+                
+                // 統計情報
+                const worst = allSolutions[allSolutions.length - 1];
+                const median = allSolutions[Math.floor(allSolutions.length / 2)];
+                const worstDiff = worst.distance - allSolutions[0].distance;
+                const worstPercent = ((worstDiff / allSolutions[0].distance) * 100).toFixed(1);
+                
+                topRoutesHtml += `
+                    <br><strong>📊 解の分布統計 (全${allSolutions.length.toLocaleString()}通り):</strong><br>
+                    • 最良解: ${allSolutions[0].distance.toLocaleString()} km<br>
+                    • 中央値: ${median.distance.toLocaleString()} km (+${(median.distance - allSolutions[0].distance).toLocaleString()}km, +${(((median.distance - allSolutions[0].distance) / allSolutions[0].distance) * 100).toFixed(1)}%)<br>
+                    • 最悪解: ${worst.distance.toLocaleString()} km (+${worstDiff.toLocaleString()}km, +${worstPercent}%)<br>
+                    • 解の品質範囲: ${worstPercent}%のスプレッド<br>
+                    • 最適解の個数: ${allSolutions.filter(s => s.distance === allSolutions[0].distance).length}個<br>
+                    • トップ${topN}内の範囲: ${topN < allSolutions.length ? (((allSolutions[topN-1].distance - allSolutions[0].distance) / allSolutions[0].distance) * 100).toFixed(1) : worstPercent}%以内
+                `;
+                
+                infoElement.innerHTML = topRoutesHtml;
+                
+            } else {
+                // ヒューリスティック結果の表示
+                infoElement.innerHTML = `
+                    <strong>計算統計:</strong><br>
+                    • 選択都市数: ${selectedCities.length}都市<br>
+                    • 使用アルゴリズム: ${algorithm}<br>
+                    • 計算時間: ${computationTime} ms<br>
+                    • 改善回数: ${computationsCount}回<br>
+                    • 注意: ヒューリスティック解法のため、真の最適解は保証されません<br>
+                    • 推定品質: 真の最適解の+5-15%程度と予想<br><br>
+                    
+                    <strong>💡 より良い解を求めるには:</strong><br>
+                    • 都市数を10以下に減らして全探索を試す<br>
+                    • 異なる都市の組み合わせで複数回実行<br>
+                    • より高度なアルゴリズム（Lin-Kernighan等）の使用を検討
+                `;
+            }
+        }
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', initializeUI);
+    </script>
+</body>
+</html>

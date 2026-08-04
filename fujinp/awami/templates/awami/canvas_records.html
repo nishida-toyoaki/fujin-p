@@ -1,0 +1,124 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>記録の一覧 - あわみ</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.6; padding: 18px;
+       height: 100vh; display: flex; flex-direction: column; }
+h1 { font-size: 1.14em; margin-bottom: 2px; }
+.sub { color: #7a8694; font-size: .8em; margin-bottom: 12px; }
+.toolbar { margin-bottom: 10px; display: flex; gap: 8px; align-items: center; }
+.btn { padding: 7px 14px; border: none; border-radius: 7px; background: #35618f;
+       color: #fff; font-size: .86em; cursor: pointer; font-family: inherit; }
+.btn:hover { background: #2a4d72; }
+.btn.secondary { background: #fff; color: #2b3440; border: 1px solid #ccd4dc; }
+.btn.secondary:hover { background: #eef2f6; }
+#result { display: none; padding: 9px 13px; border-radius: 6px; margin-bottom: 10px; font-size: .88em; }
+#result.success { background: #e4f3e8; color: #21663a; }
+#result.error { background: #fbe4e4; color: #8f2323; }
+.wrap { flex: 1; overflow-y: auto; background: #fff;
+        border: 1px solid #dde3ea; border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eef2f6;
+         font-size: .9em; }
+th { position: sticky; top: 0; background: #2b3440; color: #fff; font-size: .82em;
+     font-weight: normal; }
+td.name { font-weight: bold; }
+td.num { color: #5a6672; width: 90px; }
+td.when { color: #98a3ae; width: 140px; font-size: .84em; }
+td.ops { width: 210px; white-space: nowrap; text-align: right; }
+.op { border: 1px solid #ccd4dc; background: #fff; border-radius: 5px;
+      padding: 4px 10px; font-size: .8em; cursor: pointer; font-family: inherit; margin-left: 4px; }
+.op:hover { background: #eef2f6; }
+.op.del { color: #a53d3d; border-color: #dcb9b9; }
+.op.open { background: #35618f; color: #fff; border-color: #35618f; }
+.op.open:hover { background: #2a4d72; }
+.empty { color: #98a3ae; font-size: .9em; padding: 22px 14px; }
+</style>
+</head>
+<body>
+<h1>🗂 記録の一覧</h1>
+<div class="sub">{{ canvas.name }}　／　記録は保存した瞬間の討論展開・投票結果のスナップショットです（後から変わりません）</div>
+<div id="result"></div>
+<div class="toolbar">
+    <button class="btn" id="btnSnap">＋ いまを記録</button>
+    <button class="btn secondary" id="btnReload">再読込</button>
+</div>
+
+<div class="wrap">
+    <table>
+        <thead><tr><th>名前</th><th>展開</th><th>投票</th><th>保存日時</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none;">まだ記録はありません。「＋ いまを記録」で今の展開と結果を保存できます。</div>
+</div>
+
+<script>
+const CANVAS_ID = {{ canvas.id }};
+function showResult(m, e) {
+    $('#result').text(m).removeClass('success error').addClass(e ? 'error' : 'success').show();
+    setTimeout(() => $('#result').fadeOut(), 4000);
+}
+function load() {
+    $.getJSON('/awami/api/canvas/' + CANVAS_ID + '/records', function(d) {
+        if (!d || !d.success) return;
+        const $t = $('#rows').empty();
+        $('#empty').toggle(d.records.length === 0);
+        d.records.forEach(function(r) {
+            const $tr = $('<tr>');
+            $tr.append($('<td class="name">').text(r.name));
+            $tr.append($('<td class="num">').text(r.flow_count + ' 件'));
+            $tr.append($('<td class="num">').text(r.poll_count + ' 件'));
+            $tr.append($('<td class="when">').text(r.created_at));
+            const $ops = $('<td class="ops">');
+            $ops.append($('<button class="op open">開く</button>').on('click', () =>
+                window.open('/awami/canvas/' + CANVAS_ID + '/flow?record=' + r.id,
+                            'awamiRec' + r.id, 'width=740,height=860')));
+            $ops.append($('<button class="op">📊 結果</button>').on('click', () =>
+                window.open('/awami/canvas/' + CANVAS_ID + '/results?record=' + r.id,
+                            'awamiRecR' + r.id, 'width=760,height=860')));
+            $ops.append($('<button class="op">改名</button>').on('click', function() {
+                const name = prompt('記録名を変更:', r.name);
+                if (name === null) return;
+                $.ajax({ url: '/awami/api/record/' + r.id + '/rename', method: 'POST',
+                    contentType: 'application/json', data: JSON.stringify({ name: name }),
+                    success: x => { if (x.success) load(); } });
+            }));
+            $ops.append($('<button class="op del">✕</button>').on('click', function() {
+                if (!confirm('この記録を削除します。よろしいですか？')) return;
+                $.ajax({ url: '/awami/api/record/' + r.id + '/delete', method: 'POST',
+                    contentType: 'application/json', data: '{}',
+                    success: x => { if (x.success) load(); } });
+            }));
+            $tr.append($ops);
+            $t.append($tr);
+        });
+    });
+}
+$('#btnReload').on('click', load);
+$('#btnSnap').on('click', function() {
+    const name = prompt('この記録の名前は？（例：第3回・前半の投票まで）', '記録');
+    if (name === null) return;
+    $.ajax({ url: '/awami/api/canvas/' + CANVAS_ID + '/records/snapshot', method: 'POST',
+        contentType: 'application/json', data: JSON.stringify({ name: name }),
+        success: function(x) {
+            if (x.success) { showResult('「' + x.name + '」を記録しました（展開' + x.flow_count + '件・投票' + x.poll_count + '件）', false); load(); }
+            else showResult('エラー: ' + x.error, true);
+        },
+        error: () => showResult('通信エラー', true) });
+});
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,594 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作業内容編集 - CoRePo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- KaTeX CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+    <style>
+        .editor-container { height: calc(100vh - 300px); }
+        #editor, #preview { height: 100%; resize: none; }
+        .preview-content {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            height: 100%;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+        .external-editor-header {
+            background-color: #e3f2fd;
+            border-bottom: 2px solid #2196f3;
+        }
+        .task-info {
+            background-color: #f8f9fa;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .remarks-section {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+        }
+        #remarks { min-height: 80px; resize: vertical; }
+
+        /* プレビュー内のテーブルや図用のスタイル */
+        .sql-result-table { border-collapse: collapse; margin: 1em auto; width: 100%; font-size: 14px; }
+        .sql-result-table th, .sql-result-table td { border: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; word-wrap: break-word; }
+        .sql-result-table th { background-color: #f2f2f2; }
+        .table-container { width: 100%; overflow-x: auto; }
+        .katex { font-size: 1.1em !important; }
+        .mermaid { text-align: center; }
+        .svg-container { text-align: center; margin: 1em 0; }
+        .svg-container svg { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- ヘッダー -->
+        <header class="external-editor-header py-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h4 mb-0">
+                    <i class="fas fa-edit text-primary"></i>
+                    作業内容編集
+                </h1>
+                <div>
+                    <!-- ★★★ 新規追加: 保存して全体プレビューウィンドウへ移動ボタン ★★★ -->
+                    <button class="btn btn-primary me-2" id="fullPreviewBtn"
+                            title="作業内容を保存してから、文書全体のプレビューウィンドウを開きます">
+                        <i class="fas fa-external-link-alt"></i> 保存して全体プレビューへ移動
+                    </button>
+                    <button class="btn btn-success me-2" id="saveBtn">
+                        <i class="fas fa-save"></i> 保存して閉じる
+                    </button>
+                    <button class="btn btn-danger" id="cancelBtn">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- タスク情報 -->
+        <div class="task-info">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>タスク:</strong> <span id="taskName">読み込み中...</span>
+                </div>
+                <div class="col-md-6">
+                    <strong>プロジェクト:</strong> <span id="projectName">読み込み中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 備考セクション -->
+        <div class="remarks-section">
+            <label for="remarks" class="form-label fw-bold">
+                <i class="fas fa-comment-dots text-warning"></i> 備考（管理者への連絡事項）
+            </label>
+            <textarea class="form-control" id="remarks"
+                      placeholder="作業に関する質問や報告事項があれば記入してください..."></textarea>
+        </div>
+
+        <!-- ツールバー -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="btn-group me-2" role="group">
+                    <button type="button" class="btn btn-outline-primary" id="previewBtn">
+                        <i class="fas fa-eye"></i> プレビュー更新
+                    </button>
+                    <button type="button" class="btn btn-outline-success" id="saveOnlyBtn">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="uploadBtn">
+                        <i class="fas fa-image"></i> 画像アップロード
+                    </button>
+                    <!-- ★★★ 新規追加: Excel→HTMLボタン ★★★ -->
+                    <button type="button" class="btn btn-outline-info" id="excelHelperBtn">
+                        <i class="fas fa-table"></i> Excel→HTML
+                    </button>
+                </div>
+
+                <!-- 隠し要素：ファイル入力 -->
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            </div>
+        </div>
+
+        <!-- エディタとプレビュー -->
+        <div class="row editor-container">
+            <div class="col-md-6">
+                <div class="h-100">
+                    <label for="editor" class="form-label fw-bold">作業内容 (Markdown)</label>
+                    <textarea class="form-control font-monospace" id="editor"
+                              placeholder="作業内容をMarkdownで入力してください..."></textarea>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="h-100">
+                    <label class="form-label fw-bold">プレビュー</label>
+                    <div class="preview-content" id="preview">
+                        <p class="text-info"><i class="fas fa-info-circle"></i> 「プレビュー更新」ボタンを押してプレビューを表示してください</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- KaTeX JavaScript -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <!-- Mermaid JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+
+    <script>
+        // URLからプロジェクトIDとタスクIDを取得
+        const pathParts = window.location.pathname.split('/');
+        const projectId = parseInt(pathParts[pathParts.length - 2]);
+        const taskId = parseInt(pathParts[pathParts.length - 1]);
+
+        class CompleteExternalEditor {
+            constructor() {
+                this.projectId = projectId;
+                this.taskId = taskId;
+                this.editor = document.getElementById('editor');
+                this.preview = document.getElementById('preview');
+                this.remarks = document.getElementById('remarks');
+                this.saveBtn = document.getElementById('saveBtn');
+                this.cancelBtn = document.getElementById('cancelBtn');
+                this.previewBtn = document.getElementById('previewBtn');
+                this.uploadBtn = document.getElementById('uploadBtn');
+                this.imageInput = document.getElementById('imageInput');
+                this.excelHelperBtn = document.getElementById('excelHelperBtn'); // ★追加
+                this.fullPreviewBtn = document.getElementById('fullPreviewBtn'); // ★★★ 新規追加: 全体プレビューボタン
+
+                this.isUpdatingPreview = false;
+                this.setupEventListeners();
+                this.loadTaskData();
+
+                // Mermaid初期化
+                if (window.mermaid) {
+                    mermaid.initialize({ startOnLoad: true });
+                }
+            }
+
+            setupEventListeners() {
+                // 保存ボタン
+                this.saveBtn.addEventListener('click', () => this.saveContent());
+
+                // 保存のみボタン
+                this.saveOnlyBtn = document.getElementById('saveOnlyBtn');
+                this.saveOnlyBtn.addEventListener('click', () => this.saveOnly());
+
+                // キャンセルボタン
+                this.cancelBtn.addEventListener('click', () => this.cancelEdit());
+
+                // プレビューボタン
+                this.previewBtn.addEventListener('click', () => this.updatePreview());
+
+                // 画像アップロードボタン
+                this.uploadBtn.addEventListener('click', () => this.imageInput.click());
+
+                // 画像選択時
+                this.imageInput.addEventListener('change', (e) => this.handleImageUpload(e));
+
+                // ★★★ 新規追加: Excel→HTMLボタン ★★★
+                this.excelHelperBtn.addEventListener('click', () => this.openExcelHelper());
+
+                // ★★★ 新規追加: 保存して全体プレビューウィンドウへ移動ボタン ★★★
+                this.fullPreviewBtn.addEventListener('click', () => this.saveAndOpenSharedPreview());
+
+                // キーボードショートカット
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 's') {
+                        e.preventDefault();
+                        this.saveContent();
+                    }
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        this.cancelEdit();
+                    }
+                    if (e.ctrlKey && e.key === 'p') {
+                        e.preventDefault();
+                        this.updatePreview();
+                    }
+                });
+            }
+
+            // ★★★ 新規追加: 保存してから全体のプレビューウィンドウ（shared_preview）を開く ★★★
+            // 未保存の内容は全体プレビューに反映されないため、移動前に保存を義務付ける。
+            // 保存が失敗した場合はプレビューを開かない（不整合な内容を見せない）。
+            // 分担者にも文書全体のプレビュー権限がある設計のため、
+            // 担当タスクの編集画面からプロジェクト全体のプレビューへ直行できる。
+            // 権限チェックはサーバ側（shared_preview ルート）で行われる。
+            async saveAndOpenSharedPreview() {
+                const content = this.editor.value.trim();
+                const remarks = this.remarks ? this.remarks.value.trim() : '';
+
+                // ★ポップアップブロッカー対策：ユーザー操作の直後（await前）にウィンドウを確保
+                const width = 1200;
+                const height = 900;
+                const left = (screen.width - width) / 2;
+                const top = (screen.height - height) / 2;
+                const previewWindow = window.open(
+                    'about:blank',
+                    `shared_preview_${this.projectId}`,
+                    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+                );
+
+                try {
+                    this.fullPreviewBtn.disabled = true;
+                    this.fullPreviewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+
+                    const response = await fetch(`/colrep/save_content_external/${this.projectId}/${this.taskId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: content, remarks: remarks })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.showMessage('作業内容を保存しました。全体プレビューを開きます。', 'success');
+                        // 保存成功後に確保済みウィンドウへプレビューを読み込む
+                        if (previewWindow && !previewWindow.closed) {
+                            previewWindow.location.href = `/colrep/shared_preview/${this.projectId}`;
+                            previewWindow.focus();
+                        }
+                    } else {
+                        // 保存失敗時はプレビューを開かず、確保したウィンドウを閉じる
+                        if (previewWindow && !previewWindow.closed) {
+                            previewWindow.close();
+                        }
+                        this.showMessage(result.error || '保存に失敗したため、全体プレビューへの移動を中止しました', 'error');
+                    }
+                } catch (error) {
+                    console.error('Save-and-preview error:', error);
+                    if (previewWindow && !previewWindow.closed) {
+                        previewWindow.close();
+                    }
+                    this.showMessage('保存に失敗したため、全体プレビューへの移動を中止しました', 'error');
+                } finally {
+                    this.fullPreviewBtn.disabled = false;
+                    this.fullPreviewBtn.innerHTML = '<i class="fas fa-external-link-alt"></i> 保存して全体プレビューへ移動';
+                }
+            }
+
+            // ★★★ 新規追加: Excel→HTMLヘルパーを開く ★★★
+            openExcelHelper() {
+                const width = 1000;
+                const height = 800;
+                const left = (screen.width - width) / 2;
+                const top = (screen.height - height) / 2;
+
+                window.open(
+                    '/excel_helper/',
+                    'excel_helper',
+                    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+                );
+            }
+
+            // ★★★ 新規追加: Excel→HTMLヘルパーから呼ばれる関数 ★★★
+            insertHTMLTable(html) {
+                const cursorPos = this.editor.selectionStart;
+                const text = this.editor.value;
+
+                // カーソル位置にHTMLを挿入
+                this.editor.value = text.slice(0, cursorPos) + '\n' + html + '\n' + text.slice(cursorPos);
+
+                // カーソル位置を更新
+                this.editor.selectionStart = this.editor.selectionEnd = cursorPos + html.length + 2;
+                this.editor.focus();
+
+                // プレビューを自動更新
+                this.updatePreview();
+
+                // 成功メッセージ
+                this.showMessage('HTMLテーブルを挿入しました', 'success');
+            }
+
+            async loadTaskData() {
+                try {
+                    const response = await fetch(`/colrep/get_task_content/${this.projectId}/${this.taskId}`);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        document.getElementById('taskName').textContent = result.task_title || 'タスク';
+                        document.getElementById('projectName').textContent = result.project_name || 'プロジェクト';
+                        this.editor.value = result.md_content || '';
+                        if (this.remarks) {
+                            this.remarks.value = result.remarks || '';
+                        }
+                    } else {
+                        this.showMessage(`データ読み込みエラー: ${result.error}`, 'error');
+                        console.error('API Error:', result.error);
+                    }
+                } catch (error) {
+                    console.error('Load error:', error);
+                    this.showMessage('タスクデータの読み込みに失敗しました', 'error');
+                }
+            }
+
+            async saveContent() {
+                const content = this.editor.value.trim();
+                const remarks = this.remarks ? this.remarks.value.trim() : '';
+
+                try {
+                    this.saveBtn.disabled = true;
+                    this.saveBtn.textContent = '保存中...';
+
+                    const response = await fetch(`/colrep/save_content_external/${this.projectId}/${this.taskId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: content, remarks: remarks })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.showMessage('作業内容を保存しました。', 'success');
+
+                        // 親ウィンドウにコールバック
+                        if (window.opener && window.opener.editorCallback) {
+                            window.opener.editorCallback({ success: true });
+                        }
+
+                        // 少し待ってからウィンドウを閉じる
+                        setTimeout(() => {
+                            window.close();
+                        }, 1000);
+
+                    } else {
+                        this.showMessage(result.error || '保存に失敗しました', 'error');
+                        if (window.opener && window.opener.editorCallback) {
+                            window.opener.editorCallback({ success: false, error: result.error });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Save error:', error);
+                    this.showMessage('保存に失敗しました', 'error');
+                    if (window.opener && window.opener.editorCallback) {
+                        window.opener.editorCallback({ success: false, error: error.message });
+                    }
+                } finally {
+                    this.saveBtn.disabled = false;
+                    this.saveBtn.innerHTML = '<i class="fas fa-save"></i> 保存して閉じる';
+                }
+            }
+
+            cancelEdit() {
+                if (confirm('編集内容を破棄してもよろしいですか？')) {
+                    // 親ウィンドウにコールバック
+                    if (window.opener && window.opener.editorCallback) {
+                        window.opener.editorCallback({ aborted: true });
+                    }
+                    window.close();
+                }
+            }
+
+            async updatePreview() {
+                console.log('updatePreview called');
+                if (this.isUpdatingPreview) return;
+
+                const markdown = this.editor.value;
+                if (!markdown.trim()) {
+                    this.preview.innerHTML = '<p class="text-muted">プレビューがここに表示されます</p>';
+                    return;
+                }
+
+                this.isUpdatingPreview = true;
+                const originalButtonContent = this.previewBtn.innerHTML;
+                this.previewBtn.disabled = true;
+                this.previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
+
+                try {
+                    const response = await fetch('/colrep/preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            markdown: markdown
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result.html) {
+                        this.preview.innerHTML = result.html;
+
+                        // Mermaidとmath処理
+                        if (window.mermaid) {
+                            mermaid.run({ nodes: this.preview.querySelectorAll('.mermaid') });
+                        }
+                        if (window.renderMathInElement) {
+                            renderMathInElement(this.preview, {
+                                delimiters: [
+                                    {left: '$$', right: '$$', display: true},
+                                    {left: '$', right: '$', display: false}
+                                ]
+                            });
+                        }
+
+                        this.showMessage('プレビューを更新しました', 'success');
+                    } else {
+                        this.preview.innerHTML = '<p class="text-danger">プレビューの生成に失敗しました</p>';
+                    }
+                } catch (error) {
+                    console.error('Preview error:', error);
+                    this.preview.innerHTML = '<p class="text-danger">プレビューの生成に失敗しました</p>';
+                } finally {
+                    this.isUpdatingPreview = false;
+                    this.previewBtn.disabled = false;
+                    this.previewBtn.innerHTML = originalButtonContent;
+                }
+            }
+
+            async handleImageUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // ファイルサイズチェック（10MB制限）
+                if (file.size > 10 * 1024 * 1024) {
+                    this.showMessage('ファイルサイズは10MB以下にしてください', 'error');
+                    return;
+                }
+
+                // 画像ファイルかチェック
+                if (!file.type.startsWith('image/')) {
+                    this.showMessage('画像ファイルを選択してください', 'error');
+                    return;
+                }
+
+                try {
+                    this.uploadBtn.disabled = true;
+                    this.uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> アップロード中...';
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/colrep/upload_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // エディタに画像マークダウンを挿入
+                        const imageMarkdown = `![${result.filename}](${result.url})`;
+                        this.insertTextAtCursor(imageMarkdown);
+                        this.showMessage('画像がアップロードされました', 'success');
+                        // プレビューを自動更新
+                        this.updatePreview();
+                    } else {
+                        this.showMessage(result.error || 'アップロードに失敗しました', 'error');
+                    }
+
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    this.showMessage('アップロードに失敗しました', 'error');
+                } finally {
+                    this.uploadBtn.disabled = false;
+                    this.uploadBtn.innerHTML = '<i class="fas fa-image"></i> 画像アップロード';
+                    // input要素をクリア
+                    this.imageInput.value = '';
+                }
+            }
+
+            insertTextAtCursor(text) {
+                const start = this.editor.selectionStart;
+                const end = this.editor.selectionEnd;
+                const value = this.editor.value;
+
+                this.editor.value = value.substring(0, start) + text + value.substring(end);
+                this.editor.selectionStart = this.editor.selectionEnd = start + text.length;
+                this.editor.focus();
+            }
+
+            showMessage(message, type = 'info') {
+                const alertClass = type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info';
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${alertClass} alert-dismissible fade show position-fixed`;
+                alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                alertDiv.innerHTML = `
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(alertDiv);
+
+                // 3秒後に自動削除
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 3000);
+            }
+
+            async saveOnly() {
+                const content = this.editor.value.trim();
+                const remarks = this.remarks ? this.remarks.value.trim() : '';
+
+                try {
+                    this.saveOnlyBtn.disabled = true;
+                    this.saveOnlyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+
+                    const response = await fetch(`/colrep/save_content_external/${this.projectId}/${this.taskId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: content, remarks: remarks })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.showMessage('作業内容を保存しました。', 'success');
+                    } else {
+                        this.showMessage(result.error || '保存に失敗しました', 'error');
+                    }
+                } catch (error) {
+                    console.error('Save error:', error);
+                    this.showMessage('保存に失敗しました', 'error');
+                } finally {
+                    this.saveOnlyBtn.disabled = false;
+                    this.saveOnlyBtn.innerHTML = '<i class="fas fa-save"></i> 保存';
+                }
+            }
+        }
+
+        // ★★★ グローバルスコープに公開（Excel helperから呼ばれる） ★★★
+        let editorInstance;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            editorInstance = new CompleteExternalEditor();
+        });
+
+        // ★★★ Excel helperから呼ばれるグローバル関数 ★★★
+        function insertHTMLTable(html) {
+            if (editorInstance) {
+                editorInstance.insertHTMLTable(html);
+            }
+        }
+    </script>
+</body>
+</html>

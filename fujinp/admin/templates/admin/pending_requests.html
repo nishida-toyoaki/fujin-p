@@ -1,0 +1,278 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>承認待ちユーザー - FUJIN-P 管理画面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #5a6268; }
+        .content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-card h3 { font-size: 0.9rem; margin-bottom: 10px; opacity: 0.9; }
+        .stat-card .number { font-size: 2.5rem; font-weight: bold; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-approve {
+            background: #28a745;
+            color: white;
+        }
+        .btn-approve:hover { background: #218838; }
+        .btn-reject {
+            background: #ffc107;
+            color: #333;
+        }
+        .btn-reject:hover { background: #e0a800; }
+        .btn-blacklist {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-blacklist:hover { background: #c82333; }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .badge-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>承認待ちユーザー</h1>
+                <p style="color: #666;">登録申請の承認・却下を管理</p>
+            </div>
+            <a href="{{ url_for('admin.dashboard') }}" class="back-btn">ダッシュボードに戻る</a>
+        </div>
+
+        <div class="content">
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>承認待ち</h3>
+                    <div class="number">{{ requests|length }}</div>
+                </div>
+            </div>
+
+            {% if requests %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>申請日時</th>
+                        <th>氏名</th>
+                        <th>メールアドレス</th>
+                        <th>所属</th>
+                        <th>IPアドレス</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td>{{ req.requested_at }}</td>
+                        <td>{{ req.full_name }}</td>
+                        <td>{{ req.email }}</td>
+                        <td>{{ req.affiliation or '－' }}</td>
+                        <td><code>{{ req.ip_address }}</code></td>
+                        <td>
+                            <div class="action-buttons">
+                                <form action="{{ url_for('admin.approve_request', request_id=req.id) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-approve" 
+                                            onclick="return confirm('{{ req.full_name }}さんの申請を承認しますか？')">
+                                        承認
+                                    </button>
+                                </form>
+                                
+                                <button class="btn btn-reject" 
+                                        onclick="showRejectModal({{ req.id }}, '{{ req.full_name }}')">
+                                    不承認
+                                </button>
+                                
+                                <form action="{{ url_for('admin.blacklist_request', request_id=req.id) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-blacklist" 
+                                            onclick="return confirm('{{ req.email }}をブラックリストに登録しますか？')">
+                                        ブラックリスト
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">
+                <p>承認待ちの申請はありません</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 不承認理由入力モーダル -->
+    <div id="rejectModal" class="modal">
+        <div class="modal-content">
+            <h2>不承認理由の入力</h2>
+            <p id="rejectUserName" style="margin: 10px 0; color: #666;"></p>
+            <form id="rejectForm" method="POST">
+                <textarea name="rejection_reason" placeholder="不承認理由を入力してください（任意）"></textarea>
+                <div class="modal-buttons">
+                    <button type="button" onclick="closeRejectModal()" style="background: #6c757d; color: white;">
+                        キャンセル
+                    </button>
+                    <button type="submit" style="background: #ffc107; color: #333;">
+                        不承認にする
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showRejectModal(requestId, userName) {
+            document.getElementById('rejectUserName').textContent = userName + 'さんの申請';
+            document.getElementById('rejectForm').action = '/admin/reject_request/' + requestId;
+            document.getElementById('rejectModal').style.display = 'block';
+        }
+
+        function closeRejectModal() {
+            document.getElementById('rejectModal').style.display = 'none';
+        }
+
+        // モーダル外クリックで閉じる
+        window.onclick = function(event) {
+            var modal = document.getElementById('rejectModal');
+            if (event.target == modal) {
+                closeRejectModal();
+            }
+        }
+    </script>
+</body>
+</html>

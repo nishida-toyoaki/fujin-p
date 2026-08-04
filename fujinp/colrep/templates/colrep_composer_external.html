@@ -1,0 +1,576 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Composer編集 - {{ project.プロジェクト名 }} - CoRePo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- KaTeX CSS - 確実に読み込まれるように -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+    <style>
+        .editor-container {
+            height: calc(100vh - 250px);
+        }
+
+        #editor, #preview {
+            height: 100%;
+            resize: none;
+        }
+
+        .preview-content {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            height: 100%;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+
+        .composer-editor-header {
+            background-color: #e8f5e8;
+            border-bottom: 2px solid #28a745;
+        }
+
+        .project-info {
+            background-color: #f8f9fa;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .composer-guide {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .guide-section {
+            margin-bottom: 0.5rem;
+        }
+
+        .guide-section h6 {
+            color: #856404;
+            margin-bottom: 0.25rem;
+        }
+
+        .guide-section p, .guide-section ul {
+            margin-bottom: 0.25rem;
+            font-size: 0.9em;
+        }
+        /* プレビュー内のテーブルや図用のスタイル */
+        .sql-result-table { border-collapse: collapse; margin: 1em auto; width: 100%; font-size: 14px; }
+        .sql-result-table th, .sql-result-table td { border: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; word-wrap: break-word; }
+        .sql-result-table th { background-color: #f2f2f2; }
+        .table-container { width: 100%; overflow-x: auto; }
+        .katex { font-size: 1.1em !important; }
+        .mermaid { text-align: center; }
+        .svg-container { text-align: center; margin: 1em 0; }
+        .svg-container svg { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- ヘッダー -->
+        <header class="composer-editor-header py-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h4 mb-0">
+                    <i class="fas fa-file-alt text-success"></i>
+                    Composer編集 - {{ project.プロジェクト名 }}
+                </h1>
+                <div>
+                    <button class="btn btn-success me-2" id="saveBtn">
+                        <i class="fas fa-save"></i> 保存して閉じる
+                    </button>
+                    <button class="btn btn-danger" id="cancelBtn">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- プロジェクト情報 -->
+        <div class="project-info">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>プロジェクト:</strong> {{ project.プロジェクト名 }}
+                </div>
+                <div class="col-md-6">
+                    <strong>テーブル:</strong> {{ project.テーブル名 }}
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-6">
+                    <strong>責任者:</strong> {{ project.責任者名 }}
+                </div>
+                <div class="col-md-6">
+                    <strong>更新日時:</strong>
+                    {% if project.更新日時 %}
+                        {{ project.更新日時.strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                        未更新
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Composer作成ガイド -->
+        <div class="composer-guide">
+            <h5><i class="fas fa-info-circle text-warning"></i> Composer作成ガイド</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="guide-section">
+                        <h6>📋 基本情報</h6>
+                        <ul class="small">
+                            <li>プロジェクトの目的</li>
+                            <li>対象範囲と期間</li>
+                            <li>成果物の形式</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="guide-section">
+                        <h6>🔗 統合方法</h6>
+                        <ul class="small">
+                            <li>タスクの統合順序</li>
+                            <li>データの組み合わせ方法</li>
+                            <li>品質チェック項目</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="guide-section">
+                        <h6>📝 メタ情報</h6>
+                        <ul class="small">
+                            <li>関連資料・参考文献</li>
+                            <li>注意点・制約事項</li>
+                            <li>完了基準</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ツールバー -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="btn-toolbar" role="toolbar">
+                    <div class="btn-group me-2" role="group">
+                        <button type="button" class="btn btn-outline-primary" id="previewBtn">
+                            <i class="fas fa-eye"></i> プレビュー更新
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="uploadBtn">
+                            <i class="fas fa-image"></i> 画像アップロード
+                        </button>
+                    </div>
+                    <div class="btn-group me-2" role="group">
+                        <button type="button" class="btn btn-outline-info" onclick="insertTemplate('basic')">
+                            <i class="fas fa-file-medical"></i> 基本テンプレート
+                        </button>
+                        <button type="button" class="btn btn-outline-info" onclick="insertTemplate('workflow')">
+                            <i class="fas fa-project-diagram"></i> ワークフロー
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 隠し要素：ファイル入力 -->
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            </div>
+        </div>
+
+        <!-- エディタとプレビュー -->
+        <div class="row editor-container">
+            <div class="col-md-6">
+                <div class="h-100">
+                    <label for="editor" class="form-label fw-bold">Composer (Markdown)</label>
+                    <textarea class="form-control font-monospace" id="editor"
+                              placeholder="プロジェクトの統合方法とメタ情報をMarkdownで記述してください...">{{ project.Composer or '' }}</textarea>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="h-100">
+                    <label class="form-label fw-bold">プレビュー</label>
+                    <div class="preview-content" id="preview">
+                        <p class="text-muted">プレビューがここに表示されます</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- メッセージ表示用コンテナ -->
+    <div id="messageContainer" class="fixed-top mt-3 mx-3"></div>
+
+    <!-- Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+
+
+    <script>
+        // テンプレート定義
+        const templates = {
+            basic: `# {{ project.プロジェクト名 }} - 統合指示書
+
+## プロジェクト概要
+- **目的**: [プロジェクトの目的を記述]
+- **期間**: [開始日] ～ [終了日]
+- **成果物**: [最終的な成果物の形式]
+
+## タスク統合方法
+
+### 1. データ収集・整理フェーズ
+- [ ] 各作業者からの成果物確認
+- [ ] データ形式の統一
+- [ ] 品質チェック
+
+### 2. 統合・編集フェーズ
+- [ ] データの組み合わせ
+- [ ] 全体構成の調整
+- [ ] 最終レビュー
+
+## 品質基準
+1. [基準1を記述]
+2. [基準2を記述]
+3. [基準3を記述]
+
+## 参考資料・注意点
+- [関連資料のリンクや参考情報]
+- [特別な注意点や制約事項]
+
+---
+*最終更新: {{ current_date }}*`,
+
+            workflow: `# ワークフロー図
+
+## 作業フロー
+
+\`\`\`mermaid
+graph TD
+    A[プロジェクト開始] --> B[タスク分割・アサイン]
+    B --> C[各作業者が作業実行]
+    C --> D{品質チェック}
+    D -->|OK| E[統合作業]
+    D -->|NG| F[修正指示]
+    F --> C
+    E --> G[最終レビュー]
+    G --> H[完了]
+\`\`\`
+
+## データフロー
+
+\`\`\`mermaid
+flowchart LR
+    A[原データ] --> B[作業者1]
+    A --> C[作業者2]
+    A --> D[作業者3]
+    B --> E[統合処理]
+    C --> E
+    D --> E
+    E --> F[最終成果物]
+\`\`\`
+
+## チェックポイント
+| フェーズ | チェック項目 | 責任者 |
+|----------|-------------|--------|
+| データ収集 | 完全性確認 | 責任者 |
+| 統合処理 | 整合性確認 | 責任者 |
+| 最終確認 | 品質確認 | 全員 |`
+        };
+
+        class ComposerEditor {
+            constructor() {
+                this.projectId = {{ project.id }};
+                this.editor = document.getElementById('editor');
+                this.preview = document.getElementById('preview');
+                this.saveBtn = document.getElementById('saveBtn');
+                this.cancelBtn = document.getElementById('cancelBtn');
+                this.previewBtn = document.getElementById('previewBtn');
+                this.uploadBtn = document.getElementById('uploadBtn');
+                this.imageInput = document.getElementById('imageInput');
+
+                this.setupEventListeners();
+                // this.updatePreview();
+            }
+
+            setupEventListeners() {
+                // 保存ボタン
+                this.saveBtn.addEventListener('click', () => this.saveComposer());
+
+                // キャンセルボタン
+                this.cancelBtn.addEventListener('click', () => this.cancelEdit());
+
+                // プレビューボタン
+                this.previewBtn.addEventListener('click', () => this.updatePreview());
+
+                // 画像アップロードボタン
+                this.uploadBtn.addEventListener('click', () => this.imageInput.click());
+
+                // 画像選択時
+                this.imageInput.addEventListener('change', (e) => this.handleImageUpload(e));
+
+                // 削除または以下のようにコメントアウト
+                // // リアルタイムプレビュー（入力時）
+                // this.editor.addEventListener('input', () => {
+                //     clearTimeout(this.previewTimeout);
+                //     this.previewTimeout = setTimeout(() => this.updatePreview(), 500);
+                // });
+
+                // Ctrl+S でも保存
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 's') {
+                        e.preventDefault();
+                        this.saveComposer();
+                    }
+                });
+
+                // ESCキーでキャンセル
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        this.cancelEdit();
+                    }
+                });
+            }
+
+            async saveComposer() {
+                const content = this.editor.value.trim();
+
+                try {
+                    this.saveBtn.disabled = true;
+                    this.saveBtn.textContent = '保存中...';
+
+                    const response = await fetch(`/colrep/save_composer_external/${this.projectId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            composer: content
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.showMessage('Composerを保存しました。', 'success');
+
+                        // 親ウィンドウにコールバック
+                        if (window.opener && window.opener.composerCallback) {
+                            window.opener.composerCallback({ success: true });
+                        }
+
+                        // 少し待ってからウィンドウを閉じる
+                        setTimeout(() => {
+                            window.close();
+                        }, 1000);
+
+                    } else {
+                        this.showMessage(result.error || '保存に失敗しました', 'error');
+                        if (window.opener && window.opener.composerCallback) {
+                            window.opener.composerCallback({ success: false, error: result.error });
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('Save error:', error);
+                    this.showMessage('保存に失敗しました', 'error');
+                    if (window.opener && window.opener.composerCallback) {
+                        window.opener.composerCallback({ success: false, error: error.message });
+                    }
+                } finally {
+                    this.saveBtn.disabled = false;
+                    this.saveBtn.innerHTML = '<i class="fas fa-save"></i> 保存して閉じる';
+                }
+            }
+
+            cancelEdit() {
+                if (confirm('編集内容を破棄してもよろしいですか？')) {
+                    // 親ウィンドウにコールバック
+                    if (window.opener && window.opener.composerCallback) {
+                        window.opener.composerCallback({ aborted: true });
+                    }
+                    window.close();
+                }
+            }
+
+            async updatePreview() {
+                const markdown = this.editor.value;
+
+                if (!markdown) {
+                    this.preview.innerHTML = '<p class="text-muted">プレビューがここに表示されます</p>';
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/colrep/preview_composer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            markdown: markdown,
+                            project_id: this.projectId
+                        })
+                    });
+                    const result = await response.json();
+
+                    if (result.html) {
+                        this.preview.innerHTML = result.html;
+                        // Mermaidとmath処理
+                        if (window.mermaid) {
+                            mermaid.run({ nodes: this.preview.querySelectorAll('.mermaid') });
+                        }
+                        if (window.renderMathInElement) {
+                            renderMathInElement(this.preview, {
+                                delimiters: [
+                                    {left: '$$', right: '$$', display: true},
+                                    {left: '$', right: '$', display: false}
+                                ]
+                            });
+                        }
+
+                    } else {
+                        this.preview.innerHTML = '<p class="text-danger">プレビューの生成に失敗しました</p>';
+                    }
+
+                } catch (error) {
+                    console.error('Preview error:', error);
+                    this.preview.innerHTML = '<p class="text-danger">プレビューの生成に失敗しました</p>';
+                }
+            }
+
+            async handleImageUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // ファイルサイズチェック（5MB制限）
+                if (file.size > 10 * 1024 * 1024) {
+                    this.showMessage('ファイルサイズは10MB以下にしてください', 'error');
+                    return;
+                }
+
+                // 画像ファイルかチェック
+                if (!file.type.startsWith('image/')) {
+                    this.showMessage('画像ファイルを選択してください', 'error');
+                    return;
+                }
+
+                try {
+                    this.uploadBtn.disabled = true;
+                    this.uploadBtn.textContent = 'アップロード中...';
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/colrep/upload_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // エディタに画像マークダウンを挿入
+                        const imageMarkdown = `![${result.filename}](${result.url})`;
+                        this.insertTextAtCursor(imageMarkdown);
+                        this.showMessage('画像がアップロードされました', 'success');
+                        this.updatePreview();
+                    } else {
+                        this.showMessage(result.error || 'アップロードに失敗しました', 'error');
+                    }
+
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    this.showMessage('アップロードに失敗しました', 'error');
+                } finally {
+                    this.uploadBtn.disabled = false;
+                    this.uploadBtn.innerHTML = '<i class="fas fa-image"></i> 画像アップロード';
+                    // input要素をクリア
+                    this.imageInput.value = '';
+                }
+            }
+
+            insertTextAtCursor(text) {
+                const start = this.editor.selectionStart;
+                const end = this.editor.selectionEnd;
+                const value = this.editor.value;
+
+                this.editor.value = value.substring(0, start) + text + value.substring(end);
+                this.editor.selectionStart = this.editor.selectionEnd = start + text.length;
+                this.editor.focus();
+            }
+
+            showMessage(message, type = 'info') {
+                let messageContainer = document.getElementById('messageContainer');
+                if (!messageContainer) {
+                    messageContainer = document.createElement('div');
+                    messageContainer.id = 'messageContainer';
+                    messageContainer.className = 'fixed-top mt-3 mx-3';
+                    document.body.appendChild(messageContainer);
+                }
+
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
+                alertDiv.innerHTML = `
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+
+                messageContainer.appendChild(alertDiv);
+
+                // 3秒後に自動削除
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 3000);
+            }
+        }
+
+        // グローバル関数: テンプレート挿入
+        function insertTemplate(templateType) {
+            const editor = document.getElementById('editor');
+            const template = templates[templateType];
+
+            if (template) {
+                // カーソル位置にテンプレートを挿入
+                const start = editor.selectionStart;
+                const end = editor.selectionEnd;
+                const value = editor.value;
+
+                const newValue = value.substring(0, start) + template + value.substring(end);
+                editor.value = newValue;
+                editor.selectionStart = editor.selectionEnd = start + template.length;
+                editor.focus();
+
+                // プレビュー更新
+                if (window.composerEditor) {
+                    window.composerEditor.updatePreview();
+                }
+            }
+        }
+
+        // mermaid初期化
+        if (window.mermaid) {
+            mermaid.initialize({ startOnLoad: true });
+        }
+
+        // DOM読み込み完了後に初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            window.composerEditor = new ComposerEditor();
+        });
+    </script>
+</body>
+</html>

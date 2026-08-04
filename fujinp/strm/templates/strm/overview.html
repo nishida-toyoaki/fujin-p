@@ -1,0 +1,160 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>時空資源予約状況 - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        :root { --primary-color: #2563eb; --primary-hover: #1d4ed8; --background-color: #f8fafc; --border-color: #e2e8f0; --text-color: #1f2937; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background-color: var(--background-color); color: var(--text-color); }
+        .header { position: sticky; top: 0; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 0.5rem 1rem; z-index: 100; }
+        .header-controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .nav-button { padding: 0.4rem 0.8rem; font-size: 0.9rem; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; }
+        .nav-button:hover { background-color: var(--primary-hover); }
+        .btn-return { display: inline-block; padding: 6px 14px; background: #e74c3c; border-radius: 20px; color: #fff !important; text-decoration: none; font-size: .82em; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+        .btn-return:hover { background: #c0392b; }
+        .pending-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; background-color: #dc2626; color: white; border-radius: 10px; font-size: 0.8em; text-align: center; }
+        .resource-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; max-height: 150px; overflow-y: auto; }
+        .resource-badge { padding: 0.5rem 1rem; border-radius: 1rem; background-color: #e2e8f0; color: #1f2937; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .resource-badge.active { background-color: #2563eb; color: white; }
+        .year-navigation { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+        .year-label { font-size: 1.25rem; font-weight: bold; min-width: 200px; text-align: center; }
+        .calendar-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+        .month-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); column-gap: 0.25rem; row-gap: 2rem; }
+        .month-container { min-height: 80px; width: 100%; margin-bottom: 0.25rem; }
+        .month-header { background-color: var(--primary-color); color: white; padding: 0.15rem; text-align: center; font-weight: bold; font-size: 0.8rem; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background-color: var(--border-color); padding: 1px; min-height: 28px; }
+        .calendar-day { background: white; min-height: 26px; padding: 0.05rem; font-size: 0.7rem; display: flex; flex-direction: column; overflow: hidden; }
+        .calendar-day.sunday { color: #dc2626; }
+        .calendar-day.saturday { color: #2563eb; }
+        .calendar-day.weekend { background-color: #f8fafc; }
+        .calendar-day.today-cell { outline: 2px solid #f59e0b; outline-offset: -2px; }
+        .reservation-count { text-align: center; font-size: 1.1em; font-weight: bold; margin-top: 0.1em; line-height: 1; }
+        .hint { font-size: 0.85rem; color: #4b5563; margin: 0.25rem 0 0.5rem 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>時空資源予約状況</h1>
+        <div class="header-controls">
+            <a href="{{ url_for('strm.index') }}" class="nav-button">予約</a>
+            {% if show_pending_link %}
+            <a href="{{ url_for('strm.pending') }}" class="nav-button">承認ダッシュボード{% if pending_count %}<span class="pending-badge">{{ pending_count }}</span>{% endif %}</a>
+            {% endif %}
+            {% if is_admin %}
+            <a href="{{ url_for('strm.resources') }}" class="nav-button">資源管理</a>
+            {% endif %}
+            <a href="{{ url_for('strm.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        </div>
+        <p class="hint">資源バッジをクリックすると、その資源の予約状況（確定分）が「午前件数|午後件数」で表示されます（複数選択可）。</p>
+        <div class="resource-toggles" id="resource-toggles"></div>
+        <div class="year-navigation">
+            <button class="nav-button" id="prevYear"><span>←</span><span>前年度</span></button>
+            <div class="year-label" id="current-year"></div>
+            <button class="nav-button" id="nextYear"><span>次年度</span><span>→</span></button>
+        </div>
+    </div>
+
+    <div class="calendar-container">
+        <div class="month-grid" id="calendar-grid"></div>
+    </div>
+
+    <script>
+        const API = {
+            resources: '{{ url_for("strm.api_resources") }}',
+            annual: '{{ url_for("strm.api_annual") }}'
+        };
+
+        let currentYear = null;              // サーバから返る年度（数値）
+        const activeResources = new Set();
+
+        function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+        function loadResources() {
+            $.get(API.resources, function(resp) {
+                if (!resp.success) return;
+                const $c = $('#resource-toggles').empty();
+                resp.resources.forEach(r => {
+                    const $badge = $('<div>').addClass('resource-badge').text(r.name)
+                        .on('click', function() {
+                            if (activeResources.has(r.id)) {
+                                activeResources.delete(r.id);
+                                $(this).removeClass('active');
+                            } else {
+                                activeResources.add(r.id);
+                                $(this).addClass('active');
+                            }
+                            loadAnnual();
+                        });
+                    $c.append($badge);
+                });
+            });
+        }
+
+        function loadAnnual() {
+            let qs = currentYear ? 'year=' + currentYear : '';
+            activeResources.forEach(id => { qs += (qs ? '&' : '') + 'resources[]=' + id; });
+            $.get(API.annual + (qs ? '?' + qs : ''), function(resp) {
+                if (!resp.success) return;
+                currentYear = resp.year;
+                $('#current-year').text(resp.year_label);
+                renderCalendar(resp);
+            });
+        }
+
+        function renderCalendar(resp) {
+            const $grid = $('#calendar-grid').empty();
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+            resp.months.forEach(m => {
+                const $month = $('<div>').addClass('month-container');
+                $month.append($('<div>').addClass('month-header').text(m.label));
+                const $days = $('<div>').addClass('calendar-grid');
+
+                weekdays.forEach(w => $days.append($('<div>').addClass('calendar-day').text(w)));
+                for (let i = 0; i < m.first_weekday; i++) {
+                    $days.append($('<div>').addClass('calendar-day'));
+                }
+                for (let day = 1; day <= m.days; day++) {
+                    const wd = (m.first_weekday + day - 1) % 7;
+                    const dateStr = m.year + '-' + pad2(m.month) + '-' + pad2(day);
+                    const $cell = $('<div>').addClass('calendar-day');
+                    if (wd === 0) $cell.addClass('sunday weekend');
+                    if (wd === 6) $cell.addClass('saturday weekend');
+                    if (dateStr === resp.today) $cell.addClass('today-cell');
+                    $cell.append($('<div>').text(day));
+
+                    const c = resp.counts[dateStr];
+                    if (c && (c.am + c.pm) > 0) {
+                        const am = c.am || '・';
+                        const pm = c.pm || '・';
+                        const $count = $('<div>').addClass('reservation-count').html(
+                            '<span style="color:' + (c.am ? '#d32f2f' : '#999999') + '">' + am + '</span>|' +
+                            '<span style="color:' + (c.pm ? '#d32f2f' : '#999999') + '">' + pm + '</span>'
+                        );
+                        $cell.append($count);
+                        $cell.css('background-color', (c.am + c.pm) === 1 ? '#ffebee' : '#ffcdd2');
+                    }
+                    $days.append($cell);
+                }
+                $month.append($days);
+                $grid.append($month);
+            });
+        }
+
+        $('#prevYear').on('click', () => { currentYear -= 1; loadAnnual(); });
+        $('#nextYear').on('click', () => { currentYear += 1; loadAnnual(); });
+
+        loadResources();
+        loadAnnual();
+    </script>
+</body>
+</html>

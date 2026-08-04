@@ -1,0 +1,706 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>データセンター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.6/purify.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#1a2535;color:#eef1f5;display:flex;flex-direction:column}
+
+/* ヘッダー */
+#header{background:#0e1c2b;color:#fff;padding:8px 16px;
+        display:flex;align-items:center;gap:10px;flex-shrink:0;
+        border-bottom:2px solid #2e6da4}
+#header h1{font-size:14px;font-weight:600;color:#aed6f1}
+#story-title-hdr{font-size:15px;font-weight:700;color:#fff;flex:1}
+.nav-links{display:flex;gap:8px}
+.nav-links a{color:#7fb3d3;text-decoration:none;font-size:12px;
+             padding:3px 8px;border:1px solid #2e6da4;border-radius:3px}
+.nav-links a:hover{background:#2e6da4;color:#fff}
+
+/* 3ゾーンレイアウト */
+#workspace{display:flex;flex:1;overflow:hidden}
+
+/* ===== 左サイドバー：ミニマップ ===== */
+#sidebar{width:240px;min-width:180px;background:#111d2b;border-right:1px solid #243447;
+         display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+#sidebar-header{padding:8px 12px;font-size:11px;font-weight:600;color:#5d8aad;
+                border-bottom:1px solid #243447;letter-spacing:.05em;text-transform:uppercase}
+#minimap{flex:1;overflow-y:auto;padding:6px 0}
+#minimap::-webkit-scrollbar{width:4px}
+#minimap::-webkit-scrollbar-track{background:#111d2b}
+#minimap::-webkit-scrollbar-thumb{background:#2e6da4;border-radius:2px}
+
+.mm-node{cursor:pointer;user-select:none}
+.mm-row{display:flex;align-items:center;padding:4px 10px;gap:5px;
+        border-left:3px solid transparent;transition:background .1s}
+.mm-row:hover{background:#1a2d42}
+.mm-row.active{background:#1a3a5c;border-left-color:#4a9ede;color:#fff}
+.mm-row.ancestor{border-left-color:#2e6da4}
+.mm-num{font-size:10px;color:#5d7a8a;min-width:28px;font-family:monospace}
+.mm-row.active .mm-num{color:#aed6f1}
+.mm-icon{font-size:10px;flex-shrink:0}
+.mm-title{font-size:11px;color:#8aa0b0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.mm-row.active .mm-title{color:#e0eaf5}
+.mm-children-indicator{font-size:9px;color:#3e5a72;flex-shrink:0}
+.mm-children{padding-left:14px}
+.mm-resume-btn{display:none;font-size:9px;padding:1px 6px;border:1px solid #4a9ede;
+               border-radius:8px;color:#4a9ede;background:none;cursor:pointer;flex-shrink:0;margin-left:2px}
+.mm-resume-btn:hover{background:#1a3a5c}
+.mm-row.active .mm-resume-btn{display:inline}
+
+/* ===== 中央：コンテンツ ===== */
+#content-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#1e2d3d}
+
+/* ノードビュー */
+#node-view{flex:1;overflow-y:auto;padding:28px 40px;background:#1e2d3d}
+#node-view::-webkit-scrollbar{width:6px}
+#node-view::-webkit-scrollbar-track{background:#1e2d3d}
+#node-view::-webkit-scrollbar-thumb{background:#2e5070;border-radius:3px}
+
+/* ロードスクリーン */
+#loading-screen{flex:1;display:flex;align-items:center;justify-content:center;
+                flex-direction:column;gap:12px;color:#4a6a8a}
+#loading-screen .ls-title{font-size:18px;color:#aed6f1}
+
+/* ノードヘッダー */
+#node-num-badge{display:inline-block;background:#2e6da4;color:#fff;font-size:11px;
+                padding:2px 10px;border-radius:12px;font-family:monospace;
+                margin-bottom:12px}
+
+/* Markdown レンダリング */
+#body-md-rendered{color:#cdd8e3;line-height:1.75;margin-bottom:24px}
+#body-md-rendered h1,#body-md-rendered h2{
+  color:#aed6f1;border-bottom:1px solid #243447;padding-bottom:6px;margin:18px 0 10px}
+#body-md-rendered h3{color:#7fb3d3;margin:14px 0 6px}
+#body-md-rendered p{margin-bottom:10px}
+#body-md-rendered ul,#body-md-rendered ol{padding-left:20px;margin-bottom:10px}
+#body-md-rendered li{margin-bottom:4px}
+#body-md-rendered code{background:#0e1c2b;padding:1px 5px;border-radius:3px;font-size:11px;
+                        color:#85c1e9}
+#body-md-rendered pre{background:#0e1c2b;padding:10px;border-radius:4px;overflow:auto;
+                       margin-bottom:10px}
+#body-md-rendered pre code{padding:0;background:none}
+#body-md-rendered strong{color:#e0eaf5}
+#body-md-rendered blockquote{border-left:3px solid #2e6da4;padding-left:10px;
+                               color:#8aa0b0;margin:8px 0}
+
+/* HTML部品エリア */
+#part-html-wrap{margin-bottom:24px;background:#fff;border-radius:6px;overflow:hidden;
+                box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#part-html-inner {
+  padding: 12px;
+  overflow: hidden;
+}
+/* テーブルスタイル（部品内） */
+#part-html-inner svg {
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+  max-width: 100%;
+}
+#part-html-inner canvas {
+  width: 100% !important;
+  height: auto !important;
+}
+#part-html-inner table{border-collapse:collapse;width:100%;font-size:12px}
+#part-html-inner th{background:#2e6da4;color:#fff;padding:6px 10px;text-align:left}
+#part-html-inner td{padding:5px 10px;border:1px solid #ddd;color:#333}
+#part-html-inner tr:nth-child(even) td{background:#f5f9ff}
+
+/* 分岐ナビゲーション */
+#branch-area{margin-bottom:20px}
+#branch-area .branch-label{font-size:11px;color:#5d8aad;margin-bottom:8px;
+                            text-transform:uppercase;letter-spacing:.06em}
+#branch-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.branch-btn{padding:8px 16px;border:1px solid #2e5a7a;border-radius:4px;
+            background:#1a2d42;color:#aed6f1;cursor:pointer;font-size:12px;
+            transition:all .15s;text-align:left}
+.branch-btn:hover{background:#1a3a5c;border-color:#4a9ede;color:#fff}
+.branch-btn .bb-num{font-size:10px;color:#5d8aad;font-family:monospace;margin-right:5px}
+.branch-btn .bb-title{font-weight:600}
+
+/* 制作ノート（編集者のみ） */
+#meta-note-area{background:#2d2a0e;border:1px solid #5a5010;border-radius:4px;
+                padding:10px 14px;margin-bottom:20px;display:none}
+#meta-note-area .mn-label{font-size:10px;color:#a09040;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:6px}
+#meta-note-area .mn-body{font-size:12px;color:#c8b860;line-height:1.6;white-space:pre-wrap}
+
+/* ===== ナビゲーションバー ===== */
+#nav-bar{padding:10px 16px;background:#0e1c2b;border-top:1px solid #243447;
+         display:flex;align-items:center;gap:8px;flex-shrink:0}
+.nav-btn{padding:6px 16px;border:1px solid #2e5a7a;border-radius:4px;
+         background:#1a2d42;color:#aed6f1;cursor:pointer;font-size:12px;
+         font-weight:600;transition:all .15s;display:flex;align-items:center;gap:6px}
+.nav-btn:hover{background:#1a3a5c;border-color:#4a9ede;color:#fff}
+.nav-btn:disabled{opacity:.35;cursor:not-allowed}
+.nav-btn.nav-back{background:#111d2b}
+#nav-breadcrumb{flex:1;font-size:11px;color:#4a6a8a;text-align:center;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* トースト */
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:4px;
+       color:#fff;font-size:13px;z-index:9999;display:none;max-width:320px}
+#toast.ok {background:#27ae60}
+#toast.err{background:#e74c3c}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>📊</h1>
+  <div id="story-title-hdr">読み込み中...</div>
+  <div class="nav-links">
+    <a id="btn-report" href="#" title="全ノードをpreorder順でHTMLにまとめる">📦 包括Report</a>
+    <a id="edit-link" href="#" style="display:none">✏️ 編集</a>
+    <a href="{{ url_for('data_center.index') }}">← 一覧</a>
+  </div>
+</div>
+
+<div id="workspace">
+
+  <!-- 左：ミニマップ -->
+  <div id="sidebar">
+    <div id="sidebar-header">ナビゲーション</div>
+    <div id="minimap"></div>
+  </div>
+
+  <!-- 中央：コンテンツ -->
+  <div id="content-area">
+    <div id="node-view">
+      <div id="loading-screen">
+        <span style="font-size:36px">📖</span>
+        <div class="ls-title">ストーリーを読み込み中...</div>
+      </div>
+      <div id="story-content" style="display:none">
+        <div id="node-num-badge"></div>
+
+        <!-- HTML部品（テーブル・グラフ） -->
+        <div id="part-html-wrap" style="display:none">
+          <div id="part-html-inner"></div>
+        </div>
+
+        <!-- MD解説 -->
+        <div id="body-md-rendered"></div>
+
+        <!-- 制作ノート（編集者のみ） -->
+        <div id="meta-note-area">
+          <div class="mn-label">🗒 制作ノート（制作者のみ表示）</div>
+          <div class="mn-body" id="meta-note-body"></div>
+        </div>
+
+        <!-- 分岐ナビゲーション -->
+        <div id="branch-area" style="display:none">
+          <div class="branch-label">このノードから分岐</div>
+          <div id="branch-buttons"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ナビゲーションバー -->
+    <div id="nav-bar">
+      <button class="nav-btn nav-back" id="btn-parent" onclick="goParent()" disabled>▲ 上へ</button>
+      <button class="nav-btn" id="btn-prev" onclick="goPrev()" disabled>◀ 前</button>
+      <div id="nav-breadcrumb">—</div>
+      <button class="nav-btn" id="btn-next" onclick="goNext()" disabled>次 ▶</button>
+      <button class="nav-btn" id="btn-first-child" onclick="goFirstChild()" disabled>▼ 展開</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const STORY_ID = {{ story_id }};
+let treeData    = [];     // ルートノードリスト（children付き）
+let flatNodes   = {};     // id → node のマップ
+let currentId   = null;   // 現在表示中のノードID
+let resumeId    = null;   // 「ここから再開」用に保存したID
+let isEditor    = false;
+
+// ============================================================
+// 初期ロード
+// ============================================================
+$.get('{{ url_for("data_center.api_view_tree", story_id=0) }}'.replace('/0/','/'+STORY_ID+'/'),
+function(data){
+  if(!data.success){ showError(data.error); return; }
+  treeData = data.tree;
+  isEditor = !!data.can_edit;
+  const story = data.story;
+
+  document.title = story.title + ' - データセンター';
+  $('#story-title-hdr').text(story.title);
+
+  if(isEditor){
+    $('#edit-link').attr('href',
+      '{{ url_for("data_center.edit", story_id=0) }}'.replace('/0','/'+STORY_ID)
+    ).show();
+  }
+
+  // フラットマップ構築
+  buildFlatMap(treeData);
+
+  // ミニマップ描画
+  renderMinimap(treeData);
+
+  // 最初のノードへ
+  if(treeData.length) showNode(treeData[0].id);
+  else showEmpty();
+
+}).fail(function(xhr){
+  showError('アクセスできません（' + xhr.status + '）');
+});
+
+// ============================================================
+// フラットマップ構築（id → node）
+// ============================================================
+function buildFlatMap(nodes, parent_id=null){
+  nodes.forEach(function(n, idx){
+    flatNodes[n.id] = Object.assign({}, n, {
+      _parent_id : parent_id,
+      _siblings  : nodes,
+      _sibling_idx: idx
+    });
+    if(n.children?.length) buildFlatMap(n.children, n.id);
+  });
+}
+
+// ============================================================
+// ミニマップ描画
+// ============================================================
+function renderMinimap(nodes){
+  $('#minimap').empty();
+  nodes.forEach(function(n){ $('#minimap').append(buildMmEl(n)); });
+}
+function buildMmEl(node){
+  const $wrap = $('<div class="mm-node">');
+  const hasChildren = node.children?.length > 0;
+  const preview = extractTitle(node.body_md);
+  const $row = $('<div class="mm-row">').attr('data-id', node.id);
+  $('<span class="mm-num">').text(node.node_number).appendTo($row);
+  $('<span class="mm-icon">').text(node.has_part ? '📊' : '📝').appendTo($row);
+  $('<span class="mm-title">').text(preview||'（未記入）').appendTo($row);
+  if(hasChildren){
+    $('<span class="mm-children-indicator">').text('▸'+node.children.length).appendTo($row);
+  }
+  // 「ここから再開」ボタン
+  $('<button class="mm-resume-btn" title="ここから再開">⏎</button>')
+    .on('click', function(e){
+      e.stopPropagation();
+      resumeId = node.id;
+      toast('ノード '+node.node_number+' を再開ポイントに設定','ok');
+    }).appendTo($row);
+
+  $row.on('click', function(){ showNode(node.id); });
+  $wrap.append($row);
+  if(hasChildren){
+    const $ch = $('<div class="mm-children">');
+    node.children.forEach(function(c){ $ch.append(buildMmEl(c)); });
+    $wrap.append($ch);
+  }
+  return $wrap;
+}
+
+function updateMinimap(nodeId){
+  $('.mm-row').removeClass('active ancestor');
+  $(`.mm-row[data-id="${nodeId}"]`).addClass('active');
+  // 祖先を強調
+  let n = flatNodes[nodeId];
+  while(n?._parent_id){
+    $(`.mm-row[data-id="${n._parent_id}"]`).addClass('ancestor');
+    n = flatNodes[n._parent_id];
+  }
+  // ミニマップ内でスクロールして見えるようにする
+  const $active = $(`.mm-row[data-id="${nodeId}"]`);
+  if($active.length){
+    const mm = document.getElementById('minimap');
+    const top = $active.position().top + mm.scrollTop;
+    mm.scrollTo({top: top - 80, behavior: 'smooth'});
+  }
+}
+
+// ============================================================
+// SVG の固定サイズをレスポンシブに正規化
+// ============================================================
+function normalizeSvg(container) {
+  container.querySelectorAll('svg').forEach(function(svg) {
+    // viewBox がなければ width/height 属性から生成
+    if (!svg.getAttribute('viewBox')) {
+      const w = parseFloat(svg.getAttribute('width'))  || svg.clientWidth  || 800;
+      const h = parseFloat(svg.getAttribute('height')) || svg.clientHeight || 400;
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    }
+    // 固定サイズ属性を除去（CSS側で 100% を効かせる）
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+  });
+}
+// ============================================================
+// ノード表示
+// ============================================================
+function showNode(nodeId){
+  const n = flatNodes[nodeId];
+  if(!n){ toast('ノードが見つかりません','err'); return; }
+  currentId = nodeId;
+
+  // ミニマップ更新
+  updateMinimap(nodeId);
+
+  // コンテンツ表示
+  $('#loading-screen').hide();
+  $('#story-content').show();
+
+  // ノード番号バッジ
+  $('#node-num-badge').text('ノード ' + n.node_number);
+
+  // HTML部品
+    if(n.part_html){
+      const inner = document.getElementById('part-html-inner');
+      inner.innerHTML = DOMPurify.sanitize(n.part_html);
+      normalizeSvg(inner);          // ← 追加
+      $('#part-html-wrap').show();
+    } else {
+      $('#part-html-wrap').hide().find('#part-html-inner').empty();
+    }
+
+  // Markdown解説
+  if(n.body_md){
+    $('#body-md-rendered').html(DOMPurify.sanitize(marked.parse(n.body_md)));
+  } else {
+    $('#body-md-rendered').empty();
+  }
+
+  // 制作ノートは api_view_tree では返らないため非表示
+  $('#meta-note-area').hide();
+
+  // 分岐ボタン（子ノード）
+  const $bb = $('#branch-buttons').empty();
+  if(n.children?.length){
+    n.children.forEach(function(c){
+      const ctitle = extractTitle(c.body_md);
+      const $btn = $('<button class="branch-btn">');
+      $btn.append($('<span class="bb-num">').text(c.node_number));
+      $btn.append($('<span class="bb-title">').text(ctitle||'（'+c.node_number+'）'));
+      $btn.on('click', function(){ showNode(c.id); });
+      $bb.append($btn);
+    });
+    $('#branch-area').show();
+  } else {
+    $('#branch-area').hide();
+  }
+
+  // ナビゲーションバー更新
+  updateNavBar(n);
+
+  // ページトップへスクロール
+  document.getElementById('node-view').scrollTo({top:0, behavior:'smooth'});
+}
+
+function updateNavBar(n){
+  const siblings = n._siblings;
+  const idx      = n._sibling_idx;
+
+  // パンくず
+  const path = buildPath(n.id);
+  $('#nav-breadcrumb').text(path);
+
+  // ◀ 前（同階層の前のノード）
+  const prevNode = idx > 0 ? siblings[idx-1] : null;
+  $('#btn-prev').prop('disabled', !prevNode);
+  $('#btn-prev').off('click').on('click', function(){
+    if(prevNode) showNode(prevNode.id);
+  });
+
+  // 次 ▶
+  const nextNode = idx < siblings.length-1 ? siblings[idx+1] : null;
+  $('#btn-next').prop('disabled', !nextNode);
+  $('#btn-next').off('click').on('click', function(){
+    if(nextNode) showNode(nextNode.id);
+  });
+
+  // ▲ 上へ（親へ）
+  const hasParent = n._parent_id != null;
+  $('#btn-parent').prop('disabled', !hasParent);
+
+  // ▼ 展開（最初の子へ）
+  const hasChild = n.children?.length > 0;
+  $('#btn-first-child').prop('disabled', !hasChild);
+}
+
+function goParent(){
+  const n = flatNodes[currentId];
+  if(n?._parent_id) showNode(n._parent_id);
+}
+function goPrev(){
+  const n = flatNodes[currentId];
+  if(!n) return;
+  if(n._sibling_idx > 0) showNode(n._siblings[n._sibling_idx-1].id);
+}
+function goNext(){
+  const n = flatNodes[currentId];
+  if(!n) return;
+  if(n._sibling_idx < n._siblings.length-1) showNode(n._siblings[n._sibling_idx+1].id);
+}
+function goFirstChild(){
+  const n = flatNodes[currentId];
+  if(n?.children?.length) showNode(n.children[0].id);
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function extractTitle(bodyMd){
+  if(!bodyMd) return '';
+  const m = bodyMd.match(/^#+\s*(.+)/m);
+  return m ? m[1].trim() : bodyMd.split('\n')[0].trim().slice(0,40);
+}
+function buildPath(nodeId){
+  const parts = [];
+  let n = flatNodes[nodeId];
+  while(n){
+    parts.unshift(n.node_number + ' ' + extractTitle(n.body_md));
+    n = n._parent_id ? flatNodes[n._parent_id] : null;
+  }
+  return parts.join(' › ');
+}
+function showEmpty(){
+  $('#loading-screen').html(
+    '<span style="font-size:36px">📭</span>' +
+    '<div class="ls-title" style="color:#5d8aad">ノードがありません</div>'
+  ).show();
+}
+function showError(msg){
+  $('#loading-screen').html(
+    '<span style="font-size:36px">⚠️</span>' +
+    '<div class="ls-title" style="color:#e74c3c">'+msg+'</div>'
+  ).show();
+}
+function toast(msg, type='ok'){
+  $('#toast').attr('class',type).text(msg).fadeIn(200);
+  setTimeout(()=>$('#toast').fadeOut(400), 3000);
+}
+
+// キーボードナビゲーション
+$(document).on('keydown', function(e){
+  if(['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
+  if(e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goPrev();
+  if(e.key === 'ArrowRight' && e.shiftKey) goFirstChild();
+  if(e.key === 'Escape') goParent();
+});
+
+// ============================================================
+// 包括Report：preorder順で全ノードをHTML化
+// ============================================================
+
+// HTMLエスケープ
+function escHtml(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// preorder走査：treeData → 平坦な配列（node_number順）
+function flattenPreorder(nodes, depth, out){
+  if(!nodes) return;
+  nodes.forEach(function(n){
+    out.push({ node: n, depth: depth });
+    if(n.children?.length) flattenPreorder(n.children, depth+1, out);
+  });
+}
+
+// SVGの固定サイズを除去（part_htmlのSVGをレスポンシブに）
+function normalizeSvgInHtml(htmlStr){
+  if(!htmlStr) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = DOMPurify.sanitize(htmlStr);
+  tmp.querySelectorAll('svg').forEach(function(svg){
+    if(!svg.getAttribute('viewBox')){
+      const w = parseFloat(svg.getAttribute('width'))  || 800;
+      const h = parseFloat(svg.getAttribute('height')) || 400;
+      svg.setAttribute('viewBox', '0 0 '+w+' '+h);
+    }
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+    svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  });
+  return tmp.innerHTML;
+}
+
+// 本文MDから先頭の見出し相当を抽出（タイトル用）
+function extractNodeTitle(bodyMd){
+  if(!bodyMd) return '';
+  const m = bodyMd.match(/^#+\s*(.+)/m);
+  if(m) return m[1].trim();
+  return bodyMd.split('\n')[0].trim().slice(0,60);
+}
+
+// 包括レポートHTML生成
+function buildReportHtml(){
+  const storyTitle = $('#story-title-hdr').text() || 'ストーリー';
+  const flat = [];
+  flattenPreorder(treeData, 1, flat);
+
+  let body = '';
+  flat.forEach(function(item){
+    const n = item.node;
+    const d = item.depth;
+    const hLevel = Math.min(d+1, 6);   // depth 1 → h2, 2 → h3 ...（H1はストーリー全体）
+    const title = extractNodeTitle(n.body_md);
+
+    body += '\n<section class="node node-d'+d+'" id="node-'+escHtml(n.node_number)+'">\n';
+    body += '  <h'+hLevel+' class="node-heading"><span class="node-num">'
+              + escHtml(n.node_number) + '</span> '
+              + escHtml(title || '（無題）') + '</h'+hLevel+'>\n';
+
+    if(n.part_html){
+      body += '  <div class="part-figure">\n'
+            + normalizeSvgInHtml(n.part_html)
+            + '\n  </div>\n';
+    }
+    if(n.body_md){
+      // marked で MD → HTML
+      body += '  <div class="node-body">\n'
+            + DOMPurify.sanitize(marked.parse(n.body_md))
+            + '\n  </div>\n';
+    }
+    body += '</section>\n';
+  });
+
+  const css = `
+  *,*::before,*::after{box-sizing:border-box}
+  body{font-family:"Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+       font-size:14px;line-height:1.75;color:#222;background:#fff;
+       max-width:900px;margin:0 auto;padding:30px 24px}
+  h1.report-title{font-size:22px;border-bottom:2px solid #1a3a5c;padding-bottom:8px;
+                  color:#1a3a5c;margin-bottom:6px}
+  .report-meta{font-size:11px;color:#888;margin-bottom:24px}
+  section.node{margin:22px 0;padding:14px 18px;border-left:3px solid #2e6da4;
+               background:#fafcff;border-radius:0 4px 4px 0;page-break-inside:avoid}
+  section.node-d2{margin-left:14px;border-left-color:#4a9ede;background:#f5f9ff}
+  section.node-d3{margin-left:28px;border-left-color:#7fb3d3;background:#f0f5fa}
+  section.node-d4{margin-left:42px;border-left-color:#a0c4dc;background:#eef3f8}
+  section.node-d5{margin-left:56px;border-left-color:#c0d4e2}
+  .node-heading{color:#1a3a5c;margin:0 0 10px;display:flex;align-items:baseline;gap:8px}
+  .node-num{display:inline-block;background:#2e6da4;color:#fff;font-size:11px;
+            padding:2px 8px;border-radius:10px;font-family:Consolas,monospace;
+            font-weight:normal;flex-shrink:0}
+  h2.node-heading{font-size:18px;border-bottom:1px solid #cdd8e3;padding-bottom:5px}
+  h3.node-heading{font-size:16px}
+  h4.node-heading{font-size:14px}
+  h5.node-heading,h6.node-heading{font-size:13px}
+  .part-figure{margin:12px 0;background:#fff;padding:8px;border:1px solid #e3e8ee;
+               border-radius:4px;overflow:hidden}
+  .part-figure svg{max-width:100%;height:auto;display:block;margin:0 auto}
+  .part-figure table{border-collapse:collapse;width:100%;font-size:12px}
+  .part-figure th{background:#2e6da4;color:#fff;padding:6px 10px;text-align:left}
+  .part-figure td{padding:5px 10px;border:1px solid #ddd}
+  .part-figure tr:nth-child(even) td{background:#f5f9ff}
+  .node-body{color:#333}
+  .node-body p{margin:8px 0}
+  .node-body ul,.node-body ol{padding-left:22px;margin:8px 0}
+  .node-body li{margin-bottom:3px}
+  .node-body code{background:#eef3f8;padding:1px 5px;border-radius:3px;
+                  font-size:12px;color:#2e6da4}
+  .node-body pre{background:#f5f7fa;padding:10px;border-radius:4px;overflow:auto}
+  .node-body pre code{background:none;padding:0}
+  .node-body blockquote{border-left:3px solid #cdd8e3;padding-left:12px;
+                         color:#666;margin:8px 0}
+  .node-body h1,.node-body h2,.node-body h3{display:none}  /* MD先頭の見出しは重複するので隠す */
+  @media print{
+    body{max-width:none;padding:10mm}
+    section.node{page-break-inside:avoid}
+  }
+  `;
+
+  const now = new Date();
+  const ts = now.getFullYear()+'-'
+           + String(now.getMonth()+1).padStart(2,'0')+'-'
+           + String(now.getDate()).padStart(2,'0')+' '
+           + String(now.getHours()).padStart(2,'0')+':'
+           + String(now.getMinutes()).padStart(2,'0');
+
+  const html =
+'<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n'
++ '<title>'+escHtml(storyTitle)+' - 包括Report</title>\n'
++ '<style>'+css+'</style>\n</head>\n<body>\n'
++ '<h1 class="report-title">'+escHtml(storyTitle)+'</h1>\n'
++ '<div class="report-meta">包括レポート（preorder順）／ 生成: '+ts
++ ' ／ ノード数: '+flat.length+'</div>\n'
++ body
++ '\n</body>\n</html>\n';
+
+  return { html: html, count: flat.length, title: storyTitle };
+}
+
+// クリップボードへコピー（フォールバック付き）
+async function copyToClipboard(text){
+  if(navigator.clipboard && window.isSecureContext){
+    try{ await navigator.clipboard.writeText(text); return true; }
+    catch(e){ /* fall through */ }
+  }
+  // フォールバック：textarea経由
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+  return ok;
+}
+
+// ファイルとしてダウンロード
+function downloadHtml(html, filename){
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// ボタンクリック：クリップボードへコピー＋ダウンロード
+$('#btn-report').on('click', async function(e){
+  e.preventDefault();
+  if(!treeData.length){ toast('ノードがありません','err'); return; }
+
+  try{
+    const result = buildReportHtml();
+    const safeTitle = result.title.replace(/[\\\/:*?"<>|]/g,'_').slice(0,60);
+    const filename = safeTitle + '_report.html';
+
+    // 1) クリップボードへコピー
+    const copied = await copyToClipboard(result.html);
+    // 2) ファイルとしてダウンロードも実行
+    downloadHtml(result.html, filename);
+
+    if(copied){
+      toast('包括レポート（'+result.count+'ノード）をクリップボードにコピー＆ダウンロードしました','ok');
+    } else {
+      toast('ダウンロードしました（クリップボードはブラウザ制限で不可）','ok');
+    }
+  } catch(err){
+    console.error(err);
+    toast('レポート生成に失敗：'+err.message,'err');
+  }
+});
+</script>
+</body>
+</html>
+

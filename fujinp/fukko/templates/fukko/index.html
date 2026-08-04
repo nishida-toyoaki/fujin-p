@@ -1,0 +1,235 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ふっこ - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            background: #f0f4f8;
+            color: #333;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+        .header {
+            display: flex; align-items: center; gap: 12px;
+            background: #fff; border-radius: 10px; padding: 14px 18px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px;
+        }
+        .header h1 { font-size: 1.3em; flex: 1; }
+        .back-btn {
+            text-decoration: none; color: #4a6785; font-size: 0.9em;
+            padding: 6px 10px; border: 1px solid #cdd8e3; border-radius: 6px;
+        }
+        .back-btn:hover { background: #eef3f8; }
+        .model-badge {
+            font-size: 0.75em; color: #666; background: #eef3f8;
+            padding: 4px 10px; border-radius: 12px;
+        }
+        #result {
+            display: none; padding: 10px 14px; border-radius: 8px;
+            margin-bottom: 10px; font-size: 0.9em;
+        }
+        #result.success { background: #e6f6e6; color: #256b25; }
+        #result.error { background: #fdeaea; color: #a33; }
+
+        .chat-area {
+            background: #fff; border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            display: flex; flex-direction: column;
+            height: calc(100vh - 210px); min-height: 380px;
+        }
+        #messages { flex: 1; overflow-y: auto; padding: 18px; }
+        .msg { margin-bottom: 14px; display: flex; flex-direction: column; }
+        .msg.user { align-items: flex-end; }
+        .msg.assistant { align-items: flex-start; }
+        .bubble {
+            max-width: 78%; padding: 10px 14px; border-radius: 12px;
+            line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+        }
+        .msg.user .bubble { background: #4a6785; color: #fff; border-bottom-right-radius: 4px; }
+        .msg.assistant .bubble { background: #eef3f8; border-bottom-left-radius: 4px; }
+        .meta { font-size: 0.72em; color: #999; margin-top: 4px; }
+        .msg.loading .bubble { color: #888; font-style: italic; }
+
+        .input-area {
+            display: flex; gap: 8px; padding: 12px;
+            border-top: 1px solid #e3eaf1;
+        }
+        #user-input {
+            flex: 1; resize: none; padding: 10px 12px;
+            border: 1px solid #cdd8e3; border-radius: 8px;
+            font-family: inherit; font-size: 1em; height: 60px;
+        }
+        #user-input:focus { outline: none; border-color: #4a6785; }
+        .btn {
+            border: none; border-radius: 8px; cursor: pointer;
+            font-size: 0.95em; padding: 0 18px;
+        }
+        .btn-send { background: #4a6785; color: #fff; }
+        .btn-send:hover { background: #3a536b; }
+        .btn-send:disabled { background: #aab8c6; cursor: not-allowed; }
+        .btn-new {
+            background: #fff; color: #4a6785; border: 1px solid #cdd8e3;
+            font-size: 0.85em; padding: 6px 12px; border-radius: 6px;
+        }
+        .btn-new:hover { background: #eef3f8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="{{ url_for('guest.dashboard') }}" class="back-btn">← 戻る</a>
+            <h1>🐣 ふっこ</h1>
+            <span class="model-badge">モデル: {{ model }}</span>
+            <button class="btn-new btn" id="btn-new">🔄 新しい会話</button>
+        </div>
+
+        <div id="result"></div>
+
+        <div class="chat-area">
+            <div id="messages"></div>
+            <div class="input-area">
+                <textarea id="user-input"
+                    placeholder="メッセージを入力（Enterで送信 / Shift+Enterで改行）"></textarea>
+                <button class="btn btn-send" id="btn-send">送信</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showResult(message, isError) {
+            const $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(() => $r.fadeOut(), 5000);
+        }
+
+        function scrollToBottom() {
+            const $m = $('#messages');
+            $m.scrollTop($m[0].scrollHeight);
+        }
+
+        // メッセージ1件を画面に追加（日時は常に文字列で受け取る）
+        function appendMessage(role, content, meta) {
+            const $msg = $('<div>').addClass('msg').addClass(role);
+            $msg.append($('<div>').addClass('bubble').text(content));
+            if (meta) {
+                $msg.append($('<div>').addClass('meta').text(meta));
+            }
+            $('#messages').append($msg);
+            scrollToBottom();
+        }
+
+        function buildMeta(m) {
+            let meta = m.created_at || '';
+            if (m.role === 'assistant' && m.output_tokens != null) {
+                meta += '  [' + (m.model || '') +
+                        ' / in:' + m.input_tokens +
+                        ' out:' + m.output_tokens + ' tokens]';
+            }
+            return meta;
+        }
+
+        // 履歴の読み込み（ページ再読み込み時）
+        function loadHistory() {
+            $.ajax({
+                url: '{{ url_for("fukko.api_history") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (!resp.success) return;
+                    $('#messages').empty();
+                    resp.messages.forEach(function(m) {
+                        appendMessage(m.role, m.content, buildMeta(m));
+                    });
+                }
+            });
+        }
+
+        // 送信
+        function sendMessage() {
+            const text = $('#user-input').val().trim();
+            if (!text) return;
+
+            $('#user-input').val('');
+            $('#btn-send').prop('disabled', true);
+            appendMessage('user', text, '送信中...');
+
+            const $loading = $('<div>').addClass('msg assistant loading')
+                .append($('<div>').addClass('bubble').text('ふっこが考えています...'));
+            $('#messages').append($loading);
+            scrollToBottom();
+
+            $.ajax({
+                url: '{{ url_for("fukko.api_chat") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ message: text }),
+                success: function(resp) {
+                    $loading.remove();
+                    if (resp.success) {
+                        // 直前のユーザメッセージのメタを確定日時に更新
+                        $('#messages .msg.user').last().find('.meta').text(resp.sent_at);
+                        appendMessage('assistant', resp.reply, buildMeta({
+                            role: 'assistant',
+                            created_at: resp.replied_at,
+                            model: resp.model,
+                            input_tokens: resp.input_tokens,
+                            output_tokens: resp.output_tokens
+                        }));
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    $loading.remove();
+                    let msg = '通信エラー';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        msg = xhr.responseJSON.error;
+                    }
+                    showResult(msg, true);
+                },
+                complete: function() {
+                    $('#btn-send').prop('disabled', false);
+                    $('#user-input').focus();
+                }
+            });
+        }
+
+        $('#btn-send').on('click', sendMessage);
+
+        $('#user-input').on('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 新しい会話
+        $('#btn-new').on('click', function() {
+            $.ajax({
+                url: '{{ url_for("fukko.api_new") }}',
+                method: 'POST',
+                success: function(resp) {
+                    if (resp.success) {
+                        $('#messages').empty();
+                        showResult('新しい会話を開始しました', false);
+                    }
+                }
+            });
+        });
+
+        loadHistory();
+        $('#user-input').focus();
+    </script>
+</body>
+</html>

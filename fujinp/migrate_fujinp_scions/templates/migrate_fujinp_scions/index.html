@@ -1,0 +1,186 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>さいまる - FUJIN-P マイグレーション支援</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         "Hiragino Sans", "Yu Gothic UI", sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            min-height: 100vh;
+            padding: 15px;
+            color: #1e293b;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        .header {
+            background: white;
+            padding: 18px 25px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header h1 { font-size: 1.35rem; color: #1e293b; }
+        .header .subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .back-btn {
+            padding: 8px 16px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .back-btn:hover { background: #4f46e5; }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+        @media (max-width: 600px) {
+            .choice-grid { grid-template-columns: 1fr; }
+        }
+        .choice-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px 26px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: transform 0.12s, box-shadow 0.12s;
+        }
+        .choice-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+        }
+        .choice-icon { font-size: 3rem; margin-bottom: 12px; }
+        .choice-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .choice-desc {
+            font-size: 0.9rem;
+            color: #64748b;
+            line-height: 1.7;
+        }
+        .choice-card.exporter { border-top: 5px solid #6366f1; }
+        .choice-card.importer { border-top: 5px solid #10b981; }
+
+        .intro {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 26px;
+            margin-bottom: 18px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            font-size: 0.9rem;
+            color: #475569;
+            line-height: 1.8;
+        }
+        .intro strong { color: #1e293b; }
+        .btn-return {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; background: #ef4444; color: #fff;
+            border-radius: 20px; text-decoration: none;
+            font-size: 0.85rem; font-weight: 800; white-space: nowrap;
+        }
+        .btn-return:hover { background: #dc2626; color: #fff; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <div class="header-left">
+            <span style="font-size:1.8rem">🚚</span>
+            <div>
+                <h1>さいまる</h1>
+                <div class="subtitle">FUJIN-P マイグレーション支援ツール</div>
+            </div>
+        </div>
+        <a href="{{ url_for('migrate_fujinp_scions.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+
+    </div>
+
+    <div class="intro">
+        「さいまる」は FUJIN-P サイトを別環境へ移行するためのツールです。
+        <strong>エクスポーター</strong>でサイトを丸ごとパッケージ化して登録し、
+        <strong>インポーター</strong>で登録済みパッケージを受け取ります。
+    </div>
+
+    <div class="choice-grid">
+        {% if is_admin %}
+        <a href="{{ url_for('migrate_fujinp_scions.exporter') }}"
+           class="choice-card exporter">
+            <div class="choice-icon">📦</div>
+            <div class="choice-title">エクスポーター <span style="font-size:0.7rem;background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;vertical-align:middle">admin 専用</span></div>
+            <div class="choice-desc">
+                実行母体の FUJIN-P サイトを丸ごとコピーした
+                エクスポートパッケージを作成・レビュー・登録します。
+                移行元サイトの admin が使用します。
+            </div>
+        </a>
+        {% else %}
+        <div class="choice-card exporter" style="opacity:0.55;cursor:not-allowed">
+            <div class="choice-icon">📦</div>
+            <div class="choice-title">エクスポーター <span style="font-size:0.7rem;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;vertical-align:middle">admin 専用</span></div>
+            <div class="choice-desc">
+                パッケージの作成・登録はサイトの admin のみが行えます。
+                パッケージの用意が必要な場合は admin にご連絡ください。
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_download %}
+        <a href="{{ url_for('migrate_fujinp_scions.importer') }}"
+           class="choice-card importer">
+            <div class="choice-icon">📥</div>
+            <div class="choice-title">インポーター{% if not allow_guest_download %} <span style="font-size:0.7rem;background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;vertical-align:middle">admin 専用</span>{% endif %}</div>
+            <div class="choice-desc">
+                登録済みのエクスポートパッケージを一覧から選び、
+                ZIP ファイルとしてダウンロードします。
+            </div>
+        </a>
+        {% else %}
+        <div class="choice-card importer" style="opacity:0.55;cursor:not-allowed">
+            <div class="choice-icon">📥</div>
+            <div class="choice-title">インポーター <span style="font-size:0.7rem;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;vertical-align:middle">admin 専用</span></div>
+            <div class="choice-desc">
+                パッケージにはサイト全体のソースコードが含まれるため、
+                一覧・ダウンロードは admin のみに限定されています。
+                パッケージが必要な場合は admin にご連絡ください。
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if not is_admin and not can_download %}
+    <div class="intro" style="margin-top:18px;font-size:0.85rem">
+        🔒 現在の設定では、さいまるの機能はサイトの admin に限定されています。
+        配布範囲を広げる場合は、サイト管理者が <code>routes.py</code> の
+        <code>ALLOW_GUEST_DOWNLOAD</code> を <code>True</code> に変更します。
+    </div>
+    {% endif %}
+
+</div>
+</body>
+</html>

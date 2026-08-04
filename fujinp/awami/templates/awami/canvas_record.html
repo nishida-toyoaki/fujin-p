@@ -1,0 +1,134 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>討論の記録 - あわみ</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.6; padding: 16px;
+       height: 100vh; display: flex; flex-direction: column; }
+h1 { font-size: 1.12em; margin-bottom: 2px; }
+.sub { color: #7a8694; font-size: .8em; margin-bottom: 12px; }
+.toolbar { margin-bottom: 10px; display: flex; gap: 8px; align-items: center; }
+.btn { padding: 5px 12px; border: 1px solid #ccd4dc; border-radius: 6px;
+       background: #fff; font-size: .82em; cursor: pointer; font-family: inherit; }
+.btn:hover { background: #eef2f6; }
+.cols { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.col h2 { font-size: .95em; padding: 8px 12px; background: #2b3440; color: #fff;
+          border-radius: 8px 8px 0 0; }
+.col .body { flex: 1; overflow-y: auto; background: #fff;
+             border: 1px solid #dde3ea; border-top: none;
+             border-radius: 0 0 8px 8px; padding: 10px 14px; }
+.empty { color: #98a3ae; font-size: .88em; padding: 16px 4px; }
+/* 自由意見 */
+.wi { border-bottom: 1px solid #eef2f6; padding: 8px 2px; }
+.wi .meta { color: #98a3ae; font-size: .74em; }
+.wi .meta .qlabel { color: #6b86a5; }
+.wi .body-text { white-space: pre-wrap; font-size: .95em; margin-top: 1px; }
+/* n択 */
+.cp { border: 1px solid #e4e9ef; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.cp .meta { color: #98a3ae; font-size: .74em; margin-bottom: 3px; }
+.cp .q { font-weight: bold; font-size: .96em; margin-bottom: 6px; }
+.chip { display: inline-block; font-size: .7em; padding: 1px 8px; border-radius: 10px; }
+.chip.open { background: #e4f3e8; color: #21663a; }
+.chip.closed { background: #eef2f6; color: #7a8694; }
+.bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.bar-label { width: 34%; min-width: 90px; font-size: .84em; text-align: right; }
+.bar-track { flex: 1; background: #eef2f6; border-radius: 4px; height: 16px; }
+.bar-fill { background: #4a7ebb; height: 100%; border-radius: 4px;
+            transition: width .4s; min-width: 2px; }
+.bar-count { width: 36px; font-size: .86em; font-weight: bold; }
+.cp .total { color: #98a3ae; font-size: .76em; margin-top: 2px; }
+@media (max-width: 700px) { .cols { flex-direction: column; } }
+</style>
+</head>
+<body>
+<h1>📜 討論の記録</h1>
+<div class="sub">{{ canvas.name }}　／　3秒ごとに自動更新</div>
+<div class="toolbar">
+    <button class="btn" id="btnOrder">表示順：新しい順</button>
+</div>
+
+<div class="cols">
+    <div class="col">
+        <h2>✍ 自由意見の流れ</h2>
+        <div class="body" id="wiCol"><div class="empty">まだ意見はありません</div></div>
+    </div>
+    <div class="col">
+        <h2>🗳 投票（n択）とその結果</h2>
+        <div class="body" id="cpCol"><div class="empty">まだ投票はありません</div></div>
+    </div>
+</div>
+
+<script>
+const CANVAS_ID = {{ canvas.id }};
+let newestFirst = true;
+let lastJson = null;
+
+$('#btnOrder').on('click', function() {
+    newestFirst = !newestFirst;
+    $(this).text('表示順：' + (newestFirst ? '新しい順' : '古い順'));
+    if (lastJson) render(lastJson);
+});
+
+function render(d) {
+    lastJson = d;
+    // 自由意見の流れ
+    const $w = $('#wiCol').empty();
+    let ws = d.writeins.slice();
+    if (newestFirst) ws.reverse();
+    if (ws.length === 0) $w.append($('<div class="empty">').text('まだ意見はありません'));
+    ws.forEach(function(x) {
+        const $meta = $('<div class="meta">')
+            .append(document.createTextNode('#' + x.no + '　' + x.time + '　'))
+            .append($('<span class="qlabel">').text(x.question ? '〔' + x.question + '〕' : ''));
+        $w.append($('<div class="wi">')
+            .append($meta)
+            .append($('<div class="body-text">').text(x.content)));
+    });
+    // n択の並び
+    const $c = $('#cpCol').empty();
+    let cs = d.choice_polls.slice();
+    if (newestFirst) cs.reverse();
+    if (cs.length === 0) $c.append($('<div class="empty">').text('まだ投票はありません'));
+    cs.forEach(function(p) {
+        const maxN = Math.max.apply(null, p.options.map(o => o.count).concat([1]));
+        const $card = $('<div class="cp">');
+        $card.append($('<div class="meta">').text(p.time + '　'));
+        $card.append($('<div class="q">')
+            .text(p.question + '　')
+            .append($('<span class="chip ' + p.status + '">')
+                .text(p.status === 'open' ? '受付中' : '締切')));
+        p.options.forEach(function(o) {
+            const pct = Math.round(o.count / maxN * 100);
+            $card.append($('<div class="bar-row">')
+                .append($('<div class="bar-label">').text(o.label))
+                .append($('<div class="bar-track">')
+                    .append($('<div class="bar-fill">').css('width', pct + '%')))
+                .append($('<div class="bar-count">').text(o.count)));
+        });
+        $card.append($('<div class="total">').text('投票数：' + p.total));
+        $c.append($card);
+    });
+}
+
+function load() {
+    $.getJSON('/awami/api/canvas/' + CANVAS_ID + '/record', function(d) {
+        if (d && d.success) render(d);
+    });
+}
+load();
+setInterval(load, 3000);
+</script>
+</body>
+</html>

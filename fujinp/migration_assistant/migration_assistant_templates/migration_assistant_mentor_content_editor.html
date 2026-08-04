@@ -1,0 +1,1543 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コンテンツ編集 - まいあし師匠</title>
+
+    <!-- KaTeX CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+    <style>
+        :root {
+            --primary-color: #6a1b9a;
+            --accent-color: #ab47bc;
+            --success-color: #4caf50;
+            --border-color: #ddd;
+            --bg-color: #f5f5f5;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            background: var(--bg-color);
+            min-height: 100vh;
+        }
+
+        /* ヘッダー */
+        #header {
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        #header h1 {
+            font-size: 22px;
+            margin: 0;
+            font-weight: 600;
+        }
+        .header-nav a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: 0.2s;
+            margin-left: 10px;
+        }
+        .header-nav a:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* メインコンテナ */
+        #main-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .info-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-box h2 {
+            margin: 0 0 10px 0;
+            color: var(--primary-color);
+            font-size: 18px;
+        }
+        .info-box p {
+            margin: 0;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        /* Phaseカード */
+        .phase-card {
+            background: white;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            margin-bottom: 30px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .phase-header {
+            background: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .phase-number {
+            font-size: 24px;
+            font-weight: bold;
+            background: rgba(255,255,255,0.2);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .phase-title-display {
+            flex: 1;
+            color: white;
+            padding: 8px 12px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .btn-edit-phase-title {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.5);
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        .btn-edit-phase-title:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Stageアイテム */
+        .stages-list {
+            padding: 20px;
+        }
+        .stage-item {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .stage-item:last-child {
+            border-bottom: none;
+        }
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .stage-number {
+            background: var(--accent-color);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .stage-title-display {
+            flex: 1;
+            padding: 6px 12px;
+            font-size: 15px;
+            color: #333;
+            font-weight: 500;
+        }
+        .btn-edit-stage-title {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        .btn-edit-stage-title:hover {
+            background: #9c27b0;
+        }
+
+        /* Stepリスト */
+        .steps-list {
+            padding-left: 40px;
+        }
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .step-number {
+            background: #e0e0e0;
+            color: #555;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .step-title-display {
+            flex: 1;
+            padding: 4px 8px;
+            font-size: 14px;
+            color: #333;
+        }
+        .btn-edit-title {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            transition: 0.2s;
+            margin-right: 5px;
+        }
+        .btn-edit-title:hover {
+            background: #9c27b0;
+        }
+        .btn-edit-detail {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        .btn-edit-detail:hover {
+            background: var(--accent-color);
+        }
+        .btn-delete {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+            transition: 0.2s;
+            margin-left: 5px;
+        }
+        .btn-delete:hover {
+            background: #d32f2f;
+        }
+        .btn-add {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            transition: 0.2s;
+            margin-top: 10px;
+        }
+        .btn-add:hover {
+            background: #45a049;
+        }
+        .add-phase-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .add-stage-container, .add-step-container {
+            margin-top: 15px;
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-box {
+            background: white;
+            width: 95%;
+            max-width: 1400px;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 15px 25px;
+            border-bottom: 2px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 0;
+        }
+        .modal-body {
+            padding: 0;
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 2カラムレイアウト */
+        .editor-toolbar {
+            padding: 10px 15px;
+            background: #f8f8f8;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+        .editor-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .editor-pane, .preview-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .editor-pane {
+            border-right: 2px solid #e0e0e0;
+        }
+        .pane-label {
+            padding: 10px 15px;
+            background: #f0f0f0;
+            font-weight: bold;
+            font-size: 13px;
+            color: #555;
+            border-bottom: 1px solid #ddd;
+        }
+        .editor-content, .preview-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Markdown編集エリア */
+        .markdown-editor {
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            border: none;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+        }
+        .markdown-editor:focus {
+            outline: none;
+        }
+
+        /* プレビューエリア */
+        .preview-content {
+            padding: 20px;
+            background: #fafafa;
+        }
+        .preview-placeholder {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .modal-footer {
+            padding: 15px 25px;
+            border-top: 2px solid #f0f0f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* ボタン */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--accent-color);
+        }
+        .btn-secondary {
+            background: white;
+            border: 1px solid #ccc;
+            color: #555;
+        }
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+        .btn-info {
+            background: #2196f3;
+            color: white;
+        }
+        .btn-info:hover {
+            background: #1976d2;
+        }
+
+        /* 保存ステータス */
+        .save-status {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 12px 20px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        .save-status.show {
+            display: flex;
+        }
+        .save-status.saving {
+            background: #2196f3;
+            color: white;
+        }
+        .save-status.saved {
+            background: var(--success-color);
+            color: white;
+        }
+        .save-status.error {
+            background: #f44336;
+            color: white;
+        }
+
+        /* ローディング */
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f0f0f0;
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 進捗集計 */
+        .progress-summary {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .progress-summary h2 {
+            font-size: 18px;
+            margin: 0 0 15px 0;
+            color: var(--primary-color);
+        }
+        .progress-stats {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: #666;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .stat-未着手 .stat-value { color: #999; }
+        .stat-取り組み中 .stat-value { color: #2196F3; }
+        .stat-苦戦 .stat-value { color: #FF9800; }
+        .stat-完了 .stat-value { color: #4CAF50; }
+        .stat-放棄 .stat-value { color: #f44336; }
+        /* ★★★ 新規追加: 画像アップロードボタン用のスタイル ★★★ */
+        .btn-upload {
+            background: #ff9800;
+            color: white;
+        }
+        .btn-upload:hover {
+            background: #f57c00;
+        }
+        .btn-link {
+            background: #00bcd4;
+            color: white;
+        }
+        .btn-link:hover {
+            background: #0097a7;
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>👨‍🏫 コンテンツ編集 - まいあし師匠</h1>
+    <div class="header-nav">
+        <a href="/migration_assistant/mentor_dashboard">📊 ダッシュボード</a>
+        <a href="/migration_assistant">🏠 メインページ</a>
+    </div>
+</div>
+
+<div id="main-container">
+    <div class="info-box">
+        <h2>📝 編集ガイド</h2>
+        <p>
+            このページでは、弟子に表示されるインストラクションを編集できます。
+            Phase/Stageのタイトルは直接編集でき、Stepの詳細は「詳細編集」ボタンからMarkdown形式で記述できます。
+            変更は自動的に保存されます。
+        </p>
+    </div>
+
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>コンテンツを読み込み中...</p>
+    </div>
+
+    <div id="content-container" style="display:none;"></div>
+</div>
+
+<!-- Step詳細編集モーダル -->
+<div id="modal-edit-detail" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 class="modal-title" id="detail-modal-title">Step詳細編集</h3>
+            <button class="btn btn-secondary" onclick="confirmCloseDetailModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="editor-toolbar">
+                <button class="btn btn-info" onclick="updatePreview()">
+                    <span id="preview-btn-text">👁️ プレビュー更新</span>
+                </button>
+                <button class="btn btn-upload" onclick="document.getElementById('imageInput').click()">
+                    🖼️ 画像アップロード
+                </button>
+                <button class="btn btn-link" onclick="insertLink()">
+                    🔗 リンク挿入
+                </button>
+            </div>
+            <div class="editor-container">
+                <div class="editor-pane">
+                    <div class="pane-label">📝 Markdown編集</div>
+                    <div class="editor-content">
+                        <textarea id="detail-markdown" class="markdown-editor" placeholder="Markdown形式で詳細を記述してください..."></textarea>
+                    </div>
+                </div>
+                <div class="preview-pane">
+                    <div class="pane-label">👁️ プレビュー</div>
+                    <div class="preview-content" id="preview-area">
+                        <div class="preview-placeholder">
+                            <p>「プレビュー更新」ボタンを押してプレビューを表示してください</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="confirmCloseDetailModal()">キャンセル</button>
+            <button class="btn btn-success" onclick="saveStepDetailOnly()">💾 保存</button>
+            <button class="btn btn-primary" onclick="saveStepDetailAndClose()">💾 保存して閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- Stepタイトル編集モーダル -->
+<div id="modal-edit-title" class="modal">
+    <div class="modal-box" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Stepタイトル編集</h3>
+            <button class="btn btn-secondary" onclick="closeTitleModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 25px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold; color: var(--primary-color);">
+                タイトル
+            </label>
+            <input type="text"
+                   id="title-input"
+                   style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; font-size: 14px;"
+                   placeholder="Stepタイトルを入力してください">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeTitleModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="saveStepTitle()">💾 保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Phaseタイトル編集モーダル -->
+<div id="modal-edit-phase-title" class="modal">
+    <div class="modal-box" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Phaseタイトル編集</h3>
+            <button class="btn btn-secondary" onclick="closePhaseTitleModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 25px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold; color: var(--primary-color);">
+                タイトル
+            </label>
+            <input type="text"
+                   id="phase-title-input"
+                   style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; font-size: 14px;"
+                   placeholder="Phaseタイトルを入力してください">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closePhaseTitleModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="savePhaseTitle()">💾 保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Stageタイトル編集モーダル -->
+<div id="modal-edit-stage-title" class="modal">
+    <div class="modal-box" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Stageタイトル編集</h3>
+            <button class="btn btn-secondary" onclick="closeStageTitleModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 25px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold; color: var(--primary-color);">
+                タイトル
+            </label>
+            <input type="text"
+                   id="stage-title-input"
+                   style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; font-size: 14px;"
+                   placeholder="Stageタイトルを入力してください">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeStageTitleModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="saveStageTitle()">💾 保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ★★★ 新規追加: 隠しファイル入力 ★★★ -->
+<input type="file" id="imageInput" accept="image/*" style="display: none;">
+
+<!-- 保存ステータス -->
+<div id="save-status" class="save-status">
+    <span id="save-message">保存中...</span>
+</div>
+
+<!-- KaTeX JavaScript -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+<script>
+// --- 定数定義 ---
+const COURSE_ID = {{ course_id }};
+const API_BASE = '/migration_assistant/api'; // 汎用API（プレビュー等）用
+const API_V2 = '/migration_assistant/api/v2'; // コースコンテンツ操作用
+
+let contentData = {};
+let progressByStep = {};
+let currentEditingStep = null;
+let currentEditingTitleStep = null;
+let currentEditingPhase = null;
+let currentEditingStage = null;
+let saveTimeout = null;
+let isUpdatingPreview = false;
+let hasUnsavedChanges = false; // 未保存変更フラグのみ残す
+
+// ★★★ 新規追加: 画像アップロード処理 ★★★
+document.getElementById('imageInput').addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // ファイルサイズチェック（10MB制限）
+    if (file.size > 10 * 1024 * 1024) {
+        alert('ファイルサイズは10MB以下にしてください');
+        return;
+    }
+
+    // 画像ファイルかチェック
+    if (!file.type.startsWith('image/')) {
+        alert('画像ファイルを選択してください');
+        return;
+    }
+
+    try {
+        showSaveStatus('saving');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE}/upload_image`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // エディタに画像マークダウンを挿入
+            const imageMarkdown = `![${result.filename}](${result.url})`;
+            insertTextAtCursor(imageMarkdown);
+            showSaveStatus('saved');
+            // プレビューを自動更新
+            updatePreview();
+        } else {
+            alert(result.error || 'アップロードに失敗しました');
+            showSaveStatus('error');
+        }
+    } catch (error) {
+        console.error('Upload error:', error);
+        alert('アップロードに失敗しました');
+        showSaveStatus('error');
+    } finally {
+        // input要素をクリア
+        event.target.value = '';
+    }
+});
+
+// ★★★ 新規追加: リンク挿入機能 ★★★
+function insertLink() {
+    const url = prompt('リンク先のURLを入力してください:');
+    if (!url) return;
+
+    const text = prompt('リンクテキストを入力してください:', url);
+    if (text === null) return; // キャンセルされた場合
+
+    const linkMarkdown = `[${text || url}](${url})`;
+    insertTextAtCursor(linkMarkdown);
+
+    // プレビューを自動更新
+    updatePreview();
+}
+
+// ★★★ 新規追加: カーソル位置にテキストを挿入 ★★★
+function insertTextAtCursor(text) {
+    const editor = document.getElementById('detail-markdown');
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const value = editor.value;
+
+    editor.value = value.substring(0, start) + text + value.substring(end);
+    editor.selectionStart = editor.selectionEnd = start + text.length;
+    editor.focus();
+}
+
+// 初期化
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadContent();
+    await loadProgressByStep();  // 追加
+});
+
+// コンテンツ読み込み
+async function loadContent() {
+    try {
+        // ★ 取得先を新エンドポイントに変更
+        const res = await fetch(`${API_V2}/courses/${COURSE_ID}/content`);
+        const data = await res.json();
+
+        if (!data.success) {
+            alert('コンテンツの読み込みに失敗しました: ' + data.error);
+            return;
+        }
+
+        contentData = data.content; // ここに新テーブル(course_...)のデータが入る
+        renderContent();
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content-container').style.display = 'block';
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// コンテンツ描画
+// コンテンツ描画（配列構造対応版）
+function renderContent() {
+    const container = document.getElementById('content-container');
+    container.innerHTML = '';
+
+    // 1. 冒頭のPhase追加ボタン
+    const addPhaseFirst = document.createElement('div');
+    addPhaseFirst.className = 'add-phase-container';
+    addPhaseFirst.innerHTML = `
+        <button class="btn-add" onclick="addPhase('first', 0)">
+            ➕ Phase追加（最初）
+        </button>
+    `;
+    container.appendChild(addPhaseFirst);
+
+    // 2. Phaseの描画（contentDataが配列なので、順番通りに処理されます）
+    contentData.forEach(phase => {
+        const phaseCard = document.createElement('div');
+        phaseCard.className = 'phase-card';
+
+        // --- Phaseヘッダー ---
+        const phaseHeader = document.createElement('div');
+        phaseHeader.className = 'phase-header';
+        phaseHeader.innerHTML = `
+            <div class="phase-number">${phase.number}</div>
+            <span class="phase-title-display">${esc(phase.title)}</span>
+            <button class="btn-edit-phase-title" onclick="openPhaseTitleEditor('${phase.id}', '${esc(phase.title)}')">
+                ✏️ 編集
+            </button>
+            <button class="btn-delete" onclick="deletePhase('${phase.id}')">
+                🗑️ 削除
+            </button>
+        `;
+        phaseCard.appendChild(phaseHeader);
+
+        // --- Stageリスト ---
+        const stagesList = document.createElement('div');
+        stagesList.className = 'stages-list';
+
+        // Stage追加ボタン（最初）
+        const addStageFirst = document.createElement('div');
+        addStageFirst.className = 'add-stage-container';
+        addStageFirst.innerHTML = `
+            <button class="btn-add" onclick="addStage('${phase.id}', 'first', 0)">
+                ➕ Stage追加（最初）
+            </button>
+        `;
+        stagesList.appendChild(addStageFirst);
+
+        // Stageの描画
+        phase.stages.forEach(stage => {
+            const stageDiv = document.createElement('div');
+            stageDiv.className = 'stage-item';
+
+            // Stageヘッダー
+            const stageHeader = document.createElement('div');
+            stageHeader.className = 'stage-header';
+            stageHeader.innerHTML = `
+                <div class="stage-number">${stage.number}</div>
+                <span class="stage-title-display">${esc(stage.title)}</span>
+                <button class="btn-edit-stage-title" onclick="openStageTitleEditor('${phase.id}', '${stage.id}', '${esc(stage.title)}')">
+                    ✏️ 編集
+                </button>
+                <button class="btn-delete" onclick="deleteStage('${phase.id}', '${stage.id}')">
+                    🗑️ 削除
+                </button>
+            `;
+            stageDiv.appendChild(stageHeader);
+
+            // Stepリスト
+            const stepsList = document.createElement('div');
+            stepsList.className = 'steps-list';
+
+            // Step追加ボタン（最初）
+            const addStepFirst = document.createElement('div');
+            addStepFirst.className = 'add-step-container';
+            addStepFirst.innerHTML = `
+                <button class="btn-add" onclick="addStep('${phase.id}', '${stage.id}', 'first', 0)">
+                    ➕ Step追加（最初）
+                </button>
+            `;
+            stepsList.appendChild(addStepFirst);
+
+            // Stepの描画
+            stage.steps.forEach(step => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = 'step-item';
+                stepDiv.innerHTML = `
+                    <div class="step-number">${step.number}</div>
+                    <span class="step-title-display">${esc(step.title)}</span>
+                    <button class="btn-edit-title" onclick="openTitleEditor('${phase.id}', '${stage.id}', '${step.id}', '${esc(step.title)}')">
+                        ✏️ 編集
+                    </button>
+                    <button class="btn-edit-detail" onclick="openDetailEditor('${phase.id}', '${stage.id}', '${step.id}')">
+                        📝 詳細編集
+                    </button>
+                    <button class="btn-delete" onclick="deleteStep('${phase.id}', '${stage.id}', '${step.id}')">
+                        🗑️ 削除
+                    </button>
+                `;
+                stepsList.appendChild(stepDiv);
+
+                // --- 弟子進捗バーの集計表示 ---
+                const progressKey = `${phase.id}_${stage.id}_${step.id}`;
+                const stepProgress = progressByStep[progressKey] || {'未着手': 0, '取り組み中': 0, '苦戦': 0, '完了': 0, '放棄': 0};
+                const total = stepProgress['未着手'] + stepProgress['取り組み中'] + stepProgress['苦戦'] + stepProgress['完了'] + stepProgress['放棄'];
+
+                if (total > 0) {
+                    const progressBar = document.createElement('div');
+                    progressBar.style.cssText = 'margin-left: 38px; margin-top: 6px; margin-bottom: 12px;';
+                    progressBar.innerHTML = `
+                        <div style="display: flex; gap: 10px; font-size: 11px;">
+                            <span style="color: #999;">未着手: ${stepProgress['未着手']}</span>
+                            <span style="color: #1976d2;">取り組み中: ${stepProgress['取り組み中']}</span>
+                            <span style="color: #f57c00;">苦戦: ${stepProgress['苦戦']}</span>
+                            <span style="color: #388e3c;">完了: ${stepProgress['完了']}</span>
+                            <span style="color: #d32f2f;">放棄: ${stepProgress['放棄']}</span>
+                        </div>
+                    `;
+                    stepsList.appendChild(progressBar);
+                }
+
+                // 各Stepの後ろの追加ボタン
+                const addStepAfter = document.createElement('div');
+                addStepAfter.className = 'add-step-container';
+                addStepAfter.innerHTML = `
+                    <button class="btn-add" onclick="addStep('${phase.id}', '${stage.id}', 'after', ${step.number})">
+                        ➕ Step追加
+                    </button>
+                `;
+                stepsList.appendChild(addStepAfter);
+            });
+
+            stageDiv.appendChild(stepsList);
+            stagesList.appendChild(stageDiv);
+
+            // 各Stageの後ろの追加ボタン
+            const addStageAfter = document.createElement('div');
+            addStageAfter.className = 'add-stage-container';
+            addStageAfter.innerHTML = `
+                <button class="btn-add" onclick="addStage('${phase.id}', 'after', ${stage.number})">
+                    ➕ Stage追加
+                </button>
+            `;
+            stagesList.appendChild(addStageAfter);
+        });
+
+        phaseCard.appendChild(stagesList);
+        container.appendChild(phaseCard);
+
+        // 各Phaseの後ろの追加ボタン
+        const addPhaseAfter = document.createElement('div');
+        addPhaseAfter.className = 'add-phase-container';
+        addPhaseAfter.innerHTML = `
+            <button class="btn-add" onclick="addPhase('after', ${phase.number})">
+                ➕ Phase追加
+            </button>
+        `;
+        container.appendChild(addPhaseAfter);
+    });
+}
+
+// Phaseタイトル編集モーダルを開く
+function openPhaseTitleEditor(phaseId, currentTitle) {
+    currentEditingPhase = phaseId;
+    document.getElementById('phase-title-input').value = currentTitle;
+    document.getElementById('modal-edit-phase-title').classList.add('active');
+
+    setTimeout(() => {
+        document.getElementById('phase-title-input').focus();
+        document.getElementById('phase-title-input').select();
+    }, 100);
+}
+
+// Phaseタイトル編集モーダルを閉じる
+function closePhaseTitleModal() {
+    document.getElementById('modal-edit-phase-title').classList.remove('active');
+    currentEditingPhase = null;
+}
+
+// 2. Phase保存 (V2)
+async function savePhaseTitle() {
+    if (!currentEditingPhase) return;
+    const newTitle = document.getElementById('phase-title-input').value.trim();
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/phase`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                course_id: COURSE_ID,
+                phase_id: currentEditingPhase,
+                phase_title: newTitle
+            })
+        });
+        if ((await res.json()).success) {
+            showSaveStatus('saved');
+            closePhaseTitleModal();
+            await loadContent();
+        } else { throw new Error(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// Stageタイトル編集モーダルを開く
+function openStageTitleEditor(phaseId, stageId, currentTitle) {
+    currentEditingStage = { phaseId, stageId };
+    document.getElementById('stage-title-input').value = currentTitle;
+    document.getElementById('modal-edit-stage-title').classList.add('active');
+
+    setTimeout(() => {
+        document.getElementById('stage-title-input').focus();
+        document.getElementById('stage-title-input').select();
+    }, 100);
+}
+
+// Stageタイトル編集モーダルを閉じる
+function closeStageTitleModal() {
+    document.getElementById('modal-edit-stage-title').classList.remove('active');
+    currentEditingStage = null;
+}
+
+// 3. Stage保存 (V2)
+async function saveStageTitle() {
+    if (!currentEditingStage) return;
+    const newTitle = document.getElementById('stage-title-input').value.trim();
+    const { phaseId, stageId } = currentEditingStage;
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/stage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                course_id: COURSE_ID,
+                phase_id: phaseId,
+                stage_id: stageId,
+                stage_title: newTitle
+            })
+        });
+        if ((await res.json()).success) {
+            showSaveStatus('saved');
+            closeStageTitleModal();
+            await loadContent();
+        } else { throw new Error(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// 詳細エディタを開く
+function openDetailEditor(phaseId, stageId, stepId) {
+    const phase = contentData.find(p => p.id === phaseId);
+    const stage = phase ? phase.stages.find(s => s.id === stageId) : null;
+    const step = stage ? stage.steps.find(s => s.id === stepId) : null;
+
+    if (!step) {
+        alert('ステップが見つかりません');
+        return;
+    }
+
+    currentEditingStep = { phaseId, stageId, stepId, title: step.title };
+
+    document.getElementById('detail-modal-title').textContent =
+        `${step.title} - 詳細編集`;
+    document.getElementById('detail-markdown').value = step.detail || '';
+
+    hasUnsavedChanges = false; // リセット
+
+    document.getElementById('modal-edit-detail').classList.add('active');
+
+    // プレビューをクリア
+    document.getElementById('preview-area').innerHTML =
+        '<div class="preview-placeholder"><p>「プレビュー更新」ボタンを押してプレビューを表示してください</p></div>';
+
+    // 変更監視
+    const editor = document.getElementById('detail-markdown');
+    editor.addEventListener('input', () => { hasUnsavedChanges = true; }, { once: false });
+}
+
+// ★新規追加: 未保存フラグを立てる
+function markAsUnsaved() {
+    const currentContent = document.getElementById('detail-markdown').value;
+    hasUnsavedChanges = (currentContent !== lastSavedContent);
+}
+
+// ★新規追加: 自動保存開始
+function startAutoSave() {
+    // 既存のタイマーをクリア
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+    }
+
+    // 30秒ごとに自動保存
+    autoSaveInterval = setInterval(() => {
+        if (hasUnsavedChanges && currentEditingStep) {
+            saveStepDetailOnly(true); // 自動保存フラグをtrue
+        }
+    }, 30000); // 30秒
+}
+
+// ★新規追加: 自動保存停止
+function stopAutoSave() {
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
+    document.getElementById('autosave-status').textContent = '';
+}
+
+// 保存のみ（モーダルは閉じない）
+async function saveStepDetailOnly() {
+    if (!currentEditingStep) {
+        console.error('currentEditingStep が設定されていません');
+        return;
+    }
+
+    const detail = document.getElementById('detail-markdown').value;
+    const { phaseId, stageId, stepId, title } = currentEditingStep;
+
+    console.log('保存開始:', {
+        course_id: COURSE_ID,
+        phase_id: phaseId,
+        stage_id: stageId,
+        step_id: stepId,
+        step_title: title,
+        detail_length: detail.length
+    });
+
+    showSaveStatus('saving');
+
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/step`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                course_id: COURSE_ID,
+                phase_id: phaseId,
+                stage_id: stageId,
+                step_id: stepId,
+                step_title: title,
+                step_detail: detail
+            })
+        });
+
+        console.log('レスポンスステータス:', res.status);
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('HTTPエラー:', res.status, errorText);
+            throw new Error(`HTTPエラー: ${res.status} - ${errorText}`);
+        }
+
+        const result = await res.json();
+        console.log('保存結果:', result);
+
+        if (result.success) {
+            hasUnsavedChanges = false;
+            showSaveStatus('saved');
+            console.log('✓ 保存成功');
+
+            // ★★★ 重要な追加: contentData を更新 ★★★
+            const phase = contentData.find(p => p.id === phaseId);
+            const stage = phase ? phase.stages.find(s => s.id === stageId) : null;
+            const step = stage ? stage.steps.find(s => s.id === stepId) : null;
+            if (step) {
+                step.detail = detail;
+                console.log('✓ contentData を更新しました');
+            }
+
+        } else {
+            throw new Error(result.error || '保存に失敗しました');
+        }
+    } catch (e) {
+        console.error('保存エラー:', e);
+        alert('保存に失敗しました: ' + e.message);
+        showSaveStatus('error');
+    }
+}
+
+// 保存して閉じる
+async function saveStepDetailAndClose() {
+    if (!currentEditingStep) return;
+
+    await saveStepDetailOnly();
+
+    // 保存成功したら閉じる
+    if (!hasUnsavedChanges) {
+        closeDetailModal();
+        await loadContent();
+    }
+}
+
+// プレビュー更新
+async function updatePreview() {
+    if (isUpdatingPreview) return;
+
+    const markdown = document.getElementById('detail-markdown').value;
+    if (!markdown.trim()) {
+        document.getElementById('preview-area').innerHTML =
+            '<div class="preview-placeholder"><p>プレビューがここに表示されます</p></div>';
+        return;
+    }
+
+    isUpdatingPreview = true;
+    const btn = document.getElementById('preview-btn-text');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ 更新中...';
+
+    try {
+        const res = await fetch(`${API_BASE}/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markdown: markdown })
+        });
+
+        const data = await res.json();
+        if (data.html) {
+            document.getElementById('preview-area').innerHTML = data.html;
+
+            // KaTeX レンダリング
+            if (window.renderMathInElement) {
+                renderMathInElement(document.getElementById('preview-area'), {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ]
+                });
+            }
+        } else {
+            document.getElementById('preview-area').innerHTML =
+                '<p style="color: red;">プレビューの生成に失敗しました</p>';
+        }
+    } catch (e) {
+        console.error('Preview error:', e);
+        document.getElementById('preview-area').innerHTML =
+            '<p style="color: red;">プレビューの生成に失敗しました</p>';
+    } finally {
+        isUpdatingPreview = false;
+        btn.textContent = originalText;
+    }
+}
+
+// 5. Step詳細（Markdown）保存 (V2)
+// ★修正: 保存して閉じる
+async function saveStepDetail() {
+    await saveStepDetailOnly(false);
+    if (!hasUnsavedChanges) {
+        closeDetailModal();
+        await loadContent();
+    }
+}
+
+// 確認付きで閉じる
+function confirmCloseDetailModal() {
+    if (hasUnsavedChanges) {
+        if (!confirm('変更箇所がありますがこのまま終了しますか？')) {
+            return; // 「いいえ」→ 留まる
+        }
+    }
+    // 変更なし、または「はい」→ 閉じる
+    closeDetailModal();
+}
+
+// モーダルを閉じる
+function closeDetailModal() {
+    document.getElementById('modal-edit-detail').classList.remove('active');
+    currentEditingStep = null;
+    hasUnsavedChanges = false;
+}
+
+// タイトル編集モーダルを開く
+function openTitleEditor(phaseId, stageId, stepId, currentTitle) {
+    currentEditingTitleStep = { phaseId, stageId, stepId };
+    document.getElementById('title-input').value = currentTitle;
+    document.getElementById('modal-edit-title').classList.add('active');
+
+    // フォーカスを当てる
+    setTimeout(() => {
+        document.getElementById('title-input').focus();
+        document.getElementById('title-input').select();
+    }, 100);
+}
+
+// タイトル編集モーダルを閉じる
+function closeTitleModal() {
+    document.getElementById('modal-edit-title').classList.remove('active');
+    currentEditingTitleStep = null;
+}
+
+// 4. Stepタイトル保存 (V2)
+async function saveStepTitle() {
+    if (!currentEditingTitleStep) return;
+    const newTitle = document.getElementById('title-input').value.trim();
+    const { phaseId, stageId, stepId } = currentEditingTitleStep;
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/step`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                course_id: COURSE_ID,
+                phase_id: phaseId,
+                stage_id: stageId,
+                step_id: stepId,
+                step_title: newTitle
+            })
+        });
+        if ((await res.json()).success) {
+            showSaveStatus('saved');
+            closeTitleModal();
+            await loadContent();
+        } else { throw new Error(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// --- 追加・削除アクション (すべて V2 & COURSE_ID対応) ---
+
+async function addPhase(position, afterNumber) {
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/phase/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, position, after_number: afterNumber })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+async function deletePhase(phaseId) {
+    if (!confirm('このPhase内の全データが削除されます。よろしいですか？')) return;
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/phase/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, phase_id: phaseId })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+async function addStage(phaseId, position, afterNumber) {
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/stage/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, phase_id: phaseId, position, after_number: afterNumber })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// Stage削除
+async function deleteStage(phaseId, stageId) {
+    if (!confirm('このStage内の全Stepが削除されます。よろしいですか？')) return;
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/stage/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, phase_id: phaseId, stage_id: stageId })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// Step追加
+async function addStep(phaseId, stageId, position, afterNumber) {
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/step/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, phase_id: phaseId, stage_id: stageId, position, after_number: afterNumber })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// Step削除
+async function deleteStep(phaseId, stageId, stepId) {
+    if (!confirm('このStepを削除しますか？')) return;
+    showSaveStatus('saving');
+    try {
+        const res = await fetch(`${API_V2}/mentor/content/step/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: COURSE_ID, phase_id: phaseId, stage_id: stageId, step_id: stepId })
+        });
+        if ((await res.json()).success) { showSaveStatus('saved'); await loadContent(); }
+    } catch (e) { showSaveStatus('error'); }
+}
+
+// デバウンス保存
+function debouncedSave(callback) {
+    clearTimeout(saveTimeout);
+    showSaveStatus('saving');
+    saveTimeout = setTimeout(async () => {
+        await callback();
+    }, 1000);
+}
+
+// 保存ステータス表示
+function showSaveStatus(status) {
+    const statusDiv = document.getElementById('save-status');
+    const messageSpan = document.getElementById('save-message');
+
+    statusDiv.className = 'save-status show ' + status;
+
+    if (status === 'saving') {
+        messageSpan.textContent = '💾 保存中...';
+    } else if (status === 'saved') {
+        messageSpan.textContent = '✓ 保存しました';
+        setTimeout(() => {
+            statusDiv.classList.remove('show');
+        }, 2000);
+    } else if (status === 'error') {
+        messageSpan.textContent = '✗ 保存に失敗しました';
+        setTimeout(() => {
+            statusDiv.classList.remove('show');
+        }, 3000);
+    }
+}
+
+// HTMLエスケープ
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[m]));
+}
+
+// モーダル外クリックで確認ダイアログ表示
+/*
+document.getElementById('modal-edit-detail').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-edit-detail') {
+        confirmCloseDetailModal();
+    }
+});
+*/
+
+// Ctrl+S で保存
+document.getElementById('detail-markdown').addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveStepDetailOnly();
+    }
+});
+
+// タイトル編集モーダル外クリックで閉じる
+/*
+document.getElementById('modal-edit-title').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-edit-title') {
+        closeTitleModal();
+    }
+});
+*/
+
+// Enterキーでタイトル保存
+document.getElementById('title-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        saveStepTitle();
+    }
+});
+
+// Phaseタイトル編集モーダル外クリックで閉じる
+/*
+document.getElementById('modal-edit-phase-title').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-edit-phase-title') {
+        closePhaseTitleModal();
+    }
+});
+*/
+
+// EnterキーでPhaseタイトル保存
+document.getElementById('phase-title-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        savePhaseTitle();
+    }
+});
+
+// Stageタイトル編集モーダル外クリックで閉じる
+/*
+document.getElementById('modal-edit-stage-title').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-edit-stage-title') {
+        closeStageTitleModal();
+    }
+});
+*/
+
+
+// 弟子進捗の取得も V2（そのコース専用）にする必要があります
+async function loadProgressByStep() {
+    try {
+        // バックエンドに /api/v2/mentor/courses/<id>/progress_by_step を作成することを推奨
+        const res = await fetch(`${API_V2}/courses/${COURSE_ID}/progress_by_step`);
+        const data = await res.json();
+        if (data.success) {
+            progressByStep = data.by_step;
+            renderContent();
+        }
+    } catch (e) { console.error('進捗読込失敗', e); }
+}
+
+// EnterキーでStageタイトル保存
+document.getElementById('stage-title-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        saveStageTitle();
+    }
+});
+</script>
+
+</body>
+</html>

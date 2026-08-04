@@ -1,0 +1,109 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ display_name }} - ユーザーズマニュアル</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+        .container{max-width:1100px;margin:0 auto}
+        .header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+        h1{color:#333;font-size:1.3rem;margin-bottom:5px}
+        .subtitle{color:#666;font-size:.85rem}
+        .hdr-btns{float:right;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .hdr-btns a,.hdr-btns button{padding:8px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#6366f1;transition:.3s}
+        .hdr-btns a:hover,.hdr-btns button:hover{background:#4f46e5}
+        .hdr-btns a.home{background:#ef4444}.hdr-btns a.home:hover{background:#dc2626}
+        .hdr-btns a.edit{background:#0ea5e9}.hdr-btns a.edit:hover{background:#0284c7}
+        .panel{background:#fff;padding:24px 28px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+        .man-meta{font-size:.8rem;color:#888;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid #eee;display:flex;gap:20px;flex-wrap:wrap}
+        .man-empty{text-align:center;padding:60px 20px;color:#9ca3af}
+        .man-empty .me-icon{font-size:3rem;margin-bottom:12px}
+        .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:8px 16px;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none;z-index:100}
+        .toast.show{opacity:.95}
+        /* Markdownレンダリング */
+        .md-r{line-height:1.8;color:#374151}
+        .md-r h1{font-size:1.5rem;border-bottom:2px solid #e2e8f0;padding-bottom:8px;margin:18px 0 12px}
+        .md-r h2{font-size:1.25rem;border-bottom:1px solid #e2e8f0;padding-bottom:6px;color:#1e40af;margin:16px 0 10px}
+        .md-r h3{font-size:1.05rem;color:#555;margin:14px 0 8px}
+        .md-r p{margin:8px 0}
+        .md-r ul,.md-r ol{margin:8px 0 8px 24px}
+        .md-r li{margin:4px 0}
+        .md-r code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:Consolas,Monaco,monospace;font-size:.85em}
+        .md-r pre{background:#1e293b;color:#e2e8f0;padding:16px;border-radius:8px;overflow-x:auto;margin:12px 0}
+        .md-r pre code{background:none;color:inherit;padding:0}
+        .md-r table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.9rem}
+        .md-r th,.md-r td{border:1px solid #d1d5db;padding:8px 12px;text-align:left}
+        .md-r th{background:#f3f4f6}
+        .md-r blockquote{border-left:4px solid #c7d2fe;padding-left:12px;color:#666;margin:10px 0}
+        .md-r img{max-width:100%;height:auto}
+        @media print{
+            body{background:#fff;padding:0}
+            .hdr-btns{display:none}
+            .header,.panel{box-shadow:none;border-radius:0}
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="hdr-btns">
+            <button onclick="copyUrl()">📋 URLをコピー</button>
+            {% if is_admin %}
+            <a class="edit" href="{{ url_for('app_share.edit_document', app_name=app_name, doc_type='manual') }}">📝 編集</a>
+            {% endif %}
+            <a href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+            <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
+        </div>
+        <h1>{{ icon }} {{ display_name }} <span style="font-weight:400;color:#666;font-size:.95rem">ユーザーズマニュアル</span></h1>
+        <p class="subtitle">{{ app_name }}</p>
+    </div>
+    <div class="panel">
+        {% if updated_at or updated_by_name %}
+        <div class="man-meta">
+            {% if updated_at %}<span>📝 更新: {{ updated_at }}</span>{% endif %}
+            {% if updated_by_name %}<span>👤 {{ updated_by_name }}</span>{% endif %}
+        </div>
+        {% endif %}
+        <div id="man-body"></div>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+marked.setOptions({breaks:true,gfm:true});
+const CONTENT = {{ content|tojson }};
+const IS_ADMIN = {{ is_admin|tojson }};
+const EDIT_URL = "{{ url_for('app_share.edit_document', app_name=app_name, doc_type='manual') }}";
+
+if (CONTENT && CONTENT.trim()) {
+    document.getElementById('man-body').innerHTML = '<div class="md-r">' + marked.parse(CONTENT) + '</div>';
+} else {
+    let h = '<div class="man-empty"><div class="me-icon">📖</div><p>まだマニュアルが作成されていません。</p>';
+    if (IS_ADMIN) h += '<p style="margin-top:12px"><a href="' + EDIT_URL + '" style="color:#6366f1;font-weight:600">📝 マニュアルを作成する</a></p>';
+    h += '</div>';
+    document.getElementById('man-body').innerHTML = h;
+}
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600)}
+function copyUrl(){
+    const u = location.href;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(u).then(()=>toast('URLをコピーしました')).catch(()=>prompt('このURLをコピーしてください', u));
+    } else {
+        prompt('このURLをコピーしてください', u);
+    }
+}
+</script>
+</body>
+</html>

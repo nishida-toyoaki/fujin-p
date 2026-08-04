@@ -1,0 +1,62 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参加URL - あわみ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #1f2733; color: #fff; min-height: 100vh; display: flex;
+       flex-direction: column; align-items: center; justify-content: center;
+       padding: 3vh 4vw; text-align: center; }
+.label { font-size: 2.0vw; color: #9fb0c0; margin-bottom: 2vh; }
+.row { display: flex; align-items: center; justify-content: center;
+       gap: 3vw; flex-wrap: wrap; }
+.url { font-family: Consolas, monospace; font-size: 2.6vw; word-break: break-all;
+       background: #2b3440; border-radius: 14px; padding: 3vh 2.5vw;
+       line-height: 1.5; max-width: 56vw; }
+.qr-box { background: #fff; border-radius: 14px; padding: 1.6vw; }
+.qr-box .cap { color: #2b3440; font-size: 1.1vw; margin-top: .6vw; }
+.q { margin-top: 3.5vh; font-size: 2.2vw; color: #dfe7ef; }
+@media (max-aspect-ratio: 4/3) {
+    .url { font-size: 4.2vw; max-width: 90vw; }
+    .label { font-size: 3.4vw; }
+    .q { font-size: 3.6vw; }
+    .qr-box .cap { font-size: 2.4vw; }
+}
+</style>
+</head>
+<body>
+    <div class="label">ブラウザでこのURLを開くか、QRコードを読み取って投票してください</div>
+    <div class="row">
+        <div class="url">{{ vote_url }}</div>
+        <div class="qr-box">
+            <div id="qrcode"></div>
+            <div class="cap">スマホでスキャン</div>
+        </div>
+    </div>
+    {% if poll.choice_question %}<div class="q">{{ poll.choice_question }}</div>{% endif %}
+    {% if poll.writein_question %}<div class="q">{{ poll.writein_question }}</div>{% endif %}
+<script>
+(function() {
+    // 画面サイズに応じたQRの一辺（投影で読み取りやすい大きさ）
+    var side = Math.round(Math.min(window.innerHeight * 0.42,
+                                   window.innerWidth * 0.26));
+    side = Math.max(side, 180);
+    new QRCode(document.getElementById('qrcode'), {
+        text: '{{ vote_url }}',
+        width: side, height: side,
+        correctLevel: QRCode.CorrectLevel.M
+    });
+})();
+</script>
+</body>
+</html>

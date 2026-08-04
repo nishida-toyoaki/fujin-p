@@ -1,0 +1,472 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エクセル→HTML変換ヘルパー</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .header h2 {
+            font-size: 24px;
+            color: #212529;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .btn-info:hover {
+            background: #117a8b;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section h5 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .form-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+            background: white;
+        }
+        
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .radio-group label:hover {
+            background: #f8f9fa;
+        }
+        
+        .radio-group input[type="radio"] {
+            margin-right: 10px;
+        }
+        
+        .preview-container {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 20px;
+            background: #fff;
+            max-height: 500px;
+            overflow: auto;
+        }
+        
+        .code-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow: auto;
+        }
+        
+        .stats-box {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .loading-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <h2>📊 エクセル→HTML変換ヘルパー</h2>
+            <button class="btn btn-secondary" onclick="window.close()">✕ 閉じる</button>
+        </div>
+
+        <!-- ステップ1: ファイル選択 -->
+        <div class="section">
+            <h5>① エクセルファイルを選択</h5>
+            <input type="file" class="form-control" id="excelFile" accept=".xlsx,.xls" onchange="handleFileSelect()">
+            <button class="btn btn-primary" onclick="loadSheets()" id="loadSheetsBtn" disabled style="margin-top: 10px;">
+                → シート一覧を読み込む
+            </button>
+        </div>
+
+        <!-- ステップ2: シート選択 -->
+        <div class="section" id="sheetSection" style="display: none;">
+            <h5>② シートを選択</h5>
+            <select class="form-select" id="sheetSelect">
+                <option value="">読み込み中...</option>
+            </select>
+        </div>
+
+        <!-- ステップ3: 変換オプション -->
+        <div class="section" id="optionSection" style="display: none;">
+            <h5>③ 変換オプション</h5>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="styleType" value="simple" checked>
+                    <div>
+                        <strong>シンプル</strong><br>
+                        <small>白黒罫線、高速変換</small>
+                    </div>
+                </label>
+                <label>
+                    <input type="radio" name="styleType" value="styled">
+                    <div>
+                        <strong>エクセル書式保持</strong><br>
+                        <small>色・フォント・罫線・結合セルをそのまま再現</small>
+                    </div>
+                </label>
+                <label>
+                    <input type="radio" name="styleType" value="bootstrap">
+                    <div>
+                        <strong>Bootstrap風</strong><br>
+                        <small>ストライプ表示、外部CSS不要</small>
+                    </div>
+                </label>
+            </div>
+            
+            <div class="warning-box">
+                <strong>⚠️ 重要：</strong> すべてのスタイルはインライン（各要素に直接記述）で出力されるため、
+                他の文書に一切影響を与えません。外部CSSやグローバルクラスは使用しません。
+            </div>
+            
+            <button class="btn btn-primary" onclick="convertExcel()" style="margin-top: 15px;">
+                🔄 変換実行
+            </button>
+        </div>
+
+        <!-- ステップ4: プレビュー -->
+        <div class="section" id="previewSection" style="display: none;">
+            <h5>④ プレビュー</h5>
+            <div class="stats-box" id="statsBox"></div>
+            <div class="preview-container" id="previewContainer">
+                <!-- プレビューがここに表示されます -->
+            </div>
+        </div>
+
+        <!-- ステップ5: HTMLソース -->
+        <div class="section" id="sourceSection" style="display: none;">
+            <h5>⑤ HTMLソース</h5>
+            <div class="code-container">
+                <pre id="htmlSource" style="margin: 0; white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="copyToClipboard()">
+                    📋 クリップボードにコピー
+                </button>
+                <button class="btn btn-info" onclick="insertToEditor()">
+                    📝 エディタに挿入
+                </button>
+                <button class="btn btn-secondary" onclick="downloadHTML()">
+                    💾 HTMLファイルとしてダウンロード
+                </button>
+            </div>
+        </div>
+
+        <!-- ローディング表示 -->
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p>変換中...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentHTML = '';
+
+        function handleFileSelect() {
+            const fileInput = document.getElementById('excelFile');
+            const loadBtn = document.getElementById('loadSheetsBtn');
+            loadBtn.disabled = !fileInput.files.length;
+        }
+
+        async function loadSheets() {
+            const fileInput = document.getElementById('excelFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('ファイルを選択してください');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('excel_file', file);
+
+            try {
+                const response = await fetch('/excel_helper/get_sheets', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const sheetSelect = document.getElementById('sheetSelect');
+                    sheetSelect.innerHTML = '';
+                    
+                    data.sheets.forEach((sheet, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = sheet;
+                        sheetSelect.appendChild(option);
+                    });
+
+                    document.getElementById('sheetSection').style.display = 'block';
+                    document.getElementById('optionSection').style.display = 'block';
+                } else {
+                    alert('エラー: ' + data.error);
+                }
+            } catch (error) {
+                alert('シート一覧の取得に失敗しました: ' + error);
+            }
+        }
+
+        async function convertExcel() {
+            const fileInput = document.getElementById('excelFile');
+            const file = fileInput.files[0];
+            const sheetSelect = document.getElementById('sheetSelect');
+            const styleType = document.querySelector('input[name="styleType"]:checked').value;
+
+            if (!file) {
+                alert('ファイルを選択してください');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('excel_file', file);
+            formData.append('sheet_name', sheetSelect.value);
+            formData.append('style_type', styleType);
+
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.style.display = 'flex';
+
+            try {
+                const response = await fetch('/excel_helper/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentHTML = data.html;
+
+                    // プレビュー表示
+                    document.getElementById('previewContainer').innerHTML = data.preview;
+
+                    // 統計情報
+                    document.getElementById('statsBox').innerHTML = `
+                        <strong>📊 テーブル情報:</strong> 
+                        ${data.stats.rows} 行 × ${data.stats.columns} 列 
+                        （合計 ${data.stats.cells} セル）
+                    `;
+
+                    // HTMLソース表示
+                    document.getElementById('htmlSource').textContent = data.html;
+
+                    // セクション表示
+                    document.getElementById('previewSection').style.display = 'block';
+                    document.getElementById('sourceSection').style.display = 'block';
+
+                    // スクロール
+                    document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert('変換エラー: ' + data.error);
+                }
+            } catch (error) {
+                alert('変換に失敗しました: ' + error);
+            } finally {
+                overlay.style.display = 'none';
+            }
+        }
+
+        function copyToClipboard() {
+            const textArea = document.createElement('textarea');
+            textArea.value = currentHTML;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                alert('✅ HTMLソースをクリップボードにコピーしました！');
+            } catch (err) {
+                alert('❌ コピーに失敗しました');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        function insertToEditor() {
+            // 親ウィンドウのエディタに挿入
+            if (window.opener && window.opener.insertHTMLTable) {
+                window.opener.insertHTMLTable(currentHTML);
+                alert('✅ エディタに挿入しました！');
+                window.close();
+            } else {
+                alert('⚠️ エディタが見つかりません。クリップボードにコピーして手動で貼り付けてください。');
+                copyToClipboard();
+            }
+        }
+
+        function downloadHTML() {
+            const blob = new Blob([currentHTML], { type: 'text/html; charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'table.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

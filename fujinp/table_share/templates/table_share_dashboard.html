@@ -1,0 +1,1915 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>テーシャ (Table Share) - FUJIN-Pアライアンス</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+        .tab-container {
+            margin-top: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab-button {
+            padding: 12px 24px;
+            background: #ecf0f1;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            color: #7f8c8d;
+            transition: all 0.3s;
+        }
+        .tab-button:hover {
+            background: #dfe6e9;
+        }
+        .tab-button.active {
+            background: #3498db;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .form-group select,
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            min-height: 60px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        button.danger {
+            background-color: #e74c3c;
+        }
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        button.success {
+            background-color: #27ae60;
+        }
+        button.success:hover {
+            background-color: #219a52;
+        }
+
+        .btn-return {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #ef4444; color: #fff; font-weight: 800;
+            text-decoration: none; padding: 6px 14px; border-radius: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2); white-space: nowrap;
+        }
+        .btn-return:hover { background: #dc2626; color: #fff; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #e8f4fc;
+        }
+        .info-box {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .warning-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .error-box {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #17a2b8;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .back-button:hover {
+            background-color: #138496;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .badge-success {
+            background-color: #27ae60;
+            color: white;
+        }
+        .badge-warning {
+            background-color: #f39c12;
+            color: white;
+        }
+        .badge-info {
+            background-color: #3498db;
+            color: white;
+        }
+        .badge-remote {
+            background-color: #9b59b6;
+            color: white;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .action-buttons button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .sync-progress {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 5px 10px;
+            background-color: #e8f4fc;
+            border-radius: 4px;
+            color: #2980b9;
+            white-space: nowrap;
+        }
+        .sync-progress .progress-text {
+            animation: pulse 0.8s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        #result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        #result.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        #result.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* ============================================
+           Overview タブ 固有スタイル
+           ============================================ */
+        .overview-layout {
+            display: flex;
+            height: 680px;
+            gap: 0;
+            margin: 0 -20px -20px -20px; /* tab-content のパディングを相殺 */
+        }
+
+        /* ── 左パネル: テーブル一覧 ── */
+        .overview-list-panel {
+            width: 340px;
+            min-width: 260px;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #ddd;
+            background: #fafbfc;
+        }
+        .overview-list-header {
+            padding: 12px 14px 8px;
+            background: #ecf0f1;
+            border-bottom: 1px solid #ddd;
+            flex-shrink: 0;
+        }
+        .overview-list-header input {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .overview-list-header input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+        }
+        .overview-filter-row {
+            display: flex;
+            gap: 6px;
+        }
+        .overview-filter-row button {
+            flex: 1;
+            padding: 5px 0;
+            font-size: 12px;
+            background: #dce1e4;
+            color: #5a6a7a;
+            border-radius: 3px;
+        }
+        .overview-filter-row button:hover {
+            background: #cdd5db;
+        }
+        .overview-filter-row button.active {
+            background: #3498db;
+            color: white;
+        }
+        .overview-list-count {
+            font-size: 11px;
+            color: #7f8c8d;
+            padding: 4px 14px 0;
+            flex-shrink: 0;
+        }
+        .overview-table-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* グループ見出し */
+        .overview-group-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            padding: 6px 14px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+        .overview-group-header.local-header {
+            background: #34495e;
+        }
+        .overview-group-header.remote-header {
+            background: #6c3483;
+        }
+
+        /* リスト項目 */
+        .overview-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background 0.15s;
+            font-size: 13px;
+        }
+        .overview-item:hover {
+            background: #eaf4fb;
+        }
+        .overview-item.selected {
+            background: #d6eaf8;
+            border-left: 3px solid #3498db;
+        }
+        .overview-item .item-db {
+            color: #7f8c8d;
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 120px;
+        }
+        .overview-item .item-table {
+            font-weight: 600;
+            color: #2c3e50;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .overview-item .item-rows {
+            font-size: 11px;
+            color: #95a5a6;
+            white-space: nowrap;
+        }
+        .overview-item .item-site-badge {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 8px;
+            background: #9b59b6;
+            color: white;
+            white-space: nowrap;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ── 右パネル: プレビュー ── */
+        .overview-preview-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 0; /* flex item の overflow バグ対策 */
+        }
+
+        /* プレビュー未選択のプレスホルダー */
+        .preview-placeholder {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #aab;
+            font-size: 15px;
+            gap: 10px;
+        }
+        .preview-placeholder .placeholder-icon {
+            font-size: 40px;
+            opacity: 0.5;
+        }
+
+        /* プレビュー情報バー */
+        .preview-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 16px;
+            background: #ecf0f1;
+            border-bottom: 2px solid #ddd;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .preview-info-bar .info-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .preview-info-bar .info-meta {
+            font-size: 12px;
+            color: #7f8c8d;
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .preview-info-bar .info-meta span {
+            background: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+
+        /* スクロールコンテナ */
+        .preview-scroll-container {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: auto;
+            min-height: 0; /* flex child の overflow バグ対策 */
+        }
+
+        /* プレビュー用テーブル */
+        .preview-table {
+            border-collapse: collapse;
+            width: auto;          /* 横幅を内容に合わせる */
+            min-width: 100%;
+            font-size: 12px;
+            margin: 0;
+        }
+        .preview-table th {
+            background: #3498db;
+            color: white;
+            padding: 8px 12px;
+            text-align: left;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border: 1px solid #2980b9;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .preview-table td {
+            padding: 6px 12px;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .preview-table tr:nth-child(even) td {
+            background-color: #f9fafb;
+        }
+        .preview-table tr:hover td {
+            background-color: #eaf4fb;
+        }
+        /* 行番号カラム */
+        .preview-table .row-no {
+            background: #ecf0f1;
+            color: #7f8c8d;
+            text-align: right;
+            font-size: 11px;
+            user-select: none;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            border-color: #ddd;
+        }
+        .preview-table thead .row-no {
+            background: #2c3e50;
+            color: #ecf0f1;
+            position: sticky;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+        /* NULL値の表示 */
+        .preview-table .null-val {
+            color: #e74c3c;
+            font-style: italic;
+            opacity: 0.7;
+        }
+
+        /* プレビュー中のローディング */
+        .preview-loading {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #3498db;
+            font-size: 14px;
+            gap: 10px;
+        }
+        .preview-loading .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #ddd;
+            border-top-color: #3498db;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Overview 内のエラーボックス */
+        .preview-error {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .preview-error .error-box {
+            max-width: 500px;
+            text-align: center;
+        }
+
+        /* プレビュー情報バー内のアクションボタン */
+        .preview-action-btn {
+            margin-left: auto;
+            padding: 7px 16px;
+            font-size: 13px;
+            border-radius: 5px;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .preview-action-btn:hover {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+        }
+    </style>
+</head>
+<body>
+    <h1>🔗 テーシャ (Table Share)</h1>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+      <a href="{{ url_for('table_share.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+    <p>FUJIN-Pアライアンス間でテーブルを共有・同期するシステムです。</p>
+
+    <div id="loading" class="loading">⏳ 処理中...</div>
+    <div id="result"></div>
+
+    <div class="tab-container">
+        <div class="tab-buttons">
+            <button class="tab-button active"  data-tab="overview">📊 テーブル一覧</button>
+            <button class="tab-button" data-tab="publish">📤 Publish（公開）</button>
+            <button class="tab-button" data-tab="subscribe">📥 Subscribe（購読）</button>
+            <button class="tab-button" data-tab="alliance">🌐 アライアンス管理</button>
+            <button class="tab-button" data-tab="history">📋 同期履歴</button>
+        </div>
+
+        <!-- ================================================
+             Overview タブ（テーブル一覧＋プレビュー）
+             ================================================ -->
+        <div id="tab-overview" class="tab-content active">
+            <div class="overview-layout">
+
+                <!-- 左パネル: テーブル一覧 -->
+                <div class="overview-list-panel">
+                    <div class="overview-list-header">
+                        <input type="text" id="overview-search" placeholder="🔍 テーブル名で検索...">
+                        <div class="overview-filter-row">
+                            <button class="active" data-filter="all">全件</button>
+                            <button data-filter="local">ローカル</button>
+                            <button data-filter="remote">リモート</button>
+                        </div>
+                    </div>
+                    <div class="overview-list-count" id="overview-count">読み込み中...</div>
+                    <div class="overview-table-list" id="overview-table-list">
+                        <!-- JS で描画 -->
+                    </div>
+                </div>
+
+                <!-- 右パネル: プレビュー -->
+                <div class="overview-preview-panel" id="overview-preview-panel">
+                    <div class="preview-placeholder" id="preview-placeholder">
+                        <div class="placeholder-icon">📋</div>
+                        <div>左側のリストからテーブルを選んでください</div>
+                        <div style="font-size:12px;">プレビューが表示されます</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Publish タブ -->
+        <div id="tab-publish" class="tab-content">
+            <h2>テーブルを公開（Publish）</h2>
+            <div class="info-box">
+                自サイトのテーブルを他のFUJIN-Pサイトに公開します。<br>
+                公開したテーブルは「公開中」としてマークされ、他サイトが依存している可能性があることを示します。<br>
+                <strong>※ テーブル自体は通常通り変更可能ですが、依存クライアントへの影響にご注意ください。</strong>
+            </div>
+
+            <div class="form-group">
+                <label>データベース:</label>
+                <select id="publish-db-select">
+                    <option value="">選択してください</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>テーブル:</label>
+                <select id="publish-table-select" disabled>
+                    <option value="">選択してください</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>説明（任意）:</label>
+                <textarea id="publish-description" placeholder="このテーブルの説明を入力"></textarea>
+            </div>
+
+            <button id="publish-btn" disabled>📤 テーブルを公開</button>
+
+            <h3>公開済みテーブル一覧</h3>
+            <div class="warning-box" style="font-size: 13px;">
+                ⚠️ 公開中のテーブルは他サイトが購読・依存している可能性があります。<br>
+                テーブル構造やデータを変更する際は、依存クライアントへの影響にご注意ください。
+            </div>
+            <table id="published-tables">
+                <thead>
+                    <tr>
+                        <th>ステータス</th>
+                        <th>データベース</th>
+                        <th>テーブル</th>
+                        <th>バージョン</th>
+                        <th>行数</th>
+                        <th>更新日時</th>
+                        <th>説明</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Subscribe タブ -->
+        <div id="tab-subscribe" class="tab-content">
+            <h2>テーブルを購読（Subscribe）</h2>
+            <div class="info-box">
+                他のFUJIN-Pサイトからテーブルを取得します。<br>
+                同期前に自動でバックアップが作成されます。
+            </div>
+
+            <h3>新規購読設定</h3>
+            <div class="form-group">
+                <label>アライアンスサイト:</label>
+                <select id="sub-site-select">
+                    <option value="">選択してください</option>
+                </select>
+                <button id="fetch-remote-btn" disabled style="margin-left: 10px;">📡 公開テーブルを取得</button>
+            </div>
+
+            <div id="remote-tables-section" style="display: none;">
+                <div class="info-box">
+                    <strong id="remote-site-name"></strong> で公開中のテーブル一覧
+                </div>
+                <table id="remote-tables-list" style="margin-bottom: 20px;">
+                    <thead>
+                        <tr>
+                            <th>選択</th>
+                            <th>データベース</th>
+                            <th>テーブル</th>
+                            <th>バージョン</th>
+                            <th>行数</th>
+                            <th>説明</th>
+                            <th>更新日時</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="form-group">
+                <label>リモートデータベース名:</label>
+                <input type="text" id="sub-remote-db" placeholder="上の一覧から選択、または手入力">
+            </div>
+
+            <div class="form-group">
+                <label>リモートテーブル名:</label>
+                <input type="text" id="sub-remote-table" placeholder="上の一覧から選択、または手入力">
+            </div>
+
+            <div class="form-group">
+                <label>ローカルデータベース:</label>
+                <select id="sub-local-db">
+                    <option value="">選択してください</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>ローカルテーブル名（省略時はリモートと同名）:</label>
+                <input type="text" id="sub-local-table" placeholder="省略可">
+            </div>
+
+            <button id="add-subscription-btn">➕ 購読設定を追加</button>
+
+            <h3>購読一覧</h3>
+            <table id="subscriptions-table">
+                <thead>
+                    <tr>
+                        <th>サイト</th>
+                        <th>リモートテーブル</th>
+                        <th>ローカルテーブル</th>
+                        <th>最終同期</th>
+                        <th>バージョン</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Alliance タブ -->
+        <div id="tab-alliance" class="tab-content">
+            <h2>アライアンスサイト管理</h2>
+            <div class="warning-box">
+                ⚠️ サイトの登録は管理者のみ可能です。<br>
+                連携先のFUJIN-PサイトのURLとAPIキーを登録してください。
+            </div>
+
+            <h3>新規サイト登録</h3>
+            <div class="info-box">
+                連携したいFUJIN-Pサイトの管理者からURL・APIキーを入手し、以下に登録してください。
+            </div>
+
+            <div class="form-group">
+                <label>サイト名（表示用）:</label>
+                <input type="text" id="alliance-site-name" placeholder="例: パートナーA大学">
+            </div>
+
+            <div class="form-group">
+                <label>サイトURL:</label>
+                <input type="text" id="alliance-site-url" placeholder="例: https://partnerA.pythonanywhere.com">
+                <button id="check-site-btn" type="button" style="margin-left: 10px;">🔍 接続確認</button>
+                <span id="check-site-result" style="margin-left: 10px;"></span>
+            </div>
+
+            <div class="form-group">
+                <label>APIキー:</label>
+                <input type="text" id="alliance-api-key" placeholder="相手サイトの管理者から提供されたAPIキー">
+            </div>
+
+            <div class="form-group">
+                <label>説明（任意）:</label>
+                <textarea id="alliance-description" placeholder="このサイトの説明"></textarea>
+            </div>
+
+            <button id="add-alliance-btn">➕ サイトを登録</button>
+
+            <h3>登録済みサイト一覧</h3>
+            <table id="alliance-sites-table">
+                <thead>
+                    <tr>
+                        <th>サイト名</th>
+                        <th>URL</th>
+                        <th>説明</th>
+                        <th>登録日</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h3>自サイトの情報（連携先に伝える情報）</h3>
+            <div class="info-box" id="my-site-info">
+                <p><strong>サイトURL:</strong> <code id="my-site-url"></code></p>
+                <p><strong>APIキー:</strong> config.pyで <code>TABLE_SHARE_API_KEY</code> を設定し、連携先に伝えてください</p>
+                <p style="font-size: 12px; color: #666;">※ 他サイトと連携する際は、上記の情報を相手の管理者にお伝えください。</p>
+            </div>
+        </div>
+
+        <!-- History タブ -->
+        <div id="tab-history" class="tab-content">
+            <h2>同期履歴</h2>
+            <table id="history-table">
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>リモートテーブル</th>
+                        <th>ローカルテーブル</th>
+                        <th>バージョン</th>
+                        <th>行数</th>
+                        <th>バックアップ</th>
+                        <th>状態</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if session.get('user_category') in ['admin'] %}
+        <a href="{{ url_for('admin.dashboard') }}" class="back-button">管理者ダッシュボードに戻る</a>
+    {% else %}
+        <a href="{{ url_for('guest.dashboard') }}" class="back-button">ダッシュボードに戻る</a>
+    {% endif %}
+
+    <script>
+    // グローバル変数で初期化済みフラグを管理
+    window.tableShareInitialized = window.tableShareInitialized || false;
+
+    $(document).ready(function() {
+        if (window.tableShareInitialized) {
+            console.warn('既に初期化済みです。重複初期化をスキップします。');
+            return;
+        }
+
+        console.log('=== テーシャシステムを初期化中 ===');
+        window.tableShareInitialized = true;
+
+        // ===========================================
+        // ユーティリティ
+        // ===========================================
+        function escapeHtml(s) {
+            return $('<span>').text(s).html();
+        }
+
+        function showResult(message, isError) {
+            const $result = $('#result');
+            $result.text(message)
+                   .removeClass('success error')
+                   .addClass(isError ? 'error' : 'success')
+                   .show();
+            setTimeout(() => $result.fadeOut(), 5000);
+        }
+
+        // ===========================================
+        // タブ切り替え
+        // ===========================================
+        $('.tab-button').click(function() {
+            const tab = $(this).data('tab');
+            $('.tab-button').removeClass('active');
+            $(this).addClass('active');
+            $('.tab-content').removeClass('active');
+            $(`#tab-${tab}`).addClass('active');
+
+            // タブ固有の初期ロード
+            if (tab === 'overview' && !overviewLoaded) loadOverview();
+        });
+
+        // ===========================================
+        // Overview タブ
+        // ===========================================
+        let overviewLoaded = false;
+        let overviewData = { local_tables: [], remote_tables: [] };
+        let currentFilter = 'all';
+        let currentSearch  = '';
+        let selectedKey    = null;   // 選択中の識別キー
+
+        function loadOverview() {
+            $('#overview-table-list').html('<div style="padding:20px;color:#999;text-align:center;">読み込み中...</div>');
+            $.ajax({
+                url: '{{ url_for("table_share.get_all_tables_overview") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        overviewData = resp;
+                        overviewLoaded = true;
+                        renderOverviewList();
+                    } else {
+                        showResult('テーブル一覧取得エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('テーブル一覧取得エラー: ' + xhr.responseText, true);
+                }
+            });
+        }
+
+        // フィルタ・検索に応じてリスト描画
+        function renderOverviewList() {
+            const kw = currentSearch.toLowerCase();
+            const $list = $('#overview-table-list');
+            $list.empty();
+
+            let localItems  = overviewData.local_tables;
+            let remoteItems = overviewData.remote_tables;
+
+            // キーワード検索
+            if (kw) {
+                localItems  = localItems.filter(t => t.table_name.toLowerCase().includes(kw) || t.database.toLowerCase().includes(kw));
+                remoteItems = remoteItems.filter(t => t.table_name.toLowerCase().includes(kw) || t.database.toLowerCase().includes(kw) || t.site_name.toLowerCase().includes(kw));
+            }
+
+            // フィルタ
+            if (currentFilter === 'local')  remoteItems = [];
+            if (currentFilter === 'remote') localItems  = [];
+
+            let total = 0;
+
+            // ── ローカルグループ ──
+            if (localItems.length > 0) {
+                $list.append('<div class="overview-group-header local-header">🏠 ローカルテーブル</div>');
+
+                // DB ごとにサブグループ
+                const byDb = {};
+                localItems.forEach(t => { (byDb[t.database] = byDb[t.database] || []).push(t); });
+
+                Object.keys(byDb).sort().forEach(db => {
+                    $list.append(`<div class="overview-group-header local-header" style="font-size:11px;padding:3px 14px 3px 22px;background:#3d5166;">📁 ${escapeHtml(db)}</div>`);
+                    byDb[db].sort((a,b) => a.table_name.localeCompare(b.table_name)).forEach(t => {
+                        const key = `local:${t.database}:${t.table_name}`;
+                        const selClass = (key === selectedKey) ? ' selected' : '';
+                        $list.append(`
+                            <div class="overview-item${selClass}" data-key="${key}" data-type="local" data-database="${escapeHtml(t.database)}" data-table="${escapeHtml(t.table_name)}">
+                                <span class="item-table">${escapeHtml(t.table_name)}</span>
+                                <span class="item-rows">${t.row_count}行</span>
+                            </div>
+                        `);
+                        total++;
+                    });
+                });
+            }
+
+            // ── リモートグループ（サイトごと） ──
+            if (remoteItems.length > 0) {
+                // サイトごとにグループ
+                const bySite = {};
+                remoteItems.forEach(t => { (bySite[t.site_name] = bySite[t.site_name] || []).push(t); });
+
+                Object.keys(bySite).sort().forEach(siteName => {
+                    $list.append(`<div class="overview-group-header remote-header">🌐 リモート: ${escapeHtml(siteName)}</div>`);
+
+                    const byDb = {};
+                    bySite[siteName].forEach(t => { (byDb[t.database] = byDb[t.database] || []).push(t); });
+
+                    Object.keys(byDb).sort().forEach(db => {
+                        $list.append(`<div class="overview-group-header remote-header" style="font-size:11px;padding:3px 14px 3px 22px;background:#7d3c98;">📁 ${escapeHtml(db)}</div>`);
+                        byDb[db].sort((a,b) => a.table_name.localeCompare(b.table_name)).forEach(t => {
+                            const key = `remote:${t.site_id}:${t.database}:${t.table_name}`;
+                            const selClass = (key === selectedKey) ? ' selected' : '';
+                            $list.append(`
+                                <div class="overview-item${selClass}" data-key="${key}" data-type="remote" data-site-id="${t.site_id}" data-database="${escapeHtml(t.database)}" data-table="${escapeHtml(t.table_name)}">
+                                    <span class="item-table">${escapeHtml(t.table_name)}</span>
+                                    <span class="item-rows">v${t.version} · ${t.row_count}行</span>
+                                </div>
+                            `);
+                            total++;
+                        });
+                    });
+                });
+            }
+
+            // 件数表示
+            const totalAll = overviewData.local_tables.length + overviewData.remote_tables.length;
+            $('#overview-count').text(total < totalAll ? `${total} / ${totalAll} テーブル` : `${totalAll} テーブル`);
+
+            if (total === 0) {
+                $list.append('<div style="padding:30px;color:#999;text-align:center;">該当テーブルはありません</div>');
+            }
+        }
+
+        // 検索入力
+        $('#overview-search').on('input', function() {
+            currentSearch = $(this).val().trim();
+            selectedKey = null;
+            renderOverviewList();
+            resetPreview();
+        });
+
+        // フィルタ切り替え
+        $('.overview-filter-row button').click(function() {
+            $('.overview-filter-row button').removeClass('active');
+            $(this).addClass('active');
+            currentFilter = $(this).data('filter');
+            renderOverviewList();
+        });
+
+        // リスト項目クリック → プレビュー取得
+        $(document).on('click', '.overview-item', function() {
+            const $item = $(this);
+            const key  = $item.data('key');
+            const type = $item.data('type');
+
+            // 選択状態の切り替え
+            $('.overview-item').removeClass('selected');
+            $item.addClass('selected');
+            selectedKey = key;
+
+            const db    = $item.data('database');
+            const table = $item.data('table');
+
+            // ローディング表示
+            showPreviewLoading();
+
+            if (type === 'local') {
+                $.ajax({
+                    url: '{{ url_for("table_share.preview_local_table") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ database: db, table_name: table }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            renderPreview(db, table, resp, null);
+                        } else {
+                            showPreviewError(resp.error);
+                        }
+                    },
+                    error: function(xhr) {
+                        showPreviewError(xhr.responseJSON?.error || xhr.responseText);
+                    }
+                });
+            } else {
+                // remote
+                const siteId = $item.data('site-id');
+                $.ajax({
+                    url: '{{ url_for("table_share.preview_remote_table") }}',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ alliance_site_id: siteId, database: db, table_name: table }),
+                    success: function(resp) {
+                        if (resp.success) {
+                            // リモート元サイト名を検索
+                            const siteName = overviewData.remote_tables.find(t => t.site_id == siteId)?.site_name || '';
+                            renderPreview(db, table, resp, siteName, resp.version, siteId);
+                        } else {
+                            showPreviewError(resp.error);
+                        }
+                    },
+                    error: function(xhr) {
+                        showPreviewError(xhr.responseJSON?.error || xhr.responseText);
+                    }
+                });
+            }
+        });
+
+        // ── プレビュー描画関数群 ──
+        function resetPreview() {
+            $('#overview-preview-panel').html(`
+                <div class="preview-placeholder" id="preview-placeholder">
+                    <div class="placeholder-icon">📋</div>
+                    <div>左側のリストからテーブルを選んでください</div>
+                    <div style="font-size:12px;">プレビューが表示されます</div>
+                </div>
+            `);
+        }
+
+        function showPreviewLoading() {
+            $('#overview-preview-panel').html(`
+                <div class="preview-loading">
+                    <div class="spinner"></div>
+                    データを取得中...
+                </div>
+            `);
+        }
+
+        function showPreviewError(msg) {
+            $('#overview-preview-panel').html(`
+                <div class="preview-error">
+                    <div class="error-box">❌ ${escapeHtml(msg)}</div>
+                </div>
+            `);
+        }
+
+        function renderPreview(db, table, resp, siteName, version, siteId) {
+            const { columns, rows, total_count, fetched_count } = resp;
+
+            // ── 情報バー ──
+            let titleHtml = `<span class="info-title">${escapeHtml(db)}.${escapeHtml(table)}</span>`;
+            let metaParts = [
+                `📦 全 ${total_count} 行`,
+                `👁 表示 ${fetched_count} 行`,
+                `📐 ${columns.length} カラム`
+            ];
+            if (siteName) {
+                titleHtml = `<span class="badge badge-remote" style="font-size:12px;padding:3px 8px;">${escapeHtml(siteName)}</span> ` + titleHtml;
+            }
+            if (version != null) {
+                metaParts.push(`🏷 v${version}`);
+            }
+            const metaHtml = metaParts.map(p => `<span>${p}</span>`).join('');
+
+            // ── アクションボタン ──
+            let actionBtnHtml = '';
+            if (siteName) {
+                // リモート → 購読タブへ
+                actionBtnHtml = `<button class="preview-action-btn success btn-subscribe-from-overview"
+                                  data-site-id="${siteId}"
+                                  data-remote-db="${escapeHtml(db)}"
+                                  data-remote-table="${escapeHtml(table)}">📥 購読設定を追加</button>`;
+            } else {
+                // ローカル → 公開タブへ
+                actionBtnHtml = `<button class="preview-action-btn btn-publish-from-overview"
+                                  data-database="${escapeHtml(db)}"
+                                  data-table="${escapeHtml(table)}">📤 このテーブルを公開</button>`;
+            }
+
+            // ── テーブル ──
+            let thHtml = '<th class="row-no">#</th>' + columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+
+            let tbodyHtml = '';
+            rows.forEach((row, idx) => {
+                let tdHtml = `<td class="row-no">${idx + 1}</td>`;
+                columns.forEach(col => {
+                    const val = row[col];
+                    if (val === null || val === undefined) {
+                        tdHtml += '<td class="null-val">NULL</td>';
+                    } else {
+                        const str = String(val);
+                        // 長い値は title 属性で全文を見せる
+                        tdHtml += `<td${str.length > 40 ? ` title="${escapeHtml(str)}"` : ''}>${escapeHtml(str)}</td>`;
+                    }
+                });
+                tbodyHtml += `<tr>${tdHtml}</tr>`;
+            });
+
+            $('#overview-preview-panel').html(`
+                <div class="preview-info-bar">
+                    ${titleHtml}
+                    <div class="info-meta">${metaHtml}</div>
+                    ${actionBtnHtml}
+                </div>
+                <div class="preview-scroll-container">
+                    <table class="preview-table">
+                        <thead><tr>${thHtml}</tr></thead>
+                        <tbody>${tbodyHtml}</tbody>
+                    </table>
+                </div>
+            `);
+        }
+
+        // ── Overview アクションボタン: ローカル → 公開タブ ──
+        $(document).on('click', '.btn-publish-from-overview', function() {
+            const db    = $(this).data('database');
+            const table = $(this).data('table');
+
+            // Publishタブに切り替え
+            $('.tab-button').removeClass('active');
+            $('[data-tab="publish"]').addClass('active');
+            $('.tab-content').removeClass('active');
+            $('#tab-publish').addClass('active');
+
+            // DB セレクトに値をセット
+            $('#publish-db-select').val(db);
+
+            // そのDBのテーブル一覧を取得してテーブルセレクトに埋める
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.get_tables") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ database: db }),
+                success: function(resp) {
+                    if (resp.success) {
+                        const $tableSel = $('#publish-table-select');
+                        $tableSel.prop('disabled', false).empty().append('<option value="">選択してください</option>');
+                        resp.tables.forEach(tbl => {
+                            $tableSel.append(`<option value="${tbl}">${tbl}</option>`);
+                        });
+                        // 対象テーブルを自動選択
+                        $tableSel.val(table);
+                        $('#publish-btn').prop('disabled', !$tableSel.val());
+                    }
+                },
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // ── Overview アクションボタン: リモート → 購読タブ ──
+        $(document).on('click', '.btn-subscribe-from-overview', function() {
+            const siteId     = $(this).data('site-id');
+            const remoteDb   = $(this).data('remote-db');
+            const remoteTable = $(this).data('remote-table');
+
+            // Subscribeタブに切り替え
+            $('.tab-button').removeClass('active');
+            $('[data-tab="subscribe"]').addClass('active');
+            $('.tab-content').removeClass('active');
+            $('#tab-subscribe').addClass('active');
+
+            // アライアンスサイト・リモート情報をセット
+            $('#sub-site-select').val(siteId);
+            $('#fetch-remote-btn').prop('disabled', false);
+            $('#sub-remote-db').val(remoteDb);
+            $('#sub-remote-table').val(remoteTable);
+
+            // ローカルDBが未選択なら最初の項目を自動選択
+            if (!$('#sub-local-db').val()) {
+                const firstOpt = $('#sub-local-db option:eq(1)').val();
+                if (firstOpt) $('#sub-local-db').val(firstOpt);
+            }
+
+            showResult(`リモートテーブル「${remoteDb}.${remoteTable}」の購読設定を開いました`, false);
+        });
+
+        // ===========================================
+        // Publishタブ
+        // ===========================================
+
+        // データベース一覧を取得
+        function loadDatabases() {
+            $.ajax({
+                url: '{{ url_for("table_share.get_databases") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        const dbs = resp.databases;
+                        ['#publish-db-select', '#sub-local-db'].forEach(sel => {
+                            $(sel).empty().append('<option value="">選択してください</option>');
+                            dbs.forEach(db => {
+                                $(sel).append(`<option value="${db}">${db}</option>`);
+                            });
+                        });
+                    }
+                }
+            });
+        }
+
+        // テーブル一覧を取得
+        $('#publish-db-select').change(function() {
+            const db = $(this).val();
+            const $tableSel = $('#publish-table-select');
+            $tableSel.prop('disabled', true).empty().append('<option value="">選択してください</option>');
+            $('#publish-btn').prop('disabled', true);
+
+            if (!db) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.get_tables") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ database: db }),
+                success: function(resp) {
+                    if (resp.success) {
+                        $tableSel.prop('disabled', false);
+                        resp.tables.forEach(tbl => {
+                            $tableSel.append(`<option value="${tbl}">${tbl}</option>`);
+                        });
+                    }
+                },
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        $('#publish-table-select').change(function() {
+            $('#publish-btn').prop('disabled', !$(this).val());
+        });
+
+        // テーブル公開
+        $('#publish-btn').click(function() {
+            const db = $('#publish-db-select').val();
+            const table = $('#publish-table-select').val();
+            const desc = $('#publish-description').val();
+
+            if (!db || !table) return;
+
+            if (!confirm(`テーブル「${table}」を公開します。よろしいですか？`)) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.publish_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: db,
+                    table_name: table,
+                    description: desc
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadPublishedTables();
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: (xhr) => showResult('エラー: ' + xhr.responseText, true),
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // 公開済みテーブル一覧
+        function loadPublishedTables() {
+            $.ajax({
+                url: '{{ url_for("table_share.get_published_tables") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        const $tbody = $('#published-tables tbody');
+                        $tbody.empty();
+                        if (resp.tables.length === 0) {
+                            $tbody.append('<tr><td colspan="8" style="text-align:center;">公開中のテーブルはありません</td></tr>');
+                        } else {
+                            resp.tables.forEach(t => {
+                                $tbody.append(`
+                                    <tr>
+                                        <td><span class="badge badge-warning">📡 公開中</span></td>
+                                        <td>${t.database_name}</td>
+                                        <td>${t.table_name}</td>
+                                        <td><span class="badge badge-info">v${t.version}</span></td>
+                                        <td>${t.row_count}行</td>
+                                        <td>${t.updated_at}</td>
+                                        <td>${t.description || '-'}</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button class="republish-btn" data-db="${t.database_name}" data-table="${t.table_name}" title="最新データで再公開">🔄 再公開</button>
+                                                <button class="danger unpublish-btn" data-db="${t.database_name}" data-table="${t.table_name}" title="公開を取り消す">🚫 非公開</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `);
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // 再公開ボタンイベント（イベント委譲）
+        $(document).on('click', '.republish-btn', function() {
+            const db = $(this).data('db');
+            const table = $(this).data('table');
+            if (!confirm(`テーブル「${table}」を最新データで再公開（バージョンアップ）します。\n依存クライアントは次回同期時に新しいデータを取得します。\nよろしいですか？`)) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.publish_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: db,
+                    table_name: table,
+                    description: ''
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadPublishedTables();
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: (xhr) => showResult('エラー: ' + xhr.responseText, true),
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // 非公開ボタンイベント（イベント委譲）
+        $(document).on('click', '.unpublish-btn', function() {
+            const db = $(this).data('db');
+            const table = $(this).data('table');
+
+            if (!confirm(`テーブル「${db}.${table}」の公開を取り消します。\n\n⚠️ 注意:\n・他サイトがこのテーブルを購読している場合、次回同期時にエラーが発生します\n・テーブル自体は削除されず、ローカルで引き続き使用できます\n\nよろしいですか？`)) {
+                return;
+            }
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.unpublish_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    database: db,
+                    table_name: table
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadPublishedTables();
+                        // Overview のキャッシュを無効化
+                        overviewLoaded = false;
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('非公開エラー: ' + (xhr.responseJSON?.error || xhr.responseText), true);
+                },
+                complete: () => $('#loading').hide()
+            });
+        });
+        // ===========================================
+        // Subscribeタブ
+        // ===========================================
+
+        // アライアンスサイト一覧を取得
+        function loadAllianceSites() {
+            $.ajax({
+                url: '{{ url_for("table_share.get_alliance_sites") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        const $siteSel = $('#sub-site-select');
+                        $siteSel.empty().append('<option value="">選択してください</option>');
+                        resp.sites.forEach(s => {
+                            $siteSel.append(`<option value="${s.id}">${s.site_name} (${s.site_url})</option>`);
+                        });
+
+                        // アライアンス一覧テーブル
+                        const $tbody = $('#alliance-sites-table tbody');
+                        $tbody.empty();
+                        if (resp.sites.length === 0) {
+                            $tbody.append('<tr><td colspan="6" style="text-align:center;">登録済みサイトはありません</td></tr>');
+                        } else {
+                            resp.sites.forEach(s => {
+                                $tbody.append(`
+                                    <tr>
+                                        <td>${s.site_name}</td>
+                                        <td>${s.site_url}</td>
+                                        <td>${s.description || '-'}</td>
+                                        <td>${s.created_at}</td>
+                                        <td><span class="badge badge-success">有効</span></td>
+                                        <td>
+                                            <button class="danger delete-site-btn" data-id="${s.id}" data-name="${s.site_name}">✕ 削除</button>
+                                        </td>
+                                    </tr>
+                                `);
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // アライアンスサイト削除ボタンイベント（イベント委譲）
+        $(document).on('click', '.delete-site-btn', function() {
+            const siteId = $(this).data('id');
+            const siteName = $(this).data('name');
+
+            if (!confirm(`サイト「${siteName}」を削除しますか？\n\n※ このサイトへの購読設定がある場合は先に解除してください。`)) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.delete_alliance_site") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ site_id: siteId }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadAllianceSites();
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('削除エラー: ' + (xhr.responseJSON?.error || xhr.responseText), true);
+                },
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // アライアンスサイト選択時
+        $('#sub-site-select').change(function() {
+            const siteId = $(this).val();
+            $('#fetch-remote-btn').prop('disabled', !siteId);
+            $('#remote-tables-section').hide();
+            $('#sub-remote-db, #sub-remote-table').val('');
+        });
+
+        // リモート公開テーブル取得ボタン
+        $('#fetch-remote-btn').click(function() {
+            const siteId = $('#sub-site-select').val();
+            if (!siteId) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.fetch_remote_tables") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ alliance_site_id: siteId }),
+                success: function(resp) {
+                    if (resp.success) {
+                        $('#remote-site-name').text(resp.site_name);
+                        const $tbody = $('#remote-tables-list tbody');
+                        $tbody.empty();
+
+                        if (resp.tables.length === 0) {
+                            $tbody.append('<tr><td colspan="7" style="text-align:center;">公開中のテーブルはありません</td></tr>');
+                        } else {
+                            resp.tables.forEach((t, idx) => {
+                                $tbody.append(`
+                                    <tr>
+                                        <td><button class="select-remote-btn" data-db="${t.database_name}" data-table="${t.table_name}">選択</button></td>
+                                        <td>${t.database_name}</td>
+                                        <td>${t.table_name}</td>
+                                        <td>v${t.version}</td>
+                                        <td>${t.row_count}行</td>
+                                        <td>${t.description || '-'}</td>
+                                        <td>${t.updated_at}</td>
+                                    </tr>
+                                `);
+                            });
+                        }
+
+                        $('#remote-tables-section').show();
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: (xhr) => showResult('接続エラー: ' + xhr.responseText, true),
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // 選択ボタンイベント（イベント委譲）
+        $(document).on('click', '.select-remote-btn', function() {
+            const db = $(this).data('db');
+            const table = $(this).data('table');
+            $('#sub-remote-db').val(db);
+            $('#sub-remote-table').val(table);
+            showResult(`${db}.${table} を選択しました`, false);
+        });
+
+        // 購読設定追加
+        $('#add-subscription-btn').click(function() {
+            const siteId = $('#sub-site-select').val();
+            const remoteDb = $('#sub-remote-db').val();
+            const remoteTable = $('#sub-remote-table').val();
+            const localDb = $('#sub-local-db').val();
+            const localTable = $('#sub-local-table').val();
+
+            if (!siteId || !remoteDb || !remoteTable || !localDb) {
+                showResult('必須項目を入力してください', true);
+                return;
+            }
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.add_subscription") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    alliance_site_id: siteId,
+                    remote_database: remoteDb,
+                    remote_table: remoteTable,
+                    local_database: localDb,
+                    local_table: localTable
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadSubscriptions();
+                        // フォームクリア
+                        $('#sub-remote-db, #sub-remote-table, #sub-local-table').val('');
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: (xhr) => showResult('エラー: ' + xhr.responseText, true),
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // 購読一覧
+        function loadSubscriptions() {
+            $.ajax({
+                url: '{{ url_for("table_share.get_subscriptions") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        const $tbody = $('#subscriptions-table tbody');
+                        $tbody.empty();
+                        if (resp.subscriptions.length === 0) {
+                            $tbody.append('<tr><td colspan="6" style="text-align:center;">購読設定がありません</td></tr>');
+                        } else {
+                            resp.subscriptions.forEach(s => {
+                                $tbody.append(`
+                                    <tr id="sub-row-${s.id}">
+                                        <td>${s.remote_site_name || '-'}</td>
+                                        <td>${s.remote_database}.${s.remote_table}</td>
+                                        <td>${s.local_database}.${s.local_table || s.remote_table}</td>
+                                        <td>${s.last_synced_at || '未同期'}</td>
+                                        <td>${s.last_synced_version ? 'v' + s.last_synced_version : '-'}</td>
+                                        <td>
+                                            <div class="action-buttons" id="action-${s.id}">
+                                                <button class="success sync-btn" data-id="${s.id}">🔄 同期</button>
+                                                <button class="danger delete-sub-btn" data-id="${s.id}" data-name="${s.remote_table}">✕ 解除</button>
+                                            </div>
+                                            <div class="sync-progress" id="progress-${s.id}" style="display:none;">
+                                                <span class="progress-text"></span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `);
+                            });
+                        }
+                    } else {
+                        showResult('購読一覧取得エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('購読一覧取得エラー: ' + xhr.responseText, true);
+                }
+            });
+        }
+
+        // 同期進捗表示のステージ
+        const syncStages = [
+            '[SYNC] 開始...',
+            '[FETCH] リモート接続中...',
+            '[FETCH] データ取得中...',
+            '[BACKUP] バックアップ作成中...',
+            '[UPDATE] テーブル更新中...',
+            '[SAVE] 履歴保存中...'
+        ];
+
+        // 同期ボタンイベント（イベント委譲）
+        $(document).on('click', '.sync-btn', function() {
+            const $btn = $(this);
+
+            // 既に処理中なら無視（連打防止）
+            if ($btn.prop('disabled') || $btn.data('syncing')) {
+                console.log('既に同期処理中です');
+                return false;
+            }
+
+            const subId = $btn.data('id');
+            console.log('=== 同期開始 ===');
+            console.log('subscription_id:', subId);
+
+            if (!confirm('テーブルを同期します。バックアップが自動作成されます。続行しますか？')) {
+                return false;
+            }
+
+            // 処理中フラグを立てる
+            $btn.data('syncing', true);
+            $btn.prop('disabled', true);
+
+            // ボタンを非表示にし、進捗表示に切り替え
+            const $actionDiv = $(`#action-${subId}`);
+            const $progressDiv = $(`#progress-${subId}`);
+            const $progressText = $progressDiv.find('.progress-text');
+
+            $actionDiv.hide();
+            $progressDiv.show();
+
+            // 進捗ステージを順番に表示
+            let stageIndex = 0;
+            $progressText.text(syncStages[stageIndex]);
+
+            const stageInterval = setInterval(() => {
+                stageIndex++;
+                if (stageIndex < syncStages.length) {
+                    $progressText.text(syncStages[stageIndex]);
+                }
+            }, 500);
+
+            // ボタンをリセットする関数
+            const resetButton = function() {
+                $btn.data('syncing', false);
+                $btn.prop('disabled', false);
+            };
+
+            $.ajax({
+                url: '{{ url_for("table_share.sync_table") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ subscription_id: subId }),
+                timeout: 120000,
+                success: function(resp) {
+                    clearInterval(stageInterval);
+                    console.log('=== 同期成功 ===');
+                    console.log('レスポンス:', resp);
+                    if (resp.success) {
+                        $progressText.text('✅ ' + resp.message);
+                        showResult(resp.message, false);
+                        overviewLoaded = false;
+                        setTimeout(() => {
+                            $progressDiv.hide();
+                            $actionDiv.show();
+                            resetButton();
+                            loadSubscriptions();
+                            loadSyncHistory();
+                        }, 2000);
+                    } else {
+                        console.error('=== 同期失敗（サーバーエラー）===');
+                        console.error('エラー詳細:', resp.error);
+                        $progressText.text('❌ エラー: ' + resp.error);
+                        alert('同期エラーの詳細:\n\n' + resp.error);
+                        showResult('エラー: ' + resp.error, true);
+                        setTimeout(() => {
+                            $progressDiv.hide();
+                            $actionDiv.show();
+                            resetButton();
+                        }, 5000);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    clearInterval(stageInterval);
+                    console.error('=== 同期失敗（ネットワーク/通信エラー）===');
+                    console.error('ステータス:', status);
+                    console.error('エラー:', error);
+                    console.error('レスポンス:', xhr.responseText);
+
+                    let errMsg = 'エラーが発生しました';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errMsg = xhr.responseJSON.error;
+                    } else if (xhr.responseText) {
+                        errMsg = xhr.responseText.substring(0, 200);
+                    }
+
+                    $progressText.text('❌ エラー');
+                    alert('同期エラー:\n\n' + errMsg + '\n\nHTTPステータス: ' + xhr.status);
+                    showResult('同期エラー: ' + errMsg, true);
+
+                    setTimeout(() => {
+                        $progressDiv.hide();
+                        $actionDiv.show();
+                        resetButton();
+                    }, 5000);
+                }
+            });
+
+            return false;  // イベント伝播を止める
+        });
+
+        // 購読解除ボタンイベント（イベント委譲）
+        $(document).on('click', '.delete-sub-btn', function() {
+            const subId = $(this).data('id');
+            const tableName = $(this).data('name');
+
+            if (!confirm(`「${tableName}」の購読設定を解除しますか？\n（ローカルテーブルは削除されません）`)) return;
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.delete_subscription") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ subscription_id: subId }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadSubscriptions();
+                        loadSyncHistory();
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: function(xhr) {
+                    showResult('解除エラー: ' + (xhr.responseJSON?.error || xhr.responseText), true);
+                },
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // ===========================================
+        // Allianceタブ
+        // ===========================================
+
+        // 自サイトのURL表示
+        $('#my-site-url').text(window.location.origin);
+
+        // 接続確認ボタン
+        $('#check-site-btn').click(function() {
+            const siteUrl = $('#alliance-site-url').val().trim().replace(/\/$/, '');
+            if (!siteUrl) {
+                $('#check-site-result').html('<span style="color: red;">URLを入力してください</span>');
+                return;
+            }
+
+            $('#check-site-result').html('<span style="color: gray;">確認中...</span>');
+            $.ajax({
+                url: '{{ url_for("table_share.check_site") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ site_url: siteUrl }),
+                success: function(resp) {
+                    if (resp.success) {
+                        const info = resp.site_info;
+                        $('#check-site-result').html(`<span style="color: green;">✅ FUJIN-P対応（${info.site_name}）</span>`);
+                        // サイト名を自動入力
+                        if (!$('#alliance-site-name').val()) {
+                            $('#alliance-site-name').val(info.site_name);
+                        }
+                        if (info.description && !$('#alliance-description').val()) {
+                            $('#alliance-description').val(info.description);
+                        }
+                    } else {
+                        $('#check-site-result').html(`<span style="color: orange;">⚠️ ${resp.error}</span>`);
+                    }
+                },
+                error: function() {
+                    $('#check-site-result').html('<span style="color: red;">❌ 接続エラー</span>');
+                }
+            });
+        });
+
+        $('#add-alliance-btn').click(function() {
+            const siteName = $('#alliance-site-name').val();
+            const siteUrl = $('#alliance-site-url').val();
+            const apiKey = $('#alliance-api-key').val();
+            const desc = $('#alliance-description').val();
+
+            if (!siteName || !siteUrl || !apiKey) {
+                showResult('必須項目を入力してください', true);
+                return;
+            }
+
+            $('#loading').show();
+            $.ajax({
+                url: '{{ url_for("table_share.add_alliance_site") }}',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    site_name: siteName,
+                    site_url: siteUrl,
+                    api_key: apiKey,
+                    description: desc
+                }),
+                success: function(resp) {
+                    if (resp.success) {
+                        showResult(resp.message, false);
+                        loadAllianceSites();
+                        // フォームクリア
+                        $('#alliance-site-name, #alliance-site-url, #alliance-api-key, #alliance-description').val('');
+                        // Overview キャッシュ無効化
+                        overviewLoaded = false;
+                    } else {
+                        showResult('エラー: ' + resp.error, true);
+                    }
+                },
+                error: (xhr) => showResult('エラー: ' + xhr.responseText, true),
+                complete: () => $('#loading').hide()
+            });
+        });
+
+        // ===========================================
+        // Historyタブ
+        // ===========================================
+
+        function loadSyncHistory() {
+            $.ajax({
+                url: '{{ url_for("table_share.get_sync_history") }}',
+                method: 'GET',
+                success: function(resp) {
+                    if (resp.success) {
+                        const $tbody = $('#history-table tbody');
+                        $tbody.empty();
+                        if (resp.history.length === 0) {
+                            $tbody.append('<tr><td colspan="7" style="text-align:center;">同期履歴がありません</td></tr>');
+                        } else {
+                            resp.history.forEach(h => {
+                                const statusBadge = h.status === 'success'
+                                    ? '<span class="badge badge-success">成功</span>'
+                                    : '<span class="badge badge-warning">失敗</span>';
+                                $tbody.append(`
+                                    <tr>
+                                        <td>${h.synced_at}</td>
+                                        <td>${h.remote_table}</td>
+                                        <td>${h.local_table}</td>
+                                        <td>v${h.remote_version}</td>
+                                        <td>${h.row_count}行</td>
+                                        <td>${h.backup_table || '-'}</td>
+                                        <td>${statusBadge}</td>
+                                    </tr>
+                                `);
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // ===========================================
+        // 初期化
+        // ===========================================
+        loadOverview();          // ← Overview が初期タブなので最初に読み込む
+        loadDatabases();
+        loadPublishedTables();
+        loadAllianceSites();
+        loadSubscriptions();
+        loadSyncHistory();
+    });
+    </script>
+</body>
+</html>

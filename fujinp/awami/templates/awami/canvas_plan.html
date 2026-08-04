@@ -1,0 +1,218 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>プレゼン計画 - あわみ</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.6; padding: 16px;
+       height: 100vh; display: flex; flex-direction: column; }
+h1 { font-size: 1.12em; margin-bottom: 2px; }
+.sub { color: #7a8694; font-size: .8em; margin-bottom: 10px; }
+.toolbar { margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mode-btn { padding: 7px 16px; border: 2px solid #ccd4dc; border-radius: 8px;
+            background: #fff; font-size: .88em; cursor: pointer; font-family: inherit; }
+.mode-btn:hover { background: #eef2f6; }
+.mode-btn.sel { border-color: #35618f; background: #eaf1f8; font-weight: bold; }
+.mode-btn.live.sel { border-color: #a53d3d; background: #fbeaea; }
+.spacer { flex: 1; }
+.done-btn { padding: 7px 18px; border: none; border-radius: 8px; background: #35618f;
+            color: #fff; font-size: .88em; cursor: pointer; font-family: inherit; }
+.done-btn:hover { background: #2a4d72; }
+.mode-note { font-size: .78em; color: #7a8694; margin-bottom: 8px; }
+.mode-note.live { color: #a53d3d; }
+.list { flex: 1; overflow-y: auto; background: #fff;
+        border: 1px solid #dde3ea; border-radius: 8px; padding: 8px 10px; }
+.empty { color: #98a3ae; font-size: .88em; padding: 16px 6px; }
+.item { display: flex; align-items: center; gap: 6px;
+        border-bottom: 1px solid #eef2f6; padding: 7px 4px; }
+.item .num { width: 30px; color: #98a3ae; font-size: .8em; text-align: right; flex-shrink: 0; }
+.item .label { flex: 1; font-size: .95em; min-width: 0;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.indent .label { padding-left: 26px; color: #5a6672; }
+.item.indent .label::before { content: '└ '; color: #b3bfca; }
+.item.deleted .label { color: #b3bfca; text-decoration: line-through; }
+.sub-badge { font-size: .68em; color: #6b86a5; background: #eaf1f8;
+             border-radius: 8px; padding: 0 7px; flex-shrink: 0; }
+.op { border: 1px solid #ccd4dc; background: #fff; border-radius: 5px;
+      padding: 3px 8px; font-size: .78em; cursor: pointer; font-family: inherit;
+      flex-shrink: 0; }
+.op:hover { background: #eef2f6; }
+.op:disabled { opacity: .35; cursor: default; }
+.op.del { color: #a53d3d; border-color: #dcb9b9; }
+.open-btn { border: none; border-radius: 6px; padding: 6px 16px; font-size: .86em;
+            cursor: pointer; font-family: inherit; color: #fff; flex-shrink: 0; }
+.open-btn.rehearsal { background: #3aa6b9; }
+.open-btn.rehearsal:hover { background: #2e8b9c; }
+.open-btn.live { background: #a53d3d; }
+.open-btn.live:hover { background: #8a3030; }
+.open-btn:disabled { background: #ccd4dc; cursor: default; }
+</style>
+</head>
+<body>
+<h1>📋 プレゼン計画</h1>
+<div class="sub">{{ canvas.name }}</div>
+
+<div class="toolbar" style="margin-bottom:6px;">
+    <span style="font-size:.82em;color:#5a6672;">計画:</span>
+    <select id="planSel" style="padding:5px 8px;border:1px solid #ccd4dc;border-radius:6px;font-size:.85em;font-family:inherit;max-width:220px;"></select>
+    <button class="btn" id="btnPlanNew">＋ 新規</button>
+    <button class="btn" id="btnPlanRename">改名</button>
+    <button class="btn" id="btnPlanDel">削除</button>
+</div>
+
+<div class="toolbar">
+    <button class="mode-btn sel" data-mode="edit">✏️ 編集</button>
+    <button class="mode-btn" data-mode="rehearsal">🎧 リハーサル</button>
+    <button class="mode-btn live" data-mode="live">🔴 実行</button>
+    <span class="spacer"></span>
+    <button class="done-btn" id="btnDone">完了</button>
+</div>
+<div class="mode-note" id="modeNote">キャンバスのノードを右クリック→「プレゼン計画に追加」で末尾に加わります．↑↓で並べ替え，⇥で直上ノードのsub（オプショナル提示）にできます．</div>
+
+<div class="list" id="planList"><div class="empty">まだ計画はありません</div></div>
+
+<script>
+const CANVAS_ID = {{ canvas.id }};
+let mode = 'edit';           // edit / rehearsal / live
+let lastJson = null;
+let PLANS = [];
+let currentPlan = null;
+
+function loadPlans(selId) {
+    $.getJSON('/awami/api/canvas/' + CANVAS_ID + '/plans', function(d) {
+        if (!d || !d.success) return;
+        PLANS = d.plans;
+        const $s = $('#planSel').empty();
+        PLANS.forEach(p => $s.append($('<option>').val(p.id).text(p.name)));
+        if (PLANS.length === 0) {
+            currentPlan = null;
+            $('#planList').empty().append($('<div class="empty">').text('計画がありません。「＋ 新規」で作成し、キャンバスのノードから追加してください。'));
+            return;
+        }
+        currentPlan = (selId && PLANS.some(p => p.id == selId)) ? selId : PLANS[0].id;
+        $s.val(currentPlan);
+        load();
+    });
+}
+$('#planSel').on('change', function() { currentPlan = parseInt($(this).val()); load(); });
+$('#btnPlanNew').on('click', function() {
+    const name = prompt('新しい計画の名前は？', '計画 ' + (PLANS.length + 1));
+    if (name === null) return;
+    $.ajax({ url: '/awami/api/canvas/' + CANVAS_ID + '/plans/create',
+        method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name: name }),
+        success: r => { if (r.success) loadPlans(r.id); } });
+});
+$('#btnPlanRename').on('click', function() {
+    if (!currentPlan) return;
+    const cur = PLANS.find(p => p.id == currentPlan);
+    const name = prompt('計画名を変更:', cur ? cur.name : '');
+    if (name === null) return;
+    $.ajax({ url: '/awami/api/plan/' + currentPlan + '/rename',
+        method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name: name }),
+        success: r => { if (r.success) loadPlans(currentPlan); } });
+});
+$('#btnPlanDel').on('click', function() {
+    if (!currentPlan) return;
+    if (!confirm('この計画を削除します（計画の項目も消えます。ノード自体は残ります）。よろしいですか？')) return;
+    $.ajax({ url: '/awami/api/plan/' + currentPlan + '/delete',
+        method: 'POST', contentType: 'application/json', data: '{}',
+        success: r => { if (r.success) loadPlans(); } });
+});
+
+const NOTES = {
+    edit: 'キャンバスのノードを右クリック→「プレゼン計画に追加」で末尾に加わります．↑↓で並べ替え，⇥で直上ノードのsub（オプショナル提示）にできます．',
+    rehearsal: 'リハーサルモード：「開く」で資料を別ウィンドウに開きます．討論の展開には記録されません．',
+    live: '実行モード：「開く」で資料を開き，討論の展開に記録されます（即興で開いたものと同じ扱い）．'
+};
+
+$('.mode-btn').on('click', function() {
+    $('.mode-btn').removeClass('sel');
+    $(this).addClass('sel');
+    mode = $(this).data('mode');
+    $('#modeNote').text(NOTES[mode]).toggleClass('live', mode === 'live');
+    if (lastJson) render(lastJson);
+});
+
+
+$('#btnDone').on('click', () => window.close());
+
+function api(url, data, done) {
+    $.ajax({ url: url, method: 'POST', contentType: 'application/json',
+             data: JSON.stringify(data || {}),
+             success: resp => { if (resp.success) { if (done) done(resp); load(); } },
+           });
+}
+
+function render(d) {
+    lastJson = d;
+    const $l = $('#planList').empty();
+    if (d.items.length === 0) {
+        $l.append($('<div class="empty">').text('まだ計画はありません．キャンバスのノードを右クリック→「プレゼン計画に追加」．'));
+        return;
+    }
+    let mainNo = 0;
+    d.items.forEach(function(it, i) {
+        const $row = $('<div class="item">').toggleClass('indent', !!it.indent)
+                                            .toggleClass('deleted', !!it.deleted);
+        if (!it.indent) mainNo += 1;
+        $row.append($('<div class="num">').text(it.indent ? '' : mainNo + '.'));
+        const $label = $('<div class="label">').text(it.label).attr('title', it.label);
+        $row.append($label);
+        if (it.indent) $row.append($('<span class="sub-badge">').text('sub'));
+
+        if (mode === 'edit') {
+            const $up = $('<button class="op">↑</button>').prop('disabled', i === 0)
+                .on('click', () => api('/awami/api/plan_item/' + it.id + '/move', { direction: 'up' }));
+            const $dn = $('<button class="op">↓</button>').prop('disabled', i === d.items.length - 1)
+                .on('click', () => api('/awami/api/plan_item/' + it.id + '/move', { direction: 'down' }));
+            const $ind = $('<button class="op">')
+                .text(it.indent ? '⇤ 解除' : '⇥ sub')
+                .prop('disabled', i === 0 && !it.indent)
+                .on('click', () => api('/awami/api/plan_item/' + it.id + '/indent', { indent: it.indent ? 0 : 1 }));
+            const $del = $('<button class="op del">✕</button>')
+                .on('click', () => api('/awami/api/plan_item/' + it.id + '/delete'));
+            $row.append($up, $dn, $ind, $del);
+        } else {
+            const live = (mode === 'live');
+            const $open = $('<button class="open-btn">')
+                .addClass(live ? 'live' : 'rehearsal')
+                .text('開く')
+                .prop('disabled', !it.url || it.deleted)
+                .on('click', function() {
+                    if (live) {
+                        // 実行：討論の展開に記録してから開く（即興openと同じイベント）
+                        $.ajax({ url: '/awami/api/canvas/' + CANVAS_ID + '/node_open',
+                                 method: 'POST', contentType: 'application/json',
+                                 data: JSON.stringify({ node_id: it.node_id }) });
+                    }
+                    window.open(it.url, '_blank');
+                });
+            $row.append($open);
+        }
+        $l.append($row);
+    });
+}
+
+function load() {
+    if (!currentPlan) return;
+    $.getJSON('/awami/api/canvas/' + CANVAS_ID + '/plan?plan_id=' + currentPlan, function(d) {
+        if (d && d.success) render(d);
+    });
+}
+loadPlans({{ sel_plan if sel_plan else 'null' }});
+setInterval(load, 3000);   // キャンバス側からの追加を拾う
+</script>
+</body>
+</html>

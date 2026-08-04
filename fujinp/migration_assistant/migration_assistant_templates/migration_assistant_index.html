@@ -1,0 +1,1477 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>まいあし - マイグレーションアシスタント</title>
+    <!-- Markdown変換ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- KaTeX CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <style>
+        :root {
+            --header-height: 50px;
+            --primary-color: #6a1b9a;
+            --accent-color: #ab47bc;
+            --success-color: #4caf50;
+            --border-color: #ddd;
+            --bg-color: #f5f5f5;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            background: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ヘッダー */
+        #header {
+            height: var(--header-height);
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+        #header h1 {
+            font-size: 20px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+        }
+        #header h1::before {
+            content: '👣';
+            margin-right: 10px;
+            font-size: 24px;
+        }
+        .header-nav {
+            display: flex;
+            gap: 15px;
+        }
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: 0.2s;
+        }
+        .nav-link:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .btn-return {
+            color: #fff;
+            background: #e74c3c;
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+            transition: 0.2s;
+        }
+        .btn-return:hover {
+            background: #c0392b;
+        }
+
+        /* メインコンテナ */
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左サイドバー: システム一覧 */
+        #systems-panel {
+            width: 350px;
+            background: white;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 15px 20px;
+            background: #fafafa;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+        }
+        .systems-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .system-card {
+            display: block;              /* a要素をカードとして扱う */
+            color: inherit;              /* リンク色を打ち消す */
+            text-decoration: none;       /* 下線を打ち消す */
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .system-card:hover {
+            border-color: var(--accent-color);
+            box-shadow: 0 2px 8px rgba(106,27,154,0.1);
+        }
+        .system-card.active {
+            border-color: var(--primary-color);
+            background: #f3e5f5;
+            box-shadow: 0 2px 8px rgba(106,27,154,0.2);
+        }
+        .system-url {
+            font-weight: bold;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 6px;
+        }
+        .system-meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .system-progress {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .progress-bar {
+            flex: 1;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), #81c784);
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 11px;
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        /* 右メインエリア: 進捗詳細 */
+        #detail-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* 師匠未指名時の表示 */
+        .no-mentor-box {
+            background: white;
+            border: 2px solid #ff9800;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            max-width: 600px;
+            margin: 50px auto;
+        }
+        .no-mentor-box h2 {
+            color: #ff9800;
+            margin: 0 0 20px 0;
+        }
+        .no-mentor-box p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .mentor-list {
+            text-align: left;
+            margin: 20px 0;
+        }
+        .mentor-item {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .mentor-name {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .detail-placeholder {
+            text-align: center;
+            color: #999;
+            margin-top: 100px;
+            font-size: 14px;
+        }
+        .detail-placeholder::before {
+            content: '📋';
+            display: block;
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .detail-header {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .system-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .system-info-row {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Phaseカード */
+        .phase-section {
+            margin-bottom: 30px;
+        }
+        .phase-title {
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 20px 0 15px 0;
+            padding: 12px;
+            background: #f3e5f5;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        /* Stageカード */
+        .stage-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .stage-checkbox {
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+        }
+        .stage-name {
+            flex: 1;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        .stage-completed {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+
+        /* Stepリスト */
+        .steps-list {
+            margin-left: 35px;
+        }
+        .steps-list-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: #fafafa;
+            border-radius: 4px;
+        }
+        .step-id {
+            font-family: monospace;
+            color: #888;
+            font-size: 12px;
+            min-width: 55px;
+        }
+        .step-title {
+            flex: 1;
+            font-size: 13px;
+            color: #555;
+        }
+        .btn-step-detail {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: 0.2s;
+        }
+        .btn-step-detail:hover {
+            background: var(--accent-color);
+        }
+
+        /* 進捗ステータス */
+        .progress-status {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 11px;
+        }
+        .progress-status label {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            transition: 0.2s;
+        }
+        .progress-status label:hover {
+            background: #e0e0e0;
+        }
+        .progress-status input[type="radio"] {
+            cursor: pointer;
+        }
+        .status-未着手 { color: #999; }
+        .status-取り組み中 { color: #2196F3; font-weight: 500; }
+        .status-苦戦 { color: #FF9800; font-weight: 500; }
+        .status-完了 { color: #4CAF50; font-weight: 600; }
+        .status-放棄 { color: #f44336; }
+
+        /* ボタン */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--accent-color);
+        }
+        .btn-secondary {
+            background: white;
+            border: 1px solid #ccc;
+            color: #555;
+        }
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 10px 24px;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+            transform: scale(1.02);
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-box {
+            background: white;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+        }
+        
+        /* 閉じるボタンの案内 */
+        .modal-close-notice {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #856404;
+            text-align: center;
+            animation: pulse-notice 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-notice {
+            0%, 100% {
+                background: #fff3cd;
+            }
+            50% {
+                background: #ffe69c;
+            }
+        }
+        
+        .modal-content {
+            line-height: 1.8;
+            color: #333;
+        }
+        .modal-content p {
+            margin: 12px 0;
+        }
+        .modal-content h1 {
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        .modal-content h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        .modal-content h3 {
+            color: var(--accent-color);
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .modal-content code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .modal-content pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .modal-content pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        .modal-content ul, .modal-content ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        .modal-content li {
+            margin: 6px 0;
+        }
+        .modal-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+        }
+        .modal-content th, .modal-content td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        .modal-content th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: bold;
+        }
+        .modal-content tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .modal-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .modal-content blockquote {
+            border-left: 4px solid var(--accent-color);
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #666;
+            font-style: italic;
+        }
+        .modal-content .katex {
+            font-size: 1.1em;
+        }
+        .modal-content .katex-display {
+            margin: 20px 0;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f0f0;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: #555;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* 師匠情報 */
+        .mentor-badge {
+            display: inline-flex;
+            align-items: center;
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #1976d2;
+            font-weight: 500;
+        }
+        .mentor-badge::before {
+            content: '👨‍🏫';
+            margin-right: 6px;
+        }
+        .loading-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f0f0f0;
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .courses-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            padding: 10px;
+        }
+
+        .course-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: 0.2s;
+        }
+
+        .course-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 12px rgba(106, 27, 154, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .course-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .course-card .course-creator {
+            color: var(--primary-color);
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .course-card .course-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            max-height: 60px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .course-card .course-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 15px;
+        }
+
+        .course-card .course-phases {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-enroll {
+            width: 100%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        .btn-enroll:hover {
+            background: var(--accent-color);
+        }
+        /* システムカード内の削除ボタン */
+        .system-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+            position: relative; /* ← 追加 */
+        }
+
+        .system-card-delete {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #f44336;
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: 0.2s;
+            z-index: 10;
+        }
+
+        .system-card:hover .system-card-delete {
+            opacity: 1;
+        }
+
+        .system-card-delete:hover {
+            background: #d32f2f;
+            transform: scale(1.1);
+        }
+</style>
+</head>
+<body>
+
+<div id="header">
+    <h1>まいあし <span style="font-size:12px; opacity:0.8; margin-left:10px; font-weight:400;">Migration Assistant</span></h1>
+    <div class="header-nav">
+        <a href="/migration_assistant/mentor_dashboard" class="nav-link">👨‍🏫 師匠ダッシュボード</a>
+        <a href="/migration_assistant/admin_panel" class="nav-link" id="admin-link" style="display:none;">⚙️ 管理者パネル</a>
+        <a href="/migration_assistant/return_to_fujin" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+</div>
+
+<div id="main-container">
+    <!-- 左: コース一覧 -->
+    <div id="systems-panel">
+        <div class="panel-header">
+            <span class="panel-title">コース名</span>
+            <button class="btn btn-primary" onclick="openCourseBrowser()" style="font-size:12px; padding:6px 12px;">📚 新規教材</button>        </div>
+        <div class="systems-list" id="systems-list"></div>
+    </div>
+
+    <!-- 右: 進捗詳細 -->
+    <div id="detail-panel">
+        <div id="detail-placeholder" class="detail-placeholder">
+            左のリストからコースを選択してください
+        </div>
+
+        <div id="detail-content" style="display:none;">
+            <div class="detail-header">
+                <div class="system-title" id="detail-system-url"></div>
+                <div class="system-info-row">
+                    <span id="detail-system-name"></span>
+                    <span id="detail-mentor-info"></span>
+                    <span id="detail-created-at"></span>
+                </div>
+            </div>
+
+            <div id="stages-container"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 公開教材一覧モーダル -->
+<div id="modal-course-browser" class="modal">
+    <div class="modal-box" style="max-width: 900px;">
+        <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>📚 公開教材一覧</span>
+            <button class="btn btn-secondary" onclick="closeCourseBrowser()" style="padding: 4px 12px; font-size: 12px;">✕ 閉じる</button>
+        </div>
+
+        <div id="courses-loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>教材を読み込み中...</p>
+        </div>
+
+        <div id="courses-list" style="display: none;">
+            <!-- ここに教材カードが動的に追加される -->
+        </div>
+
+        <div id="courses-empty" style="display: none; text-align: center; padding: 40px; color: #999;">
+            <p style="font-size: 48px;">📭</p>
+            <p>公開されている教材がありません</p>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Step詳細表示モーダル -->
+<div id="modal-step-detail" class="modal">
+    <div class="modal-box">
+        <div class="modal-title" id="step-detail-title"></div>
+        <div class="modal-close-notice">
+            ⚠️ このページの一番下にある「閉じる」ボタンで閉じてください
+        </div>
+        <div class="modal-content" id="step-detail-content"></div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="closeStepDetailModal()">✕ 閉じる</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '/migration_assistant/api';
+const COURSE_URL_BASE = '/migration_assistant/course';
+let currentSystemId = null;
+let progressData = {};  // 進捗データ
+let currentMentorUserId = null;
+
+// Flaskが埋め込む初期選択の受講ID（enrollment_id）。
+// /course/<course_id> でアクセスされたとき、サーバ側で本人のenrollment_idに
+// 解決して埋め込まれる。未指定なら null。
+const INITIAL_SYSTEM_ID = {{ initial_system_id if initial_system_id is not none else 'null' }};
+
+// 受講一覧を引くための索引（キーは enrollment_id を文字列化したもの）
+let systemsById = {};
+
+// 初期化
+document.addEventListener('DOMContentLoaded', async () => {
+    // marked.jsの利用可能性をチェック
+    console.log('=== まいあし初期化 ===');
+    console.log('marked.js available:', typeof marked !== 'undefined');
+    if (typeof marked !== 'undefined') {
+        console.log('marked.parse available:', typeof marked.parse === 'function');
+    }
+
+    await loadSystems();
+    checkAdminAccess();
+
+    // サーバが埋め込んだ受講IDがあれば自動選択
+    if (INITIAL_SYSTEM_ID !== null && INITIAL_SYSTEM_ID !== undefined) {
+        const key = String(INITIAL_SYSTEM_ID);
+        console.log('[まいあし] 初期選択の受講ID:', key,
+                    '/ 一覧の受講ID:', Object.keys(systemsById));
+        if (systemsById[key]) {
+            console.log('[まいあし] コースを自動選択します:', key);
+            selectSystemById(key, false);  // 初期表示ではURLを書き換えない
+        } else {
+            console.warn('[まいあし] 受講IDが一覧に見つかりません:', key);
+        }
+    }
+});
+
+// ブラウザの戻る／進むへの追従。history.state に受講IDを持たせておき、それで復元する。
+window.addEventListener('popstate', (ev) => {
+    const sid = ev.state && ev.state.systemId;
+    if (sid && systemsById[String(sid)]) {
+        selectSystemById(String(sid), false);
+    } else {
+        // コース未選択状態へ戻す
+        currentSystemId = null;
+        document.querySelectorAll('.system-card').forEach(c => c.classList.remove('active'));
+        document.getElementById('detail-content').style.display = 'none';
+        document.getElementById('detail-placeholder').style.display = 'block';
+    }
+});
+
+// 受講ID（enrollment_id）からコースを選択する共通処理
+function selectSystemById(systemId, pushUrl = true) {
+    const key = String(systemId);
+    const sys = systemsById[key];
+    if (!sys) return;
+    const card = document.querySelector(`.system-card[data-system-id="${key}"]`);
+    selectSystem(sys, card, pushUrl);
+}
+
+// 管理者権限チェック
+async function checkAdminAccess() {
+    try {
+        const res = await fetch(`${API_BASE}/check_admin`);
+        const data = await res.json();
+        if (data.is_admin) {
+            document.getElementById('admin-link').style.display = 'block';
+        }
+    } catch (e) {
+        console.log('Admin access check failed (not admin or error):', e);
+    }
+}
+
+/**
+ * システム一覧（受講中の教材）を読み込み、左サイドバーに描画する
+ */
+async function loadSystems() {
+    try {
+        const res = await fetch(`${API_BASE}/systems`);
+        const data = await res.json();
+
+        if (!data.success) {
+            console.error('Failed to load systems:', data.error);
+            return;
+        }
+
+        const container = document.getElementById('systems-list');
+        container.innerHTML = '';
+
+        // IDで引けるように索引を作り直す（URL遷移・再選択に使用）
+        // キーは enrollment_id を文字列化。
+        systemsById = {};
+        data.systems.forEach(sys => {
+            systemsById[String(sys.id)] = sys;
+        });
+
+        if (data.systems.length === 0) {
+            container.innerHTML = `
+                <div style="padding:20px; text-align:center; color:#999; font-size:13px;">
+                    まだ受講中の教材がありません<br>
+                    「📚 新規教材」ボタンから教材を選んでください
+                </div>`;
+            return;
+        }
+
+        data.systems.forEach(sys => {
+            // 進捗率の計算（0除算防止）
+            const progress = sys.total_steps > 0
+                ? Math.round((sys.completed_steps / sys.total_steps) * 100)
+                : 0;
+
+            // カード本体は <a> にして、各教材に固有URL（/course/<course_id>）を与える。
+            // これによりリンクのコピー・共有・新規タブで開く、が可能になる。
+            const card = document.createElement('a');
+            card.className = 'system-card';
+            if (sys.course_id !== undefined && sys.course_id !== null) {
+                card.href = `${COURSE_URL_BASE}/${sys.course_id}`;
+            }
+            card.dataset.systemId = sys.id;
+
+            // 現在選択中のシステムであれば active クラスを付与
+            if (currentSystemId === sys.id) {
+                card.classList.add('active');
+            }
+
+            // カード内部のHTML
+            // 削除ボタンには event.stopPropagation() を付与し、カード選択イベントの発火を防ぐ
+            card.innerHTML = `
+                <button class="system-card-delete"
+                    onclick="event.stopPropagation(); event.preventDefault(); deleteSystemCard(${sys.id}, '${sys.source_type}', '${escapeHtml(sys.system_name)}')">
+                    ×
+                </button>
+                <div class="system-url">${escapeHtml(sys.system_name)}</div>
+                <div class="system-meta">👨‍🏫 師匠: ${escapeHtml(sys.mentor_name)}</div>
+                <div class="system-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="progress-text">${progress}%</div>
+                </div>
+            `;
+
+            // クリックは通常のページ遷移をせず、その場で選択（SPA挙動）してURLだけ更新。
+            // Ctrl/⌘+クリックや中クリック（新規タブ）はブラウザ標準動作に任せる。
+            card.onclick = (e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                e.preventDefault();
+                selectSystem(sys, card);
+            };
+
+            container.appendChild(card);
+        });
+
+    } catch (e) {
+        console.error('Error loading systems:', e);
+        const container = document.getElementById('systems-list');
+        container.innerHTML = '<div style="padding:20px; color:red;">読み込みエラーが発生しました</div>';
+    }
+}
+// selectSystem 関数内の表示ロジック
+// pushUrl=true のとき、選択に合わせてブラウザのURLを /course/<course_id> に更新する。
+// URLパスは course_id、内部の選択キーは enrollment_id（history.state に保持）。
+async function selectSystem(sys, card, pushUrl = true) {
+    currentSystemId = sys.id;
+
+    // アクティブ表示の切り替え
+    document.querySelectorAll('.system-card').forEach(c => c.classList.remove('active'));
+    if (card) card.classList.add('active');
+
+    // URLを固有アドレスへ更新（ページ再読み込みはしない）
+    if (pushUrl && sys.course_id !== undefined && sys.course_id !== null) {
+        const newUrl = `${COURSE_URL_BASE}/${sys.course_id}`;
+        if (window.location.pathname !== newUrl) {
+            history.pushState({ systemId: sys.id }, '', newUrl);
+        }
+    }
+
+    document.getElementById('detail-placeholder').style.display = 'none';
+    document.getElementById('detail-content').style.display = 'block';
+
+    // ヘッダー情報の更新
+    document.getElementById('detail-system-url').textContent = sys.system_name;
+
+    // 「師匠」を「著者（師匠）」として表示し、共有状態をバッジで示す
+    document.getElementById('detail-mentor-info').innerHTML = `
+        <span class="mentor-badge">${escapeHtml(sys.mentor_name)} (著者)</span>
+        <span style="font-size: 11px; color: #4caf50; background: #e8f5e9; padding: 2px 8px; border-radius: 4px; margin-left: 5px;">
+            ● 著者と進捗共有中
+        </span>
+    `;
+
+    document.getElementById('detail-created-at').textContent = `受講開始: ${sys.created_at}`;
+
+    // コンテンツ読み込み（system_idを渡すだけでOK）
+    await loadContent(sys.id);
+}
+
+// コンテンツ読み込み
+async function loadContent(systemId, mentorUserId) {
+    const container = document.getElementById('stages-container');
+    container.innerHTML = '<div style="text-align:center; padding:30px; color:#999;">読み込み中...</div>';
+
+    try {
+        const [contentRes, progressRes] = await Promise.all([
+            fetch(`${API_BASE}/student/content?system_id=${systemId}`),
+            fetch(`${API_BASE}/student/progress?system_id=${systemId}`)
+        ]);
+
+        const data = await contentRes.json();
+        const progressResult = await progressRes.json();
+
+        if (progressResult.success) {
+            progressData = progressResult.progress || {};
+        }
+
+        if (!data.success) {
+            // 受講データ自体が見つからない場合などのエラー表示のみ残す
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:#f44336;">エラー: ${data.message || data.error}</div>`;
+            return;
+        }
+
+        const content = data.content;
+        container.innerHTML = '';
+
+        // ★★★ 【重要】新システム対応：Phaseを番号順に並び替えてループを回す ★★★
+        const sortedPhases = Object.values(content).sort((a, b) => a.number - b.number);
+
+        sortedPhases.forEach(phase => {
+            const phaseId = phase.id; // DB上のユニークID (p_xxx)
+
+            const phaseSection = document.createElement('div');
+            phaseSection.className = 'phase-section';
+
+            const phaseTitle = document.createElement('div');
+            phaseTitle.className = 'phase-title';
+            phaseTitle.textContent = `Phase ${phase.number}: ${phase.title}`;
+            phaseSection.appendChild(phaseTitle);
+
+            // ★★★ Stageも番号順に並び替える ★★★
+            const sortedStages = (phase.stages || []).sort((a, b) => a.number - b.number);
+
+            sortedStages.forEach(stage => {
+                const stageCard = document.createElement('div');
+                stageCard.className = 'stage-card';
+
+                const stageHeader = document.createElement('div');
+                stageHeader.className = 'stage-header';
+                stageHeader.innerHTML = `
+                    <div class="stage-name">
+                        Stage ${phase.number}-${stage.number}: ${esc(stage.title)}
+                    </div>
+                `;
+                stageCard.appendChild(stageHeader);
+
+                if (stage.steps && stage.steps.length > 0) {
+                    const stepsList = document.createElement('div');
+                    stepsList.className = 'steps-list';
+                    stepsList.innerHTML = '<div class="steps-list-title">作業ステップ:</div>';
+
+                    // ★★★ Stepも番号順に並び替える ★★★
+                    const sortedSteps = stage.steps.sort((a, b) => a.number - b.number);
+
+                    sortedSteps.forEach(step => {
+                        const stepItem = document.createElement('div');
+                        stepItem.className = 'step-item';
+
+                        const progressKey = `${phaseId}_${stage.id}_${step.id}`;
+                        const currentStatus = progressData[progressKey] || '未着手';
+
+                        stepItem.innerHTML = `
+                            <div class="step-id">${step.display_id}</div>
+                            <div class="step-title">${esc(step.title)}</div>
+                            <div class="progress-status">
+                                ${['未着手', '取り組み中', '苦戦', '完了', '放棄'].map(status => `
+                                    <label class="status-${status}">
+                                        <input type="radio" name="status_${progressKey}"
+                                               value="${status}" ${currentStatus === status ? 'checked' : ''}
+                                               onchange="updateProgress('${phaseId}', '${stage.id}', '${step.id}', '${status}')">
+                                        ${status}
+                                    </label>
+                                `).join('')}
+                            </div>
+                            <button class="btn-step-detail"
+                                    onclick="showStepDetail('${phaseId}', '${stage.id}', '${step.id}', '${esc(step.display_id)}', '${esc(step.title)}')">
+                                詳細
+                            </button>
+                        `;
+                        stepsList.appendChild(stepItem);
+                    });
+                    stageCard.appendChild(stepsList);
+                }
+                phaseSection.appendChild(stageCard);
+            });
+            container.appendChild(phaseSection);
+        });
+
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = `<div style="text-align:center; padding:30px; color:#f44336;">エラーが発生しました: ${e.message}</div>`;
+    }
+}
+
+
+
+// Step詳細表示
+async function showStepDetail(phaseId, stageId, stepId, displayId, stepTitle) {
+    if (!currentSystemId) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/student/step_detail/${phaseId}/${stageId}/${stepId}?system_id=${currentSystemId}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            alert('詳細の取得に失敗しました: ' + data.error);
+            return;
+        }
+
+        console.log('Step detail data:', data);
+        console.log('HTML content from server:', data.step_detail);
+
+        document.getElementById('step-detail-title').textContent = `Step ${displayId}: ${stepTitle}`;
+
+        // バックエンドで既にHTMLに変換済みなので、そのまま表示
+        const contentElement = document.getElementById('step-detail-content');
+        contentElement.innerHTML = data.step_detail || '詳細情報がありません。';
+
+        // KaTeX レンダリング（数式がある場合）
+        if (window.renderMathInElement) {
+            try {
+                renderMathInElement(contentElement, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ],
+                    throwOnError: false
+                });
+            } catch (e) {
+                console.error('KaTeX rendering error:', e);
+            }
+        }
+
+        document.getElementById('modal-step-detail').classList.add('active');
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+function closeStepDetailModal() {
+    document.getElementById('modal-step-detail').classList.remove('active');
+}
+
+// Stage完了トグル
+async function toggleStageComplete(phaseId, stageId, completed) {
+    if (!currentSystemId) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/systems/${currentSystemId}/progress/${phaseId}/${stageId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            await loadSystems();
+        } else {
+            alert('更新失敗: ' + data.error);
+        }
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+
+
+
+
+// システム削除
+async function deleteCurrentSystem() {
+    if (!currentSystemId) return;
+
+    if (!confirm('このシステムを削除しますか？\n（進捗情報も全て削除されます）')) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/systems/${currentSystemId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            currentSystemId = null;
+            document.getElementById('detail-content').style.display = 'none';
+            document.getElementById('detail-placeholder').style.display = 'block';
+            await loadSystems();
+        } else {
+            alert('削除失敗: ' + data.error);
+        }
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// システムカードから直接削除
+async function deleteSystemCard(systemId, sourceType, systemName) {
+    if (!confirm(`「${systemName}」を削除しますか？\n\n※ 進捗情報も全て削除されます`)) {
+        return;
+    }
+
+    try {
+        let endpoint;
+
+        if (sourceType === 'course') {
+            // 新システム: course_enrollments から削除
+            endpoint = `${API_BASE}/v2/enrollments/${systemId}`;
+        } else {
+            // 旧システム: migration_assistant_systems から削除
+            endpoint = `${API_BASE}/systems/${systemId}`;
+        }
+
+        const res = await fetch(endpoint, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            // 削除成功
+            if (currentSystemId === systemId) {
+                // 削除したのが現在選択中のシステムなら、詳細表示をクリア
+                currentSystemId = null;
+                document.getElementById('detail-content').style.display = 'none';
+                document.getElementById('detail-placeholder').style.display = 'block';
+            }
+
+            await loadSystems();
+            alert('✅ 削除しました');
+        } else {
+            alert('❌ 削除失敗: ' + data.error);
+        }
+    } catch (e) {
+        console.error('Error deleting system:', e);
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+
+// 進捗更新
+async function updateProgress(phaseId, stageId, stepId, status) {
+    try {
+        const res = await fetch(`${API_BASE}/student/progress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                system_id: currentSystemId,
+                phase_id: phaseId,
+                stage_id: stageId,
+                step_id: stepId,
+                status: status
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            const progressKey = `${phaseId}_${stageId}_${stepId}`;
+            progressData[progressKey] = status;
+
+            // 【重要】進捗バーを即座に更新するため、システム一覧を再取得
+            await loadSystems();
+
+            // 現在選択中のカードに active クラスを付け直す（loadSystemsで描き直されるため）
+            const cards = document.querySelectorAll('.system-card');
+            cards.forEach(card => {
+                // system-card-delete ボタンの引数などからIDを判別するか、単純に描き直し後に選択状態を維持
+                // ※ card.onclick で currentSystemId は保持されているため、見た目上の微調整
+            });
+        } else {
+            alert('進捗の更新に失敗しました: ' + data.error);
+        }
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// ユーティリティ
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+}
+
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[m]));
+}
+
+// HTMLエスケープ関数（esc関数のエイリアス）
+function escapeHtml(str) {
+    return esc(str);
+}
+
+// =============================================================================
+// 公開コース（教材）閲覧・受講申し込み
+// =============================================================================
+
+// 公開コース一覧を開く
+async function openCourseBrowser() {
+    const modal = document.getElementById('modal-course-browser');
+    const loadingDiv = document.getElementById('courses-loading');
+    const listDiv = document.getElementById('courses-list');
+    const emptyDiv = document.getElementById('courses-empty');
+
+    modal.classList.add('active');
+    loadingDiv.style.display = 'block';
+    listDiv.style.display = 'none';
+    emptyDiv.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE}/v2/courses/public`);
+        const data = await res.json();
+
+        loadingDiv.style.display = 'none';
+
+        if (data.success && data.courses.length > 0) {
+            renderCourses(data.courses);
+            listDiv.style.display = 'block';
+        } else {
+            emptyDiv.style.display = 'block';
+        }
+    } catch (e) {
+        console.error('Error loading courses:', e);
+        loadingDiv.style.display = 'none';
+        emptyDiv.innerHTML = `
+            <p style="font-size: 48px;">❌</p>
+            <p style="color: #f44336;">教材の読み込みに失敗しました</p>
+            <p style="font-size: 13px; color: #999;">${e.message}</p>
+        `;
+        emptyDiv.style.display = 'block';
+    }
+}
+
+// コース一覧を描画
+function renderCourses(courses) {
+    const listDiv = document.getElementById('courses-list');
+    listDiv.innerHTML = '<div class="courses-grid"></div>';
+    const grid = listDiv.querySelector('.courses-grid');
+
+    courses.forEach(course => {
+        const card = document.createElement('div');
+        card.className = 'course-card';
+
+        card.innerHTML = `
+            <h3>${esc(course.course_title)}</h3>
+            <div class="course-creator">
+                👨‍🏫 著者: ${esc(course.creator_name)}
+            </div>
+            <div class="course-description">
+                ${esc(course.course_description || '説明なし')}
+            </div>
+            <div class="course-meta">
+                <div class="course-phases">📚 ${course.phase_count || 0} Phase</div>
+            </div>
+            <div style="font-size: 11px; color: #888; margin-bottom: 12px;">
+                ※受講を開始すると、著者にあなたの進捗が自動的に共有されます。
+            </div>
+            <button class="btn-enroll" onclick="enrollCourse(${course.id}, '${esc(course.course_title)}')">
+                この教材で学習を開始する →
+            </button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+// コース一覧を閉じる
+function closeCourseBrowser() {
+    document.getElementById('modal-course-browser').classList.remove('active');
+}
+
+// コースに受講申し込み
+async function enrollCourse(courseId, courseTitle) {
+    if (!confirm(`「${courseTitle}」の学習を開始しますか？`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/v2/enrollments/enroll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course_id: courseId })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            alert('✅ 受講申し込みが完了しました！');
+            closeCourseBrowser();
+            await loadSystems(); // システム一覧を再読み込み
+        } else {
+            // エラーメッセージを日本語化
+            let errorMsg = '受講申し込みに失敗しました';
+
+            if (data.error === 'Already enrolled') {
+                errorMsg = '現在受講中科目の重複履修はできません';
+            } else if (data.error === 'Course not found') {
+                errorMsg = '指定された教材が見つかりません';
+            } else if (data.error === 'Unauthorized') {
+                errorMsg = 'ログインが必要です';
+            } else if (data.error) {
+                errorMsg = data.error;
+            }
+
+            alert('❌ ' + errorMsg);
+        }
+    } catch (e) {
+        console.error('Error enrolling:', e);
+        alert('エラーが発生しました: ' + e.message);
+    }
+}
+
+// モーダル外クリックで閉じる
+document.getElementById('modal-course-browser')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-course-browser') {
+        closeCourseBrowser();
+    }
+});
+</script>
+
+<!-- KaTeX JavaScript -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+</body>
+</html>

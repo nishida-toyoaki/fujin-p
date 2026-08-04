@@ -1,0 +1,555 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ノート編集 - {{ note.名前 }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background-color: #f5f7fa;
+        }
+
+        .top-bar {
+            background-color: #2d3748;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .top-bar h1 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+
+        .top-bar-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .top-bar button, .top-bar a {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+
+        .save-btn {
+            background-color: #48bb78;
+            color: white;
+        }
+
+        .save-btn:hover {
+            background-color: #38a169;
+        }
+
+        .back-btn {
+            background-color: #4299e1;
+            color: white;
+        }
+
+        .back-btn:hover {
+            background-color: #3182ce;
+        }
+
+        .editor-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            gap: 0;
+        }
+
+        .editor-pane, .preview-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pane-header {
+            background-color: #edf2f7;
+            padding: 10px 15px;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 2px solid #cbd5e0;
+        }
+
+        .editor-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: white;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.95rem;
+        }
+
+        .form-group textarea {
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            min-height: 400px;
+        }
+
+        .preview-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: white;
+        }
+
+        /* Markdown スタイル */
+        .preview-content h1, .preview-content h2, .preview-content h3 {
+            color: #2d3748;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+
+        .preview-content p {
+            line-height: 1.7;
+            margin-bottom: 1em;
+        }
+
+        .preview-content code {
+            background-color: #f7fafc;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .preview-content pre {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+
+        .preview-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+        }
+
+        .preview-content img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .share-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f7fafc;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .share-section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #2d3748;
+            font-size: 1.1rem;
+        }
+
+        .share-option {
+            margin-bottom: 10px;
+        }
+
+        .share-option label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .share-option label:hover {
+            background-color: #edf2f7;
+        }
+
+        .share-option input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .share-description {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-left: 28px;
+            margin-top: -5px;
+        }
+
+        .user-list {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-item label {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .user-item select {
+            width: 120px;
+            padding: 4px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+        }
+
+        .toolbar {
+            padding: 10px 15px;
+            background-color: #f7fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar button {
+            padding: 5px 10px;
+            border: 1px solid #cbd5e0;
+            background-color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background-color 0.2s;
+        }
+
+        .toolbar button:hover {
+            background-color: #edf2f7;
+        }
+
+        #imageUpload {
+            display: none;
+        }
+
+        .status-message {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            padding: 12px 20px;
+            background-color: #48bb78;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: none;
+            z-index: 1000;
+        }
+
+        .status-message.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1>ノート編集: {{ note.名前 }} (ID: {{ note.id }})</h1>
+        <div class="top-bar-buttons">
+            <button class="save-btn" onclick="saveContent()">保存して戻る</button>
+            <a href="{{ url_for('my_md_notes.index') }}" class="back-btn">キャンセル</a>
+        </div>
+    </div>
+
+    <div class="status-message" id="statusMessage">保存しました</div>
+
+    <div class="editor-container">
+        <!-- 左ペイン: エディタ -->
+        <div class="editor-pane">
+            <div class="pane-header">エディタ</div>
+
+            <div class="toolbar">
+                <button onclick="insertMarkdown('# ')">見出し1</button>
+                <button onclick="insertMarkdown('## ')">見出し2</button>
+                <button onclick="insertMarkdown('### ')">見出し3</button>
+                <button onclick="insertMarkdown('**', '**')">太字</button>
+                <button onclick="insertMarkdown('*', '*')">斜体</button>
+                <button onclick="insertMarkdown('`', '`')">コード</button>
+                <button onclick="insertMarkdown('```\n', '\n```')">コードブロック</button>
+                <button onclick="insertMarkdown('$$\n', '\n$$')">数式ブロック</button>
+                <button onclick="insertMarkdown('- ')">リスト</button>
+                <button onclick="insertMarkdown('[', '](url)')">リンク</button>
+                <button type="button" onclick="document.getElementById('imageUpload').click()">画像・PDF添付</button>
+            </div>
+
+            <div class="editor-area">
+                <form id="noteForm" method="POST">
+                    <div class="form-group">
+                        <label for="name">ノート名 *</label>
+                        <input type="text" id="name" name="name" value="{{ note.名前 }}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sequence">序列（表示順）</label>
+                        <input type="number" id="sequence" name="sequence" value="{{ note.序列 if note.序列 is not none else 0 }}" min="0" step="1">
+                        <small style="color: #718096;">数値が小さいほど先に表示されます（空欄のときは0になります）</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="content">内容（Markdown形式）</label>
+                        <textarea id="content" name="content" onkeyup="debouncePreview()">{{ note.内容 if note.内容 else '' }}</textarea>
+                    </div>
+
+                    <div class="share-section">
+                        <h3>共有設定</h3>
+
+                        <div class="share-option">
+                            <label>
+                                <input type="radio" name="share_key" value="private"
+                                    {% if note.共有キー not in ['public', 'shared'] %}checked{% endif %}>
+                                <strong>非公開</strong>
+                            </label>
+                            <div class="share-description">自分だけが閲覧・編集できます</div>
+                        </div>
+
+                        <div class="share-option">
+                            <label>
+                                <input type="radio" name="share_key" value="public"
+                                    {% if note.共有キー == 'public' %}checked{% endif %}>
+                                <strong>公開</strong>
+                            </label>
+                            <div class="share-description">全員が閲覧できます（編集は自分のみ）</div>
+                        </div>
+
+                        <div class="share-option">
+                            <label>
+                                <input type="radio" name="share_key" value="shared"
+                                    {% if note.共有キー == 'shared' %}checked{% endif %}>
+                                <strong>特定のユーザーと共有</strong>
+                            </label>
+                            <div class="share-description">選択したユーザーとのみ共有します</div>
+                        </div>
+
+                        <div id="userList" class="user-list" style="display: {% if note.共有キー == 'shared' %}block{% else %}none{% endif %};">
+                            <h4 style="margin-top: 0;">共有するユーザーを選択</h4>
+                            {% for user in all_users %}
+                            <div class="user-item">
+                                <label>
+                                    <input type="checkbox" name="shared_users" value="{{ user.id }}"
+                                        {% if user.id in shared_user_ids %}checked{% endif %}>
+                                    {{ user.氏名 }} ({{ user.カテゴリー }})
+                                </label>
+                                <select name="user_permission_{{ user.id }}">
+                                    <option value="閲覧" {% if shared_permissions.get(user.id) == '閲覧' %}selected{% endif %}>閲覧のみ</option>
+                                    <option value="編集" {% if shared_permissions.get(user.id) == '編集' %}selected{% endif %}>編集可能</option>
+                                </select>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" style="display:none" onchange="uploadImage(this)">
+                </form>
+            </div>
+        </div>
+
+        <!-- 右ペイン: プレビュー -->
+        <div class="preview-pane">
+            <div class="pane-header">プレビュー</div>
+            <div class="preview-content" id="preview">
+                プレビューを読み込み中...
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+
+    <script>
+        let debounceTimer;
+
+        // 共有設定の表示切り替え
+        document.querySelectorAll('input[name="share_key"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const userList = document.getElementById('userList');
+                userList.style.display = this.value === 'shared' ? 'block' : 'none';
+            });
+        });
+
+        function debouncePreview() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updatePreview, 500);
+        }
+
+        function updatePreview() {
+            const content = document.getElementById('content').value;
+
+            fetch("{{ url_for('my_md_notes.preview_markdown') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ markdown: content })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('preview').innerHTML = data.html;
+
+                // KaTeX レンダリング
+                renderMathInElement(document.getElementById('preview'), {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\[', right: '\\]', display: true},
+                        {left: '\\(', right: '\\)', display: false}
+                    ]
+                });
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function insertMarkdown(before, after = '') {
+            const textarea = document.getElementById('content');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const selectedText = textarea.value.substring(start, end);
+            const replacement = before + selectedText + after;
+
+            textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+            textarea.focus();
+            textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
+
+            debouncePreview();
+        }
+
+        const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
+
+        function uploadImage(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            if (file.size > MAX_UPLOAD_BYTES) {
+                alert('ファイルサイズが上限（20MB）を超えています。');
+                input.value = '';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch("{{ url_for('my_md_notes.upload_image') }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.kind === 'pdf') {
+                        insertMarkdown(`[${data.filename}](${data.url})`);
+                        showStatus('PDFを添付しました');
+                    } else {
+                        insertMarkdown(`![画像](${data.url})`);
+                        showStatus('画像をアップロードしました');
+                    }
+                } else {
+                    alert('アップロードに失敗しました: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('アップロードに失敗しました');
+            })
+            .finally(() => { input.value = ''; });
+        }
+
+        function saveContent() {
+            const form = document.getElementById('noteForm');
+            const formData = new FormData(form);
+
+            fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    return response.text();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('保存に失敗しました');
+            });
+        }
+
+        function showStatus(message) {
+            const statusMsg = document.getElementById('statusMessage');
+            statusMsg.textContent = message;
+            statusMsg.classList.add('show');
+            setTimeout(() => {
+                statusMsg.classList.remove('show');
+            }, 3000);
+        }
+
+        // 初期プレビュー
+        updatePreview();
+    </script>
+</body>
+</html>

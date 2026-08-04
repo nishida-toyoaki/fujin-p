@@ -1,0 +1,412 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>データセンター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#f0f2f5;color:#333}
+
+/* ヘッダー */
+#header{background:#1a3a5c;color:#fff;padding:10px 16px;
+        display:flex;align-items:center;gap:12px}
+#header h1{font-size:16px;font-weight:600}
+.nav-links{margin-left:auto;display:flex;gap:8px}
+.nav-links a{color:#aed6f1;text-decoration:none;font-size:12px;
+             padding:4px 8px;border:1px solid #2e6da4;border-radius:3px}
+.nav-links a:hover{background:#2e6da4}
+
+/* ボタン共通 */
+.btn{padding:5px 12px;border:none;border-radius:3px;cursor:pointer;
+     font-size:12px;font-weight:500;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:#2e6da4;color:#fff}
+.btn-success{background:#27ae60;color:#fff}
+.btn-danger {background:#e74c3c;color:#fff}
+.btn-dark   {background:#1a3a5c;color:#fff}
+.btn-edit   {background:#e67e22;color:#fff}
+.btn-view   {background:#8e44ad;color:#fff}
+.btn-return {background:#e74c3c;color:#fff;padding:5px 12px;border:none;
+             border-radius:3px;cursor:pointer;font-size:12px;font-weight:600;
+             text-decoration:none;white-space:nowrap;display:inline-flex;
+             align-items:center;gap:6px;transition:opacity .15s}
+.btn-return:hover{opacity:.85;color:#fff}
+input[type=text],textarea,select{
+  width:100%;padding:6px 8px;border:1px solid #ccc;
+  border-radius:3px;font-size:13px;font-family:inherit}
+label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
+
+/* メインコンテンツ */
+#main{padding:16px 20px}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.section-header h2{font-size:15px;color:#1a3a5c}
+
+/* ストーリー一覧テーブル */
+#story-grid{background:#fff;border:1px solid #ddd;border-radius:6px;overflow:hidden}
+.story-table{width:100%;border-collapse:collapse;font-size:13px}
+.story-table thead th{background:#1a3a5c;color:#fff;padding:8px 12px;
+                       text-align:left;font-weight:600;white-space:nowrap}
+.story-table tbody tr{border-bottom:1px solid #eee}
+.story-table tbody tr:last-child{border-bottom:none}
+.story-table tbody tr:hover{background:#f5f9ff}
+.story-table td{padding:9px 12px;vertical-align:middle}
+.sc-title{font-size:14px;font-weight:700;color:#1a3a5c}
+.sc-desc{font-size:12px;color:#666;margin-top:2px}
+.sc-meta{font-size:11px;color:#aaa;margin-top:2px}
+.badge-count{background:#2e6da4;color:#fff;border-radius:10px;
+             padding:1px 8px;font-size:11px}
+.badge-policy{display:inline-block;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:600}
+.bp-public  {background:#d5f5e3;color:#1e8449}
+.bp-domestic{background:#d6eaf8;color:#1a5276}
+.bp-group   {background:#f9ebea;color:#784212}
+.bp-private {background:#fde8e8;color:#922b21}
+.td-btns{white-space:nowrap;text-align:right}
+
+/* 新規作成モーダル */
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100}
+#modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+       width:440px;max-width:92vw;background:#fff;border-radius:6px;
+       box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:101}
+#modal .mh{background:#1a3a5c;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;
+           display:flex;justify-content:space-between;align-items:center}
+#modal .mh span{font-size:14px;font-weight:600}
+#modal .mh button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+#modal .mb{padding:16px}
+#modal .mb .field{margin-bottom:12px}
+#modal .mf{padding:10px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end}
+
+/* アクセスポリシーモーダル */
+#access-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200}
+#access-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+              width:480px;max-width:92vw;background:#fff;border-radius:6px;
+              box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:201}
+#access-modal .am-hd{background:#2c3e50;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;
+                     display:flex;align-items:center;justify-content:space-between}
+#access-modal .am-hd span{font-size:14px;font-weight:700}
+#access-modal .am-hd button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+#access-modal .am-body{padding:16px}
+#access-modal .am-foot{padding:10px 16px;border-top:1px solid #eee;
+                       display:flex;gap:8px;justify-content:flex-end}
+.policy-radio-group{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.policy-radio-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+                   border:1px solid #e0e0e0;border-radius:4px;cursor:pointer}
+.policy-radio-item:hover{background:#f5f5f5}
+.policy-radio-item input[type=radio]{margin-top:3px;flex-shrink:0}
+.policy-radio-item .pr-label{font-size:13px;font-weight:600;color:#2c3e50}
+.policy-radio-item .pr-desc {font-size:11px;color:#888;margin-top:2px}
+.policy-radio-item.selected{border-color:#2e6da4;background:#eef4fb}
+#access-group-area{display:none;margin-top:10px;border:1px solid #ddd;
+                   border-radius:4px;padding:10px;background:#fafafa}
+#access-group-area label{font-size:12px;font-weight:600;color:#555;margin-bottom:6px;display:block}
+.group-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+            border:1px solid #ccc;border-radius:12px;font-size:12px;cursor:pointer;
+            background:#fff;margin:3px}
+.group-chip.checked{background:#2e6da4;color:#fff;border-color:#2e6da4}
+
+/* トースト */
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:4px;
+       color:#fff;font-size:13px;z-index:9999;display:none;max-width:320px}
+#toast.ok {background:#27ae60}
+#toast.err{background:#e74c3c}
+.loading{color:#aaa;padding:30px;text-align:center;font-style:italic}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>📊 データセンター</h1>
+    <div class="nav-links">
+        <a href="{{ url_for('data_center.source_index') }}">📂 元データ</a>
+        <a href="{{ url_for('data_center.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+</div>
+
+<div id="main">
+  <div class="section-header">
+    <h2>📖 ストーリー集</h2>
+    {% if can_create_story %}
+    <button class="btn btn-dark" onclick="openCreate()">＋ 新規ストーリー</button>
+    {% endif %}
+    <button class="btn btn-primary" onclick="loadStories()" style="margin-left:auto">⟳ 更新</button>
+  </div>
+  <div id="story-grid">
+    <table class="story-table">
+      <thead><tr>
+        <th>ストーリー名</th>
+        <th>説明</th>
+        <th style="width:8%">ノード</th>
+        <th style="width:12%">公開設定</th>
+        <th style="width:24%">操作</th>
+      </tr></thead>
+      <tbody id="story-tbody">
+        <tr><td colspan="5" class="loading">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 新規・編集モーダル -->
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="modal">
+  <div class="mh">
+    <span id="modal-title">ストーリー作成</span>
+    <button onclick="closeModal()">✕</button>
+  </div>
+  <div class="mb">
+    <input type="hidden" id="modal-id">
+    <div class="field">
+      <label>ストーリー名 *</label>
+      <input type="text" id="modal-name" placeholder="例: データブック 2025年度">
+    </div>
+    <div class="field">
+      <label>説明</label>
+      <textarea id="modal-desc" rows="3" placeholder="このストーリーの内容・目的..."></textarea>
+    </div>
+  </div>
+  <div class="mf">
+    <button class="btn btn-danger" id="btn-modal-delete" onclick="deleteStory()"
+            style="display:none;margin-right:auto">🗑 削除</button>
+    <button class="btn" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-success" onclick="saveStory()">💾 保存</button>
+  </div>
+</div>
+
+<!-- アクセスポリシーモーダル -->
+<div id="access-overlay" onclick="closeAccess()"></div>
+<div id="access-modal">
+  <div class="am-hd">
+    <span>🔑 公開設定: <span id="access-story-name"></span></span>
+    <button onclick="closeAccess()">✕</button>
+  </div>
+  <div class="am-body">
+    <input type="hidden" id="access-story-id">
+    <div class="policy-radio-group">
+      <label class="policy-radio-item" onclick="selectPolicy('public')">
+        <input type="radio" name="access_policy" value="public">
+        <div><div class="pr-label">🌐 公開（public）</div>
+             <div class="pr-desc">ログイン済みユーザーであれば誰でも閲覧可</div></div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('domestic')">
+        <input type="radio" name="access_policy" value="domestic">
+        <div><div class="pr-label">🏫 学内公開（domestic）</div>
+             <div class="pr-desc">regular / admin カテゴリのユーザーのみ閲覧可</div></div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('group')">
+        <input type="radio" name="access_policy" value="group">
+        <div><div class="pr-label">👥 グループ限定（group）</div>
+             <div class="pr-desc">指定したグループに所属するユーザーのみ閲覧可</div></div>
+      </label>
+      <label class="policy-radio-item" onclick="selectPolicy('private')">
+        <input type="radio" name="access_policy" value="private">
+        <div><div class="pr-label">🔒 非公開（private）</div>
+             <div class="pr-desc">作成者・管理者のみ閲覧可</div></div>
+      </label>
+    </div>
+    <div id="access-group-area">
+      <label>許可するグループ:</label>
+      <div id="access-group-list"></div>
+    </div>
+  </div>
+  <div class="am-foot">
+    <button class="btn" onclick="closeAccess()">キャンセル</button>
+    <button class="btn btn-success" onclick="saveAccess()">💾 保存</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const POLICY_LABELS = {
+  public  : ['🌐 公開',      'bp-public'],
+  domestic: ['🏫 学内公開',  'bp-domestic'],
+  group   : ['👥 グループ',  'bp-group'],
+  private : ['🔒 非公開',    'bp-private'],
+};
+function policyBadge(p){
+  const info = POLICY_LABELS[p] || ['—',''];
+  return `<span class="badge-policy ${info[1]}">${info[0]}</span>`;
+}
+function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg, type='ok'){
+  $('#toast').attr('class',type).text(msg).fadeIn(200);
+  setTimeout(()=>$('#toast').fadeOut(400), 3000);
+}
+
+// ============================================================
+// ストーリー一覧
+// ============================================================
+function loadStories(){
+  $.get('{{ url_for("data_center.api_stories") }}', function(data){
+    const $tb = $('#story-tbody').empty();
+    if(!data.success){
+      $tb.html('<tr><td colspan="5" class="loading" style="color:#e74c3c">'+esc(data.error)+'</td></tr>');
+      return;
+    }
+    if(!data.stories.length){
+      $tb.html('<tr><td colspan="5" class="loading" style="color:#bbb">ストーリーがありません</td></tr>');
+      return;
+    }
+    data.stories.forEach(function(s){
+      const updated = s.updated_at ? s.updated_at.slice(0,10) : '';
+      const $tr = $('<tr>');
+      const $titleCell = $('<td>');
+      $('<div class="sc-title">').text(s.title).appendTo($titleCell);
+      $('<div class="sc-meta">')
+        .text('更新: '+updated+'　作成者: '+(s.owner_name||''))
+        .appendTo($titleCell);
+      $tr.append($titleCell);
+      $tr.append($('<td>').append(
+        $('<div class="sc-desc">').text(s.description||'')));
+      $tr.append($('<td>').append(
+        $('<span class="badge-count">').text(s.node_count||0)));
+      $tr.append($('<td>').html(policyBadge(s.access_policy)));
+
+      const $buttons = $('<td class="td-btns">');
+      if(s.can_edit){
+        $('<button class="btn btn-edit">').css({padding:'2px 9px',fontSize:'11px'})
+          .text('✏️ 編集').on('click', function(){
+            openEdit(s.id, s.title, s.description||'');
+          }).appendTo($buttons);
+        $('<button class="btn btn-primary">').css({padding:'2px 9px',fontSize:'11px'})
+          .text('🌳 ノード編集').on('click', function(){
+            location.href = '{{ url_for("data_center.edit", story_id=0) }}'
+              .replace('/0','/'+s.id);
+          }).appendTo($buttons);
+        $('<button class="btn">')
+          .css({padding:'2px 9px',fontSize:'11px',background:'#7f8c8d',color:'#fff'})
+          .text('🔑 公開設定').on('click', function(){
+            openAccess(s.id, s.title);
+          }).appendTo($buttons);
+      }
+      $('<button class="btn btn-view">').css({padding:'2px 9px',fontSize:'11px'})
+        .text('▶ 閲覧').on('click', function(){
+          location.href = '{{ url_for("data_center.view", story_id=0) }}'
+            .replace('/0','/'+s.id);
+        }).appendTo($buttons);
+      $tr.append($buttons);
+      $tb.append($tr);
+    });
+  });
+}
+
+// ============================================================
+// ストーリー作成・編集モーダル
+// ============================================================
+function openCreate(){
+  $('#modal-id').val('');$('#modal-name').val('');$('#modal-desc').val('');
+  $('#modal-title').text('ストーリー作成');$('#btn-modal-delete').hide();
+  $('#modal,#modal-overlay').show();setTimeout(()=>$('#modal-name').focus(),100);
+}
+function openEdit(id, name, desc){
+  $('#modal-id').val(id);$('#modal-name').val(name);$('#modal-desc').val(desc);
+  $('#modal-title').text('ストーリー編集');$('#btn-modal-delete').show();
+  $('#modal,#modal-overlay').show();
+}
+function closeModal(){ $('#modal,#modal-overlay').hide(); }
+
+function saveStory(){
+  const name = $('#modal-name').val().trim();
+  if(!name){ toast('ストーリー名を入力してください','err'); return; }
+  $.ajax({
+    url: '{{ url_for("data_center.api_story_save") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({
+      id: $('#modal-id').val()||null,
+      title: name,
+      description: $('#modal-desc').val().trim()
+    }),
+    success: function(r){
+      if(r.success){ toast(r.message,'ok'); closeModal(); loadStories(); }
+      else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'エラー'),'err'); }
+  });
+}
+function deleteStory(){
+  const id = $('#modal-id').val();
+  const name = $('#modal-name').val();
+  if(!confirm(`「${name}」を削除しますか？\n（全ノードも削除されます）`)) return;
+  $.ajax({
+    url: '{{ url_for("data_center.api_story_delete") }}',
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({id}),
+    success: function(r){
+      if(r.success){ toast(r.message,'ok'); closeModal(); loadStories(); }
+      else toast(r.error,'err');
+    }
+  });
+}
+
+// ============================================================
+// アクセスポリシーモーダル
+// ============================================================
+function openAccess(storyId, storyName){
+  $('#access-story-id').val(storyId);
+  $('#access-story-name').text(storyName);
+  $('input[name=access_policy]').prop('checked',false);
+  $('.policy-radio-item').removeClass('selected');
+  $('#access-group-list').empty();$('#access-group-area').hide();
+
+  $.get('{{ url_for("data_center.api_story_access", story_id=0) }}'.replace('/0/','/'+storyId+'/'),
+  function(data){
+    if(!data.success){ toast(data.error||'取得エラー','err'); return; }
+    selectPolicy(data.policy);
+    $('input[name=access_policy][value="'+data.policy+'"]').prop('checked',true);
+    if(data.all_groups?.length){
+      data.all_groups.forEach(function(g){
+        const checked = g.id === data.group_id;
+        const $chip = $('<label class="group-chip '+(checked?'checked':'')+'">');
+        const $rb = $('<input type="radio" name="access_group">').val(g.id).prop('checked',checked);
+        $chip.append($rb, $('<span>').text(g.name));
+        $chip.on('click', function(){ $('.group-chip').removeClass('checked'); $chip.addClass('checked'); });
+        $('#access-group-list').append($chip);
+      });
+    } else {
+      $('#access-group-list').html('<span style="color:#aaa;font-size:12px">グループが登録されていません</span>');
+    }
+    $('#access-overlay').show();$('#access-modal').show();
+  }).fail(function(){ toast('取得に失敗しました','err'); });
+}
+function selectPolicy(val){
+  $('input[name=access_policy]').each(function(){
+    const checked = $(this).val()===val;
+    $(this).prop('checked',checked);
+    $(this).closest('.policy-radio-item').toggleClass('selected',checked);
+  });
+  $('#access-group-area').toggle(val==='group');
+}
+function closeAccess(){ $('#access-overlay').hide();$('#access-modal').hide(); }
+function saveAccess(){
+  const storyId = $('#access-story-id').val();
+  const policy  = $('input[name=access_policy]:checked').val();
+  if(!policy){ toast('ポリシーを選択してください','err'); return; }
+  const groupId = $('input[name=access_group]:checked').val() || null;
+  if(policy==='group' && !groupId){ toast('グループを選択してください','err'); return; }
+  $.ajax({
+    url: '{{ url_for("data_center.api_story_access", story_id=0) }}'.replace('/0/','/'+storyId+'/'),
+    type: 'POST', contentType: 'application/json',
+    data: JSON.stringify({policy, group_id: groupId ? parseInt(groupId) : null}),
+    success: function(r){
+      if(r.success){ toast(r.message,'ok'); closeAccess(); loadStories(); }
+      else toast(r.error,'err');
+    },
+    error: function(x){ toast((x.responseJSON?.error||'保存エラー'),'err'); }
+  });
+}
+
+function escAttr(s){ return String(s??'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+$(function(){ loadStories(); });
+</script>
+</body>
+</html>
+

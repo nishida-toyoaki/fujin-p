@@ -1,0 +1,299 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>時空資源管理 - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f8fafc; color: #1f2937; }
+        .container { max-width: 1150px; margin: 0 auto; }
+        .card { background: #fff; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .nav-button { padding: 8px 16px; background-color: #2563eb; color: white !important; border: none; border-radius: 12px; cursor: pointer; text-decoration: none; font-weight: 500; }
+        .nav-button:hover { background-color: #1d4ed8; }
+        .btn-return { display: inline-block; padding: 6px 14px; background: #e74c3c; border-radius: 20px; color: #fff !important; text-decoration: none; font-size: .82em; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+        .btn-return:hover { background: #c0392b; }
+        .pending-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; background-color: #dc2626; color: white; border-radius: 10px; font-size: 0.8em; text-align: center; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        th { background-color: #f8f9fa; font-weight: 600; }
+        .approval-required { background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 0.85rem; display: inline-block; }
+        .inactive-row { color: #9ca3af; background-color: #fafafa; }
+        .inactive-tag { background-color: #e5e7eb; color: #4b5563; padding: 2px 8px; border-radius: 12px; font-size: 0.85rem; }
+        label { display: block; font-weight: 600; margin-top: 10px; }
+        .checkbox-label { display: inline-block; font-weight: normal; margin: 4px 16px 0 0; }
+        input[type="text"], select { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; }
+        .group-checkbox-list { max-height: 160px; overflow-y: auto; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; padding: 6px 10px; margin-top: 4px; }
+        .group-checkbox-list label { display: block; font-weight: normal; margin: 2px 0; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+        .group-checkbox-list label:hover { background-color: #eff6ff; }
+        .group-checkbox-list input[type="checkbox"] { margin-right: 8px; }
+        .group-checkbox-list .no-groups { color: #6b7280; padding: 4px; }
+        button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; background-color: #1a73e8; color: white; }
+        button:hover { background-color: #1557b0; }
+        .small-button { padding: 4px 10px; font-size: 0.85rem; }
+        .toggle-button { background-color: #6b7280; }
+        .toggle-button:hover { background-color: #4b5563; }
+        .form-actions { margin-top: 15px; display: flex; gap: 8px; }
+        .secondary-button { background-color: #5f6368; }
+        #approval-settings { display: none; margin-top: 10px; padding: 12px 15px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+        #result { display: none; padding: 10px 16px; margin-bottom: 15px; border-radius: 6px; font-weight: bold; }
+        #result.success { background-color: #ecfdf5; color: #065f46; border: 1px solid #10b981; }
+        #result.error { background-color: #fef2f2; color: #991b1b; border: 1px solid #ef4444; }
+        .note { font-size: 0.85rem; color: #4b5563; margin: 4px 0 0 0; }
+        .detail-line { font-size: 0.8rem; color: #4b5563; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card header-bar">
+            <h1>時空資源管理</h1>
+            <div>
+                <a href="{{ url_for('strm.index') }}" class="nav-button">予約カレンダー</a>
+                <a href="{{ url_for('strm.overview') }}" class="nav-button">予約状況</a>
+                {% if show_pending_link %}
+                <a href="{{ url_for('strm.pending') }}" class="nav-button">承認ダッシュボード{% if pending_count %}<span class="pending-badge">{{ pending_count }}</span>{% endif %}</a>
+                {% endif %}
+                <a href="{{ url_for('strm.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+            </div>
+        </div>
+
+        <div id="result"></div>
+
+        <div class="card">
+            <h2 id="form-heading">資源の追加</h2>
+            <form id="resource-form">
+                <input type="hidden" id="edit-id">
+                <label for="res-name">資源名（必須）</label>
+                <input type="text" id="res-name" maxlength="100" required placeholder="例: 1204会議室">
+                <label for="res-category">カテゴリ</label>
+                <input type="text" id="res-category" maxlength="50" placeholder="例: 部屋、公用車" value="部屋">
+                <label for="res-description">説明</label>
+                <input type="text" id="res-description" placeholder="例: プロジェクタあり・定員12名">
+
+                <label for="res-approval">承認の要否</label>
+                <select id="res-approval">
+                    <option value="0">承認申請不要（ログインユーザ全員が予約可・即確定）</option>
+                    <option value="1">要承認</option>
+                </select>
+
+                <div id="approval-settings">
+                    <label>申請資格（いずれかを満たせば申請可）</label>
+                    <span class="checkbox-label"><input type="checkbox" id="allow-regular" checked> regular（正規メンバー）</span>
+                    <span class="checkbox-label"><input type="checkbox" id="allow-guest" checked> guest（その他メンバー）</span>
+                    <label>申請資格グループ（任意・チェックした複数のグループを許可）</label>
+                    <div id="applicant-groups-list" class="group-checkbox-list"></div>
+
+                    <label>承認グループ（必須・複数可。所属者の誰か1人の承認で確定）</label>
+                    <div id="approver-groups-list" class="group-checkbox-list"></div>
+
+                    <label>特権グループ（任意・複数可。所属者の申請は承認不要で即確定）</label>
+                    <div id="privileged-groups-list" class="group-checkbox-list"></div>
+                    <p class="note" id="super-admin-note">※「時空資源総管理者」グループは設定に関わらず常に特権・常に承認可です。グループの作成・メンバー管理は「まいぐる」で行います。</p>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="save-button">登録</button>
+                    <button type="button" class="secondary-button" id="clear-button">クリア</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>資源一覧</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>資源名</th>
+                        <th>カテゴリ</th>
+                        <th>説明</th>
+                        <th>承認設定</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="resource-rows"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API = {
+            list:   '{{ url_for("strm.api_resources") }}?all=1',
+            groups: '{{ url_for("strm.api_groups") }}',
+            create: '{{ url_for("strm.api_resource_create") }}',
+            update: id => '{{ url_for("strm.api_resource_update", resource_id=0) }}'.replace('/0/', '/' + id + '/'),
+            toggle: id => '{{ url_for("strm.api_resource_toggle", resource_id=0) }}'.replace('/0/', '/' + id + '/')
+        };
+
+        function showResult(message, isError) {
+            const $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(() => $r.fadeOut(), 5000);
+        }
+
+        const GROUP_LISTS = ['applicant-groups-list', 'approver-groups-list', 'privileged-groups-list'];
+
+        function loadGroups() {
+            $.get(API.groups, function(resp) {
+                GROUP_LISTS.forEach(listId => {
+                    const $list = $('#' + listId).empty();
+                    if (resp.success && resp.groups.length > 0) {
+                        resp.groups.forEach(g => {
+                            const $label = $('<label>')
+                                .append($('<input>').attr({ type: 'checkbox', value: g.id }))
+                                .append(document.createTextNode(g.name));
+                            $list.append($label);
+                        });
+                    } else {
+                        $list.append($('<div>').addClass('no-groups')
+                            .text('（グループが見つかりません — まいぐるで作成してください）'));
+                    }
+                });
+            });
+        }
+
+        function setChecked(listId, groups) {
+            const ids = (groups || []).map(g => String(g.id));
+            $('#' + listId + ' input[type="checkbox"]').each(function() {
+                $(this).prop('checked', ids.includes($(this).val()));
+            });
+        }
+
+        function getChecked(listId) {
+            return $('#' + listId + ' input[type="checkbox"]:checked')
+                .map(function() { return $(this).val(); }).get();
+        }
+
+        function groupNames(list) {
+            return (list || []).map(g => g.name).join('、');
+        }
+
+        function approvalCell(r) {
+            if (!r.approval_required) return $('<td>').text('不要');
+            const $td = $('<td>');
+            $td.append($('<span>').addClass('approval-required').text('要承認'));
+            const cats = [];
+            if (r.allow_regular) cats.push('regular');
+            if (r.allow_guest) cats.push('guest');
+            let applicant = cats.join('/');
+            if ((r.applicant_groups || []).length > 0) {
+                applicant += (applicant ? ' + ' : '') + groupNames(r.applicant_groups);
+            }
+            $td.append($('<div>').addClass('detail-line').text('申請資格: ' + (applicant || '（設定なし）')));
+            $td.append($('<div>').addClass('detail-line').text('承認G: ' + (groupNames(r.approver_groups) || '（総管理者のみ）')));
+            if ((r.privileged_groups || []).length > 0) {
+                $td.append($('<div>').addClass('detail-line').text('特権G: ' + groupNames(r.privileged_groups)));
+            }
+            return $td;
+        }
+
+        function loadResources() {
+            $.get(API.list, function(resp) {
+                if (!resp.success) { showResult(resp.error || '読み込みに失敗しました。', true); return; }
+                const $rows = $('#resource-rows').empty();
+                resp.resources.forEach(r => {
+                    const $tr = $('<tr>');
+                    if (!r.is_active) $tr.addClass('inactive-row');
+                    $tr.append($('<td>').text(r.name));
+                    $tr.append($('<td>').text(r.category));
+                    $tr.append($('<td>').text(r.description));
+                    $tr.append(approvalCell(r));
+                    $tr.append($('<td>').html(r.is_active ? '利用可' : '<span class="inactive-tag">停止中</span>'));
+                    const $ops = $('<td>');
+                    $ops.append($('<button>').addClass('small-button').text('編集')
+                        .on('click', () => startEdit(r)));
+                    $ops.append(' ');
+                    $ops.append($('<button>').addClass('small-button toggle-button')
+                        .text(r.is_active ? '停止' : '再開')
+                        .on('click', () => toggleResource(r)));
+                    $tr.append($ops);
+                    $rows.append($tr);
+                });
+            });
+        }
+
+        function startEdit(r) {
+            $('#edit-id').val(r.id);
+            $('#res-name').val(r.name);
+            $('#res-category').val(r.category);
+            $('#res-description').val(r.description);
+            $('#res-approval').val(r.approval_required ? '1' : '0').trigger('change');
+            $('#allow-regular').prop('checked', r.allow_regular);
+            $('#allow-guest').prop('checked', r.allow_guest);
+            setChecked('applicant-groups-list', r.applicant_groups);
+            setChecked('approver-groups-list', r.approver_groups);
+            setChecked('privileged-groups-list', r.privileged_groups);
+            $('#form-heading').text('資源の編集: ' + r.name);
+            $('#save-button').text('更新');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function clearForm() {
+            $('#edit-id').val('');
+            $('#resource-form')[0].reset();
+            $('#res-category').val('部屋');
+            $('#res-approval').val('0').trigger('change');
+            $('#allow-regular, #allow-guest').prop('checked', true);
+            $('.group-checkbox-list input[type="checkbox"]').prop('checked', false);
+            $('#form-heading').text('資源の追加');
+            $('#save-button').text('登録');
+        }
+
+        function toggleResource(r) {
+            const action = r.is_active ? '停止' : '再開';
+            if (!confirm('「' + r.name + '」を' + action + 'しますか？')) return;
+            $.post(API.toggle(r.id), function(resp) {
+                if (resp.success) { showResult(resp.message, false); loadResources(); }
+                else showResult(resp.error || '処理に失敗しました。', true);
+            });
+        }
+
+        $('#res-approval').on('change', function() {
+            $('#approval-settings').toggle($(this).val() === '1');
+        });
+
+        $('#clear-button').on('click', clearForm);
+
+        $('#resource-form').on('submit', function(e) {
+            e.preventDefault();
+            const payload = {
+                name: $('#res-name').val(),
+                category: $('#res-category').val(),
+                description: $('#res-description').val(),
+                approval_required: $('#res-approval').val() === '1',
+                allow_regular: $('#allow-regular').is(':checked'),
+                allow_guest: $('#allow-guest').is(':checked'),
+                applicant_group_ids: getChecked('applicant-groups-list'),
+                approver_group_ids: getChecked('approver-groups-list'),
+                privileged_group_ids: getChecked('privileged-groups-list')
+            };
+            const id = $('#edit-id').val();
+            $.ajax({
+                url: id ? API.update(id) : API.create,
+                method: 'POST', contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: resp => {
+                    if (resp.success) { showResult(resp.message, false); clearForm(); loadResources(); }
+                    else showResult(resp.error || '保存に失敗しました。', true);
+                },
+                error: xhr => {
+                    const r = xhr.responseJSON;
+                    showResult((r && r.error) || '通信エラーが発生しました。', true);
+                }
+            });
+        });
+
+        loadGroups();
+        loadResources();
+    </script>
+</body>
+</html>

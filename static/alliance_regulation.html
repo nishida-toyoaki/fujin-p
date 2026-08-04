@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  FUJIN-P 配布雛形 / Distribution template
+  ------------------------------------------------------------
+  このファイルは雛形です。自サイトで公開する前に、下記の
+  プレースホルダを自組織の情報に置き換えてください。
+  置き換えないまま公開すると、他組織の名称・連絡先を掲示する
+  ことになります。
+
+    {{ORGANIZATION}}       アライアンス運営主体の組織名（例: ○○大学、○○市）
+    {{ORGANIZATION_EN}}    同上の英語表記
+    {{ENACTED_DATE}}       制定日（例: 2026年4月1日）
+
+  置き換え漏れは、二重波括弧に囲まれた記号が画面にそのまま残ります。
+  ブラウザで開いて、二重波括弧が残っていないことを確認してください。
+
+  本雛形は FUJIN-P の一部として AGPL v3 のもとで配布されます。
+  文面はそのまま使用せず、自組織の法務確認を経て用いてください。
+  Copyright (C) 2026 Toyoaki Nishida
+  ============================================================
+-->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ORGANIZATION}}FUJIN-Pアライアンス運用規程</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a2e;
+            --paper: #fafaf7;
+            --accent: #2c5f7c;
+            --accent-light: #e8f0f4;
+            --border: #c8c8be;
+            --subtle: #6b6b60;
+            --highlight: #f5f0e0;
+            --warn: #8b3a3a;
+            --warn-bg: #fdf2f2;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #e8e6e0 0%, #d8d6d0 100%);
+            font-family: "Noto Sans JP", sans-serif;
+            color: var(--ink);
+            line-height: 1.85;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+        .document {
+            max-width: 780px;
+            margin: 0 auto;
+            background: var(--paper);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+            padding: 3.5rem 3rem;
+            position: relative;
+        }
+        .document::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent), #4a8fa8, var(--accent));
+        }
+        .doc-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--ink);
+        }
+        .doc-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 0.2rem 0.8rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        .doc-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.3rem;
+        }
+        .doc-subtitle {
+            font-size: 0.88rem;
+            color: var(--subtle);
+            font-weight: 300;
+        }
+        .preamble {
+            background: var(--accent-light);
+            border-left: 4px solid var(--accent);
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 0.92rem;
+        }
+        .chapter {
+            margin-top: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .chapter-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 0.5rem 0;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            letter-spacing: 0.1em;
+            color: var(--accent);
+        }
+        .article {
+            margin-bottom: 1.8rem;
+        }
+        .article-title {
+            font-family: "Noto Serif JP", serif;
+            font-size: 1.02rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            padding-left: 0.8rem;
+            border-left: 3px solid var(--accent);
+        }
+        .article p, .article li {
+            font-size: 0.92rem;
+            margin-bottom: 0.4rem;
+            text-align: justify;
+        }
+        .article ol {
+            padding-left: 1.8rem;
+        }
+        .article ol li { padding-left: 0.3rem; }
+        .article ol ol {
+            list-style-type: lower-alpha;
+            margin-top: 0.3rem;
+        }
+        .highlight-box {
+            background: var(--highlight);
+            border: 1px solid #ddd6b8;
+            padding: 1rem 1.3rem;
+            margin: 0.8rem 0;
+            font-size: 0.88rem;
+        }
+        .warn-box {
+            background: var(--warn-bg);
+            border: 1px solid #e0bfbf;
+            border-left: 4px solid var(--warn);
+            padding: 1rem 1.3rem;
+            margin: 0.8rem 0;
+            font-size: 0.88rem;
+        }
+        .warn-box .warn-label {
+            font-weight: 700;
+            color: var(--warn);
+            font-size: 0.82rem;
+            margin-bottom: 0.3rem;
+        }
+        .diagram {
+            background: #f0f2f5;
+            border: 1px solid #d0d2d5;
+            padding: 1.5rem;
+            margin: 1.2rem 0;
+            text-align: center;
+            font-size: 0.85rem;
+            line-height: 2;
+        }
+        .diagram .layer {
+            display: inline-block;
+            padding: 0.3rem 1.2rem;
+            margin: 0.2rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .diagram .layer-alliance { background: var(--accent); color: white; }
+        .diagram .layer-site { background: #4a8fa8; color: white; }
+        .diagram .layer-sommelier { background: #5a9a6a; color: white; }
+        .diagram .layer-user { background: #8a8a9a; color: white; }
+        .diagram .arrow { color: var(--subtle); font-size: 1.1rem; }
+        .doc-footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .doc-footer .date-line {
+            text-align: right;
+            font-size: 0.85rem;
+            color: var(--subtle);
+            margin-bottom: 0.3rem;
+        }
+        .nav-links {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            font-size: 0.82rem;
+            color: var(--accent);
+            text-decoration: none;
+            border: 1px solid var(--accent);
+            padding: 0.3rem 0.8rem;
+            transition: all 0.2s;
+        }
+        .nav-links a:hover { background: var(--accent); color: white; }
+        @media (max-width: 640px) {
+            .document { padding: 2rem 1.5rem; }
+            .doc-title { font-size: 1.25rem; }
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .document { box-shadow: none; border: none; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="document">
+
+    <header class="doc-header">
+        <div class="doc-badge">{{ORGANIZATION}}におけるFUJIN-P Alliance</div>
+        <h1 class="doc-title">{{ORGANIZATION}}FUJIN-Pアライアンス運用規程</h1>
+        <p class="doc-subtitle">Operational Regulation for FUJIN-P Alliance at {{ORGANIZATION_EN}}</p>
+    </header>
+
+    <div class="preamble">
+        本規程は、{{ORGANIZATION}}を母体とするFUJIN-Pアライアンス（以下「本アライアンス」）の構成・運営・参加条件について定めるものです。本規程は公開文書とし、本アライアンスに関わるすべての者が閲覧できるものとします。なお、本システムは実験段階（FUJIN-P：Experimental Phase）にあり、商用サービスと同等のサービス水準を保証するものではありません。
+    </div>
+
+    <!-- ===== 第1章 ===== -->
+    <div class="chapter">
+        <h2 class="chapter-title">第1章　総則</h2>
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第1条（目的）</h2>
+        <p>本規程は、{{ORGANIZATION}}におけるFUJIN-Pアライアンスの運用に関する基本事項を定め、サイト運営の自律性と相互連携の信頼性を両立させることを目的とします。</p>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第2条（定義）</h2>
+        <p>本規程において、各用語の定義は以下のとおりとします。</p>
+        <ol>
+            <li><strong>FUJIN-P基盤</strong>とは、Webアプリケーションの構築・運用を可能にするソフトウェア基盤をいいます。FUJIN-Pの「P」はExperimental Phaseを意味します。</li>
+            <li><strong>FUJIN-Pアライアンス</strong>とは、FUJIN-P基盤を用いて構築された複数のFUJIN-Pサイトが、共通の規程のもとに連携するコミュニティの総体をいいます。アライアンスは組織や地域ごとに個別に設置されるものであり、本規程は{{ORGANIZATION}}を母体とするアライアンスに適用されます。</li>
+            <li><strong>FUJIN-Pサイト</strong>とは、FUJIN-P基盤上にFUJIN-Pソムリエが構築し管理する個別のWebアプリケーション群をいいます。</li>
+            <li><strong>FUJIN-Pソムリエ</strong>とは、所定の研修を修了し、本アライアンスに登録されたFUJIN-Pサイトの管理責任者をいいます。DXソムリエの一形態として位置づけられます。</li>
+            <li><strong>ユーザー</strong>とは、FUJIN-Pサイトに登録し、そのサービスを利用する者をいいます。</li>
+            <li><strong>運営主体</strong>とは、本アライアンスの設置・管理・規程改定等の権限を有する主体をいい、{{ORGANIZATION}}で別途定める運用規程により定めます。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第3条（アライアンスの構成）</h2>
+        <p>本アライアンスは、以下の要素から構成されます。</p>
+        <div class="diagram">
+            <span class="layer layer-alliance">{{ORGANIZATION}} FUJIN-Pアライアンス</span><br>
+            <span class="arrow">┃</span><br>
+            <span class="arrow">┣━</span>
+            <span class="layer layer-site">FUJIN-Pサイト A</span>
+            <span class="arrow">━━</span>
+            <span class="layer layer-site">FUJIN-Pサイト B</span>
+            <span class="arrow">━━</span>
+            <span class="layer layer-site">FUJIN-Pサイト C …</span><br>
+            <span class="arrow">┃</span><br>
+            <span class="arrow">┣━</span>
+            <span class="layer layer-sommelier">ソムリエ</span>
+            <span style="font-size:0.82rem; color:#555;">（各サイトに1名以上、研修修了者）</span><br>
+            <span class="arrow">┃</span><br>
+            <span class="arrow">┗━</span>
+            <span class="layer layer-user">ユーザー</span>
+            <span style="font-size:0.82rem; color:#555;">（各サイトに登録された利用者）</span>
+        </div>
+        <ol>
+            <li>各FUJIN-Pサイトは、1名以上のFUJIN-Pソムリエによって自律的に運営されます。</li>
+            <li>サイト間は、シングルサインオン（SSO）やアセット共有等の連携機能によって接続されることがあります。</li>
+            <li>ユーザーは、個別のFUJIN-Pサイトに登録してサービスを利用します。</li>
+        </ol>
+    </section>
+
+    <!-- ===== 第2章 ===== -->
+    <div class="chapter">
+        <h2 class="chapter-title">第2章　FUJIN-Pソムリエ</h2>
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第4条（ソムリエの資格要件）</h2>
+        <ol>
+            <li>FUJIN-Pソムリエになろうとする者は、運営主体が実施または認定する所定の研修を修了しなければなりません。</li>
+            <li>研修の内容、実施方法、および修了認定の基準は、{{ORGANIZATION}}で別途定める運用規程によります。</li>
+            <li>研修を修了した者は、本規程および関連文書（サイト利用規約、プライバシーポリシー等）の内容を理解したうえで、所定の同意書を提出することにより、FUJIN-Pソムリエとして登録されます。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第5条（ソムリエの責務）</h2>
+        <ol>
+            <li>FUJIN-Pソムリエは、自身が管理するFUJIN-Pサイトについて、サービスの提供・運用・保守に関する一次的な管理責任を負います。</li>
+            <li>ソムリエは、自身のサイトに登録されたユーザーの個人情報を、本アライアンスのプライバシーポリシーおよびサイト利用規約に従い適切に管理するものとします。</li>
+            <li>ソムリエは、本規程その他のアライアンス規程を自身のサイト上に掲示し、ユーザーに周知する義務を負います。</li>
+            <li>ソムリエは、自身のサイトで提供するサービスの内容について、以下の分類を参照し、適切なアクセス制御を行うものとします。
+                <div class="highlight-box">
+                    <strong>FUJIN-Pサイトのサービス分類（参考）</strong><br>
+                    ・人的資源管理（まいぐる、あくまね等）<br>
+                    ・FUJIN-Pアセット管理（アプシャ、テーシャ等）<br>
+                    ・基本情報管理（コレポ、マイノート、テーブルマスター等）<br>
+                    ・領域依存アプリ（けいこく年度、まいあし等）
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第6条（ソムリエ情報の取り扱い）</h2>
+        <ol>
+            <li>FUJIN-Pソムリエに関する情報は、以下の2種類に区分して取り扱われます。
+                <div class="highlight-box">
+                    <strong>（A）公開情報：</strong>ソムリエが管理するFUJIN-Pサイトの名称・URL、および当該サイトが本アライアンスに属する旨。これらは各サイト上に掲示され、公開されます。<br><br>
+                    <strong>（B）サイト間共有情報：</strong>ソムリエの連絡先メールアドレス（FUJIN-Pログインアカウント）。これは、サイト間のAPI連携パスワードと同等のセキュリティレベルで、アライアンス内の他のサイトのadminに対して共有されます。
+                </div>
+            </li>
+            <li>（B）のサイト間共有情報は、アライアンスソムリエとしての他サイトへのログイン許可、サイト間連携、および障害時の連絡を目的として共有されます。受領したadminは、APIパスワードと同様にこの情報を管理し、admin業務以外の目的に使用してはなりません。</li>
+            <li>ソムリエの連絡先メールアドレスのサイト上への掲示は推奨されますが、義務とはしません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第7条（メールアドレス共有のオプトアウト）</h2>
+        <ol>
+            <li>FUJIN-Pソムリエは、自身のメールアドレスをアライアンス内の他のサイトに共有することについて、オプトアウト（不参加）を選択することができます。</li>
+            <li>オプトアウトを選択した場合、当該ソムリエのメールアドレスは他のサイトのadminに送付されません。ただし、その代わりに、当該ソムリエは他のアライアンスサイトにアライアンスソムリエとしてログインする特権を受けることができません。</li>
+            <li>オプトアウトの選択は、ソムリエ登録時または登録後いつでも運営主体に申し出ることにより変更できます。</li>
+        </ol>
+        <div class="warn-box">
+            <div class="warn-label">⚠ リスクの告知</div>
+            メールアドレスの共有に同意した場合、当該情報はアライアンス内の他サイトのadminに伝達されます。各adminはこの情報を適切に管理する義務を負いますが、万一、他のadminの過失等によりメールアドレスが不正に利用される可能性を完全に排除することはできません。ソムリエはこのリスクを理解したうえで共有の可否を判断してください。
+        </div>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第8条（守秘義務）</h2>
+        <ol>
+            <li>FUJIN-Pソムリエ（admin）は、サイト間共有情報（他のソムリエのメールアドレス、API連携パスワード等）を、admin業務の範囲を超えて利用または第三者に開示してはなりません。</li>
+            <li>ソムリエは、自身のサイトを通じて取得したユーザーの個人情報を、プライバシーポリシーに定める範囲を超えて利用または開示してはなりません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第9条（ソムリエ資格の取り消し）</h2>
+        <ol>
+            <li>運営主体は、以下の事由に該当するソムリエに対し、警告、資格の一時停止、または資格の取り消しの措置をとることができます。
+                <ol>
+                    <li>本規程またはアライアンスの関連規程に違反した場合</li>
+                    <li>守秘義務に反してサイト間共有情報またはユーザーの個人情報を漏洩した場合</li>
+                    <li>ソムリエとしての管理責任を著しく怠った場合</li>
+                    <li>その他、運営主体がアライアンスの信頼性を損なうと判断した場合</li>
+                </ol>
+            </li>
+            <li>取り消し措置の具体的な手続きは、{{ORGANIZATION}}で別途定める運用規程によります。</li>
+            <li>資格を取り消されたソムリエが管理していたサイトおよびユーザーデータの取り扱いについては、運営主体が適切な措置を講じます。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第10条（ソムリエ資格の自主返上）</h2>
+        <ol>
+            <li>ソムリエは、いつでも運営主体に通知することにより、ソムリエ資格を自主的に返上することができます。</li>
+            <li>返上後のサイト運営およびデータの引継ぎについては、運営主体と協議のうえ適切に対応するものとします。</li>
+            <li>返上に伴い、他サイトへのメールアドレスの共有は停止され、アライアンスソムリエとしてのログイン権限も失効します。</li>
+        </ol>
+    </section>
+
+    <!-- ===== 第3章 ===== -->
+    <div class="chapter">
+        <h2 class="chapter-title">第3章　ユーザーおよびサイト運営</h2>
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第11条（ユーザーの位置づけ）</h2>
+        <ol>
+            <li>ユーザーは、個別のFUJIN-Pサイトに登録してサービスを利用する者であり、当該サイトのソムリエがサービス提供の一次的な責任者となります。</li>
+            <li>ユーザーの権利義務は、別途定める「FUJIN-Pサイト利用規約」によります。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第12条（取り扱いデータのレベル定義）</h2>
+        <p>本アライアンスにおける情報は、以下の4段階のレベルに分類して管理されます。各ソムリエは、自身のサイトにおいてこの分類に基づく適切なアクセス制御を行うものとします。</p>
+        <div class="highlight-box">
+            <strong>レベル1（パブリック共有）：</strong>社会に周知されている、またはアライアンス外に広く公開される情報。<br>
+            <strong>レベル2（アライアンス間共有）：</strong>SSO、アプシャ、テーシャ等の連携のために、アライアンス内の複数サイト間で共有される情報。<br>
+            <strong>レベル3（コミュニティ内限定）：</strong>特定のFUJIN-Pサイト内でのみ共有される情報。<br>
+            <strong>レベル4（業務・役割限定）：</strong>業務上の関係者にのみ限定して開示される高機密情報。
+        </div>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第13条（シングルサインオンと属性共有）</h2>
+        <ol>
+            <li>アライアンス内のサイト間連携のため、Google認証等を用いたシングルサインオン（SSO）が導入される場合があります。</li>
+            <li>SSOを利用するユーザーの基本的な属性情報（氏名、メールアドレス、所属等）は、連携先サイトに共有されることがあります。この共有条件はサイト利用規約およびプライバシーポリシーにおいてユーザーに明示されるものとします。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第14条（各サイトにおける掲示義務）</h2>
+        <p>各FUJIN-Pサイトには、以下の事項を掲示するものとします。</p>
+        <ol>
+            <li>当該サイトが{{ORGANIZATION}}におけるFUJIN-Pアライアンスに属するFUJIN-Pソムリエによって運営されている旨の宣言（サイト名・URLを含む）</li>
+            <li>本運用規程へのリンクまたは全文</li>
+            <li>FUJIN-Pサイト利用規約</li>
+            <li>プライバシーポリシー</li>
+        </ol>
+        <p>なお、ソムリエの連絡先メールアドレスのサイト上への掲示は推奨されますが、義務とはしません（第6条第3項）。</p>
+    </section>
+
+    <!-- ===== 第4章 ===== -->
+    <div class="chapter">
+        <h2 class="chapter-title">第4章　雑則</h2>
+    </div>
+
+    <section class="article">
+        <h2 class="article-title">第15条（免責事項）</h2>
+        <ol>
+            <li>FUJIN-P基盤の開発者および本アライアンスの運営主体は、システムの不具合、停止、データ損失等により生じた損害について、故意または重過失の場合を除き責任を負いません。</li>
+            <li>各FUJIN-Pサイトにおけるサービスの品質・可用性は、当該サイトのソムリエの責任において確保されるものとし、他のソムリエまたは運営主体はこれに関する責任を負いません。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第16条（規程の改定）</h2>
+        <ol>
+            <li>本規程は、運営主体の決定により改定することができます。</li>
+            <li>改定にあたっては、登録ソムリエに対し事前に通知するものとします。</li>
+            <li>改定に同意できないソムリエは、第10条に基づき資格を返上することができます。</li>
+        </ol>
+    </section>
+
+    <section class="article">
+        <h2 class="article-title">第17条（準拠する運用規程）</h2>
+        <p>本規程に定めのない事項、および運営主体の構成・権限・ソムリエ研修の具体的内容・資格取り消しの手続き等の詳細については、{{ORGANIZATION}}で別途定める運用規程によるものとします。</p>
+    </section>
+
+    <footer class="doc-footer">
+        <p class="date-line">制定：{{ENACTED_DATE}}</p>
+
+        <nav class="nav-links">
+            <a href="/static/terms_sommelier_consent.html">ソムリエ同意書</a>
+            <a href="/static/terms_user.html">サイト利用規約</a>
+            <a href="/static/privacy_policy.html">プライバシーポリシー</a>
+        </nav>
+    </footer>
+</div>
+</body>
+</html>

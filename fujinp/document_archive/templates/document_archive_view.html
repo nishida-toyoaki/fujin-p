@@ -1,0 +1,189 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+{% extends "document_archive_base.html" %}
+{% import 'document_archive_macros.html' as ui with context %}
+{% block title %}{{ document.title }} - 文書詳細{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <!-- ヘッダー部分 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">文書詳細</h4>
+                    <div class="btn-group">
+                        <a href="{{ url_for('document_archive.dashboard') }}" class="btn btn-light">
+                            <i class="fas fa-arrow-left"></i> 一覧に戻る
+                        </a>
+                        <a href="{{ url_for('document_archive.plain_view', doc_id=document.id) }}"
+                           class="btn btn-info" target="_blank">
+                            <i class="fas fa-external-link-alt"></i> プレーン表示
+                        </a>
+                        {% if "component_editor2結合ビュー (文書ID:" in (document.owner_memo or "") %}
+                            {% set memo_parts = document.owner_memo.split("文書ID: ") %}
+                            {% if memo_parts|length > 1 %}
+                                {% set doc_id_part = memo_parts[1].split(")")[0] %}
+                                <a href="/component_editor2/combined_view/{{ doc_id_part }}"
+                                   class="btn btn-success" target="_blank">
+                                    <i class="fas fa-link"></i> ソース文書（結合ビュー）
+                                </a>
+                            {% endif %}
+                        {% elif "component_editor2単体ドキュメント (文書ID:" in (document.owner_memo or "") %}
+                            {% set memo_parts = document.owner_memo.split("文書ID: ") %}
+                            {% if memo_parts|length > 1 %}
+                                {% set doc_id_part = memo_parts[1].split(")")[0] %}
+                                <a href="/component_editor2/preview/{{ doc_id_part }}"
+                                   class="btn btn-success" target="_blank">
+                                    <i class="fas fa-link"></i> ソース文書（プレビュー）
+                                </a>
+                            {% endif %}
+                        {% endif %}
+                        {% if can_edit %}                          {# ★ 追加 #}
+                        <a href="{{ url_for('document_archive.edit_document', doc_id=document.id) }}"
+                           class="btn btn-warning">
+                            <i class="fas fa-edit"></i> 編集
+                        </a>
+                        <a href="{{ url_for('document_archive.delete_confirm', doc_id=document.id) }}"
+                           class="btn btn-danger">
+                            <i class="fas fa-trash"></i> 削除
+                        </a>
+                        {% endif %}                               {# ★ 追加 #}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <h2 class="mb-3">
+                        {{ document.title }}
+                        {% if "component_editor2" in (document.owner_memo or "") %}
+                            <span class="badge bg-info ms-2">Component Editor 2</span>
+                        {% endif %}
+                    </h2>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>ID:</strong> {{ document.id }}</p>
+                            {# P1-2: ユーザIDではなく氏名を表示する #}
+                            <p><strong>作成者:</strong> {{ document.created_by_name or '不明' }}</p>
+                            {# P1-3: 誤公開に気づけるよう公開範囲を明示する #}
+                            <p class="mb-0"><strong>公開範囲:</strong>
+                                {{ ui.policy_badge(document.access_policy, document.allowed_group_names) }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>作成日時:</strong> {{ document.created_at.strftime('%Y-%m-%d %H:%M:%S') if document.created_at else 'N/A' }}</p>
+                            <p><strong>更新日時:</strong> {{ document.updated_at.strftime('%Y-%m-%d %H:%M:%S') if document.updated_at else 'N/A' }}</p>
+                            {% if document.file_type %}
+                            <p class="mb-0"><strong>ファイル形式:</strong>
+                                <span class="badge bg-dark">{{ document.file_type.split(';')[0] }}</span>
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- パブリック説明 -->
+    {% if document.public_description %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-users"></i> パブリック説明</h5>
+                </div>
+                <div class="card-body">
+                    <div class="markdown-content">
+                        {{ public_html|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- オーナーメモ -->
+    {% if document.owner_memo %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-user-secret"></i> オーナーメモ</h5>
+                </div>
+                <div class="card-body">
+                    <div class="markdown-content">
+                        {{ owner_html|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- メインコンテンツ -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-file-alt"></i> 文書内容</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="html-content">
+                        {% if content_html %}
+                            <iframe srcdoc="{{ content_html|e }}" style="width: 100%; min-height: 600px; border: none;"></iframe>
+                        {% else %}
+                            <div class="p-3">
+                                <p class="text-muted">文書の内容がありません</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Markdownコンテンツ用の追加スタイル */
+.markdown-content {
+    line-height: 1.6;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.markdown-content p {
+    margin-bottom: 1rem;
+}
+
+.markdown-content pre {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 0.25rem;
+    padding: 0.75rem;
+    overflow-x: auto;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #007bff;
+    padding-left: 1rem;
+    margin-left: 0;
+    font-style: italic;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+}
+</style>
+{% endblock %}

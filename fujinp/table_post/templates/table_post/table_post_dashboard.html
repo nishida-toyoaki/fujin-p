@@ -1,0 +1,853 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>テーブルポスト</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+  body { font-family: sans-serif; margin: 20px; color: #222; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.15rem; border-bottom: 2px solid #17a2b8; padding-bottom: 4px; }
+  section { margin-bottom: 28px; }
+  label { margin-right: 12px; }
+  select, input[type=text], input[type=date] { padding: 4px; }
+  button { padding: 6px 14px; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .5; }
+  .loading {
+    display: none; position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); padding: 20px; background: #fff;
+    border: 1px solid #ccc; border-radius: 5px; z-index: 1000;
+  }
+    .btn-return {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #ef4444; color: #fff; font-weight: 800;
+      text-decoration: none; padding: 6px 14px; border-radius: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.2); white-space: nowrap;
+    }
+    .btn-return:hover { background: #dc2626; color: #fff; }
+  .warning-box {
+    background: #fff3cd; border: 1px solid #ffeeba; color: #856404;
+    padding: 1rem; margin-bottom: 1rem; border-radius: 5px;
+  }
+  .warning-title { font-weight: bold; margin-bottom: .5rem; }
+  .controls { margin: 10px 0; }
+  .scroll-x { overflow-x: auto; border: 1px solid #ddd; }
+  table { border-collapse: collapse; white-space: nowrap; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: .9rem; }
+  th { background: #f1f1f1; }
+  .status-ok { color: #155724; }
+  .status-pending { color: #856404; }
+  .status-rejected { color: #721c24; }
+  .admin-box { background: #eef6f8; border: 1px solid #bcdfe6;
+               padding: 12px; border-radius: 5px; }
+  .table-pick-list {
+    max-height: 260px; overflow-y: auto; border: 1px solid #ccc;
+    padding: 8px; columns: 3; column-gap: 16px;
+  }
+  .table-pick-list label { display: block; font-size: .85rem; }
+  .msg { margin-top: 8px; }
+  .msg.ok { color: #155724; }
+  .msg.err { color: #721c24; white-space: pre-wrap; }
+  .back-button {
+    display: inline-block; padding: 10px 20px; background: #17a2b8;
+    color: #fff; text-decoration: none; border-radius: 5px; margin-top: 20px;
+  }
+  .back-button:hover { background: #138496; }
+  .cell-edit { width: 130px; }
+  .trunc {
+    max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  td.trunc { cursor: default; }
+  /* 更新状態一覧: 列ごとの幅調整（1列目=テーブル名はやや広め） */
+  #status-table td.trunc { max-width: 200px; }
+  #status-table td.trunc:first-child { max-width: 260px; }
+</style>
+</head>
+<body>
+
+<h1>📮 テーブルポスト</h1>
+<div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+  <a href="{{ url_for('table_post.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+</div>
+<p>SQLテーブルの更新を「ダウンロード → 編集 → 更新申請 → admin適用」の手順で、
+   安全に行うためのアプリです。</p>
+
+<div id="loading" class="loading">処理中...</div>
+
+<!-- プロジェクト選択 -->
+<section>
+  <h2>プロジェクト選択</h2>
+  <label>プロジェクト:
+    <select id="project-select">
+      <option value="">選択してください</option>
+    </select>
+  </label>
+  <span id="project-desc" style="color:#666;"></span>
+  {% if is_admin %}
+  <button id="migrate-archive-btn" style="margin-left:12px;">📦 公式データ集に記録をマイグレート</button>
+  <div id="migrate-result"
+       style="display:none;font-size:.85rem;color:#065f46;background:#d1fae5;
+              border:1px solid #6ee7b7;border-radius:5px;padding:8px 12px;
+              margin-top:8px;white-space:pre-wrap;"></div>
+  {% endif %}
+</section>
+
+<!-- 更新状態表示テーブル -->
+<section id="status-section" style="display:none;">
+  <h2>更新状態一覧</h2>
+  <p style="font-size:.85rem;color:#666;">
+    テーブル名の辞書順。横スクロールで全項目を確認できます。</p>
+  <div class="scroll-x">
+    <table id="status-table">
+      <thead>
+        <tr>
+          <th>テーブル名</th>
+          {% if is_admin %}<th>操作</th>{% endif %}
+          <th>更新依頼先</th>
+          <th>更新期日</th>
+          <th>更新申請状況</th>
+          <th>最終更新者</th>
+          <th>更新日時</th>
+          <th>最終状態</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ダウンロード -->
+<section id="download-section" style="display:none;">
+  <h2>① テーブルのダウンロード</h2>
+  <div class="controls">
+    <label>テーブル:
+      <select id="dl-table-select">
+        <option value="">選択してください</option>
+      </select>
+    </label>
+    <button id="download-btn" disabled>xlsxダウンロード</button>
+  </div>
+</section>
+
+<!-- 更新申請 -->
+<section id="upload-section" style="display:none;">
+  <h2>② 編集済xlsxの更新申請</h2>
+  <div class="warning-box">
+    <div class="warning-title">⚠️ 編集時の注意</div>
+    <ul style="margin:0;padding-left:20px;">
+      <li>列（カラム）の追加・削除・並べ替えはできません。スキーマが異なると却下されます。</li>
+      <li>行の追加・データセルの書き換えのみ可能です。</li>
+      <li>申請した時点では本番テーブルは変わりません。adminが内容を確認して適用します。</li>
+    </ul>
+  </div>
+  <div class="controls">
+    <label>更新するテーブル:
+      <select id="up-table-select">
+        <option value="">選択してください</option>
+      </select>
+    </label><br><br>
+    <label>編集済xlsx:
+      <input type="file" id="upload-file" accept=".xlsx"></label>
+    <button id="submit-btn" disabled>更新申請を送信</button>
+  </div>
+  <div id="upload-msg" class="msg"></div>
+</section>
+
+{% if is_admin %}
+<!-- ===================== admin専用エリア ===================== -->
+<section class="admin-box">
+  <h2>🔧 admin: プロジェクト作成</h2>
+  <div class="controls">
+    <label>プロジェクト名: <input type="text" id="new-project-name"></label>
+    <label>説明: <input type="text" id="new-project-desc" size="40"></label>
+    <button id="create-project-btn">作成</button>
+  </div>
+  <div id="create-project-msg" class="msg"></div>
+</section>
+
+<section class="admin-box">
+  <h2>🔧 admin: プロジェクト編集</h2>
+  <p style="font-size:.85rem;color:#666;">
+    名称・説明の変更、有効/無効の切り替えができます。
+    無効にするとプロジェクト選択の一覧に出なくなります（データは残ります）。</p>
+  <div class="controls">
+    <label>編集対象:
+      <select id="edit-project-select">
+        <option value="">選択してください</option>
+      </select>
+    </label>
+  </div>
+  <div class="controls" id="edit-project-fields" style="display:none;">
+    <label>プロジェクト名: <input type="text" id="edit-project-name"></label>
+    <label>説明: <input type="text" id="edit-project-desc" size="40"></label>
+    <label><input type="checkbox" id="edit-project-active"> 有効</label>
+    <button id="update-project-btn">保存</button>
+  </div>
+  <div id="update-project-msg" class="msg"></div>
+</section>
+
+<section class="admin-box">
+  <h2>🔧 admin: 対象テーブルの追加 / 割り当て解除</h2>
+  <p style="font-size:.85rem;color:#666;">
+    上で選択中のプロジェクトに、&lt;platform&gt;.fujinp のテーブルを割り当てます。<br>
+    チェックを付けて「割り当てを保存」で追加、外して保存で割り当て解除になります。
+    個別の解除は更新状態一覧の「操作」列からも行えます。</p>
+  <div class="controls">
+    <button id="load-fujinp-tables-btn">現在の割り当て</button>
+    <span id="fujinp-db-label" style="color:#666;"></span>
+  </div>
+  <div id="table-pick-list" class="table-pick-list"></div>
+  <div class="controls">
+    <button id="assign-tables-btn" disabled>割り当てを保存</button>
+  </div>
+  <div id="assign-msg" class="msg"></div>
+</section>
+
+<section class="admin-box">
+  <h2>🔧 admin: 更新申請の適用</h2>
+  <div class="controls">
+    <button id="load-requests-btn">申請一覧を読み込む</button>
+  </div>
+  <div class="scroll-x">
+    <table id="requests-table">
+      <thead>
+        <tr>
+          <th>申請ID</th><th>テーブル</th><th>申請者</th><th>申請日時</th>
+          <th>行数</th><th>状態</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div id="requests-msg" class="msg"></div>
+</section>
+
+<section class="admin-box">
+  <h2>🔧 admin: 更新記録 / ロールバック</h2>
+  <p style="font-size:.85rem;color:#666;">
+    テーブルを選んで更新前の版を一覧表示し、任意の版を本番に復元できます。</p>
+  <div class="controls">
+    <label>テーブル:
+      <select id="hist-table-select">
+        <option value="">プロジェクト選択後に表示</option>
+      </select>
+    </label>
+    <button id="load-history-btn" disabled>記録一覧を読み込む</button>
+  </div>
+  <div class="scroll-x">
+    <table id="history-table">
+      <thead>
+        <tr>
+          <th>記録ID</th><th>テーブル</th><th>記録日時</th>
+          <th>行数</th><th>メモ</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div id="history-msg" class="msg"></div>
+</section>
+{% endif %}
+
+{% if session.get('user_category') in ['admin'] %}
+  <a href="{{ url_for('admin.dashboard') }}" class="back-button">管理者ダッシュボードに戻る</a>
+{% else %}
+  <a href="{{ url_for('guest.dashboard') }}" class="back-button">ダッシュボードに戻る</a>
+{% endif %}
+
+<script>
+$(function () {
+  var IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+  var currentProjectId = null;
+  var currentTables = [];          // [{database_name, table_name}, ...]
+
+  function show()  { $('#loading').show(); }
+  function hide()  { $('#loading').hide(); }
+  function msg(sel, text, ok) {
+    $(sel).text(text).removeClass('ok err').addClass(ok ? 'ok' : 'err');
+  }
+
+  // ---- プロジェクト一覧 ----
+  function loadProjects() {
+    $.getJSON('{{ url_for("table_post.get_projects") }}', function (r) {
+      if (!r.success) { alert('プロジェクト取得失敗: ' + r.error); return; }
+      var sel = $('#project-select').empty()
+        .append('<option value="">選択してください</option>');
+      r.projects.forEach(function (p) {
+        sel.append($('<option>').val(p.id)
+          .text(p.project_name).data('desc', p.description || ''));
+      });
+    });
+    if (IS_ADMIN) loadEditProjects();
+  }
+
+  // admin編集セレクト用（無効プロジェクトも含めて取得）
+  function loadEditProjects() {
+    $.getJSON('{{ url_for("table_post.get_projects") }}',
+      { include_inactive: 1 }, function (r) {
+      if (!r.success) return;
+      var sel = $('#edit-project-select').empty()
+        .append('<option value="">選択してください</option>');
+      r.projects.forEach(function (p) {
+        var label = p.project_name + (p.is_active ? '' : '（無効）');
+        sel.append($('<option>').val(p.id).text(label)
+          .data('name', p.project_name)
+          .data('desc', p.description || '')
+          .data('active', p.is_active ? 1 : 0));
+      });
+    });
+  }
+  loadProjects();
+
+  // ---- プロジェクト選択 ----
+  $('#project-select').change(function () {
+    currentProjectId = $(this).val();
+    $('#project-desc').text(
+      $(this).find('option:selected').data('desc') || '');
+    if (!currentProjectId) {
+      $('#status-section,#download-section,#upload-section').hide();
+      return;
+    }
+    loadStatus();
+  });
+
+  // ---- 公式データ集への記録マイグレート（admin） ----
+  $('#migrate-archive-btn').click(function () {
+    if (!currentProjectId) { alert('プロジェクトを選択してください'); return; }
+    if (!confirm('このプロジェクトの承認済み更新の記録（過去分を含む）を、\n' +
+                 '公式データ集の更新履歴に取り込みます。\n\n' +
+                 '・テーブル本体は変更しません（由来の記録のみ）\n' +
+                 '・取り込み済みの記録は自動的にスキップされます\n\n' +
+                 'よろしいですか？')) return;
+    var $b = $(this).prop('disabled', true).text('実行中…');
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.migrate_to_archive") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ project_id: currentProjectId }),
+      success: function (r) {
+        hide();
+        if (!r.success) { alert('エラー: ' + r.error); return; }
+        var m = '取り込み: ' + r.migrated + '件　／　' +
+                '重複スキップ: ' + r.skipped_duplicate + '件　／　' +
+                '未登録テーブルでスキップ: ' + r.skipped_unregistered + '件' +
+                '（承認済み申請 全' + r.total_applied_requests + '件）';
+        if (r.unregistered_tables && r.unregistered_tables.length) {
+          m += '\n未登録テーブル: ' + r.unregistered_tables.join('、') +
+               '\n→ 公式データ集に登録してから再実行すれば取り込まれます。';
+        }
+        if (r.unresolved_users && r.unresolved_users.length) {
+          m += '\nユーザIDを解決できず名前のみ記録: ' +
+               r.unresolved_users.join('、');
+        }
+        $('#migrate-result').text(m).show();
+      },
+      error: function (xhr) {
+        hide();
+        var e = 'マイグレート失敗';
+        try { e = JSON.parse(xhr.responseText).error || e; } catch (x) {}
+        alert('エラー: ' + e);
+      },
+      complete: function () {
+        $b.prop('disabled', false).text('📦 公式データ集に記録をマイグレート');
+      }
+    });
+  });
+
+  // ---- 更新状態一覧 ----
+  function loadStatus() {
+    show();
+    $.getJSON('{{ url_for("table_post.get_status") }}',
+      { project_id: currentProjectId }, function (r) {
+      hide();
+      if (!r.success) { alert('状態取得失敗: ' + r.error); return; }
+      currentTables = r.status.map(function (s) {
+        return { database_name: s.database_name, table_name: s.table_name };
+      });
+      renderStatus(r.status);
+      fillTableSelects();
+      $('#status-section,#download-section,#upload-section').show();
+    });
+  }
+
+  // truncate表示用セル: クラス .trunc で省略、title属性で全文
+  function truncCell(text) {
+    var t = (text == null || text === '') ? '' : String(text);
+    return $('<td>').addClass('trunc').text(t).attr('title', t);
+  }
+
+  function renderStatus(rows) {
+    var tb = $('#status-table tbody').empty();
+    var colspan = IS_ADMIN ? 8 : 7;
+    if (!rows.length) {
+      tb.append('<tr><td colspan="' + colspan +
+                '">割り当てられたテーブルがありません。</td></tr>');
+      return;
+    }
+    rows.forEach(function (s) {
+      var tr = $('<tr>');
+      // テーブル名（truncate）
+      tr.append(truncCell(s.table_name));
+      // 操作（admin: 割り当て解除）— テーブル名のすぐ右
+      if (IS_ADMIN) {
+        var ops = $('<td>');
+        $('<button>').text('割り当て解除')
+          .css({ 'font-size': '.8rem', color: '#721c24' })
+          .click(function () {
+            unassignTable(s.database_name, s.table_name,
+                          s.pending_count > 0);
+          }).appendTo(ops);
+        tr.append(ops);
+      }
+      // 更新依頼先 / 更新期日
+      if (IS_ADMIN) {
+        tr.append(adminCell(s.id, 'assignee', s.assignee, 'text'));
+        tr.append(adminCell(s.id, 'due_date', s.due_date, 'date'));
+      } else {
+        tr.append(truncCell(s.assignee));
+        tr.append(truncCell(s.due_date));
+      }
+      // 更新申請状況: 未適用(pending)申請があれば申請日時/申請者を表示
+      var pcell = $('<td>').addClass('trunc');
+      if (s.pending_count > 0) {
+        var brief = (s.pending_at || '');
+        if (s.pending_by) brief += ' / ' + s.pending_by;
+        var full = '申請中 ' + brief
+                 + (s.pending_count > 1
+                    ? '（全' + s.pending_count + '件、最新を表示）' : '');
+        pcell.text(brief).attr('title', full)
+             .css({ color: '#856404', 'font-size': '.85rem' });
+      } else {
+        pcell.text('—').attr('title', '申請なし')
+             .css('color', '#aaa');
+      }
+      tr.append(pcell);
+      // 最終更新者 / 更新日時
+      tr.append(truncCell(s.last_updater));
+      tr.append(truncCell(s.last_updated_at));
+      // 最終状態
+      if (IS_ADMIN) {
+        tr.append(adminCell(s.id, 'final_status', s.final_status, 'text'));
+      } else {
+        tr.append(truncCell(s.final_status));
+      }
+      tb.append(tr);
+    });
+  }
+
+  // 1テーブルだけ割り当て解除する。
+  // 現在の割り当て集合から当該テーブルを除いた集合を assign_tables へ送る
+  // （assign_tables は送られた集合で同期する仕様）。
+  function unassignTable(database, tableName, hasPending) {
+    var warn = 'テーブル「' + tableName + '」をこのプロジェクトから'
+             + '割り当て解除します。\n'
+             + '更新状態の記録（依頼先・期日など）は失われますが、'
+             + '本番テーブルや更新記録（履歴）は削除されません。';
+    if (hasPending) {
+      warn += '\n\n⚠️ このテーブルには未適用の更新申請が残っています。'
+            + '解除すると申請一覧から扱いづらくなります。';
+    }
+    warn += '\n続行しますか？';
+    if (!confirm(warn)) return;
+
+    // 同じDBの割り当てから当該テーブルを除外した一覧を作る
+    var remaining = currentTables
+      .filter(function (t) {
+        return !(t.database_name === database
+                 && t.table_name === tableName);
+      })
+      .filter(function (t) { return t.database_name === database; })
+      .map(function (t) { return t.table_name; });
+
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.assign_tables") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ project_id: currentProjectId,
+                             database: database, tables: remaining }),
+      success: function (r) {
+        hide();
+        if (r.success) {
+          loadStatus();
+          // 割り当てチェックリストが既に表示されていれば最新化
+          if (fujinpDb && $('#table-pick-list').children().length) {
+            loadFujinpTables();
+          }
+        } else { alert('割り当て解除失敗: ' + r.error); }
+      },
+      error: function () { hide(); alert('割り当て解除失敗'); }
+    });
+  }
+
+  // adminが直接書き換えられるセル（blurで保存）
+  function adminCell(statusId, field, value, type) {
+    var inp = $('<input>').addClass('cell-edit').attr('type', type)
+      .val(value || '');
+    inp.on('change', function () {
+      $.ajax({
+        url: '{{ url_for("table_post.update_status_cell") }}',
+        method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ status_id: statusId, field: field,
+                               value: inp.val() }),
+        success: function (r) { if (!r.success) alert('保存失敗: ' + r.error); },
+        error: function () { alert('保存失敗'); }
+      });
+    });
+    return $('<td>').append(inp);
+  }
+
+  // ---- ダウンロード/申請のテーブル選択肢を埋める ----
+  function fillTableSelects() {
+    ['#dl-table-select', '#up-table-select', '#hist-table-select']
+      .forEach(function (sel) {
+        var $s = $(sel); if (!$s.length) return;
+        $s.empty().append('<option value="">選択してください</option>');
+        currentTables.forEach(function (t) {
+          $s.append($('<option>')
+            .val(t.database_name + '|' + t.table_name)
+            .text(t.table_name));
+        });
+      });
+    $('#download-btn,#submit-btn').prop('disabled', true);
+    if ($('#load-history-btn').length)
+      $('#load-history-btn').prop('disabled', true);
+  }
+
+  // ---- ダウンロード ----
+  $('#dl-table-select').change(function () {
+    $('#download-btn').prop('disabled', !$(this).val());
+  });
+  $('#download-btn').click(function () {
+    var v = $('#dl-table-select').val(); if (!v) return;
+    var p = v.split('|');
+    window.location.href = '{{ url_for("table_post.download_table") }}' +
+      '?database=' + encodeURIComponent(p[0]) +
+      '&table=' + encodeURIComponent(p[1]);
+  });
+
+  // ---- 更新申請 ----
+  function refreshSubmitBtn() {
+    $('#submit-btn').prop('disabled',
+      !($('#up-table-select').val() && $('#upload-file')[0].files[0]));
+  }
+  $('#up-table-select').change(refreshSubmitBtn);
+  $('#upload-file').change(refreshSubmitBtn);
+
+  $('#submit-btn').click(function () {
+    var v = $('#up-table-select').val();
+    var file = $('#upload-file')[0].files[0];
+    if (!v || !file) return;
+    var p = v.split('|');
+    if (!confirm('「' + p[1] + '」の更新申請を送信します。よろしいですか？')) return;
+
+    var fd = new FormData();
+    fd.append('project_id', currentProjectId);
+    fd.append('database', p[0]);
+    fd.append('table_name', p[1]);
+    fd.append('excel_file', file);
+
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.submit_request") }}',
+      method: 'POST', data: fd, processData: false, contentType: false,
+      success: function (r) {
+        hide();
+        if (r.success) {
+          msg('#upload-msg', r.message, true);
+          $('#upload-file').val(''); $('#up-table-select').val('');
+          refreshSubmitBtn();
+        } else {
+          msg('#upload-msg', r.error, false);
+        }
+      },
+      error: function (xhr) {
+        hide();
+        var e = '送信失敗';
+        try { e = JSON.parse(xhr.responseText).error || e; } catch (x) {}
+        msg('#upload-msg', e, false);
+      }
+    });
+  });
+
+  if (!IS_ADMIN) return;   // ----- 以下 admin専用 -----
+
+  // ---- プロジェクト作成 ----
+  $('#create-project-btn').click(function () {
+    var name = $('#new-project-name').val().trim();
+    if (!name) { msg('#create-project-msg', 'プロジェクト名を入力してください', false); return; }
+    $.ajax({
+      url: '{{ url_for("table_post.create_project") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ project_name: name,
+                             description: $('#new-project-desc').val() }),
+      success: function (r) {
+        if (r.success) {
+          msg('#create-project-msg', '作成しました (ID: ' + r.project_id + ')', true);
+          $('#new-project-name,#new-project-desc').val('');
+          loadProjects();
+        } else { msg('#create-project-msg', r.error, false); }
+      },
+      error: function () { msg('#create-project-msg', '作成失敗', false); }
+    });
+  });
+
+  // ---- プロジェクト編集 ----
+  $('#edit-project-select').change(function () {
+    var opt = $(this).find('option:selected');
+    if (!$(this).val()) {
+      $('#edit-project-fields').hide();
+      return;
+    }
+    $('#edit-project-name').val(opt.data('name') || '');
+    $('#edit-project-desc').val(opt.data('desc') || '');
+    $('#edit-project-active').prop('checked', opt.data('active') == 1);
+    $('#edit-project-fields').show();
+    msg('#update-project-msg', '', true);
+  });
+
+  $('#update-project-btn').click(function () {
+    var pid = $('#edit-project-select').val();
+    if (!pid) { return; }
+    var name = $('#edit-project-name').val().trim();
+    if (!name) {
+      msg('#update-project-msg', 'プロジェクト名を入力してください', false);
+      return;
+    }
+    $.ajax({
+      url: '{{ url_for("table_post.update_project") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({
+        project_id: pid,
+        project_name: name,
+        description: $('#edit-project-desc').val(),
+        is_active: $('#edit-project-active').prop('checked')
+      }),
+      success: function (r) {
+        if (r.success) {
+          msg('#update-project-msg', '保存しました', true);
+          $('#edit-project-fields').hide();
+          loadProjects();
+        } else { msg('#update-project-msg', r.error, false); }
+      },
+      error: function () { msg('#update-project-msg', '保存失敗', false); }
+    });
+  });
+
+  // ---- fujinpテーブル一覧 ----
+  var fujinpDb = null;
+
+  // fujinpテーブル一覧を取得してチェックリストを描画する。
+  // 現在割り当て済みのテーブルは初期チェック済み＋「割り当て済み」表示。
+  function loadFujinpTables() {
+    show();
+    $.getJSON('{{ url_for("table_post.get_fujinp_tables") }}', function (r) {
+      hide();
+      if (!r.success) { alert('テーブル一覧取得失敗: ' + r.error); return; }
+      fujinpDb = r.database;
+      $('#fujinp-db-label').text('(' + r.database + ')');
+      var assigned = {};
+      currentTables.forEach(function (t) {
+        if (t.database_name === r.database) assigned[t.table_name] = true;
+      });
+      var box = $('#table-pick-list').empty();
+      r.tables.forEach(function (t) {
+        var isAssigned = !!assigned[t];
+        var lbl = $('<label>');
+        $('<input type="checkbox">').val(t)
+          .prop('checked', isAssigned).appendTo(lbl);
+        lbl.append(' ' + t);
+        if (isAssigned) {
+          $('<span>').text(' 〔割り当て済み〕')
+            .css({ color: '#155724', 'font-size': '.75rem' })
+            .appendTo(lbl);
+        }
+        box.append(lbl);
+      });
+      $('#assign-tables-btn').prop('disabled', false);
+    }).fail(function () { hide(); alert('テーブル一覧取得失敗'); });
+  }
+  $('#load-fujinp-tables-btn').click(loadFujinpTables);
+
+  // ---- テーブル割り当て ----
+  $('#assign-tables-btn').click(function () {
+    currentProjectId = $('#project-select').val();
+    if (!currentProjectId) { alert('プロジェクトを選択してください'); return; }
+    if (!fujinpDb) { alert('先に「現在の割り当て」ボタンを押してください'); return; }
+    var picked = $('#table-pick-list input:checked')
+      .map(function () { return $(this).val(); }).get();
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.assign_tables") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ project_id: currentProjectId,
+                             database: fujinpDb, tables: picked }),
+      success: function (r) {
+        hide();
+        if (r.success) {
+          msg('#assign-msg', picked.length + ' 件を割り当てました', true);
+          loadStatus();
+          loadFujinpTables();   // 「割り当て済み」表示を最新化
+        } else { msg('#assign-msg', r.error, false); }
+      },
+      error: function () { hide(); msg('#assign-msg', '割り当て失敗', false); }
+    });
+  });
+
+  // ---- 申請一覧 ----
+  $('#load-requests-btn').click(function () {
+    if (!currentProjectId) { alert('プロジェクトを選択してください'); return; }
+    show();
+    $.getJSON('{{ url_for("table_post.get_requests") }}',
+      { project_id: currentProjectId }, function (r) {
+      hide();
+      if (!r.success) { alert('申請取得失敗: ' + r.error); return; }
+      var tb = $('#requests-table tbody').empty();
+      if (!r.requests.length) {
+        tb.append('<tr><td colspan="7">申請はありません。</td></tr>');
+        return;
+      }
+      r.requests.forEach(function (q) {
+        var tr = $('<tr>');
+        tr.append($('<td>').text(q.id));
+        tr.append($('<td>').text(q.table_name));
+        tr.append($('<td>').text(q.submitted_by));
+        tr.append($('<td>').text(q.submitted_at));
+        tr.append($('<td>').text(q.row_count));
+        var stCls = q.status === 'applied' ? 'status-ok'
+                  : q.status === 'rejected' ? 'status-rejected'
+                  : 'status-pending';
+        var stLabel = q.status === 'applied' ? '承認・更新済み'
+                    : q.status === 'rejected' ? '申請却下'
+                    : '申請中';
+        tr.append($('<td>').addClass(stCls).text(stLabel));
+        var ops = $('<td>');
+        if (q.status === 'pending') {
+          $('<button>').text('適用').click(function () {
+            applyRequest(q.id, q.table_name);
+          }).appendTo(ops);
+          $('<button>').text('却下').css('margin-left', '6px')
+            .click(function () { rejectRequest(q.id); }).appendTo(ops);
+        } else { ops.text('—'); }
+        tr.append(ops);
+        tb.append(tr);
+      });
+    });
+  });
+
+  function applyRequest(id, tbl) {
+    if (!confirm('申請 #' + id + ' を本番テーブル「' + tbl +
+                 '」に適用します。\n適用前の内容は更新記録に保存されます。続行しますか？'))
+      return;
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.apply_request") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ request_id: id }),
+      success: function (r) {
+        hide();
+        if (r.success) {
+          msg('#requests-msg', r.message, true);
+          $('#load-requests-btn').click();
+          loadStatus();
+        } else { msg('#requests-msg', r.error, false); }
+      },
+      error: function (xhr) {
+        hide();
+        var e = '適用失敗';
+        try { e = JSON.parse(xhr.responseText).error || e; } catch (x) {}
+        msg('#requests-msg', e, false);
+      }
+    });
+  }
+
+  function rejectRequest(id) {
+    if (!confirm('申請 #' + id + ' を却下します。よろしいですか？')) return;
+    $.ajax({
+      url: '{{ url_for("table_post.reject_request") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ request_id: id }),
+      success: function (r) {
+        if (r.success) { $('#load-requests-btn').click(); }
+        else { msg('#requests-msg', r.error, false); }
+      },
+      error: function () { msg('#requests-msg', '却下失敗', false); }
+    });
+  }
+
+  // ---- 更新記録 / ロールバック ----
+  $('#project-select').on('change', function () {
+    // fillTableSelects() が hist-table-select も埋める
+    $('#load-history-btn').prop('disabled', true);
+    $('#history-table tbody').empty();
+  });
+  $('#hist-table-select').change(function () {
+    $('#load-history-btn').prop('disabled', !$(this).val());
+  });
+
+  $('#load-history-btn').click(function () {
+    var v = $('#hist-table-select').val(); if (!v) return;
+    var p = v.split('|');
+    show();
+    $.getJSON('{{ url_for("table_post.get_history") }}',
+      { database: p[0], table: p[1] }, function (r) {
+      hide();
+      if (!r.success) { alert('記録取得失敗: ' + r.error); return; }
+      var tb = $('#history-table tbody').empty();
+      if (!r.history.length) {
+        tb.append('<tr><td colspan="6">記録はありません。</td></tr>');
+        return;
+      }
+      r.history.forEach(function (h) {
+        var tr = $('<tr>');
+        tr.append($('<td>').text(h.id));
+        tr.append($('<td>').text(h.table_name));
+        tr.append($('<td>').text(h.recorded_at));
+        tr.append($('<td>').text(h.row_count));
+        tr.append($('<td>').text(h.note || ''));
+        var ops = $('<td>');
+        $('<button>').text('この版に戻す').click(function () {
+          rollback(h.id, h.table_name);
+        }).appendTo(ops);
+        tr.append(ops);
+        tb.append(tr);
+      });
+    }).fail(function () { hide(); alert('記録取得失敗'); });
+  });
+
+  function rollback(historyId, tbl) {
+    if (!confirm('更新記録 #' + historyId + ' の内容を本番テーブル「' + tbl +
+                 '」に復元します。\n現在の内容も記録に退避されます。続行しますか？'))
+      return;
+    show();
+    $.ajax({
+      url: '{{ url_for("table_post.rollback") }}',
+      method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ history_id: historyId }),
+      success: function (r) {
+        hide();
+        if (r.success) {
+          msg('#history-msg', r.message, true);
+          $('#load-history-btn').click();
+          loadStatus();
+        } else { msg('#history-msg', r.error, false); }
+      },
+      error: function (xhr) {
+        hide();
+        var e = '復元失敗';
+        try { e = JSON.parse(xhr.responseText).error || e; } catch (x) {}
+        msg('#history-msg', e, false);
+      }
+    });
+  }
+});
+</script>
+</body>
+</html>

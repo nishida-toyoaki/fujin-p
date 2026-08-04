@@ -1,0 +1,348 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>テーブル サイクル（DB ⇔ Excel / JSONL）</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+      .loading {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        z-index: 1000;
+      }
+      .controls { margin: 10px 0; }
+      .warning-box {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 5px;
+      }
+      .warning-title {
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+      }
+      .warning-list {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .warning-list li {
+        margin-bottom: 0.25rem;
+      }
+        .btn-action {
+            padding: 10px 20px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-action:disabled {
+            background-color: #ccc !important;
+            cursor: not-allowed;
+        }
+        .btn-download { background-color: #17a2b8; }   /* 青：取得系 */
+        .btn-download:hover:enabled { background-color: #138496; }
+        .btn-upload   { background-color: #dc3545; }   /* 赤：上書き系（破壊的） */
+        .btn-upload:hover:enabled { background-color: #c82333; }
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #17a2b8;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .back-button:hover {
+            background-color: #138496;
+        }
+        .btn-return {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #dc3545;   /* 赤地 */
+            color: white;                /* 白文字 */
+            text-decoration: none;
+            border-radius: 9999px;       /* ピル型 */
+            font-weight: bold;
+        }
+        .btn-return:hover {
+            background-color: #c82333;
+        }
+        .return-bar {
+            text-align: right;           /* 右端に寄せる */
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔄 テーブル サイクル（DB ⇔ Excel / JSONL）</h1>
+    <div class="return-bar">
+        <a href="{{ url_for('table_cycle.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+    <div class="warning-box">
+        <div class="warning-title">⚠️ 管理者向け注意事項</div>
+        <ul class="warning-list">
+            <li>このツールは外部キー制約を一時的に無効化して動作します。</li>
+            <li>アップロード時にテーブル内の既存データは全て削除されます。</li>
+            <li>データの整合性は管理者の責任において確認してください。</li>
+            <li>操作前に必要に応じてバックアップを取得することを推奨します。</li>
+        </ul>
+    </div>
+
+    <div id="loading" class="loading">処理中...</div>
+
+    <div>
+      <label>データベース:
+        <select id="db-select">
+          <option value="">選択してください</option>
+        </select>
+      </label>
+
+      <label>テーブル:
+        <select id="table-select" disabled>
+          <option value="">選択してください</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="controls">
+      <button id="download-table" class="btn-action btn-download" disabled>テーブルをダウンロード</button>
+      <br><br>
+      <label>編集済みExcel: <input type="file" id="upload-file" accept=".xlsx" /></label>
+      <button id="upload-table" class="btn-action btn-upload" disabled>アップロード</button>
+    </div>
+
+    <hr style="margin:30px 0;">
+
+    <div class="warning-box">
+      <div class="warning-title">📦 JSONL フルバックアップ（大型データ・移行用）</div>
+      <ul class="warning-list">
+        <li>構造（スキーマ）とデータを 1 ファイルにまとめて完全保存します。</li>
+        <li>復元は「更地」前提です。<b>同名テーブルがあれば破棄して作り直します。</b></li>
+        <li>別プラットフォームへ移行する場合は、移行先にログインして DB を選んでからアップロードしてください。</li>
+        <li>セルサイズ制限が無いため、大きな 1 レコードでも切れません。</li>
+      </ul>
+    </div>
+
+    <div class="controls">
+      <button id="download-jsonl" class="btn-action btn-download" disabled>JSONL でダウンロード（バックアップ）</button>
+      <br><br>
+      <label>復元する JSONL: <input type="file" id="upload-jsonl-file" accept=".jsonl,.json,.txt,.gz" /></label>
+      <br><br>
+      <label>行き先テーブル名（空欄ならファイル内の元の名前を使用）:
+        <input type="text" id="restore-table-name" placeholder="例: T_10_01" style="width:240px;" />
+      </label>
+      <button id="upload-jsonl" class="btn-action btn-upload" disabled>JSONL を復元（更地に上書き）</button>
+    </div>
+
+    <div id="result"></div>
+
+
+
+    <script>
+    $(document).ready(function() {
+      // 1. データベース一覧取得
+      $.ajax({
+        url: '{{ url_for("table_cycle.get_databases") }}',
+        method: 'GET',
+        success: function(resp) {
+          if (resp.success) {
+            const sel = $('#db-select');
+            sel.empty();
+            sel.append('<option value="">選択してください</option>');
+            resp.databases.forEach(function(db) {
+              sel.append(`<option value="${db}">${db}</option>`);
+            });
+          } else {
+            alert('DB一覧取得失敗: ' + resp.error);
+          }
+        },
+        error: function(xhr, status, error) {
+          alert('DB一覧取得失敗: ' + error);
+        }
+      });
+
+      // 2. DB選択 → テーブル一覧
+      $('#db-select').change(function() {
+        const db = $(this).val();
+        $('#table-select').prop('disabled', true).empty().append('<option value="">選択してください</option>');
+        $('#download-table').prop('disabled', true);
+
+        if (!db) return;
+
+        $('#loading').show();
+        $.ajax({
+          url: '{{ url_for("table_cycle.get_tables") }}',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ database: db }),
+          success: function(resp) {
+            if (resp.success) {
+              const tsel = $('#table-select');
+              tsel.prop('disabled', false);
+              resp.tables.forEach(function(tbl) {
+                tsel.append(`<option value="${tbl}">${tbl}</option>`);
+              });
+            } else {
+              alert('テーブル一覧取得失敗: ' + resp.error);
+            }
+          },
+          error: function() {
+            alert('テーブル一覧取得失敗');
+          },
+          complete: function() {
+            $('#loading').hide();
+          }
+        });
+      });
+
+      // 3. テーブル選択
+      $('#table-select').change(function() {
+        const tbl = $(this).val();
+        $('#download-table').prop('disabled', !tbl);
+        $('#download-jsonl').prop('disabled', !tbl);   // ★追加
+      });
+
+      // 4. 「ダウンロード」ボタン
+      $('#download-table').click(function() {
+        const db = $('#db-select').val();
+        const tbl = $('#table-select').val();
+        if (!db || !tbl) return;
+
+        window.location.href = '{{ url_for("table_cycle.download_table") }}' +
+          `?database=${encodeURIComponent(db)}&table=${encodeURIComponent(tbl)}`;
+      });
+
+      // 5. 「アップロード」ファイル選択
+      $('#upload-file').change(function() {
+        $('#upload-table').prop('disabled', !this.files[0]);
+      });
+
+      // 6. 「アップロード」ボタン
+      $('#upload-table').click(function() {
+        const db = $('#db-select').val();
+        const tbl = $('#table-select').val();
+        if (!db || !tbl) {
+          alert('DBまたはテーブルが未選択です');
+          return;
+        }
+        const file = $('#upload-file')[0].files[0];
+        if (!file) {
+          alert('Excelファイルが選択されていません');
+          return;
+        }
+
+        if (!confirm('このテーブルの既存データは全て削除され、Excelの内容で上書きされます。\n外部キー制約は一時的に無効化されます。\n本当に続行しますか？')) {
+          return;
+        }
+
+        $('#loading').show();
+        const formData = new FormData();
+        formData.append('database', db);
+        formData.append('table_name', tbl);
+        formData.append('excel_file', file);
+
+        $.ajax({
+          url: '{{ url_for("table_cycle.upload_table") }}',
+          method: 'POST',
+          data: formData,
+          processData: false,
+          contentType: false,
+          success: function(resp) {
+            if (resp.success) {
+              alert('テーブルのアップロードが完了しました');
+              $('#result').text('アップロード成功: ' + resp.message);
+            } else {
+              alert('アップロード失敗: ' + resp.error);
+            }
+          },
+          error: function(xhr, status, error) {
+            alert('アップロード失敗: ' + error);
+          },
+          complete: function() {
+            $('#loading').hide();
+          }
+        });
+      });
+
+      // ===== JSONL: ダウンロード =====
+      $('#download-jsonl').click(function() {
+        const db = $('#db-select').val();
+        const tbl = $('#table-select').val();
+        if (!db || !tbl) return;
+        window.location.href = '{{ url_for("table_cycle.download_jsonl") }}' +
+          `?database=${encodeURIComponent(db)}&table=${encodeURIComponent(tbl)}`;
+      });
+
+      // ===== JSONL: アップロード（復元）=====
+      $('#upload-jsonl-file').change(function() {
+        $('#upload-jsonl').prop('disabled', !this.files[0]);
+      });
+
+      $('#upload-jsonl').click(function() {
+        const db = $('#db-select').val();
+        if (!db) {
+          alert('復元先のデータベースが未選択です');
+          return;
+        }
+        const file = $('#upload-jsonl-file')[0].files[0];
+        if (!file) {
+          alert('JSONL ファイルが選択されていません');
+          return;
+        }
+        const restoreName = $('#restore-table-name').val().trim();
+
+        const msg = '選択中のDB:\n  ' + db + '\n\n' +
+          (restoreName ? '行き先テーブル: ' + restoreName : '行き先テーブル: （ファイル内の元の名前）') +
+          '\n\nこのテーブルが存在する場合は破棄して作り直します。\n本当に続行しますか？';
+        if (!confirm(msg)) return;
+
+        $('#loading').show();
+        const formData = new FormData();
+        formData.append('database', db);
+        formData.append('table_name', restoreName);   // 空文字ならサーバ側でファイルの名前を採用
+        formData.append('jsonl_file', file);
+
+        $.ajax({
+          url: '{{ url_for("table_cycle.upload_jsonl") }}',
+          method: 'POST',
+          data: formData,
+          processData: false,
+          contentType: false,
+          success: function(resp) {
+            if (resp.success) {
+              alert('復元が完了しました');
+              $('#result').text('復元成功: ' + resp.message);
+            } else {
+              alert('復元失敗: ' + resp.error);
+            }
+          },
+          error: function(xhr, status, error) {
+            alert('復元失敗: ' + error);
+          },
+          complete: function() {
+            $('#loading').hide();
+          }
+        });
+      });
+
+    });
+    </script>
+</body>
+</html>

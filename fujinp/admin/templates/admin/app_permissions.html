@@ -1,0 +1,507 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app.app_name }} 権限管理 - FUJIN-P</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #3d4259;
+            --surface: #474d66;
+            --surface-2: #525872;
+            --surface-3: #5c637e;
+            --border: #6b7291;
+            --border-light: #7b82a0;
+            --text: #eceef5;
+            --text-dim: #b0b5cc;
+            --text-faint: #868ca8;
+            --accent: #6c8aff;
+            --accent-dim: rgba(108,138,255,0.15);
+            --green: #4ade80;
+            --green-dim: rgba(74,222,128,0.12);
+            --red: #f87171;
+            --red-dim: rgba(248,113,113,0.12);
+            --amber: #fbbf24;
+            --cyan: #22d3ee;
+            --lv-admin: #6c8aff;
+            --lv-mgmt: #f472b6;
+            --lv-standard: #38bdf8;
+            --lv-test: #4ade80;
+            --lv-dev: #94a3b8;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Noto Sans JP", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 24px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px;
+        }
+        .header h1 {
+            font-size: 1.3rem; font-weight: 700;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .header h1 code {
+            font-family: "Source Code Pro", monospace; font-size: 0.88rem;
+            background: var(--surface-2); padding: 4px 10px; border-radius: 4px;
+            color: var(--cyan); font-weight: 400;
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surface-2); color: var(--text);
+            font-size: 0.85rem; font-weight: 500; cursor: pointer;
+            text-decoration: none; transition: all 0.15s; font-family: inherit;
+        }
+        .btn:hover { background: var(--surface-3); }
+        .btn-accent { background: var(--accent); color: white; border-color: var(--accent); }
+        .btn-accent:hover { background: #5a7aef; }
+        .btn-danger { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); }
+        .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+
+        .section {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; margin-bottom: 24px; overflow: hidden;
+        }
+        .section-header {
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .section-title { font-size: 0.95rem; font-weight: 600; }
+        .section-body { padding: 20px; }
+
+        .lv-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 4px;
+            font-size: 0.68rem; font-weight: 600; white-space: nowrap;
+        }
+        .lv-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+        .lv-admin { background: rgba(108,138,255,0.12); color: var(--lv-admin); }
+        .lv-admin::before { background: var(--lv-admin); }
+        .lv-for_management { background: rgba(244,114,182,0.12); color: var(--lv-mgmt); }
+        .lv-for_management::before { background: var(--lv-mgmt); }
+        .lv-standard { background: rgba(56,189,248,0.12); color: var(--lv-standard); }
+        .lv-standard::before { background: var(--lv-standard); }
+        .lv-test_user { background: rgba(74,222,128,0.12); color: var(--lv-test); }
+        .lv-test_user::before { background: var(--lv-test); }
+        .lv-under_development { background: rgba(148,163,184,0.12); color: var(--lv-dev); }
+        .lv-under_development::before { background: var(--lv-dev); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            padding: 12px 16px; font-size: 0.76rem; font-weight: 600;
+            color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;
+            background: var(--surface-2); border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 10px 16px; font-size: 0.88rem;
+            border-bottom: 1px solid var(--border); text-align: center;
+        }
+        th:first-child, td:first-child { text-align: left; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(108,138,255,0.03); }
+
+        tr.level-sep td {
+            background: var(--surface-2); padding: 5px 16px;
+            font-size: 0.74rem; font-weight: 600; color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+        }
+        tr.feature-inactive { opacity: 0.45; }
+
+        .perm-check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+
+        .row-toggle {
+            font-size: 0.68rem; color: var(--accent); cursor: pointer;
+            text-decoration: underline; background: none; border: none;
+            font-family: inherit; padding: 0;
+        }
+        .row-toggle:hover { color: #5a7aef; }
+
+        code {
+            font-family: "Source Code Pro", monospace; font-size: 0.82rem;
+            background: var(--surface-2); padding: 2px 6px; border-radius: 3px;
+            color: var(--cyan);
+        }
+
+        .add-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .field { display: flex; flex-direction: column; gap: 4px; }
+        .field label { font-size: 0.72rem; color: var(--text-dim); font-weight: 500; }
+        .field input {
+            padding: 7px 12px; background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); font-size: 0.88rem; font-family: inherit;
+        }
+        .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+        .flash-messages { margin-bottom: 16px; }
+        .flash-msg { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 0.88rem; }
+        .flash-msg.success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+        .flash-msg.error { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+
+        .perm-tag {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: 6px; padding: 8px 12px; margin: 4px;
+        }
+        .perm-tag-name { font-weight: 500; font-size: 0.88rem; }
+        .perm-tag-code { font-size: 0.78rem; color: var(--text-dim); }
+
+        .help-text {
+            font-size: 0.82rem; color: var(--text-dim);
+            padding: 12px 20px; background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash-msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="header">
+        <h1>{{ app.app_name }} <code>{{ app.app_code }}</code></h1>
+        <a href="{{ url_for('admin.unified_dashboard', tab='apps') }}" class="btn">← 戻る</a>
+    </div>
+
+    {% if app.description %}
+    <p style="color: var(--text-dim); margin-bottom: 20px; font-size: 0.9rem;">{{ app.description }}</p>
+    {% endif %}
+
+    <!-- 権限ラベル管理 -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">権限ラベル定義</div>
+        </div>
+        <div class="help-text">
+            このアプリで使用する権限ラベルを定義します。アプリ固有の権限（閲覧、編集、承認、エクスポートなど）を自由に設定できます。
+        </div>
+        <div class="section-body">
+            {% if perm_labels %}
+            <div style="margin-bottom: 16px;">
+                {% for pl in perm_labels %}
+                <div class="perm-tag">
+                    <div>
+                        <div class="perm-tag-name">{{ pl.permission_name }}</div>
+                        <div class="perm-tag-code"><code>{{ pl.permission_code }}</code>
+                            {% if pl.description %} — {{ pl.description }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="POST"
+                          action="{{ url_for('admin.delete_app_permission_label', app_id=app.id, perm_id=pl.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('この権限ラベルを削除しますか？関連する割当も削除されます。');">
+                        <button type="submit" class="btn btn-sm btn-danger">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('admin.add_app_permission_label', app_id=app.id) }}" class="add-form">
+                <div class="field">
+                    <label>権限コード</label>
+                    <input type="text" name="permission_code" required pattern="[a-z_]+" placeholder="例: export_csv" style="width: 160px;">
+                </div>
+                <div class="field">
+                    <label>権限名</label>
+                    <input type="text" name="permission_name" required placeholder="例: CSVエクスポート" style="width: 180px;">
+                </div>
+                <div class="field">
+                    <label>説明（任意）</label>
+                    <input type="text" name="description" placeholder="権限の説明" style="width: 240px;">
+                </div>
+                <button type="submit" class="btn btn-accent">+ 追加</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 権限マトリクス: フィーチャー × 権限ラベル -->
+    {% if perm_labels and all_features %}
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">フィーチャー × 権限 マトリクス</div>
+        </div>
+        <div class="help-text">
+            admin / guest それぞれのカテゴリについて、各フィーチャーに対する権限を設定します。
+            adminでも立ち入らない領域はチェックを外してください。変更後「保存」を押してください。
+        </div>
+        <div class="section-body" style="padding: 0;">
+            <form method="POST">
+                <div style="overflow-x: auto;">
+
+                {# ====== admin カテゴリ ====== #}
+                <table>
+                    <thead>
+                        <tr style="background: rgba(108,138,255,0.08);">
+                            <th colspan="{{ perm_labels|length + 2 }}" style="text-align: left; font-size: 0.88rem; color: var(--lv-admin); text-transform: none; letter-spacing: 0; padding: 14px 16px;">
+                                <span class="lv-badge lv-admin" style="font-size: 0.78rem;">admin</span>
+                                &nbsp; category = 'admin' のユーザに適用
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="min-width: 240px;">フィーチャー</th>
+                            {% for pl in perm_labels %}
+                            <th>
+                                {{ pl.permission_name }}<br>
+                                <code style="font-size: 0.68rem; font-weight: 400;">{{ pl.permission_code }}</code>
+                            </th>
+                            {% endfor %}
+                            <th style="font-size: 0.68rem;">一括</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# === フィーチャー不問行 === #}
+                        <tr style="background: rgba(251,191,36,0.06);">
+                            <td style="text-align: left;">
+                                <div style="font-weight: 600; font-size: 0.86rem; color: var(--amber);">フィーチャー不問</div>
+                                <div style="font-size: 0.7rem; color: var(--text-faint);">
+                                    チェック = このカテゴリの全員に許可
+                                </div>
+                            </td>
+                            {% for pl in perm_labels %}
+                            <td>
+                                <input type="checkbox"
+                                       name="perm_admin_0_{{ pl.id }}"
+                                       class="perm-check blanket-admin blanket-admin-{{ pl.id }}"
+                                       onchange="updateBlanket('admin', {{ pl.id }})"
+                                       {% if ('admin', 0, pl.id) in granted %}checked{% endif %}>
+                            </td>
+                            {% endfor %}
+                            <td>
+                                <button type="button" class="row-toggle"
+                                        onclick="toggleRow('a0')">全切替</button>
+                            </td>
+                        </tr>
+                        {% set ns = namespace(current_level='') %}
+                        {% for feature in all_features %}
+                            {% set p = feature.priority %}
+                            {% if p >= 0 and p < 1 %}{% set lv_code = 'admin' %}{% set lv_name = '管理者' %}
+                            {% elif p >= 1 and p < 2 %}{% set lv_code = 'for_management' %}{% set lv_name = '運営' %}
+                            {% elif p >= 2 and p < 3 %}{% set lv_code = 'standard' %}{% set lv_name = '標準' %}
+                            {% elif p >= 3 and p < 4 %}{% set lv_code = 'test_user' %}{% set lv_name = 'テスト' %}
+                            {% elif p >= 4 and p < 5 %}{% set lv_code = 'under_development' %}{% set lv_name = '開発中' %}
+                            {% else %}{% set lv_code = 'unknown' %}{% set lv_name = '不明' %}{% endif %}
+
+                            {% if lv_code != ns.current_level %}
+                                {% set ns.current_level = lv_code %}
+                                <tr class="level-sep">
+                                    <td colspan="{{ perm_labels|length + 2 }}">
+                                        <span class="lv-badge lv-{{ lv_code }}">{{ lv_name }}</span>
+                                    </td>
+                                </tr>
+                            {% endif %}
+
+                            <tr {% if not feature.is_active %}class="feature-inactive"{% endif %}>
+                                <td style="text-align: left;">
+                                    <div style="font-weight: 500; font-size: 0.86rem;">{{ feature.feature_name }}</div>
+                                    <div style="font-size: 0.7rem; color: var(--text-faint);">
+                                        <code style="font-size: 0.68rem;">{{ feature.feature_code }}</code>
+                                        p={{ feature.priority }}
+                                    </div>
+                                </td>
+                                {% for pl in perm_labels %}
+                                <td>
+                                    <input type="checkbox"
+                                           name="perm_admin_{{ feature.id }}_{{ pl.id }}"
+                                           class="perm-check row-a{{ feature.id }}"
+                                           {% if ('admin', feature.id, pl.id) in granted %}checked{% endif %}>
+                                </td>
+                                {% endfor %}
+                                <td>
+                                    <button type="button" class="row-toggle"
+                                            onclick="toggleRow('a{{ feature.id }}')">全切替</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                {# ====== guest カテゴリ ====== #}
+                <table style="margin-top: 8px;">
+                    <thead>
+                        <tr style="background: rgba(74,222,128,0.08);">
+                            <th colspan="{{ perm_labels|length + 2 }}" style="text-align: left; font-size: 0.88rem; color: var(--green); text-transform: none; letter-spacing: 0; padding: 14px 16px;">
+                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; background: rgba(74,222,128,0.12); color: var(--green);">guest</span>
+                                &nbsp; category = 'guest' のユーザに適用
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="min-width: 240px;">フィーチャー</th>
+                            {% for pl in perm_labels %}
+                            <th>
+                                {{ pl.permission_name }}<br>
+                                <code style="font-size: 0.68rem; font-weight: 400;">{{ pl.permission_code }}</code>
+                            </th>
+                            {% endfor %}
+                            <th style="font-size: 0.68rem;">一括</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# === フィーチャー不問行 === #}
+                        <tr style="background: rgba(251,191,36,0.06);">
+                            <td style="text-align: left;">
+                                <div style="font-weight: 600; font-size: 0.86rem; color: var(--amber);">フィーチャー不問</div>
+                                <div style="font-size: 0.7rem; color: var(--text-faint);">
+                                    チェック = このカテゴリの全員に許可
+                                </div>
+                            </td>
+                            {% for pl in perm_labels %}
+                            <td>
+                                <input type="checkbox"
+                                       name="perm_guest_0_{{ pl.id }}"
+                                       class="perm-check blanket-guest blanket-guest-{{ pl.id }}"
+                                       onchange="updateBlanket('guest', {{ pl.id }})"
+                                       {% if ('guest', 0, pl.id) in granted %}checked{% endif %}>
+                            </td>
+                            {% endfor %}
+                            <td>
+                                <button type="button" class="row-toggle"
+                                        onclick="toggleRow('g0')">全切替</button>
+                            </td>
+                        </tr>
+                        {% set ns = namespace(current_level='') %}
+                        {% for feature in all_features %}
+                            {% set p = feature.priority %}
+                            {% if p >= 0 and p < 1 %}{% set lv_code = 'admin' %}{% set lv_name = '管理者' %}
+                            {% elif p >= 1 and p < 2 %}{% set lv_code = 'for_management' %}{% set lv_name = '運営' %}
+                            {% elif p >= 2 and p < 3 %}{% set lv_code = 'standard' %}{% set lv_name = '標準' %}
+                            {% elif p >= 3 and p < 4 %}{% set lv_code = 'test_user' %}{% set lv_name = 'テスト' %}
+                            {% elif p >= 4 and p < 5 %}{% set lv_code = 'under_development' %}{% set lv_name = '開発中' %}
+                            {% else %}{% set lv_code = 'unknown' %}{% set lv_name = '不明' %}{% endif %}
+
+                            {% if lv_code != ns.current_level %}
+                                {% set ns.current_level = lv_code %}
+                                <tr class="level-sep">
+                                    <td colspan="{{ perm_labels|length + 2 }}">
+                                        <span class="lv-badge lv-{{ lv_code }}">{{ lv_name }}</span>
+                                    </td>
+                                </tr>
+                            {% endif %}
+
+                            <tr {% if not feature.is_active %}class="feature-inactive"{% endif %}>
+                                <td style="text-align: left;">
+                                    <div style="font-weight: 500; font-size: 0.86rem;">{{ feature.feature_name }}</div>
+                                    <div style="font-size: 0.7rem; color: var(--text-faint);">
+                                        <code style="font-size: 0.68rem;">{{ feature.feature_code }}</code>
+                                        p={{ feature.priority }}
+                                    </div>
+                                </td>
+                                {% for pl in perm_labels %}
+                                <td>
+                                    <input type="checkbox"
+                                           name="perm_guest_{{ feature.id }}_{{ pl.id }}"
+                                           class="perm-check row-g{{ feature.id }}"
+                                           {% if ('guest', feature.id, pl.id) in granted %}checked{% endif %}>
+                                </td>
+                                {% endfor %}
+                                <td>
+                                    <button type="button" class="row-toggle"
+                                            onclick="toggleRow('g{{ feature.id }}')">全切替</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                </div>
+                <div style="padding: 16px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="submit" class="btn btn-accent" style="padding: 10px 32px; font-size: 0.92rem;">
+                        保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% elif not perm_labels %}
+    <div class="section">
+        <div class="section-body" style="padding: 40px; text-align: center;">
+            <p style="color: var(--text-faint);">権限ラベルを追加すると、ここにマトリクスが表示されます</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- API情報 -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">API エンドポイント（参照用）</div>
+        </div>
+        <div class="section-body">
+            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 12px;">
+                他のアプリからこのアプリの権限を確認するためのAPIです。
+            </p>
+            <div style="background: var(--surface-2); padding: 12px 16px; border-radius: 6px; margin-bottom: 8px;">
+                <code style="color: var(--green); background: none; padding: 0;">GET</code>
+                <code style="background: none; padding: 0; margin-left: 8px;">
+                    /admin/api/user/{'{user_id}'}/app/{{ app.id }}/permissions
+                </code>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-faint);">
+                ユーザが持つフィーチャーに基づき、このアプリで許可された権限ラベルの一覧をJSON形式で返します。
+            </p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function toggleRow(prefix) {
+    const cbs = document.querySelectorAll('.row-' + prefix);
+    const allChecked = Array.from(cbs).every(cb => cb.checked);
+    cbs.forEach(cb => cb.checked = !allChecked);
+}
+
+function updateBlanket(category, permId) {
+    // フィーチャー不問がONなら、その列のフィーチャー行をグレーアウト
+    const blanket = document.querySelector('.blanket-' + category + '-' + permId);
+    const prefix = category === 'admin' ? 'a' : 'g';
+
+    // 該当列のフィーチャー行チェックボックスを取得
+    const featureCbs = document.querySelectorAll(
+        'input[name^="perm_' + category + '_"][name$="_' + permId + '"]:not(.blanket-' + category + ')'
+    );
+
+    featureCbs.forEach(cb => {
+        if (blanket.checked) {
+            cb.closest('td').style.opacity = '0.25';
+            cb.closest('td').style.pointerEvents = 'none';
+        } else {
+            cb.closest('td').style.opacity = '1';
+            cb.closest('td').style.pointerEvents = 'auto';
+        }
+    });
+}
+
+// ページ読み込み時に初期状態を反映
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.blanket-admin, .blanket-guest').forEach(cb => {
+        const m = cb.className.match(/blanket-(admin|guest)-(\d+)/);
+        if (m) updateBlanket(m[1], parseInt(m[2]));
+    });
+});
+</script>
+</body>
+</html>

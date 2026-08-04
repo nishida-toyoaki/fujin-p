@@ -1,0 +1,356 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/static/sw.js')
+        .then(function() { console.log('Service Worker Registered'); });
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者ダッシュボード - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 10px 17px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 2px; font-size: 1rem; }
+        .welcome { color: #666; font-size: 0.6rem; margin-bottom: 3px; }
+
+        .features-list { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+        .feature-badge {
+            display: inline-block; font-size: 0.47rem; padding: 1px 5px;
+            border-radius: 12px; background-color: #e0e7ff; color: #4338ca;
+            border: 1px solid #c7d2fe; white-space: nowrap;
+        }
+
+        .user-actions { float: right; display: flex; gap: 5px; }
+        .profile-btn {
+            padding: 4px 8px; background: #10b981; color: white; border: none;
+            border-radius: 5px; cursor: pointer; font-weight: 600;
+            text-decoration: none; display: inline-block; font-size: 0.57rem;
+        }
+        .profile-btn:hover { background: #059669; }
+        .logout-btn {
+            padding: 4px 8px; background: #dc2626; color: white; border: none;
+            border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 0.57rem;
+        }
+        .logout-btn:hover { background: #b91c1c; }
+
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px; margin-bottom: 10px;
+        }
+        .stat-card {
+            background: white; padding: 10px; border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex;
+            justify-content: space-between; align-items: center;
+            text-decoration: none; color: inherit; transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border-color: #667eea; }
+        .stat-info h3 { color: #666; font-size: 0.55rem; margin-bottom: 3px; }
+        .stat-info .number { font-size: 1.2rem; font-weight: bold; color: #333; }
+        .stat-icon { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+        .stat-pending .stat-icon { background: #fff3cd; color: #856404; }
+        .stat-blacklist .stat-icon { background: #f8d7da; color: #721c24; }
+        .stat-approved .stat-icon { background: #d4edda; color: #155724; }
+
+        .section-separator {
+            color: #fff; font-size: 0.73rem; margin: 7px 0 7px 3px;
+            padding-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2); font-weight: 500;
+            display: flex; align-items: center; gap: 5px;
+        }
+
+        .apps-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px; margin-bottom: 17px;
+        }
+
+        .app-card {
+            background: white; padding: 4px 6px; border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.3s;
+            text-decoration: none; color: inherit; display: block; border: 2px solid transparent;
+        }
+        .app-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border-color: #667eea; }
+        .app-card.clickable { cursor: pointer; }
+        .app-card.non-clickable { opacity: 0.7; cursor: default; }
+        .app-card.non-clickable:hover { transform: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-color: transparent; }
+
+        .app-title { display: flex; align-items: center; justify-content: center; gap: 4px; margin-bottom: 2px; }
+        .app-icon { font-size: 1rem; }
+        .app-card h3 { color: #333; font-size: 0.7rem; font-weight: 600; }
+        .app-card p { color: #666; font-size: 0.55rem; line-height: 1.2; text-align: center; }
+
+        /* ===== システム管理：深いボルドー→濃紺 ===== */
+        .app-card.admin-function {
+            background: linear-gradient(135deg, #4c0519 0%, #1e1b4b 100%);
+            color: white;
+        }
+        .app-card.admin-function h3, .app-card.admin-function p { color: white !important; }
+        .app-card.admin-function:hover { border-color: #fb7185; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+
+        /* ===== FUJIN-Pソムリエ：パープル・バイオレット系 ===== */
+        .app-card.sommelier {
+            background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+            color: white; border: 2px solid transparent;
+        }
+        .app-card.sommelier:hover { border-color: #ddd6fe; box-shadow: 0 4px 12px rgba(124,58,237,0.4); }
+        .app-card.sommelier h3, .app-card.sommelier p { color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+        /* ===== 管理支援：アンバー・オレンジ系 ===== */
+        .app-card.admin-support {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white; border: 2px solid transparent;
+        }
+        .app-card.admin-support:hover { border-color: #fef3c7; box-shadow: 0 4px 12px rgba(217,119,6,0.4); }
+        .app-card.admin-support h3, .app-card.admin-support p { color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+        /* ===== 構成員向け標準機能：グリーン ===== */
+        .app-card.highlight {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+        .app-card.highlight h3, .app-card.highlight p { color: white; }
+
+        /* ===== 一般ユーザ向け：ライトスカイ ===== */
+        .app-card.open-sky {
+            background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+            color: white; border: 2px solid transparent;
+        }
+        .app-card.open-sky:hover { border-color: #e0f2fe; box-shadow: 0 4px 12px rgba(14,165,233,0.4); }
+        .app-card.open-sky h3, .app-card.open-sky p { color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+
+        /* ===== フィーチャーアプリ：スチールブルー ===== */
+        .app-card.feature-app {
+            background: linear-gradient(135deg, #7fb3d5 0%, #6a9cc2 100%);
+            color: white;
+        }
+        .app-card.feature-app:hover { border-color: #aed6f1; }
+        .app-card.feature-app h3, .app-card.feature-app p { color: white; }
+
+        /* ===== 開発中：グレー ===== */
+        .app-card.dev-app {
+            background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+            color: white;
+        }
+        .app-card.dev-app:hover { border-color: #cbd5e1; }
+        .app-card.dev-app h3, .app-card.dev-app p { color: white; }
+
+        .badge {
+            display: inline-block; background: rgba(255,255,255,0.3);
+            padding: 3px 8px; border-radius: 10px; font-size: 0.65rem; margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="user-actions">
+                <a href="{{ url_for('profile.edit_profile') }}" class="profile-btn">プロフィール</a>
+                <form action="{{ url_for('auth.logout') }}" method="post" style="display: inline;">
+                    <button type="submit" class="logout-btn">ログアウト</button>
+                </form>
+            </div>
+            <h1>FUJIN-P〈{{ site_url }}〉：管理者ダッシュボード</h1>
+            <p class="welcome"> - ようこそ、{{ user_name }}［{{ user_email }}］さん </p>
+            {% if features %}
+            <div class="features-list">
+                {% for feature in features %}
+                    <span class="feature-badge">{{ feature.feature_name }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 登録申請統計 -->
+        <h3 class="section-separator">📊 登録申請状況</h3>
+        <div class="stats-grid">
+            <a href="{{ url_for('admin.pending_requests') }}" class="stat-card stat-pending">
+                <div class="stat-info"><h3>承認待ち</h3><div class="number">{{ statistics.pending_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">⏳</div>
+            </a>
+            <a href="{{ url_for('admin.approved_users_list') }}" class="stat-card stat-approved">
+                <div class="stat-info"><h3>承認済み（未設定）</h3><div class="number">{{ statistics.approved_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">✓</div>
+            </a>
+            <a href="{{ url_for('admin.blacklisted_users') }}" class="stat-card stat-blacklist">
+                <div class="stat-info"><h3>ブラックリスト</h3><div class="number">{{ statistics.blacklisted_count if statistics else 0 }}</div></div>
+                <div class="stat-icon">🚫</div>
+            </a>
+        </div>
+
+        <!-- システム管理機能 -->
+        <h3 class="section-separator">⚙️ システム管理</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('admin.unified_dashboard') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">👥</span><h3>ユーザ管理</h3></div>
+                <p>アカウントの管理</p>
+            </a>
+            <a href="{{ url_for('table_cycle.table_cycle_dashboard') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">🔃</span><h3>テーブルサイクル</h3></div>
+                <p>SQLファイル⇔.xlsxファイル</p>
+            </a>
+            <a href="{{ url_for('table_master.dashboard') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">🗂️️</span><h3>テーブルマスター</h3></div>
+                <p>SQLテーブルの管理</p>
+            </a>
+            <a href="{{ url_for('sql_saver.index') }}" class="app-card admin-function">
+              <div class="app-title"><span class="app-icon">💾</span><h3>SQL Saver</h3></div>
+              <p>プラットフォーム DB の簡易バックアップと復元</p>
+            </a>
+            <a href="{{ url_for('strm.index') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">📅</span><h3>時空資源管理（デモ用）</h3></div>
+                <p>会議室・公用車の予約管理</p>
+            </a>
+            <a href="{{ url_for('slack_minutes.index') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">💬</span><h3>すらくみ（Slack議事録）</h3></div>
+                <p>Slackチャンネルのメッセージを取得・保存して閲覧</p>
+            </a>
+            <a href="{{ url_for('fukko.index') }}" class="app-card admin-function">
+                <div class="app-title"><span class="app-icon">🐣</span><h3>ふっこ</h3></div>
+                <p>Claude API接続デモ（チャット・全ログ記録）</p>
+            </a>
+        </div>
+
+        <!-- FUJIN-Pソムリエ用アプリケーション -->
+        <h3 class="section-separator">🧑‍🍳 FUJIN-Pソムリエ用アプリ</h3>
+        <div class="apps-grid">
+
+            <a href="{{ url_for('migration_assistant.index') }}" class="app-card sommelier clickable">
+                <div class="app-title"><span class="app-icon">👣</span><h3>まいあし</h3></div>
+                <p>FUJIN-Pマイグレーション支援</p>
+            </a>
+            <a href="{{ url_for('table_share.dashboard') }}" class="app-card sommelier">
+                <div class="app-title"><span class="app-icon">🔗️</span><h3>テーシャ</h3></div>
+                <p>SQLテーブルの共有</p>
+            </a>
+            <a href="{{ url_for('user_migration.dashboard') }}" class="app-card sommelier">
+                <div class="app-title"><span class="app-icon">🛳️</span><h3>ゆーまい</h3></div>
+                <p>ユーザのマイグレーション</p>
+            </a>
+            <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="app-card sommelier">
+                <div class="app-title"><span class="app-icon">🛳️</span><h3>さいまる</h3></div>
+                <p>サイオン丸ごとマイグレーション</p>
+            </a>
+            <a href="{{ url_for('my_md_notes.index') }}" class="app-card sommelier">
+                <div class="app-title"><span class="app-icon">🗒️</span><h3>マイノート</h3></div>
+                <p>MDによる手軽なノート</p>
+            </a>
+        </div>
+
+        <!-- 管理支援アプリケーション -->
+        <h3 class="section-separator">👨‍✈️ 管理支援</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('user_groups.index') }}" class="app-card admin-support">
+                <div class="app-title"><span class="app-icon">👥</span><h3>まいぐる</h3></div>
+                <p>ユーザによるグループ管理</p>
+            </a>
+            <a href="{{ url_for('colrep.index') }}" class="app-card admin-support">
+                <div class="app-title"><span class="app-icon">🏀</span><h3>コレポ管理</h3></div>
+                <p>プロジェクトの作成・管理</p>
+            </a>
+
+            <a href="{{ url_for('table_post.table_post_dashboard') }}" class="app-card admin-support">
+                <div class="app-title"><span class="app-icon">📮</span><h3>テーブルポスト</h3></div>
+                <p>テーブル更新の申請・適用</p>
+            </a>
+        </div>
+
+        <!-- 機関内向け -->
+        <h3 class="section-separator">🏫 機関内向け</h3>
+        <div class="apps-grid">
+            <a href="{{ url_for('app_share.dashboard') }}" class="app-card highlight">
+                <div class="app-title"><span class="app-icon">📦️</span><h3>アプシャ</h3></div>
+                <p>FUJIN-Pアプリの共有</p>
+            </a>
+
+            <a href="{{ url_for('official_data_archive.index') }}" class="app-card highlight">
+              <div class="app-title"><span class="app-icon">📚</span><h3>公式データ集(DRAFT)</h3></div>
+              <p>公式データの閲覧とダウンロード</p>
+            </a>
+            <a href="{{ url_for('data_center.index') }}" class="app-card highlight">
+                <div class="app-title"><span class="app-icon">📊</span><h3>データセンター</h3></div>
+                <p>収集データからストーリーラインを作り、インタラクティブに公開する</p>
+            </a>
+            <a href="{{ url_for('index_review.index') }}" class="app-card highlight">
+                <div class="app-title"><span class="app-icon">📈</span><h3>時系列指標ビジュアル</h3></div>
+                <p>SQLテーブル内容をグラフで可視化</p>
+            </a>
+            <a href="{{ url_for('stats.stat_main') }}" class="app-card highlight">
+                <div class="app-title"><span class="app-icon">📊</span><h3>スタッツ</h3></div>
+                <p>利用状況の表示</p>
+            </a>
+        </div>
+
+
+        <h3 class="section-separator">📌 ゲスト向け</h3>
+        <div class="apps-grid">
+
+            <a href="{{ url_for('our_meeting.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🕸</span><h3>あわみ</h3></div>
+                <p>語りのネットとミーティングの支援</p>
+            </a>
+            <a href="{{ url_for('colrep.worker_dashboard') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🏀</span><h3>コレポ執筆</h3></div>
+                <p>協調的レポート制作</p>
+            </a>
+            <a href="{{ url_for('document_archive.dashboard') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🏛️</span><h3>文書アーカイブ</h3></div>
+                <p>文書アーカイブの閲覧と管理</p>
+            </a>
+            <a href="{{ url_for('free_hand_curve.index') }}" class="app-card open-sky clickable">
+                <div class="app-title"><span class="app-icon">➿</span><h3>フリーハンド曲線</h3></div>
+                <p>休息時のおたのしみ</p>
+            </a>
+            <a href="{{ url_for('ts_solvers.index') }}" class="app-card open-sky clickable">
+                <div class="app-title"><span class="app-icon">&#128558;&#8205;&#128168;</span><h3>巡回セールスマン問題ソルバー</h3></div>
+                <p>NP困難問題に挑戦！</p>
+            </a>
+            <a href="{{ url_for('solar_gl.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🪐</span><h3>太陽系3Dシミュレータ</h3></div>
+                <p>太陽と8惑星の公転を3D表示・時間制御</p>
+            </a>
+            <a href="{{ url_for('sorakara.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🛩️</span><h3>そらから</h3></div>
+                <p>上空フライトシーン（福知山周辺・地理院標高データ）</p>
+            </a>
+            <a href="{{ url_for('window_shopping.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🛍️</span><h3>ウィンドウショッピング3D</h3></div>
+                <p>棒人形が広場を歩き回り、置いた店のショーウィンドウを見て回る3Dアニメーション</p>
+            </a>
+            <a href="{{ url_for('tag_chase.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">👹</span><h3>鬼ごっこ3D</h3></div>
+                <p>鬼がブロックの陰に隠れながら追手から逃げる3Dシミュレーションゲーム</p>
+            </a>
+            <a href="{{ url_for('block_breaker.index') }}" class="app-card open-sky">
+                <div class="app-title"><span class="app-icon">🧱</span><h3>ブロック崩し</h3></div>
+                <p>ブロック崩しゲーム（ハイスコアランキング付き）</p>
+            </a>
+
+        </div>
+    </div>
+</body>
+</html>

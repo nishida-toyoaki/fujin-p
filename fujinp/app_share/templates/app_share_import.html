@@ -1,0 +1,427 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パッケージ取り込み - アプシャ</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+        .container{max-width:1100px;margin:0 auto}
+        .header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+        h1{color:#333;font-size:1.4rem;margin-bottom:5px}
+        .subtitle{color:#666;font-size:.9rem}
+        .btn-return{display:inline-block;padding:8px 16px;border:none;border-radius:5px;text-decoration:none;font-size:.85rem;font-weight:600;color:#fff;background:#6366f1;float:right}
+        .btn-return:hover{background:#4f46e5}
+        .role-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600;margin-left:10px;background:#dbeafe;color:#1e40af}
+        button{padding:8px 16px;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.85rem;transition:.3s}
+        button.primary{background:#6366f1;color:#fff}button.primary:hover{background:#4f46e5}
+        button.danger{background:#ef4444;color:#fff}button.danger:hover{background:#dc2626}
+        button.secondary{background:#e5e7eb;color:#374151}button.secondary:hover{background:#d1d5db}
+        button:disabled{opacity:.5;cursor:not-allowed}
+        #result{padding:15px;border-radius:5px;margin-bottom:15px;display:none}
+        #result.success{background:#d1fae5;color:#065f46;border:1px solid #10b981}
+        #result.error{background:#fee2e2;color:#991b1b;border:1px solid #ef4444}
+        #loading{display:none;text-align:center;padding:15px;color:#fff;font-weight:600}
+        .info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 15px;margin:10px 0;font-size:.88rem}
+        .warning-box{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 15px;margin:10px 0;font-size:.88rem}
+        .danger-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 15px;margin:10px 0;font-size:.88rem;color:#991b1b}
+        .success-box{background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:12px 15px;margin:10px 0;font-size:.88rem}
+        .badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:.75rem;font-weight:600}
+        .badge-success{background:#d1fae5;color:#065f46}.badge-warning{background:#fef3c7;color:#92400e}
+        .badge-info{background:#dbeafe;color:#1e40af}.badge-danger{background:#fee2e2;color:#991b1b}
+        .badge-gray{background:#e5e7eb;color:#374151}
+        table{width:100%;border-collapse:collapse;margin:10px 0;font-size:.84rem}
+        th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb}
+        th{background:#f3f4f6;font-weight:600}
+        .step{background:#fff;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1);overflow:hidden}
+        .step-h{display:flex;align-items:center;gap:10px;padding:12px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+        .step-no{width:26px;height:26px;border-radius:50%;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;flex-shrink:0}
+        .step-t{font-weight:700;color:#334155;flex:1}
+        .step-st{font-size:.82rem}
+        .step-b{padding:16px 20px}
+        .muted{color:#9ca3af;font-style:italic;font-size:.88rem}
+        .sqlbox{width:100%;min-height:80px;font-family:'Consolas',monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:10px;resize:vertical;line-height:1.5}
+        .tblcard{border:1px solid #e5e7eb;border-radius:8px;margin-bottom:12px;overflow:hidden}
+        .tblcard-h{background:#f1f5f9;padding:8px 14px;font-weight:700;font-size:.9rem;display:flex;justify-content:space-between;align-items:center;color:#334155}
+        .tblcard-b{padding:10px 14px}
+        .copybtn{padding:4px 12px;font-size:.78rem;background:#e0f2fe;color:#0369a1}
+        .copybtn:hover{background:#bae6fd}
+        .filelist{max-height:320px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px}
+        .filelist table{margin:0}
+        code{background:#e2e8f0;padding:1px 5px;border-radius:3px;font-size:.82rem}
+        ul.plain{margin:6px 0 0 1.3em}
+        ul.plain li{margin:2px 0;font-size:.86rem}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <a href="/app_share/" class="btn-return">← アプシャに戻る</a>
+        <h1>📥 パッケージ取り込み: {{ icon }} {{ display_name }}<span class="role-badge">管理者</span></h1>
+        <p class="subtitle">対象アプリ: <code>{{ app_name }}</code> ／ エクスポートパッケージ（fujinp_app_package）を検証してから取り込みます。</p>
+    </div>
+    <div id="result"></div>
+    <div id="loading">⏳ 処理中...</div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">1</div><div class="step-t">📄 パッケージファイルの選択</div><div class="step-st" id="st1"></div></div>
+        <div class="step-b">
+            <div id="pkg-filewrap"><input type="file" id="pkg-file" accept=".json,application/json"></div>
+            <div id="pkg-meta" class="info-box" style="display:none"></div>
+        </div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">2</div><div class="step-t">✅ 検証（アプリ一致・バージョン）</div><div class="step-st" id="st2"></div></div>
+        <div class="step-b" id="verify-body"><p class="muted">パッケージを選択すると検証結果が表示されます。</p></div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">3</div><div class="step-t">📁 改修の概要（テンプレート・バックエンドは置き換え）</div><div class="step-st" id="st3"></div></div>
+        <div class="step-b" id="files-body"><p class="muted">検証後に表示されます。</p></div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">4</div><div class="step-t">🗄 テーブルスキーマ照合</div><div class="step-st" id="st4"></div></div>
+        <div class="step-b" id="tables-body"><p class="muted">検証後に表示されます。</p></div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">5</div><div class="step-t">📚 ライブラリ照合</div><div class="step-st" id="st5"></div></div>
+        <div class="step-b" id="libs-body"><p class="muted">検証後に表示されます。</p></div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">6</div><div class="step-t">🔗 ランチャ（ダッシュボードへ貼り付け）</div><div class="step-st" id="st6"></div></div>
+        <div class="step-b" id="launcher-body"><p class="muted">検証後に表示されます。</p></div>
+    </div>
+
+    <div class="step">
+        <div class="step-h"><div class="step-no">7</div><div class="step-t">🚀 取り込み実行</div><div class="step-st" id="st7"></div></div>
+        <div class="step-b">
+            <div class="warning-box">⚠️ ファイル（テンプレート・バックエンド）は<strong>置き換え</strong>です。実行時には現在のファイル一式が自動バックアップされます。<br>
+            <strong>順序：置き換え実行 → Webアプリを Reload → ステップ4を再確認 → 残った差分だけSQLを実行。</strong>
+            先にDBを直しても、古いコードが起動時にテーブルを作り直して元に戻すことがあります（アプリ自身がDDLを持つ場合）。ステップ5の pip install だけは、新しいコードが依存するので実行前に済ませてください。取り込み後はステップ6のランチャの貼り付けもお忘れなく。</div>
+            <button class="danger" id="apply-btn" disabled onclick="applyPkg()">🚀 置き換え実行</button>
+            <div id="apply-result" style="display:none"></div>
+        </div>
+    </div>
+</div>
+<script>
+const APP_NAME = {{ app_name|tojson }};
+const STAGE_TOKEN = new URLSearchParams(location.search).get('token');
+let PKG = null, CHECK = null;
+
+function esc(t){return t?String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+function showResult(m,e){const $r=$('#result');$r.text(m).removeClass('success error').addClass(e?'error':'success').show();setTimeout(()=>$r.fadeOut(),6000)}
+function copyBox(id,btn){const el=document.getElementById(id);const txt=el.value!==undefined?el.value:el.textContent;
+    (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>{$(btn).text('✅ コピー済み');setTimeout(()=>$(btn).text('📋 コピー'),2000)}).catch(()=>{el.select&&el.select();document.execCommand('copy')})}
+
+const VBADGE={newer:'<span class="badge badge-warning">⬆ パッケージが新しい（取り込み推奨）</span>',older:'<span class="badge badge-danger">ローカルの方が新しい</span>',same:'<span class="badge badge-success">同一バージョン</span>',unknown:'<span class="badge badge-gray">日時なし</span>'};
+const FBADGE={new:'<span class="badge badge-info">🆕 新規</span>',changed:'<span class="badge badge-warning">✏ 更新</span>',same:'<span class="badge badge-success">同一</span>',skipped:'<span class="badge badge-gray">スキップ</span>'};
+
+function showPkgMeta(d){
+    $('#pkg-meta').html(
+        `📦 <strong>${esc(d.icon||'')} ${esc(d.display_name||d.app_name)}</strong>（${esc(d.app_name)}） <code>${esc(d.version_id||('v'+(d.updated_at||'日時なし')))}</code><br>`+
+        `出所: ${esc(d.site_name||'不明')} <code>${esc(d.site_url||'')}</code> ／ 生成: ${esc(d.generated_at||'不明')}${d.generated_by?' by '+esc(d.generated_by):''} ／ ${d.file_count||((d.files||[]).length)}ファイル`
+    ).show();
+}
+function loadPackage(d){
+    if(d.export_type!=='fujinp_app_package'){showResult('アプリ単位のエクスポートパッケージではありません（export_type: '+(d.export_type||'なし')+'）',true);$('#st1').html('❌');return}
+    PKG=d;
+    showPkgMeta(d);
+    $('#st1').html('✅');
+    renderLaunchers();
+    runCheck();
+}
+
+// ランチャ（エクスポート元のダッシュボードから抽出した起動リンク要素）を表示
+function renderLaunchers(){
+    const ls=(PKG&&PKG.launchers)||[];
+    if(!ls.length){$('#launcher-body').html('<p class="muted">パッケージにランチャ情報がありません（旧形式のパッケージです）。ダッシュボードへのランチャ追加は手動で行ってください。</p>');$('#st6').html('-');return}
+    let h='<div class="info-box">エクスポート元の <code>admin_dashboard.html</code> から抜き出したランチャです。取り込み後、この内容を受け入れ側の <code>admin_dashboard.html</code>（必要なら <code>guest_dashboard.html</code>）の適切な位置に貼り付けてください。<code>url_for()</code> はそのまま利用できます。</div>';
+    let found=0,i=0;
+    ls.forEach(l=>{
+        h+=`<div class="tblcard"><div class="tblcard-h"><span>📄 ${esc(l.source||'')}</span>${l.found?'<span class="badge badge-success">検出'+(l.count>1?' '+l.count+'件':'')+'</span>':'<span class="badge badge-gray">なし</span>'}</div><div class="tblcard-b">`;
+        if(l.found&&l.snippet){
+            found++;
+            h+=`<textarea class="sqlbox" id="launcher-${i}" readonly>${esc(l.snippet)}</textarea>
+                <div style="margin-top:6px"><button class="copybtn" onclick="copyBox('launcher-${i}',this)">📋 コピー</button>`;
+            if(l.method==='context') h+='<span style="font-size:.78rem;color:#92400e;margin-left:8px">※要素を自動特定できず周辺行を抜粋しています。前後をご確認ください。</span>';
+            h+='</div>';
+            i++;
+        }else{
+            h+='<p style="font-size:.85rem;color:#64748b">このファイルには当該アプリのランチャが見つかりませんでした。</p>';
+        }
+        h+='</div></div>';
+    });
+    $('#launcher-body').html(h);
+    $('#st6').html(found?`🔗 ${found}件`:'なし');
+}
+$('#pkg-file').change(function(){
+    const f=this.files[0];if(!f)return;
+    const rd=new FileReader();
+    rd.onload=function(ev){
+        let d;
+        try{d=JSON.parse(ev.target.result)}catch(x){showResult('JSONの解析に失敗: '+x.message,true);$('#st1').html('❌');return}
+        loadPackage(d);
+    };
+    rd.readAsText(f,'utf-8');
+});
+
+// 新規アプリ取り込みモーダルからトークン付きで来た場合は、ステージング済み
+// パッケージを自動読込してファイル選択（ステップ1）を省略する。
+function loadStaged(){
+    $('#loading').show();
+    $.ajax({url:'/app_share/staged_package/'+encodeURIComponent(STAGE_TOKEN),
+        success(r){
+            if(!r.success||!r.package){
+                showResult('前画面のパッケージを取得できませんでした（'+(r.error||'期限切れ')+'）。下でファイルを選択してください。',true);
+                $('#st1').html('⚠');
+                return;
+            }
+            $('#pkg-filewrap').html('<p style="font-size:.86rem;color:#065f46">✅ 前画面で選択したパッケージを読み込みました。変更する場合はページを再読み込みしてファイルを選び直してください。</p>');
+            loadPackage(r.package);
+        },
+        error(){showResult('前画面のパッケージ取得に失敗しました。下でファイルを選択してください。',true);$('#st1').html('⚠')},
+        complete(){$('#loading').hide()}});
+}
+$(document).ready(function(){ if(STAGE_TOKEN) loadStaged(); });
+
+function runCheck(){
+    if(!PKG)return;$('#loading').show();
+    $.ajax({url:'/app_share/import_package_check/'+encodeURIComponent(APP_NAME),method:'POST',contentType:'application/json',
+        data:JSON.stringify(PKG),
+        success(r){
+            if(!r.success){showResult('検証エラー: '+r.error,true);return}
+            CHECK=r;
+            renderVerify(r);renderFiles(r);renderTables(r);renderLibs(r);
+            $('#apply-btn').prop('disabled',!(r.identity.match&&r.identity.export_type_ok));
+            $('#st7').html(r.identity.match?'実行可能':'❌ 実行不可');
+        },
+        error(xhr){showResult('検証エラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},
+        complete(){$('#loading').hide()}});
+}
+
+function renderVerify(r){
+    const id=r.identity,v=r.version;
+    let h='';
+    if(!id.match){
+        h+=`<div class="danger-box">❌ <strong>アプリが一致しません。</strong>このページの対象は <code>${esc(id.target_app)}</code> ですが、パッケージは <code>${esc(id.package_app||'不明')}</code> のものです。取り込みはできません。</div>`;
+        $('#st2').html('❌ 不一致');
+    }else{
+        h+=`<div class="success-box">✅ このアプリ（<code>${esc(id.target_app)}</code>）のパッケージです。形式: fujinp_app_package v${esc(id.format_version)}</div>`;
+        $('#st2').html('✅');
+    }
+    h+=`<table><tr><th></th><th>バージョンID</th><th>更新日時</th></tr>
+        <tr><td>パッケージ側</td><td><code>${esc(v.package_version_id||'-')}</code></td><td>${esc(v.package_updated_at)||'-'}</td></tr>
+        <tr><td>ローカル側</td><td><code>${esc(v.local_version_id||'-')}</code></td><td>${esc(v.local_updated_at)||'-'}</td></tr></table>
+        <p>判定: ${VBADGE[v.status]||esc(v.status)}</p>`;
+    if(v.package_version_id&&v.package_version_id===v.local_version_id)
+        h+='<div class="success-box">🟰 バージョンIDが一致（同じ確定版）です。</div>';
+    if(v.status==='older')h+='<div class="warning-box">⚠️ ローカルの方が新しい内容です。取り込むと古い内容で上書きされます。</div>';
+    $('#verify-body').html(h);
+}
+
+function renderFiles(r){
+    const f=r.files,c=f.counts;
+    let h=`<p>🆕 新規 <strong>${c.new}</strong> 件 ／ ✏ 更新 <strong>${c.changed}</strong> 件 ／ 同一 ${c.same} 件 ／ スキップ ${c.skipped} 件</p>`;
+    if(!f.app_dir_exists)h+='<div class="warning-box">⚠️ ローカルにアプリディレクトリがありません。全ファイルが新規作成されます。</div>';
+    h+='<div class="filelist"><table><thead><tr><th>ファイル</th><th>サイズ</th><th>状態</th></tr></thead><tbody>';
+    f.details.forEach(d=>{
+        h+=`<tr><td><code>${esc(d.path)}</code>${d.reason?`<div style="font-size:.75rem;color:#92400e">${esc(d.reason)}</div>`:''}</td><td>${d.size!=null?d.size.toLocaleString():'-'}</td><td>${FBADGE[d.status]||esc(d.status)}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+    if(f.local_only.length){
+        h+=`<p style="margin-top:10px;font-size:.86rem">📌 ローカルのみに存在（置き換え対象外・そのまま残ります）:</p><ul class="plain">`;
+        f.local_only.forEach(p=>{h+=`<li><code>${esc(p)}</code></li>`});
+        h+='</ul>';
+    }
+    $('#files-body').html(h);
+    $('#st3').html(`置き換え/追加 ${c.new+c.changed}件`);
+}
+
+// テーブルごとの進行状態（ステップごとに進める）
+// TBL[i] = {...照合結果, expected:期待DDL, resolved:bool, ignored:bool, note:'', msg:''}
+let TBL=[];
+function renderTables(r){
+    const ts=r.tables||[];
+    if(!ts.length){TBL=[];$('#tables-body').html('<p class="muted">パッケージにテーブルスキーマ情報が含まれていません。</p>');$('#st4').html('-');return}
+    TBL=ts.map(t=>({...t,
+        expected:((PKG&&PKG.sql_schemas)||{})[t.table]||t.create_sql||'',
+        resolved:t.status==='same', ignored:false,
+        note:(t.status==='same'&&t.database)?'('+t.database+')':'', msg:''}));
+    drawTables();
+}
+function drawTables(){
+    // 1テーブル = ヘッダ1行（名前・バッジ・ボタン・確認結果を左から並べる）＋ 本文（SQL等）。
+    // テーブル間は破線（---）で仕切る。
+    let h='';
+    const hr='<hr style="border:none;border-top:1px dashed #cbd5e1;margin:14px 0">';
+    TBL.forEach((t,i)=>{
+        if(i>0)h+=hr;
+        let head='',body='';
+        const useLine=t.use_sql?(t.use_sql+'\n'):'';
+        const dbBadge=t.database?`<span class="badge badge-gray" style="font-family:monospace">${esc(t.database)}${t.db_guessed?'（仮）':''}</span>`:'';
+        const dropSql=t.expected?(useLine+'DROP TABLE IF EXISTS `'+t.table+'`;\n'+t.expected.replace(/;?\s*$/,';')):'';
+        const btnCopy=(sqlId)=>`<button class="copybtn" onclick="copyBox('${sqlId}',this)">📋 コピーしてMySQLコンソールで実行</button>`;
+        const btnVerify=`<button class="copybtn" style="background:#d1fae5;color:#065f46" onclick="tblVerify(${i})">✅ 実行後確認</button>`;
+        const btnIgnore=`<button class="copybtn" style="background:#e5e7eb;color:#374151" onclick="tblIgnore(${i})">⏭ 無視して次へ</button>`;
+        const msgSpan=`<span id="tbl-msg-${i}" style="font-size:.8rem;color:#991b1b">${esc(t.msg||'')}</span>`;
+        if(t.ignored){
+            head=`<span class="badge badge-gray">⏭ 無視</span> <button class="copybtn" style="background:#e5e7eb;color:#374151" onclick="tblUnignore(${i})">↩ 戻す</button>`;
+            body=`<p style="font-size:.85rem;color:#64748b;margin:6px 0 0">このテーブルへの対応は無視して先へ進みます。</p>`;
+        }else if(t.resolved){
+            head='<span class="badge badge-success">✅ 完了</span>';
+            body=`<p style="font-size:.86rem;color:#065f46;margin:6px 0 0">スキーマ確認済みです。${esc(t.note||'')}</p>`;
+            if(t.changed_columns&&t.changed_columns.length){
+                body+=`<p style="font-size:.78rem;color:#92400e;margin:4px 0 0">※カラム定義の差異が残っていますが、追加は不要のため進めて構いません。</p>`;
+            }
+        }else if(t.status==='missing'){
+            head=`<span class="badge badge-info">🆕 テーブルなし</span> ${btnCopy('sql-'+i)} ${btnVerify} ${btnIgnore} ${msgSpan}`;
+            body=`<p style="font-size:.83rem;color:#475569;margin:6px 0 4px">以下のCREATE文を実行してから「実行後確認」を押してください（1行目の USE で対象DBに切り替わります）。</p>
+                <textarea class="sqlbox" id="sql-${i}" readonly>${esc(useLine+(t.expected||''))}</textarea>`;
+            if(t.db_guessed){body+=`<p style="font-size:.78rem;color:#92400e;margin:4px 0 0">※ 旧形式のパッケージのため所属DBが特定できず、既定DB（$default）を仮定しています。パブリック系のテーブルなら USE 行を $fujinp に読み替えてください。</p>`;}
+        }else if(t.status==='invalid'){
+            head=`<span class="badge badge-danger">⚠ テーブル名不正</span> ${btnIgnore}`;
+            body=`<p style="font-size:.86rem;color:#991b1b;margin:6px 0 0">テーブル名が不正なため照合をスキップしました。</p>`;
+        }else{ // diff（追加カラムあり）
+            head=`<span class="badge badge-warning">⚠ 差分あり</span> ${btnCopy('sql-'+i)} ${btnVerify} ${btnIgnore} ${msgSpan}`;
+            body=`<p style="font-size:.83rem;color:#475569;margin:6px 0 4px"><strong>対応策1（推奨）:</strong> ➕ カラム追加 ${(t.added_columns||[]).length}件。以下のALTER文を実行してから「実行後確認」を押してください（既存データは保持されます）。</p>
+                <textarea class="sqlbox" id="sql-${i}" readonly>${esc(t.alter_sql?(useLine+t.alter_sql):'')}</textarea>`;
+            body+=`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.83rem;color:#991b1b">対応策2: DROPして新規作成（⚠ 既存データがすべて失われます）</summary>
+                <p style="font-size:.78rem;color:#991b1b;margin-top:6px">このテーブルのデータが不要な場合のみ。実行後は同じく「実行後確認」を押してください。</p>
+                <textarea class="sqlbox" id="sqldrop-${i}" readonly>${esc(dropSql)}</textarea>
+                <div style="margin-top:6px"><button class="copybtn" onclick="copyBox('sqldrop-${i}',this)">📋 コピーしてMySQLコンソールで実行</button></div></details>`;
+            if(t.changed_columns&&t.changed_columns.length){
+                body+='<p style="font-size:.86rem;margin-top:10px">✏ 定義が異なるカラム（自動変更はしません。必要なら手動で ALTER してください）:</p><table><thead><tr><th>カラム</th><th>パッケージ側</th><th>ローカル側</th></tr></thead><tbody>';
+                t.changed_columns.forEach(c=>{body+=`<tr><td><code>${esc(c.name)}</code></td><td>${esc(c.package_def)}</td><td>${esc(c.local_def)}</td></tr>`});
+                body+='</tbody></table>';
+            }
+            if(t.local_only_columns&&t.local_only_columns.length){
+                body+=`<p style="font-size:.8rem;color:#64748b;margin-top:8px">新しい版に無いカラム ${t.local_only_columns.length}件（古い版の残骸の可能性）: ${t.local_only_columns.map(c=>'<code>'+esc(c)+'</code>').join(' ')}</p>`;
+                body+=`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.83rem;color:#7c2d12">これらを削除するSQL（⚠ そのカラムのデータは失われます）</summary>
+                    <p style="font-size:.78rem;color:#7c2d12;margin-top:6px">他のアプリが同じテーブルを参照していないことを確かめてから実行してください。実行しなくても新しい版は動きます。</p>
+                    <textarea class="sqlbox" id="dropcol-${i}" readonly>${esc(t.drop_sql?(useLine+t.drop_sql):'')}</textarea></details>`;
+            }
+        }
+        h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-weight:700">🗄 <code>${esc(t.table)}</code></span> ${dbBadge} ${head}
+            </div>${body}`;
+    });
+    h+='<div id="tbl-summary" style="margin-top:12px"></div>';
+    $('#tables-body').html(h);
+    updateTblSummary();
+}
+function tblVerify(i){
+    const t=TBL[i];if(!t)return;
+    $('#loading').show();
+    $.ajax({url:'/app_share/import_table_check',method:'POST',contentType:'application/json',
+        data:JSON.stringify({table:t.table,create_sql:t.expected,
+            database_hint:((PKG&&PKG.sql_databases)||{})[t.table]||null}),
+        success(r){
+            if(!r.success){t.msg='確認エラー: '+(r.error||'');drawTables();return}
+            // 最新の照合結果で更新
+            t.status=r.status;t.added_columns=r.added_columns||[];t.changed_columns=r.changed_columns||[];
+            t.local_only_columns=r.local_only_columns||[];t.alter_sql=r.alter_sql;t.database=r.database;
+            t.drop_sql=r.drop_sql||null;t.use_sql=r.use_sql||t.use_sql;t.db_guessed=r.db_guessed;
+            if(r.resolved){
+                t.resolved=true;t.msg='';
+                t.note=(r.database?'('+r.database+')':'');
+            }else if(r.status==='missing'){
+                t.msg='確認できません（テーブルがまだ作成されていません）';
+            }else{
+                t.msg='確認できません（不足カラム: '+(r.added_columns||[]).map(a=>a.name).join(', ')+'）';
+            }
+            drawTables();
+        },
+        error(xhr){t.msg='確認エラー: '+(xhr.responseJSON?.error||xhr.statusText);drawTables();},
+        complete(){$('#loading').hide()}});
+}
+function tblIgnore(i){if(TBL[i]){TBL[i].ignored=true;TBL[i].msg='';drawTables();}}
+function tblUnignore(i){if(TBL[i]){TBL[i].ignored=false;drawTables();}}
+function updateTblSummary(){
+    const total=TBL.length;
+    if(!total){$('#tbl-summary').hide();$('#st4').html('-');return}
+    const done=TBL.filter(t=>t.resolved&&!t.ignored).length;
+    const ign=TBL.filter(t=>t.ignored).length;
+    const pend=TBL.filter(t=>!t.resolved&&!t.ignored);
+    let h='';
+    if(!pend.length&&!ign){
+        h=`<div class="success-box" style="margin:0">✅ <strong>全テーブル完了</strong>（${done}件）。次のステップへ進んでください。</div>`;
+        $('#st4').html('✅ 全部完了');
+    }else if(!pend.length){
+        h=`<div class="warning-box" style="margin:0">✅ 完了 ${done}件 ／ ⏭ 無視 ${ign}件（${TBL.filter(t=>t.ignored).map(t=>esc(t.table)).join(', ')}）。このまま進めます。</div>`;
+        $('#st4').html(`✅ 完了（無視 ${ign}）`);
+    }else{
+        h=`<div class="warning-box" style="margin:0">⚠ <strong>${pend.map(t=>esc(t.table)).join(', ')} の登録がまだ</strong>（未対応 ${pend.length}件 ／ 完了 ${done}件${ign?' ／ 無視 '+ign+'件':''}）。<br>後で対応することにして、このまま次へ進むこともできます。</div>`;
+        $('#st4').html(`⚠ 未対応 ${pend.length}`);
+    }
+    $('#tbl-summary').html(h).show();
+}
+
+function renderLibs(r){
+    const ls=r.libraries||[];
+    if(!ls.length){$('#libs-body').html('<p class="muted">サードパーティライブラリは使用されていません（またはパッケージに情報がありません）。</p>');$('#st5').html('-');return}
+    const missing=ls.filter(l=>!l.installed);
+    let h='<table><thead><tr><th>ライブラリ（import名）</th><th>pipパッケージ名</th><th>状態</th></tr></thead><tbody>';
+    ls.forEach(l=>{
+        h+=`<tr><td><code>${esc(l.name)}</code></td><td>${esc(l.pip_name)}</td><td>${l.installed?'<span class="badge badge-success">✅ インストール済み</span>':'<span class="badge badge-danger">❌ 未検出</span>'}</td></tr>`;
+    });
+    h+='</tbody></table>';
+    if(missing.length){
+        const cmd='pip install --user '+missing.map(l=>l.pip_name).join(' ');
+        h+=`<p style="font-size:.86rem;margin-top:10px">以下をBashコンソールで実行してインストールしてください（pip名が異なる場合は適宜修正）:</p>
+            <textarea class="sqlbox" id="pip-cmd" readonly style="min-height:44px">${esc(cmd)}</textarea>
+            <div style="margin-top:6px"><button class="copybtn" onclick="copyBox('pip-cmd',this)">📋 コピー</button></div>`;
+    }
+    $('#libs-body').html(h);
+    $('#st5').html(missing.length?`⚠ 未検出 ${missing.length}件`:'✅ すべて利用可能');
+}
+
+function applyPkg(){
+    if(!PKG||!CHECK||!CHECK.identity.match)return;
+    let msg='パッケージの内容でファイルを置き換え、アプリ説明・マニュアル・仕様書を更新します。よろしいですか？';
+    if(CHECK.version.status==='older')msg='⚠ ローカルの方が新しいバージョンです。古い内容で上書きされます。\n本当に実行しますか？';
+    if(!confirm(msg))return;
+    $('#loading').show();
+    $.ajax({url:'/app_share/import_package_apply/'+encodeURIComponent(APP_NAME),method:'POST',contentType:'application/json',
+        data:JSON.stringify(PKG),
+        success(r){
+            if(!r.success){showResult('エラー: '+r.error,true);return}
+            showResult(r.message,false);
+            let h=`<div class="success-box"><strong>✅ ${esc(r.message)}</strong><ul class="plain">`;
+            h+=`<li>置き換え/作成: ${r.written}ファイル、スキップ: ${r.skipped}件</li>`;
+            if(r.backup)h+=`<li>バックアップ: <code>app_share/import_backups/${esc(r.backup)}</code></li>`;
+            (r.errors||[]).forEach(e=>{h+=`<li style="color:#991b1b">⚠ ${esc(e)}</li>`});
+            h+='</ul>';
+            if(r.blueprint_registration){
+                h+=`<div style="margin-top:8px"><strong>🧩 app.py へ追加するBlueprint登録</strong>（新規アプリの場合）<textarea id="bp-reg" readonly style="width:100%;min-height:70px;font-family:monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(r.blueprint_registration)}</textarea><div><button class="copybtn" onclick="copyBox('bp-reg',this)">📋 コピー</button> <span style="font-size:.78rem;color:#64748b">import群を import 部へ、register 群を登録部へ貼り付け（url_prefix は必要に応じ調整）</span></div></div>`;
+            }
+            if(PKG.launchers&&PKG.launchers.some(l=>l.found)){
+                h+='<p style="margin-top:8px">🔗 <strong>仕上げ</strong>: ステップ6のランチャを <code>admin_dashboard.html</code> / <code>guest_dashboard.html</code> の適切な位置に貼り付けてください。</p>';
+            }
+            h+='<p style="margin-top:8px">🔄 <strong>次にWebアプリを Reload してください。</strong>'
+              +'反映後にこのアプリの画面を一度開くと、アプリが自前のDDLを持つ場合は'
+              +'テーブルの作成・カラム追加が自動で走ります。'
+              +'そのうえでこの画面を開き直し、ステップ4に残った差分だけSQLを実行してください。'
+              +'（Reload前の照合結果は古いコードの状態を映しています）</p></div>';
+            $('#apply-result').html(h).show();
+            $('#st7').html('✅ 完了（Reload待ち）');
+            runCheck();
+        },
+        error(xhr){showResult('取り込みエラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},
+        complete(){$('#loading').hide()}});
+}
+</script>
+</body>
+</html>

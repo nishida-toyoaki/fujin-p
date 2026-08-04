@@ -1,0 +1,1034 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groups - ユーザグループ管理</title>
+    <style>
+        /* Lanesと同等のデザイン基盤 */
+        :root {
+            --header-height: 50px;
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --border-color: #ddd;
+            --bg-color: #f5f5f5;
+            --admin-badge-bg: #e74c3c; /* 権限バッジ用カラー */
+        }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        #header {
+            height: var(--header-height); background: var(--primary-color); color: white;
+            display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10;
+        }
+        #header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; }
+
+        /* 権限バッジのスタイル */
+        .role-badge {
+            font-size: 11px;
+            background: var(--admin-badge-bg);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 10px;
+            font-weight: normal;
+            vertical-align: middle;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        #main-container { display: flex; flex: 1; overflow: hidden; }
+
+        /* 左サイドバー: グループ一覧 */
+        #list-panel {
+            width: 320px; background: white; border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; overflow-y: auto;
+        }
+        .list-header {
+            padding: 10px 15px; background: #fafafa; border-bottom: 1px solid var(--border-color);
+            font-size: 12px; font-weight: bold; color: #666;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .group-item {
+            padding: 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s;
+        }
+        .group-item:hover { background: #f9f9f9; }
+        .group-item.active { background: #e3f2fd; border-left: 4px solid var(--accent-color); }
+        .group-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .group-meta { font-size: 11px; color: #888; }
+
+        /* 右メイン: 詳細 */
+        #detail-panel { flex: 1; padding: 20px; overflow-y: auto; }
+        .panel-placeholder { text-align: center; color: #aaa; margin-top: 100px; }
+
+        .section-card {
+            background: white; border: 1px solid var(--border-color); border-radius: 4px;
+            padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .section-head {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px;
+        }
+        .section-title { font-weight: bold; color: #555; }
+
+        /* テーブル風リスト */
+        .data-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f9f9f9; font-size: 13px; }
+        .data-row:last-child { border: none; }
+        .data-main { flex: 1; }
+        .data-sub { font-size: 11px; color: #999; margin-left: 10px; }
+
+        .status-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-right: 5px; }
+        .active-badge { background: #d4edda; color: #155724; }
+        .inactive-badge { background: #f8d7da; color: #721c24; }
+
+        /* ボタン・モーダル */
+        .btn { padding: 6px 12px; border-radius: 3px; border: 1px solid transparent; cursor: pointer; font-size: 12px; }
+        .btn-primary { background: var(--accent-color); color: white; }
+        .btn-secondary { background: #fff; border-color: #ccc; color: #333; }
+
+        /* コンテキストメニュー */
+        #context-menu {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
+            z-index: 2000;
+            min-width: 140px;
+            font-size: 13px;
+        }
+        #context-menu .ctx-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #context-menu .ctx-item:hover { background: #f0f0f0; }
+        #context-menu .ctx-item.disabled { color: #bbb; cursor: default; }
+        #context-menu .ctx-item.disabled:hover { background: none; }
+        #context-menu .ctx-item.danger { color: #c0392b; }
+        #context-menu .ctx-item.danger.disabled { color: #bbb; }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-box { background: white; width: 400px; padding: 20px; border-radius: 5px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 3px; }
+        .btn-return{padding:6px 14px;border:none;border-radius:4px;text-decoration:none;font-size:13px;font-weight:bold;color:#fff;background:#e74c3c;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+        .btn-return:hover{background:#c0392b}
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>
+        <span style="color: transparent; text-shadow: 0 0 0 orange;">👥</span> まいぐる
+        <span style="font-size:12px; opacity:0.8; margin-left:10px;">User Group Manager</span>
+        <span id="authority-badge" class="role-badge" style="display:none;">総管理者</span>
+    </h1>
+    <div style="display:flex;gap:10px;align-items:center">
+        <div id="create-group-controls" style="display:none;">
+            <button class="btn btn-secondary" onclick="openCreateGroupModal()">＋ 新規グループ作成</button>
+        </div>
+        <a href="{{ url_for('user_groups.return_to_fujin') }}" class="btn-return">
+            🏠 FUJINダッシュボードに戻る
+        </a>
+    </div>
+</div>
+
+<div id="admin-panel-container" style="display:none; background:#fff3cd; border-bottom:1px solid #ffeeba; padding:10px 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <strong>🔑 グループ管理者管理 (総管理者専用)</strong>
+            <span style="font-size:12px; margin-left:10px;">グループを作成・削除できるユーザを任命します</span>
+        </div>
+        <button class="btn btn-secondary" onclick="openAppointManagerModal()">＋ 任命する</button>
+    </div>
+    <div id="global-managers-list" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;"></div>
+</div>
+
+<div id="main-container">
+    <div id="list-panel">
+        <div class="list-header">
+            <span>グループ一覧</span>
+            <span style="font-weight:normal;">(閲覧のみ)</span>
+        </div>
+        <div id="group-list-container"></div>
+    </div>
+
+    <div id="detail-panel">
+        <div id="empty-msg" class="panel-placeholder">左のリストからグループを選択してください</div>
+
+        <div id="detail-content" style="display:none;">
+            <div class="section-card">
+                <div style="display:flex; justify-content:space-between;">
+                    <div>
+                        <h2 id="dt-name" style="margin:0 0 5px 0;">Group Name</h2>
+                        <div id="dt-desc" style="color:#666; font-size:13px;">Description</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="font-size:11px; color:#999;">管理者</span><br>
+                        <strong id="dt-manager">Manager Name</strong>
+                    </div>
+                </div>
+                <div id="group-actions" style="display:none; margin-top:12px; padding-top:10px; border-top:1px solid #f0f0f0; text-align:right;">
+                    <button class="btn btn-secondary" onclick="openRenameFromDetail()">✏️ 名前を変更</button>
+                    <button class="btn" style="background:#e74c3c; color:#fff; margin-left:6px;" onclick="openDeleteFromDetail()">🗑️ グループを削除</button>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-head">
+                    <span class="section-title">👤 構成員 (Members)</span>
+                    <button class="btn btn-primary" id="btn-add-member" style="display:none;" onclick="openAddMemberModal()">編集</button>
+                </div>
+                <div id="dt-members-list"></div>
+                <div style="font-size:10px; color:#999; margin-top:5px;">※ user_is_direct_group_member 判定対象</div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-head">
+                    <span class="section-title">📂 サブグループ (Subgroups)</span>
+                    <button class="btn btn-primary" id="btn-add-sub" style="display:none;" onclick="openAddSubModal()">＋ 追加</button>
+                </div>
+                <div id="dt-sub-list"></div>
+                <div style="font-size:10px; color:#999; margin-top:5px;">※ このグループの配下にあるグループ。構成員は再帰的に所属とみなされます。</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-create-group" class="modal">
+    <div class="modal-box">
+        <h3>新規グループ作成</h3>
+        <div class="form-group">
+            <label>グループ名</label>
+            <input type="text" id="new-g-name">
+        </div>
+        <div class="form-group">
+            <label>説明</label>
+            <textarea id="new-g-desc" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+            <label>管理者 (氏名選択)</label>
+            <select id="new-g-manager"><option value="">読み込み中...</option></select>
+        </div>
+        <div style="text-align:right;">
+            <button class="btn btn-secondary" onclick="closeModal('modal-create-group')">キャンセル</button>
+            <button class="btn btn-primary" onclick="execCreateGroup()">作成</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 一括メンバー管理モーダル ===== -->
+<div id="modal-add-member" class="modal" style="align-items:flex-start; padding-top:40px;">
+    <div class="modal-box" style="width:680px; max-width:95vw; max-height:85vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3 style="margin:0;">👥 メンバー一括管理</h3>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span style="font-size:11px; color:#888;">並び順:</span>
+                <button class="btn btn-secondary" id="sort-by-id" onclick="setSortOrder('id')" style="padding:3px 8px; font-size:11px;">ID順</button>
+                <button class="btn btn-secondary" id="sort-by-name" onclick="setSortOrder('name')" style="padding:3px 8px; font-size:11px;">名前順</button>
+            </div>
+        </div>
+
+        <div style="font-size:11px; color:#888; margin-bottom:8px;">
+            ✔ チェックON = メンバー（追加 or 任期更新）　✔ チェックOFF = 非メンバー（レコード削除）
+        </div>
+
+        <!-- 検索 -->
+        <input type="text" id="member-search" placeholder="氏名で絞り込み..." oninput="renderMemberRows()"
+               style="width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:3px; font-size:13px; margin-bottom:8px; box-sizing:border-box;">
+
+        <!-- ヘッダ行 -->
+        <div style="display:grid; grid-template-columns:28px 1fr 130px 130px; gap:6px; padding:4px 6px;
+                    font-size:11px; font-weight:bold; color:#666; border-bottom:2px solid #eee; background:#fafafa;">
+            <div></div>
+            <div>氏名 (ID)</div>
+            <div>有効開始</div>
+            <div>有効終了</div>
+        </div>
+
+        <!-- スクロールリスト -->
+        <div id="member-bulk-list" style="overflow-y:auto; flex:1; min-height:300px; max-height:55vh; border:1px solid #eee; border-top:none;"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+            <div style="font-size:11px; color:#888;">
+                <span id="member-count-label"></span>
+            </div>
+            <div>
+                <button class="btn btn-secondary" onclick="closeMemberModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="execSyncMembers()" style="margin-left:6px;">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-add-sub" class="modal">
+    <div class="modal-box">
+        <h3>サブグループを新規作成・追加</h3>
+
+        <div class="form-group">
+            <label>親グループ</label>
+            <input type="text" id="sub-parent-name" disabled style="background:#f0f0f0; color:#666;">
+        </div>
+
+        <div class="form-group">
+            <label>新しいグループ名</label>
+            <input type="text" id="sub-new-name" placeholder="例: ○○分科会">
+            <div style="font-size:10px; color:#666;">※既存のグループ名とは重複できません</div>
+        </div>
+
+        <div class="form-group">
+            <label>説明 (任意)</label>
+            <textarea id="sub-new-desc" rows="2"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>紐付けの有効期間 (任意)</label>
+            <div style="display:flex; gap:5px;">
+                <input type="datetime-local" id="sub-from" placeholder="開始">
+                <span style="align-self:center;">～</span>
+                <input type="datetime-local" id="sub-until" placeholder="終了">
+            </div>
+            <div style="font-size:10px; color:#888;">
+                ※初期メンバーとして、親グループの現在の構成員がコピーされます。<br>
+                メンバー個々の有効期限は親グループでの設定が引き継がれます。
+            </div>
+        </div>
+
+        <div style="text-align:right;">
+            <button class="btn btn-secondary" onclick="closeModal('modal-add-sub')">キャンセル</button>
+            <button class="btn btn-primary" onclick="execAddSubNew()">作成して追加</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-edit-period" class="modal">
+    <div class="modal-box">
+        <h3>有効期間の変更</h3>
+        <input type="hidden" id="edit-target-id">
+        <input type="hidden" id="edit-target-type">
+        <div style="margin-bottom:15px; font-weight:bold;" id="edit-target-name"></div>
+
+        <div class="form-group">
+            <label>有効開始</label>
+            <input type="date" id="edit-from">
+        </div>
+        <div class="form-group">
+            <label>有効終了</label>
+            <input type="date" id="edit-until">
+        </div>
+        <div style="text-align:right;">
+            <button class="btn btn-secondary" onclick="closeModal('modal-edit-period')">キャンセル</button>
+            <button class="btn btn-primary" onclick="execUpdatePeriod()">更新</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-appoint-manager" class="modal">
+    <div class="modal-box">
+        <h3>グループ管理者を任命</h3>
+        <div class="form-group">
+            <label>ユーザを選択</label>
+            <select id="appoint-uid"><option value="">読み込み中...</option></select>
+        </div>
+        <div class="form-group">
+            <label>有効開始 (任意)</label>
+            <input type="datetime-local" id="appoint-from">
+        </div>
+        <div class="form-group">
+            <label>有効終了 (任意)</label>
+            <input type="datetime-local" id="appoint-until">
+        </div>
+        <div style="text-align:right;">
+            <button class="btn btn-secondary" onclick="closeModal('modal-appoint-manager')">キャンセル</button>
+            <button class="btn btn-primary" onclick="execAppointManager()">任命</button>
+        </div>
+    </div>
+</div>
+
+<!-- コンテキストメニュー -->
+<div id="context-menu">
+    <div class="ctx-item" id="ctx-rename" onclick="openRenameModal()">✏️ 名前を変更</div>
+    <div class="ctx-item danger" id="ctx-delete" onclick="openDeleteGroupConfirm()">🗑️ グループを削除</div>
+</div>
+
+<!-- リネームモーダル -->
+<div id="modal-rename-group" class="modal">
+    <div class="modal-box">
+        <h3>グループ名の変更</h3>
+        <div style="font-size:12px; color:#888; margin-bottom:10px;">現在: <span id="rename-current-name"></span></div>
+        <div class="form-group">
+            <label>新しいグループ名</label>
+            <input type="text" id="rename-new-name">
+        </div>
+        <div style="text-align:right;">
+            <button class="btn btn-secondary" onclick="closeModal('modal-rename-group')">キャンセル</button>
+            <button class="btn btn-primary" onclick="execRenameGroup()">変更</button>
+        </div>
+    </div>
+</div>
+<script>
+    const API_BASE = '/user_groups/api';
+    let currentGroupId = null;
+    let currentGroup = null;       // 選択中のグループ（詳細パネル用）
+    let isTotalAdmin = false;
+    let contextTargetGroup = null; // 右クリック対象グループ
+
+    // 初期化
+    document.addEventListener('DOMContentLoaded', loadGroups);
+
+    async function loadGroups() {
+        const res = await fetch(`${API_BASE}/groups`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.success) {
+            isTotalAdmin = data.is_total_admin;
+            const canCreate = data.can_create;
+
+            // 1. 作成ボタンの表示制御
+            if (canCreate) {
+                document.getElementById('create-group-controls').style.display = 'block';
+                populateUserSelect('new-g-manager');
+            } else {
+                document.getElementById('create-group-controls').style.display = 'none';
+            }
+
+            // 2. 総管理者専用パネルの制御
+            if (isTotalAdmin) {
+                document.getElementById('authority-badge').style.display = 'inline-block';
+                document.getElementById('admin-panel-container').style.display = 'block';
+                loadGlobalManagers();
+            } else {
+                document.getElementById('authority-badge').style.display = 'none';
+                document.getElementById('admin-panel-container').style.display = 'none';
+            }
+
+            const container = document.getElementById('group-list-container');
+            container.innerHTML = '';
+
+            data.groups.forEach(g => {
+                const div = document.createElement('div');
+                div.className = 'group-item';
+                div.innerHTML = `
+                    <div class="group-name">${esc(g.name)}</div>
+                    <div class="group-meta">管理者: ${esc(g.manager_name)}</div>
+                    ${g.can_edit ? '<div style="color:green; font-size:10px;">✏️ 管理可能</div>' : ''}
+                `;
+                div.onclick = () => selectGroup(g, div);
+                div.oncontextmenu = (e) => openContextMenu(e, g);
+                container.appendChild(div);
+            });
+        }
+    }
+
+    // グループ管理者一覧ロード
+    async function loadGlobalManagers() {
+        const res = await fetch(`${API_BASE}/admin/global_managers`);
+        const data = await res.json();
+        const container = document.getElementById('global-managers-list');
+        container.innerHTML = '';
+
+        if(data.success) {
+            data.managers.forEach(m => {
+                const badge = m.is_active ? '✅' : '🚫';
+                const div = document.createElement('div');
+                div.style.cssText = "background:white; padding:5px 10px; border-radius:4px; border:1px solid #ccc; font-size:12px; display:flex; align-items:center;";
+                div.innerHTML = `
+                    <span style="margin-right:5px;">${badge} <strong>${esc(m.full_name)}</strong></span>
+                    <button onclick="deleteGlobalManager(${m.id})" style="border:none; background:none; cursor:pointer; color:red;">×</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+    }
+
+    // 任命モーダル
+    function openAppointManagerModal() {
+        document.getElementById('modal-appoint-manager').classList.add('active');
+        populateUserSelect('appoint-uid');
+    }
+
+    async function execAppointManager() {
+        const uid = document.getElementById('appoint-uid').value;
+        let from = document.getElementById('appoint-from').value;
+        let until = document.getElementById('appoint-until').value;
+        if(from) from = from.replace('T', ' ');
+        if(until) until = until.replace('T', ' ');
+
+        const res = await fetch(`${API_BASE}/admin/global_managers`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ user_id: uid, valid_from: from, valid_until: until })
+        });
+        const d = await res.json();
+        if(d.success) {
+            closeModal('modal-appoint-manager');
+            loadGlobalManagers();
+        } else {
+            alert('任命失敗: ' + d.error);
+        }
+    }
+
+    async function deleteGlobalManager(id) {
+        if(!confirm('このユーザのグループ作成権限を削除しますか？')) return;
+        const res = await fetch(`${API_BASE}/admin/global_managers/${id}`, { method: 'DELETE' });
+        if(res.ok) loadGlobalManagers();
+    }
+
+    async function selectGroup(group, el) {
+        currentGroup = group;
+        currentGroupId = group.id;
+        document.querySelectorAll('.group-item').forEach(d => d.classList.remove('active'));
+        el.classList.add('active');
+
+        document.getElementById('empty-msg').style.display = 'none';
+        document.getElementById('detail-content').style.display = 'block';
+
+        document.getElementById('dt-name').textContent = group.name;
+        document.getElementById('dt-desc').textContent = group.description;
+        document.getElementById('dt-manager').textContent = group.manager_name;
+
+        // 編集権限があるグループのみ、名前変更・削除ボタンを常時表示
+        document.getElementById('group-actions').style.display = group.can_edit ? 'block' : 'none';
+
+        loadDetails(group.id);
+    }
+
+    async function loadDetails(id) {
+        const res = await fetch(`${API_BASE}/groups/${id}/details`);
+        const data = await res.json();
+
+        if(data.success) {
+            const canEdit = data.can_edit;
+            document.getElementById('btn-add-member').style.display = canEdit ? 'block' : 'none';
+            document.getElementById('btn-add-sub').style.display = canEdit ? 'block' : 'none';
+
+            // Members
+            const mList = document.getElementById('dt-members-list');
+            mList.innerHTML = '';
+            if(data.members.length === 0) mList.innerHTML = '<div style="color:#ccc; font-size:12px; padding:10px;">なし</div>';
+
+            data.members.forEach(m => {
+                const badge = m.is_active ?
+                    '<span class="status-badge active-badge">有効</span>' :
+                    '<span class="status-badge inactive-badge">無効</span>';
+
+                const actions = '';
+
+                const row = document.createElement('div');
+                row.className = 'data-row';
+                row.innerHTML = `
+                    <div class="data-main" style="flex:0 0 auto; margin-right:10px;">
+                        ${badge} <strong>${esc(m.full_name)}</strong> <span style="font-size:10px; color:#888;">(ID:${m.user_id})</span>
+                    </div>
+                    <div class="data-sub" style="flex:1;">
+                        ${fmtDate(m.valid_from)} ～ ${fmtDate(m.valid_until)}
+                    </div>
+                    ${actions}
+                `;
+                mList.appendChild(row);
+            });
+
+            // Subgroups
+            const sList = document.getElementById('dt-sub-list');
+            sList.innerHTML = '';
+            if(data.subgroups.length === 0) sList.innerHTML = '<div style="color:#ccc; font-size:12px; padding:10px;">なし</div>';
+
+            data.subgroups.forEach(s => {
+                const badge = s.is_active ?
+                    '<span class="status-badge active-badge">有効</span>' :
+                    '<span class="status-badge inactive-badge">無効</span>';
+
+                const actions = canEdit ? `
+                    <div style="margin-left:auto;">
+                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="openEditModal('subgroup', ${s.id}, '${esc(s.child_group_name)}', '${s.valid_from||''}', '${s.valid_until||''}')">編集</button>
+                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px; color:red; border-color:pink;" onclick="execDelete('subgroup', ${s.id})">削除</button>
+                    </div>
+                ` : '';
+
+                const row = document.createElement('div');
+                row.className = 'data-row';
+                row.innerHTML = `
+                    <div class="data-main" style="flex:0 0 auto; margin-right:10px;">
+                        ${badge} 📂 <strong>${esc(s.child_group_name)}</strong> <span style="font-size:10px; color:#888;">(GID:${s.child_group_id})</span>
+                    </div>
+                    <div class="data-sub" style="flex:1;">
+                        ${fmtDate(s.valid_from)} ～ ${fmtDate(s.valid_until)}
+                    </div>
+                    ${actions}
+                `;
+                sList.appendChild(row);
+            });
+        }
+    }
+
+    // --- Action Functions ---
+
+    function openCreateGroupModal() {
+        document.getElementById('modal-create-group').classList.add('active');
+        if(document.getElementById('new-g-manager').options.length <= 1) populateUserSelect('new-g-manager');
+    }
+    // ===== 一括メンバー管理モーダル =====
+    let allUsersCache = [];    // 全ユーザ一覧キャッシュ
+    let membershipMap = {};    // user_id → {membership_id, valid_from, valid_until}
+    let memberSortOrder = 'id'; // 'id' or 'name'
+
+    function setSortOrder(order) {
+        memberSortOrder = order;
+        document.getElementById('sort-by-id').style.fontWeight = (order === 'id') ? 'bold' : 'normal';
+        document.getElementById('sort-by-name').style.fontWeight = (order === 'name') ? 'bold' : 'normal';
+        renderMemberRows();
+    }
+
+    async function openAddMemberModal() {
+        document.getElementById('modal-add-member').classList.add('active');
+        document.getElementById('member-search').value = '';
+        setSortOrder(memberSortOrder);
+
+        // 全ユーザ取得（キャッシュあれば省略）
+        if (allUsersCache.length === 0) {
+            const res = await fetch(`${API_BASE}/users/candidates`);
+            const d = await res.json();
+            if (d.success) allUsersCache = d.users;
+        }
+
+        // 現在のメンバーシップ取得
+        const res2 = await fetch(`${API_BASE}/groups/${currentGroupId}/details`);
+        const d2 = await res2.json();
+        membershipMap = {};
+        if (d2.success) {
+            d2.members.forEach(m => {
+                membershipMap[m.user_id] = {
+                    membership_id: m.id,
+                    valid_from: m.valid_from || '',
+                    valid_until: m.valid_until || ''
+                };
+            });
+        }
+        renderMemberRows();
+    }
+
+    function renderMemberRows() {
+        const keyword = (document.getElementById('member-search').value || '').toLowerCase();
+        let users = [...allUsersCache];
+
+        // 並び替え
+        if (memberSortOrder === 'name') {
+            users.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ja'));
+        } else {
+            users.sort((a, b) => a.id - b.id);
+        }
+
+        // 絞り込み
+        if (keyword) {
+            users = users.filter(u => u.full_name.toLowerCase().includes(keyword));
+        }
+
+        const container = document.getElementById('member-bulk-list');
+        container.innerHTML = '';
+
+        users.forEach(u => {
+            const ms = membershipMap[u.id];
+            const isMember = !!ms;
+
+            // 日付変換: "2026/07/01 00:00" → "2026-07-01"
+            const toDateVal = (str) => {
+                if (!str) return '';
+                return str.slice(0, 10).replace(/\//g, '-');
+            };
+
+            const row = document.createElement('div');
+            row.style.cssText = `display:grid; grid-template-columns:28px 1fr 130px 130px; gap:6px;
+                padding:6px 6px; border-bottom:1px solid #f0f0f0; align-items:center; font-size:13px;
+                background:${isMember ? '#f0f8ff' : 'white'};`;
+
+            row.innerHTML = `
+                <div style="text-align:center;">
+                    <input type="checkbox" data-uid="${u.id}"
+                           class="member-chk" ${isMember ? 'checked' : ''}
+                           onchange="onMemberCheck(this)">
+                </div>
+                <div>
+                    <span style="font-weight:${isMember ? 'bold' : 'normal'};">${esc(u.full_name)}</span>
+                    <span style="font-size:10px; color:#aaa;"> (ID:${u.id})</span>
+                </div>
+                <div>
+                    <input type="date" data-uid="${u.id}" class="member-from"
+                           value="${toDateVal(isMember ? ms.valid_from : '')}"
+                           style="width:100%; padding:3px 4px; border:1px solid #ddd; border-radius:3px; font-size:12px;
+                                  background:${isMember ? 'white' : '#f5f5f5'};"
+                           ${isMember ? '' : 'disabled'}>
+                </div>
+                <div>
+                    <input type="date" data-uid="${u.id}" class="member-until"
+                           value="${toDateVal(isMember ? ms.valid_until : '')}"
+                           style="width:100%; padding:3px 4px; border:1px solid #ddd; border-radius:3px; font-size:12px;
+                                  background:${isMember ? 'white' : '#f5f5f5'};"
+                           ${isMember ? '' : 'disabled'}>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+
+        // カウント表示
+        const total = allUsersCache.length;
+        const memberCount = Object.keys(membershipMap).length;
+        document.getElementById('member-count-label').textContent =
+            `全${total}名 / メンバー ${memberCount}名 ${keyword ? `(絞り込み: ${users.length}名表示)` : ''}`;
+    }
+
+    function onMemberCheck(chk) {
+        const uid = chk.dataset.uid;
+        // 同じuid行のdate inputを有効/無効切り替え
+        document.querySelectorAll(`.member-from[data-uid="${uid}"], .member-until[data-uid="${uid}"]`).forEach(inp => {
+            inp.disabled = !chk.checked;
+            inp.style.background = chk.checked ? 'white' : '#f5f5f5';
+        });
+        // 行背景色
+        const row = chk.closest('div[style*="grid"]');
+        if (row) row.style.background = chk.checked ? '#f0f8ff' : 'white';
+    }
+
+    async function execSyncMembers() {
+        const rows = document.querySelectorAll('.member-chk');
+        const payload = [];
+        rows.forEach(chk => {
+            const uid = parseInt(chk.dataset.uid);
+            const checked = chk.checked;
+            const vf = document.querySelector(`.member-from[data-uid="${uid}"]`)?.value || '';
+            const vu = document.querySelector(`.member-until[data-uid="${uid}"]`)?.value || '';
+            // チェックOFFかつ既存メンバーでない → スキップ（何もしない）
+            const isMember = !!membershipMap[uid];
+            if (!checked && !isMember) return;
+            payload.push({ user_id: uid, checked, valid_from: vf, valid_until: vu });
+        });
+
+        const res = await fetch(`${API_BASE}/groups/${currentGroupId}/members`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        if (d.success) {
+            closeMemberModal();
+            loadDetails(currentGroupId);
+        } else {
+            alert('保存失敗: ' + (d.error || ''));
+        }
+    }
+
+    function closeMemberModal() {
+        document.getElementById('modal-add-member').classList.remove('active');
+    }
+    // ★修正: サブグループ追加モーダルを開く
+    function openAddSubModal() {
+        document.getElementById('modal-add-sub').classList.add('active');
+
+        // 親グループ名を取得
+        const parentName = document.getElementById('dt-name').textContent;
+        document.getElementById('sub-parent-name').value = parentName;
+
+        // デフォルト名セット: "親名_分科会"
+        document.getElementById('sub-new-name').value = `${parentName}_分科会`;
+        document.getElementById('sub-new-desc').value = "";
+
+        // 日付クリア
+        document.getElementById('sub-from').value = "";
+        document.getElementById('sub-until').value = "";
+    }
+
+    // ★修正: サブグループ新規作成実行
+    async function execAddSubNew() {
+        const newName = document.getElementById('sub-new-name').value;
+        const desc = document.getElementById('sub-new-desc').value;
+        let from = document.getElementById('sub-from').value;
+        let until = document.getElementById('sub-until').value;
+
+        if(!newName) { alert('グループ名を入力してください'); return; }
+        if(from) from = from.replace('T', ' ');
+        if(until) until = until.replace('T', ' ');
+
+        // 新しいAPIエンドポイントを叩く
+        const res = await fetch(`${API_BASE}/groups/${currentGroupId}/subgroups/create_new`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: newName,
+                description: desc,
+                valid_from: from,
+                valid_until: until
+            })
+        });
+
+        const d = await res.json();
+        if(d.success) {
+            closeModal('modal-add-sub');
+            loadGroups(); // グループ一覧も増えるのでリロード
+            // 詳細パネルはloadGroups後にリセットされる可能性があるため、
+            // UX的には少し待ってから詳細を再ロードするか、
+            // loadGroups内で現在の選択状態を維持するロジックが必要ですが
+            // 簡易的に、作成後は「詳細画面」をリロードして反映を確認させます
+            setTimeout(() => loadDetails(currentGroupId), 300);
+        }
+        else {
+            alert('作成失敗: ' + (d.message || d.error));
+        }
+    }
+
+    function openEditModal(type, id, name, from, until) {
+        document.getElementById('modal-edit-period').classList.add('active');
+        document.getElementById('edit-target-type').value = type;
+        document.getElementById('edit-target-id').value = id;
+        document.getElementById('edit-target-name').textContent = `対象: ${name}`;
+
+        const toDateFmt = (str) => {
+            if (!str) return '';
+            return str.slice(0, 10).replace(/\//g, '-');
+        };
+
+        document.getElementById('edit-from').value = toDateFmt(from);
+        document.getElementById('edit-until').value = toDateFmt(until);
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // 作成実行
+    async function execCreateGroup() {
+        const name = document.getElementById('new-g-name').value;
+        const desc = document.getElementById('new-g-desc').value;
+        const mgr = document.getElementById('new-g-manager').value;
+        const res = await fetch(`${API_BASE}/groups/create`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, description: desc, manager_user_id: mgr })
+        });
+        const d = await res.json();
+        if(d.success) { closeModal('modal-create-group'); loadGroups(); }
+        else { alert('作成失敗: ' + d.error); }
+    }
+
+
+
+    // サブグループ追加実行
+    async function execAddSub() {
+        const childId = document.getElementById('sub-gid').value;
+        let from = document.getElementById('sub-from').value;
+        let until = document.getElementById('sub-until').value;
+        if(from) from = from.replace('T', ' ');
+        if(until) until = until.replace('T', ' ');
+        const res = await fetch(`${API_BASE}/groups/${currentGroupId}/subgroups`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ child_group_id: childId, valid_from: from, valid_until: until })
+        });
+        const d = await res.json();
+        if(d.success) { closeModal('modal-add-sub'); loadDetails(currentGroupId); }
+        else { alert('追加失敗: ' + (d.message || d.error)); }
+    }
+
+    // 更新実行
+    async function execUpdatePeriod() {
+        const type = document.getElementById('edit-target-type').value;
+        const id = document.getElementById('edit-target-id').value;
+        let from = document.getElementById('edit-from').value;
+        let until = document.getElementById('edit-until').value;
+
+        if(from) from = from.replace('T', ' ');
+        if(until) until = until.replace('T', ' ');
+
+        const endpoint = (type === 'member') ? 'members' : 'subgroups';
+        const res = await fetch(`${API_BASE}/groups/${currentGroupId}/${endpoint}/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ valid_from: from, valid_until: until })
+        });
+
+        const d = await res.json();
+        if(d.success) { closeModal('modal-edit-period'); loadDetails(currentGroupId); }
+        else { alert('更新失敗: ' + (d.message || d.error)); }
+    }
+
+    // 削除実行
+    async function execDelete(type, id) {
+        if(!confirm('本当に削除しますか？\n（この操作は取り消せません）')) return;
+
+        const endpoint = (type === 'member') ? 'members' : 'subgroups';
+        const res = await fetch(`${API_BASE}/groups/${currentGroupId}/${endpoint}/${id}`, {
+            method: 'DELETE'
+        });
+        const d = await res.json();
+        if(d.success) { loadDetails(currentGroupId); }
+        else { alert('削除失敗: ' + (d.message || d.error)); }
+    }
+
+    // Utils
+    async function populateUserSelect(elementId) {
+        const select = document.getElementById(elementId);
+        try {
+            const res = await fetch(`${API_BASE}/users/candidates`);
+            const data = await res.json();
+            if (data.success) {
+                select.innerHTML = '<option value="">選択してください...</option>';
+                data.users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.textContent = `${u.full_name} (ID: ${u.id})`;
+                    select.appendChild(opt);
+                });
+            }
+        } catch (e) { console.error('Error loading users:', e); }
+    }
+    async function populateGroupSelect(elementId) {
+        const select = document.getElementById(elementId);
+        try {
+            const res = await fetch(`${API_BASE}/groups`);
+            const data = await res.json();
+            if (data.success) {
+                select.innerHTML = '<option value="">選択してください...</option>';
+                data.groups.forEach(g => {
+                    if (currentGroupId && g.id === currentGroupId) return;
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = `📂 ${g.name} (GID: ${g.id})`;
+                    select.appendChild(opt);
+                });
+            }
+        } catch (e) {}
+    }
+
+    function esc(s) { return s ? s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])) : ''; }
+    // --- コンテキストメニュー ---
+    function openContextMenu(e, group) {
+        e.preventDefault();
+        contextTargetGroup = group;
+
+        const menu = document.getElementById('context-menu');
+        const renameItem = document.getElementById('ctx-rename');
+
+        // 編集権限がなければグレーアウト
+        if (group.can_edit) {
+            renameItem.classList.remove('disabled');
+            renameItem.onclick = openRenameModal;
+        } else {
+            renameItem.classList.add('disabled');
+            renameItem.onclick = null;
+        }
+
+        // 削除も同じ権限（総管理者またはそのグループの管理者）
+        const deleteItem = document.getElementById('ctx-delete');
+        if (group.can_edit) {
+            deleteItem.classList.remove('disabled');
+            deleteItem.onclick = openDeleteGroupConfirm;
+        } else {
+            deleteItem.classList.add('disabled');
+            deleteItem.onclick = null;
+        }
+
+        menu.style.display = 'block';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top  = e.clientY + 'px';
+    }
+
+    // メニュー外クリックで閉じる
+    document.addEventListener('click', () => {
+        document.getElementById('context-menu').style.display = 'none';
+    });
+    document.addEventListener('contextmenu', (e) => {
+        // グループ以外の右クリックでメニューを閉じる
+        if (!e.target.closest('.group-item')) {
+            document.getElementById('context-menu').style.display = 'none';
+        }
+    });
+
+    // --- リネーム ---
+    function openRenameModal() {
+        if (!contextTargetGroup) return;
+        document.getElementById('context-menu').style.display = 'none';
+        document.getElementById('rename-current-name').textContent = contextTargetGroup.name;
+        document.getElementById('rename-new-name').value = contextTargetGroup.name;
+        document.getElementById('modal-rename-group').classList.add('active');
+    }
+
+    async function execRenameGroup() {
+        const newName = document.getElementById('rename-new-name').value.trim();
+        if (!newName) { alert('グループ名を入力してください'); return; }
+        if (newName === contextTargetGroup.name) { closeModal('modal-rename-group'); return; }
+
+        const res = await fetch(`${API_BASE}/groups/${contextTargetGroup.id}/rename`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name: newName })
+        });
+        const d = await res.json();
+        if (d.success) {
+            closeModal('modal-rename-group');
+            // 詳細パネルの名前もその場で更新
+            if (currentGroupId === contextTargetGroup.id) {
+                document.getElementById('dt-name').textContent = newName;
+                if (currentGroup) currentGroup.name = newName;
+            }
+            loadGroups(); // 左リストを更新
+        } else {
+            alert('変更失敗: ' + d.error);
+        }
+    }
+
+    // --- グループ削除 ---
+    function openDeleteGroupConfirm() {
+        if (!contextTargetGroup) return;
+        document.getElementById('context-menu').style.display = 'none';
+        confirmAndDeleteGroup(contextTargetGroup);
+    }
+
+    function openDeleteFromDetail() {
+        if (!currentGroup) return;
+        confirmAndDeleteGroup(currentGroup);
+    }
+
+    function openRenameFromDetail() {
+        if (!currentGroup) return;
+        contextTargetGroup = currentGroup;
+        openRenameModal();
+    }
+
+    function confirmAndDeleteGroup(g) {
+        const msg = `グループ「${g.name}」を削除しますか？\n\n`
+            + `・構成員の所属情報と、サブグループの紐付けも削除されます\n`
+            + `・サブグループ自体は削除されず、独立したグループとして残ります\n`
+            + `・アプリの権限設定にこのグループ名を使っている場合、該当機能に誰も入れなくなります\n\n`
+            + `（この操作は取り消せません）`;
+        if (!confirm(msg)) return;
+        execDeleteGroup(g.id);
+    }
+
+    async function execDeleteGroup(groupId) {
+        const res = await fetch(`${API_BASE}/groups/${groupId}`, { method: 'DELETE' });
+        const d = await res.json();
+        if (d.success) {
+            // 削除したグループを表示中なら詳細パネルを初期状態に戻す
+            if (currentGroupId === groupId) {
+                currentGroupId = null;
+                document.getElementById('detail-content').style.display = 'none';
+                document.getElementById('empty-msg').style.display = 'block';
+            }
+            loadGroups();
+        } else {
+            alert('削除失敗: ' + (d.message || d.error));
+        }
+    }
+
+    function fmtDate(s) { return s ? s : '∞'; }
+</script>
+</body>
+</html>

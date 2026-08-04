@@ -1,0 +1,35 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ふっこ - アクセス制限</title>
+    <style>
+        body {
+            font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            background: #f0f4f8; color: #333;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0;
+        }
+        .box {
+            background: #fff; border-radius: 10px; padding: 40px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); text-align: center;
+        }
+        a { color: #4a6785; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>🐣 ふっこ</h1>
+        <p>このアプリは管理者専用です。</p>
+        <p><a href="{{ url_for('guest.dashboard') }}">← ダッシュボードへ戻る</a></p>
+    </div>
+</body>
+</html>

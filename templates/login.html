@@ -1,0 +1,385 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <link rel="icon" href="/static/images/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js');
+            });
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUJIN-P</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --indigo: #4f46e5; --violet: #7c3aed;
+            --surface: #ffffff; --surface-2: #f5f4ff;
+            --border: #e5e3f5; --text-primary: #1e1b4b;
+            --text-secondary: #6b7280; --text-muted: #9ca3af;
+            --radius: 16px; --radius-sm: 9px;
+            --shadow-lg: 0 12px 40px rgba(79,70,229,0.18), 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-drop: 0 8px 24px rgba(15,12,46,0.5);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:'DM Sans','Noto Sans JP',sans-serif;
+            background:#0f0c2e; min-height:100vh;
+            display:flex; flex-direction:column; align-items:center;
+            padding:16px 14px 48px; position:relative; overflow-x:hidden;
+        }
+        body::before {
+            content:''; position:fixed; inset:0;
+            background:
+                radial-gradient(ellipse 80% 60% at 15% 15%, rgba(79,70,229,0.38) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 50% at 85% 85%, rgba(124,58,237,0.32) 0%, transparent 60%),
+                radial-gradient(ellipse 45% 40% at 65% 5%, rgba(99,102,241,0.22) 0%, transparent 55%);
+            pointer-events:none; z-index:0;
+        }
+        body > * { position:relative; z-index:1; }
+
+        /* ── Header bar ── */
+        .top-bar {
+            width:100%; max-width:720px;
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 2px; margin-bottom:10px;
+        }
+
+        .brand { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+        .brand-icon { width:38px; height:38px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+        .brand-name { font-weight:700; font-size:1.15rem; color:#fff; letter-spacing:-0.02em; }
+        .brand-sub { font-size:0.63rem; color:rgba(255,255,255,0.48); font-weight:400; margin-top:1px; }
+
+        /* Nav buttons */
+        .nav-btns { display:flex; gap:6px; align-items:center; }
+
+        .nav-btn {
+            padding:7px 13px;
+            background:rgba(255,255,255,0.09);
+            border:1px solid rgba(255,255,255,0.15);
+            border-radius:8px;
+            color:rgba(255,255,255,0.75);
+            font-family:inherit; font-size:0.73rem; font-weight:600;
+            cursor:pointer; white-space:nowrap;
+            transition:background 0.18s, border-color 0.18s, color 0.18s;
+            backdrop-filter:blur(8px);
+        }
+        .nav-btn:hover {
+            background:rgba(255,255,255,0.16);
+            border-color:rgba(255,255,255,0.3);
+            color:#fff;
+        }
+        .nav-btn.active {
+            background:rgba(255,255,255,0.18);
+            border-color:rgba(255,255,255,0.4);
+            color:#fff;
+        }
+
+        /* ── Dropdown panel ── */
+        .dropdown-wrap {
+            width:100%; max-width:720px;
+            overflow:hidden;
+            max-height:0; opacity:0;
+            transition:max-height 0.36s ease, opacity 0.28s ease, margin-bottom 0.36s ease;
+            margin-bottom:0;
+        }
+        .dropdown-wrap.open {
+            max-height:480px; opacity:1;
+            margin-bottom:14px;
+        }
+
+        .dropdown-panel {
+            display:none;
+            background:var(--surface);
+            border-radius:var(--radius);
+            box-shadow:var(--shadow-lg);
+            padding:20px 26px 22px;
+        }
+        .dropdown-panel.active { display:block; }
+
+        /* Flash */
+        .flash-messages { margin-bottom:12px; }
+        .flash-message { padding:8px 12px; border-radius:var(--radius-sm); font-size:0.8rem; margin-bottom:6px; }
+        .flash-message.error  { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+        .flash-message.success{ background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+
+        /* Collapsible rows (Google + email) */
+        .fold-toggle {
+            display:flex; align-items:center; gap:6px;
+            width:100%; background:none; border:none; cursor:pointer;
+            padding:8px 0 6px; font-family:inherit; font-size:0.76rem;
+            color:var(--text-secondary); transition:color 0.18s;
+            border-top:1px solid var(--border);
+        }
+        .fold-toggle:first-of-type { border-top:none; padding-top:0; }
+        .fold-toggle:hover { color:var(--indigo); }
+        .fold-toggle .arrow { margin-left:auto; font-size:0.6em; transition:transform 0.25s; }
+        .fold-toggle.open .arrow { transform:rotate(180deg); }
+
+        .fold-body { max-height:0; overflow:hidden; transition:max-height 0.32s ease, opacity 0.28s ease; opacity:0; }
+        .fold-body.open { max-height:320px; opacity:1; }
+
+        .google-btn {
+            display:flex; align-items:center; justify-content:center;
+            width:100%; padding:11px 14px; margin-top:8px;
+            background:white; border:1.5px solid #e2e0f0;
+            border-radius:var(--radius-sm); color:var(--text-primary);
+            text-decoration:none; font-weight:600; font-size:0.86rem; gap:9px;
+            transition:all 0.2s; box-shadow:0 1px 3px rgba(79,70,229,0.07);
+        }
+        .google-btn:hover { border-color:#4285F4; box-shadow:0 2px 10px rgba(66,133,244,0.18); transform:translateY(-1px); }
+        .google-icon { width:17px; height:17px; flex-shrink:0; }
+        .google-hint { text-align:center; font-size:0.68rem; color:var(--text-muted); margin-top:6px; margin-bottom:4px; }
+
+        .form-group { margin-top:10px; }
+        label { display:block; font-size:0.68rem; font-weight:600; color:var(--text-secondary); margin-bottom:4px; letter-spacing:0.04em; text-transform:uppercase; }
+        input[type="email"],input[type="password"] { width:100%; padding:8px 10px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-family:inherit; font-size:0.84rem; color:var(--text-primary); background:white; transition:border-color 0.2s,box-shadow 0.2s; }
+        input:focus { outline:none; border-color:#818cf8; box-shadow:0 0 0 3px rgba(99,102,241,0.1); }
+        .login-btn { width:100%; margin-top:12px; padding:9px; background:linear-gradient(135deg,var(--indigo) 0%,var(--violet) 100%); color:white; border:none; border-radius:var(--radius-sm); font-family:inherit; font-weight:700; font-size:0.84rem; cursor:pointer; transition:opacity 0.2s,transform 0.2s; }
+        .login-btn:hover { opacity:0.9; transform:translateY(-1px); }
+        .forgot-link { display:block; text-align:right; margin-top:4px; font-size:0.68rem; color:var(--text-muted); text-decoration:none; }
+        .forgot-link:hover { color:var(--indigo); }
+
+        /* Policy panel */
+        .policy-list { list-style:none; }
+        .policy-list li { border-bottom:1px solid var(--border); }
+        .policy-list li:last-child { border-bottom:none; }
+        .policy-list a { display:flex; align-items:center; justify-content:space-between; padding:11px 2px; color:var(--text-primary); text-decoration:none; font-size:0.84rem; font-weight:500; transition:color 0.18s; }
+        .policy-list a:hover { color:var(--indigo); }
+        .policy-list a::after { content:'›'; color:#818cf8; font-size:1.2em; font-weight:700; }
+
+        /* About panel */
+        .about-body { font-size:0.82rem; color:#555; line-height:1.75; }
+        .about-body+.about-body { margin-top:10px; }
+        .about-note { font-size:0.74rem; color:#999; margin-top:10px; }
+
+        /* ── Guest apps ── */
+        .guest-section { width:100%; max-width:720px; }
+        .section-label { display:flex; align-items:center; gap:8px; color:rgba(255,255,255,0.6); font-size:0.7rem; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; margin-bottom:12px; padding:0 2px; }
+        .section-label::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.11); }
+
+        .apps-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+
+        .app-card { background:rgba(255,255,255,0.08); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,0.12); border-radius:var(--radius); padding:26px 16px 20px; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:8px; transition:background 0.2s,border-color 0.2s,transform 0.2s,box-shadow 0.2s; }
+        .app-card:hover { background:rgba(255,255,255,0.14); border-color:rgba(255,255,255,0.28); transform:translateY(-3px); box-shadow:0 8px 28px rgba(0,0,0,0.25); }
+        .app-emoji { font-size:2.2rem; line-height:1; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35)); }
+        .app-name { font-size:0.84rem; font-weight:700; color:rgba(255,255,255,0.93); text-align:center; line-height:1.3; }
+        .app-desc { font-size:0.68rem; color:rgba(255,255,255,0.42); text-align:center; line-height:1.4; }
+        .ext-badge { font-size:0.56rem; font-weight:700; letter-spacing:0.05em; color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.18); border-radius:4px; padding:1px 5px; margin-top:2px; }
+
+
+
+        .footer-note { width:100%; max-width:720px; margin-top:22px; color:rgba(255,255,255,0.22); font-size:0.65rem; text-align:center; line-height:1.8; }
+
+        /* ── Responsive ── */
+        @media (max-width:520px) {
+            body { padding:12px 10px 40px; }
+            .nav-btn { padding:6px 9px; font-size:0.68rem; }
+            .dropdown-panel { padding:16px 16px 18px; }
+            .apps-grid { grid-template-columns:repeat(2,1fr); gap:9px; }
+            .app-card { padding:20px 12px 16px; }
+            .app-emoji { font-size:1.9rem; }
+            .login-prompt { flex-direction:column; text-align:center; gap:9px; }
+            .login-prompt-btn { width:100%; text-align:center; }
+        }
+
+        /* Animations */
+        .top-bar { animation:fadeUp 0.35s ease both; }
+        .dropdown-wrap { animation:fadeUp 0.35s ease both 0.05s; }
+        .guest-section { animation:fadeUp 0.4s ease both 0.08s; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    </style>
+</head>
+<body>
+
+    <!-- Header: logo left, nav buttons right -->
+    <div class="top-bar">
+        <div class="brand">
+            <img src="/static/images/icon-192.png" alt="FUJIN-P" class="brand-icon">
+            <div>
+                <div class="brand-name">FUJIN-P</div>
+                <div class="brand-sub">Fukuchiyama Universal Joint Information Nexus – Prototype</div>
+            </div>
+        </div>
+        <div class="nav-btns">
+            <button class="nav-btn" onclick="togglePanel('about', this)">ℹ️ FUJINについて</button>
+            <button class="nav-btn" onclick="togglePanel('policy', this)">📄 規約</button>
+            <button class="nav-btn" onclick="togglePanel('login', this)">🔑 ログイン</button>
+        </div>
+    </div>
+
+    <!-- Dropdown panels (one shared wrapper) -->
+    <div class="dropdown-wrap" id="dropdownWrap">
+
+        <div class="dropdown-panel" id="panel-about">
+            <p class="about-body">FUJINは、研究・教育をはじめとする組織の活動を支援するための統合プラットフォームです。組織におけるデジタル変革（DX）の推進を目的に開発・運用されています。</p>
+            <p class="about-body">FUJIN-Pは正式リリース前の実験版（Prototype）です。教職員・学生・連携機関がアライアンスとして参加し、各機能を試験運用しています。</p>
+            <p class="about-note">ログインせずに下のゲストエリアから一部の公開機能をご利用いただけます。</p>
+        </div>
+
+        <div class="dropdown-panel" id="panel-policy">
+            <ul class="policy-list">
+                <li><a href="/static/alliance_regulation.html">FUJIN-Pアライアンス運用規程</a></li>
+                <li><a href="/static/terms_sommelier_consent.html">FUJIN-Pソムリエ同意書</a></li>
+                <li><a href="/static/terms_user.html">利用規約</a></li>
+                <li><a href="/static/privacy_policy.html">プライバシーポリシー</a></li>
+            </ul>
+        </div>
+
+        <div class="dropdown-panel" id="panel-login">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-message {{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Google login fold -->
+            <button type="button" class="fold-toggle" id="googleToggleBtn" onclick="toggleFold('google')">
+                <svg style="width:14px;height:14px;flex-shrink:0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Googleアカウントでログイン
+                <span class="arrow">▼</span>
+            </button>
+            <div class="fold-body" id="googleBody">
+                <a href="{{ url_for('auth.google_login', next=request.args.get('next', '')) }}" class="google-btn">
+                    <svg class="google-icon" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Googleアカウントでログイン
+                </a>
+            </div>
+
+            <!-- Email login fold -->
+            <button type="button" class="fold-toggle" id="emailToggleBtn" onclick="toggleFold('email')">
+                ✉️ メールアドレスでログイン
+                <span class="arrow">▼</span>
+            </button>
+            <div class="fold-body" id="emailBody">
+                <form method="POST" action="{{ url_for('auth.login') }}">
+                    <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+                    <!-- 以下は変更なし -->
+                    <div class="form-group">
+                        <label for="username">メールアドレス</label>
+                        <input type="email" id="username" name="username" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">パスワード</label>
+                        <input type="password" id="password" name="password" autocomplete="current-password" required>
+                        <a href="{{ url_for('auth.forgot_password') }}" class="forgot-link">パスワードを忘れた場合</a>
+                    </div>
+                    <button type="submit" class="login-btn">ログイン</button>
+                </form>
+            </div>
+        </div>
+
+    </div><!-- /dropdown-wrap -->
+
+    <!-- Guest apps -->
+    <div class="guest-section">
+        <div class="section-label"><span>🌐</span><span>ゲスト向け公開アプリ</span></div>
+        <div class="apps-grid">
+            <a class="app-card" href="{{ url_for('document_archive.dashboard', doc_id=8) }}" rel="noopener">
+                <div class="app-emoji">🏛️️</div>
+                <div class="app-name">文書アーカイブ</div>
+                <div class="app-desc">文書アーカイブの閲覧と管理</div>
+                <div class="ext-badge">本サイト</div>
+            </a>
+            {% if config.get('TAG_CHASE_PUBLIC') %}
+            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='tag_chase') }}">
+                <div class="app-emoji">👹</div>
+                <div class="app-name">鬼ごっこ3D</div>
+                <div class="app-desc">鬼はブロックの陰に隠れて逃げ回る</div>
+                <div class="ext-badge">本サイト</div>
+            </a>
+            {% endif %}
+            {% if config.get('SORAKARA_PUBLIC') %}
+            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='sorakara') }}">
+                <div class="app-emoji">🪂</div>
+                <div class="app-name">そらから</div>
+                <div class="app-desc">福知山の空をグライダーで遊覧飛行</div>
+                <div class="ext-badge">本サイト</div>
+            </a>
+            {% endif %}
+            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='free_hand_curve') }}">
+                <div class="app-emoji">➿</div>
+                <div class="app-name">フリーハンド曲線</div>
+                <div class="app-desc">おたのしみ</div>
+                <div class="ext-badge">本サイト</div>
+            </a>
+
+            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='ts_solvers') }}">
+                <div class="app-emoji">😮‍💨</div>
+                <div class="app-name">巡回セールスマン<br>問題ソルバー</div>
+                <div class="app-desc">NP困難問題に挑戦！</div>
+                <div class="ext-badge">本サイト</div>
+            </a>
+
+        </div>
+    </div>
+    <script>
+    var currentPanel = null;
+    var currentBtn   = null;
+
+    function togglePanel(id, btn) {
+        var wrap = document.getElementById('dropdownWrap');
+
+        // 同じボタンを押したら閉じる
+        if (currentPanel === id) {
+            wrap.classList.remove('open');
+            btn.classList.remove('active');
+            currentPanel = null; currentBtn = null;
+            return;
+        }
+
+        // 別パネルへ切り替え
+        document.querySelectorAll('.dropdown-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+        document.getElementById('panel-' + id).classList.add('active');
+        btn.classList.add('active');
+        wrap.classList.add('open');
+        currentPanel = id; currentBtn = btn;
+    }
+
+    function toggleFold(id) {
+        var toggleBtn = document.getElementById(id + 'ToggleBtn');
+        var body      = document.getElementById(id + 'Body');
+        toggleBtn.classList.toggle('open');
+        body.classList.toggle('open');
+    }
+
+    // ゲストリンクに画面解像度を付与
+    document.querySelectorAll('.guest-link').forEach(function(a) {
+        a.addEventListener('click', function() {
+            var sc  = window.screen.width + 'x' + window.screen.height;
+            var url = new URL(a.href, location.href);
+            url.searchParams.set('screen', sc);
+            a.href = url.toString();
+        });
+    });
+    </script>
+</body>
+</html>

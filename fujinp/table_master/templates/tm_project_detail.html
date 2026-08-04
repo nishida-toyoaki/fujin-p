@@ -1,0 +1,901 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>プロジェクト詳細 - テーブルマスター</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+     font-size:13px;background:#f0f2f5;color:#333;height:100vh;display:flex;flex-direction:column}
+#header{background:#1a3a5c;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
+#header h1{font-size:15px;font-weight:600}
+#header .subtitle{font-size:11px;color:#7fb3d3}
+.nav-links{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}
+.nav-links a,.nav-links button{color:#aed6f1;text-decoration:none;font-size:12px;
+  padding:4px 8px;border:1px solid #2e6da4;border-radius:3px;background:none;cursor:pointer;font-family:inherit;font-weight:500}
+.nav-links a:hover,.nav-links button:hover{background:#2e6da4;color:#fff}
+.btn-ve{background:#2e6da4!important;color:#fff!important;border-color:#2e6da4!important;font-weight:700!important}
+.btn-schema-hdr{background:#8e44ad!important;color:#fff!important;border-color:#8e44ad!important;font-weight:700!important}
+#main{display:flex;flex:1;overflow:hidden}
+#left{width:300px;flex-shrink:0;background:#fff;border-right:2px solid #ddd;display:flex;flex-direction:column}
+#left .panel-title{background:#34495e;color:#fff;padding:8px 12px;font-size:12px;font-weight:600;flex-shrink:0}
+#left .search-box{padding:6px 8px;border-bottom:1px solid #eee;flex-shrink:0}
+#left .search-box input{width:100%;padding:5px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px}
+#all-table-list{flex:1;overflow-y:auto}
+.all-item{padding:6px 12px;border-bottom:1px solid #f5f5f5;display:flex;align-items:center;gap:6px;font-size:12px}
+.all-item:hover{background:#eef4fb}
+.all-item.in-project{background:#e8f5e9;color:#2e7d32}
+.ai-db{font-size:10px;color:#aaa;flex-shrink:0}
+.ai-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-add{font-size:10px;background:#27ae60;color:#fff;border:none;border-radius:2px;padding:1px 6px;cursor:pointer;flex-shrink:0}
+.all-item.in-project .ai-add{background:#aaa}
+#right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.r-toolbar{background:#ecf0f1;border-bottom:2px solid #ddd;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
+.r-toolbar .proj-name{font-size:15px;font-weight:700;color:#1a3a5c;flex:1}
+#view-section{flex:1;overflow-y:auto;padding:10px 14px;min-height:0}
+.vs-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.vs-header h3{font-size:13px;font-weight:700;color:#9b59b6}
+.vs-header span{font-size:12px;color:#888}
+.view-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid #eee;border-radius:4px;margin-bottom:5px}
+.view-row:hover{border-color:#9b59b6;background:#fdf9ff}
+.vr-db{font-size:11px;color:#999;flex-shrink:0;min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vr-name{flex:1;font-weight:600;color:#1a3a5c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vr-desc{font-size:11px;color:#888;flex-shrink:0;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vr-has-html{font-size:10px;color:#27ae60;flex-shrink:0}
+.vr-run{background:#9b59b6;color:#fff;border:none;border-radius:3px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap}
+.vr-run:hover{background:#7d3c98}
+.vr-del{background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;flex-shrink:0;padding:0 2px}
+.vr-del:hover{color:#c0392b}
+#view-empty{color:#bbb;padding:30px;text-align:center;font-size:12px;line-height:2}
+#table-section{flex-shrink:0;border-top:2px solid #ddd;max-height:32vh;display:flex;flex-direction:column}
+#table-section .ts-header{background:#ecf0f1;padding:7px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid #ddd}
+#table-section .ts-header h3{font-size:12px;font-weight:600;color:#34495e;flex:1}
+#project-table-list{overflow-y:auto;padding:8px 14px}
+.proj-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid #eee;border-radius:4px;margin-bottom:4px}
+.pi-db{font-size:11px;color:#999;flex-shrink:0;min-width:120px}
+.pi-name{flex:1;font-weight:600;color:#1a3a5c}
+.pi-del{background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;flex-shrink:0}
+#view-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000}
+#view-modal{display:none;position:fixed;top:3vh;left:50%;transform:translateX(-50%);
+            width:92vw;max-width:1100px;height:92vh;background:#fff;border-radius:8px;
+            box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:1001;flex-direction:column}
+#view-modal.show{display:flex}
+.vm-header{background:#7d3c98;color:#fff;padding:10px 16px;border-radius:8px 8px 0 0;
+           display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.vm-header h3{font-size:14px;font-weight:700;margin:0}
+.vm-header button{background:none;border:none;color:#fff;font-size:20px;cursor:pointer}
+.vm-body{display:flex;flex:1;overflow:hidden}
+#vm-left{width:42%;border-right:2px solid #ddd;display:flex;flex-direction:column;overflow:hidden}
+#vm-query-area{padding:10px;border-bottom:1px solid #eee;flex-shrink:0}
+#vm-db-label{font-size:12px;color:#7d3c98;font-weight:600;margin-bottom:5px}
+#vm-query-text{width:100%;font-family:'Courier New',monospace;font-size:12px;
+               background:#f8f9fa;border:1px solid #ddd;border-radius:3px;padding:7px;min-height:90px;resize:vertical;box-sizing:border-box}
+.vm-run-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+#vm-run-status{font-size:11px}
+.s-ok{color:#27ae60;font-weight:600}.s-err{color:#e74c3c;font-weight:600}
+#vm-result-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#vm-result-tabs{display:flex;border-bottom:1px solid #ddd;flex-shrink:0;background:#f5f5f5}
+.vmtab{padding:5px 14px;border:none;cursor:pointer;font-size:11px;font-weight:600;background:transparent}
+.vmtab.active{background:#fff;border-bottom:2px solid #7d3c98;color:#7d3c98}
+.vmtab-content{display:none;flex:1;overflow:auto}
+.vmtab-content.active{display:block}
+.vm-table-wrap{overflow:auto}
+.vm-res-table{border-collapse:collapse;font-size:11px;width:100%}
+.vm-res-table th{background:#34495e;color:#fff;padding:5px 8px;text-align:left;position:sticky;top:0;z-index:1;white-space:nowrap}
+.vm-res-table td{padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.vm-res-table tr:nth-child(even) td{background:#f9fafb}
+.vm-res-table tr:hover td{background:#fef5e7}
+#vm-markdown{background:#f8f9fa;padding:10px;font-family:monospace;font-size:11px;white-space:pre;overflow:auto;line-height:1.6;height:100%}
+#vm-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.vmr-header{background:#f5f5f5;padding:7px 10px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.vmr-header span{font-size:12px;font-weight:600;color:#2c3e50;flex:1}
+.html-tb{display:flex;gap:5px;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #ddd;flex-wrap:wrap;align-items:center;flex-shrink:0}
+.html-tb button{padding:3px 8px;border:1px solid #bdc3c7;background:white;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600}
+.html-tb button:hover{background:#e8e8e8}
+.html-tb input[type=number]{width:52px;padding:2px 5px;border:1px solid #bdc3c7;border-radius:3px;font-size:11px}
+.html-tb input[type=color]{width:38px;height:24px;border:1px solid #bdc3c7;border-radius:3px;cursor:pointer;padding:1px}
+.html-tb input[type=text]{width:80px;padding:2px 5px;border:1px solid #bdc3c7;border-radius:3px;font-size:11px}
+.html-tb select{padding:2px 5px;border:1px solid #bdc3c7;border-radius:3px;font-size:11px}
+.html-tb label{font-size:10px;color:#555;font-weight:600}
+.tb-sep{width:1px;height:18px;background:#bdc3c7;flex-shrink:0}
+#vm-edit-wrap{flex:1;overflow:auto;padding:8px;min-height:0}
+.table-rz-wrapper{position:relative;display:inline-block}
+/* テーブル外ハンドルバー（列幅操作用） */
+#vm-col-handlebar{display:flex;align-items:stretch;margin-bottom:2px;position:relative;user-select:none}
+.vm-ch-cell{position:relative;height:10px;background:#e8f0fe;border:1px solid #9ab4f5;box-sizing:border-box;flex-shrink:0}
+.vm-ch-cell:first-child{border-radius:3px 0 0 3px}
+.vm-ch-cell:last-child{border-radius:0 3px 3px 0}
+.vm-ch-drag{position:absolute;top:0;right:-4px;width:8px;height:100%;cursor:col-resize;z-index:10;background:transparent}
+.vm-ch-drag::after{content:'';position:absolute;top:1px;left:3px;width:2px;height:calc(100%-2px);background:#4a7cf5;border-radius:1px}
+/* テーブル幅グリップ（ハンドルバー右端） */
+#vm-tbl-width-grip{flex-shrink:0;width:14px;height:10px;background:#4a7cf5;border-radius:0 3px 3px 0;cursor:ew-resize;display:flex;align-items:center;justify-content:center;user-select:none}
+#vm-tbl-width-grip::after{content:'⇔';font-size:8px;color:#fff;line-height:1}
+.edit-tbl{border-collapse:collapse;font-size:12px}
+.edit-tbl th{background:#34495e;color:white;padding:7px 9px;text-align:left;border:1px solid #2c3e50;position:relative}
+.edit-tbl td{padding:5px 9px;border:1px solid #ddd;cursor:text;min-width:50px;position:relative}
+.edit-tbl td:focus{outline:2px solid #3498db;background:#ebf5fb}
+.edit-tbl td.sel{background:#d6eaf8;outline:2px solid #3498db}
+.edit-tbl th.sel{background:#a9cce3;outline:2px solid #3498db}
+.edit-tbl tr:nth-child(even) td{background:#f9fafb}
+.tbl-rz-handle{display:none}
+#vm-html-code-area{flex-shrink:0;max-height:120px;border-top:1px solid #ddd;display:flex;flex-direction:column}
+.hca-hd{padding:4px 8px;background:#e8e8e8;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.hca-hd span{font-size:11px;color:#555;flex:1}
+#vm-html-code{padding:6px 8px;font-family:'Courier New',monospace;font-size:10px;white-space:pre-wrap;word-wrap:break-word;overflow:auto;color:#1a1a1a;user-select:text;max-height:88px}
+#add-view-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000}
+#add-view-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+                width:480px;max-width:92vw;max-height:80vh;background:#fff;border-radius:6px;
+                box-shadow:0 6px 24px rgba(0,0,0,.3);z-index:2001;flex-direction:column}
+#add-view-modal.show{display:flex}
+.avh{background:#9b59b6;color:#fff;padding:9px 13px;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.avh span{font-size:13px;font-weight:600}
+.avh button{background:none;border:none;color:#fff;font-size:17px;cursor:pointer}
+#av-search{padding:7px 10px;border-bottom:1px solid #eee;flex-shrink:0}
+#av-search input{width:100%;padding:5px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px}
+#av-list{flex:1;overflow-y:auto}
+.av-item{padding:8px 12px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:8px}
+.av-item:hover{background:#fdf5ff}
+.av-name{font-size:12px;font-weight:600;flex:1}
+.av-db{font-size:10px;color:#aaa}
+.av-add-btn{background:#27ae60;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;cursor:pointer}
+#arch-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000}
+#arch-dialog{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+             width:420px;max-width:90vw;background:#fff;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:3001}
+.dh{background:#1a3a5c;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:space-between}
+.dh span{font-size:14px;font-weight:700}
+.dh button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+.db{padding:14px}
+.db .field{margin-bottom:10px}
+.db label{font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px}
+.db input,.db textarea,.db select{width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:3px;font-size:13px;font-family:inherit;box-sizing:border-box}
+.df{padding:8px 14px 12px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #eee}
+#arch-result{display:none;background:#eafaf1;border:1px solid #a9dfbf;border-radius:3px;padding:8px;font-size:12px;margin-top:6px}
+#arch-err{display:none;background:#fdf2f2;border:1px solid #f5c6cb;border-radius:3px;padding:8px;font-size:12px;color:#c0392b;margin-top:6px}
+#schema-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000}
+#schema-modal{display:none;position:fixed;top:4vh;left:50%;transform:translateX(-50%);
+              width:860px;max-width:95vw;height:90vh;background:#fff;border-radius:6px;
+              box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:4001;flex-direction:column}
+#schema-modal.show{display:flex}
+.smh{background:#8e44ad;color:#fff;padding:9px 13px;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.smh span{font-size:13px;font-weight:700}
+.smh button{background:none;border:none;color:#fff;font-size:17px;cursor:pointer}
+.smtb{padding:7px 12px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center;flex-shrink:0}
+#schema-text{flex:1;width:100%;padding:12px;font-family:'Courier New',monospace;font-size:11px;border:none;resize:none;outline:none;background:#1e1e1e;color:#d4d4d4}
+.btn{padding:5px 11px;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:600}
+.btn:hover{opacity:.85}
+.btn-p{background:#9b59b6;color:#fff}.btn-g{background:#27ae60;color:#fff}.btn-b{background:#3498db;color:#fff}.btn-gray{background:#95a5a6;color:#fff}
+#toast{position:fixed;bottom:16px;right:16px;padding:9px 14px;border-radius:4px;color:#fff;font-size:12px;z-index:9999;display:none;max-width:280px}
+#toast.ok{background:#27ae60}#toast.err{background:#e74c3c}
+.loading{color:#aaa;padding:16px;text-align:center;font-style:italic;font-size:12px}
+.empty{color:#bbb;padding:24px;text-align:center;font-size:12px;line-height:2}
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>📁 <span id="hdr-name">読み込み中...</span></h1>
+  <span class="subtitle" id="hdr-sub"></span>
+  <div class="nav-links">
+    <a href="/table_master/view_editor/" class="btn-ve">📋 ビューエディタ</a>
+    <button onclick="openSchema()" class="btn-schema-hdr">📄 全スキーマ</button>
+    <a href="/table_master/projects/">← プロジェクト一覧</a>
+    <a href="/table_master/">テーブルマスター</a>
+  </div>
+</div>
+<div id="main">
+  <div id="left">
+    <div class="panel-title">📋 全テーブル（クリックで追加）</div>
+    <div class="search-box"><input type="text" id="all-search" placeholder="テーブル名で絞り込み..." oninput="filterAllTables()"></div>
+    <div id="all-table-list"><div class="loading">読み込み中...</div></div>
+  </div>
+  <div id="right">
+    <div class="r-toolbar">
+      <span class="proj-name" id="proj-name-label">読み込み中...</span>
+      <span id="proj-tbl-count" style="font-size:12px;color:#888"></span>
+    </div>
+    <div id="view-section">
+      <div class="vs-header">
+        <h3>📊 プロジェクトのビュー</h3>
+        <span id="view-count"></span>
+        <button class="btn btn-p" onclick="openAddView()" style="padding:3px 10px;font-size:11px">＋ ビューを追加</button>
+      </div>
+      <div id="view-row-list"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div id="table-section">
+      <div class="ts-header">
+        <h3>🗂 登録テーブル</h3>
+        <span id="tbl-count-label" style="font-size:11px;color:#888"></span>
+      </div>
+      <div id="project-table-list"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="view-modal-overlay" onclick="closeViewModal()"></div>
+<div id="view-modal">
+  <div class="vm-header">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+      <h3 id="vm-title" style="margin:0">ビュー実行・編集</h3>
+      <span id="vm-save-indicator" style="font-size:10px;color:#e8d5f5"></span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+      <button class="btn btn-b" onclick="copyHtml()" style="font-size:11px;padding:3px 9px">📋 HTMLコピー</button>
+      <button class="btn btn-g" onclick="saveHtml()" style="font-size:11px;padding:3px 9px">💾 HTML保存</button>
+      <button class="btn btn-g" onclick="openArchive()" style="font-size:11px;padding:3px 9px">📦 アーカイブ保存</button>
+      <button onclick="closeViewModal()">✕</button>
+    </div>
+  </div>
+  <div class="vm-body">
+    <div id="vm-left">
+      <div id="vm-query-area">
+        <div id="vm-db-label"></div>
+        <textarea id="vm-query-text" placeholder="SQLクエリを入力..."></textarea>
+        <div class="vm-run-row">
+          <button class="btn btn-p" onclick="runViewQuery()" style="padding:5px 16px;font-size:13px">▶ DBから再取得（装飾リセット）</button>
+          <span id="vm-run-status"></span>
+        </div>
+      </div>
+      <div id="vm-result-area">
+        <div id="vm-result-tabs">
+          <button class="vmtab active" data-tab="table">テーブル</button>
+          <button class="vmtab" data-tab="markdown">Markdown</button>
+        </div>
+        <div id="vmtab-table" class="vmtab-content active">
+          <div class="vm-table-wrap"><div style="color:#bbb;padding:16px;text-align:center;font-size:12px">実行すると結果が表示されます</div></div>
+        </div>
+        <div id="vmtab-markdown" class="vmtab-content"><div id="vm-markdown"></div></div>
+      </div>
+    </div>
+    <div id="vm-right">
+      <div class="vmr-header">
+        <span>HTML編集テーブル</span>
+        <button class="btn btn-b" onclick="toggleVmPreview()" id="btn-vm-preview"
+          style="font-size:11px;padding:3px 9px">👁 プレビュー</button>
+      </div>
+      <div class="html-tb">
+        <label>幅:</label>
+        <input type="number" id="vm-tb-width" placeholder="px" min="100" max="2000" step="50">
+        <select id="vm-tb-unit"><option value="px">px</option><option value="%">%</option><option value="auto">自動</option></select>
+        <button onclick="vmApplyWidth()">適用</button>
+        <div class="tb-sep"></div>
+        <button onclick="vmMerge()">🔗 結合</button>
+        <button onclick="vmUnmerge()">⛓ 解除</button>
+        <div class="tb-sep"></div>
+        <label>水平:</label>
+        <button onclick="vmAlign('left')">⬅</button>
+        <button onclick="vmAlign('center')">↔</button>
+        <button onclick="vmAlign('right')">➡</button>
+        <label>垂直:</label>
+        <button onclick="vmVAlign('top')">⬆</button>
+        <button onclick="vmVAlign('middle')">↕</button>
+        <button onclick="vmVAlign('bottom')">⬇</button>
+        <div class="tb-sep"></div>
+        <label>行:</label>
+        <button onclick="vmAddRow()">＋行</button>
+        <button onclick="vmDelRow()">－行</button>
+        <div class="tb-sep"></div>
+        <label>列:</label>
+        <button onclick="vmAddCol()">＋列</button>
+        <button onclick="vmDelCol()">－列</button>
+        <div class="tb-sep"></div>
+        <label>文字:</label>
+        <input type="number" id="vm-font-size" placeholder="px" min="8" max="48" step="1" style="width:46px">
+        <button onclick="vmFontSize()">適用</button>
+        <div class="tb-sep"></div>
+        <button onclick="vmTag('b')"><b>B</b></button>
+        <button onclick="vmTag('i')"><i>I</i></button>
+        <button onclick="vmTag('u')"><u>U</u></button>
+        <button onclick="vmTag('sup')">X<sup>2</sup></button>
+        <button onclick="vmTag('sub')">H<sub>2</sub>O</button>
+        <label>色:</label>
+        <input type="color" id="vm-color" value="#000000">
+        <button onclick="vmColor()">適用</button>
+        <div class="tb-sep"></div>
+        <label>背景:</label>
+        <input type="color" id="vm-bg" value="#ffffff">
+        <button onclick="vmBg()">適用</button>
+        <button onclick="vmClearBg()">✕</button>
+        <div class="tb-sep"></div>
+        <label>枠:</label>
+        <select id="vm-border">
+          <option value="1px solid #ddd">標準</option><option value="none">なし</option>
+          <option value="1px solid #000">細線</option><option value="2px solid #000">太線</option>
+          <option value="1px dashed #000">破線</option>
+        </select>
+        <button onclick="vmBorder()">適用</button>
+        <div class="tb-sep"></div>
+        <label>ふりがな:</label>
+        <input type="text" id="vm-ruby" placeholder="よみがな" style="width:70px">
+        <button onclick="vmRuby()">適用</button>
+        <div class="tb-sep"></div>
+        <label>リンク:</label>
+        <input type="text" id="vm-link" placeholder="https://..." style="width:100px">
+        <button onclick="vmLink()">適用</button>
+        <div class="tb-sep"></div>
+        <button onclick="vmReset()">🔄 リセット</button>
+      </div>
+      <div id="vm-edit-wrap"><div style="color:#bbb;padding:20px;text-align:center;font-size:12px">実行するとここにHTML編集テーブルが表示されます</div></div>
+      <div id="vm-html-code-area">
+        <div class="hca-hd">
+          <span>生成HTMLコード（自動更新）</span>
+          <button class="btn btn-b" onclick="copyHtml()" style="padding:2px 7px;font-size:10px">📋 コピー</button>
+        </div>
+        <div id="vm-html-code"></div>
+      </div>
+      <div id="vm-preview-area" style="display:none;flex-shrink:0;border-top:1px solid #ddd;height:200px;background:#fff;overflow:hidden">
+        <div style="background:#d5f5e3;padding:4px 10px;font-size:11px;color:#1e8449;display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span>👁 プレビュー（レンダリング結果）</span>
+          <button onclick="refreshVmPreview()" style="font-size:10px;padding:1px 7px;border:1px solid #a9dfbf;background:#eafaf1;border-radius:3px;cursor:pointer">⟳ 更新</button>
+        </div>
+        <iframe id="vm-preview-frame" sandbox="allow-same-origin allow-scripts"
+          style="width:100%;height:calc(100% - 26px);border:none;background:#fff"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="add-view-overlay" onclick="closeAddView()"></div>
+<div id="add-view-modal">
+  <div class="avh"><span>📊 ビューをプロジェクトに追加</span><button onclick="closeAddView()">✕</button></div>
+  <div id="av-search"><input type="text" placeholder="ビュー名で絞り込み..." oninput="filterAv(this.value)"></div>
+  <div id="av-list"><div class="loading">読み込み中...</div></div>
+</div>
+
+<div id="arch-overlay" onclick="closeArchive()"></div>
+<div id="arch-dialog">
+  <div class="dh"><span>📦 アーカイブに保存</span><button onclick="closeArchive()">✕</button></div>
+  <div class="db">
+    <div class="field"><label>タイトル *</label><input type="text" id="arch-title" placeholder="例: 役員一覧 2024年度"></div>
+    <div class="field"><label>説明（任意）</label><textarea id="arch-desc" rows="2" placeholder="出典・備考..."></textarea></div>
+    <div class="field"><label>公開設定</label><select id="arch-public"><option value="1">公開</option><option value="0">非公開（下書き）</option></select></div>
+    <div id="arch-result">✓ 保存しました &nbsp;<a id="arch-url" href="#" target="_blank" style="color:#2e6da4"></a></div>
+    <div id="arch-err"></div>
+  </div>
+  <div class="df">
+    <button class="btn btn-gray" onclick="closeArchive()">キャンセル</button>
+    <button class="btn btn-g" id="btn-do-arch" onclick="doArchiveSave()">💾 保存</button>
+  </div>
+</div>
+
+<div id="schema-overlay" onclick="closeSchema()"></div>
+<div id="schema-modal">
+  <div class="smh"><span>📄 全スキーマ（SHOW CREATE TABLE）</span><button onclick="closeSchema()">✕</button></div>
+  <div class="smtb">
+    <span id="schema-info" style="font-size:12px;color:#666;flex:1"></span>
+    <button class="btn btn-b" onclick="copySchema()">📋 コピー</button>
+    <button class="btn btn-gray" onclick="closeSchema()">閉じる</button>
+  </div>
+  <textarea id="schema-text" readonly></textarea>
+</div>
+<div id="toast"></div>
+
+<script>
+const PROJECT_ID = {{ project_id }};
+let allTables=[],projectTables=new Set(),availableViewsAll=[];
+let vmSelectedCells=[],vmCurrentDb='',vmCurrentQuery='',vmCurrentViewId=null,vmCurrentLinkId=null;
+
+$(function(){
+  loadDetail(); loadAllTables();
+  $(document).on('click','.vmtab',function(){
+    var tab=$(this).data('tab');
+    $('.vmtab').removeClass('active');$(this).addClass('active');
+    $('.vmtab-content').removeClass('active');$('#vmtab-'+tab).addClass('active');
+  });
+  $('#arch-title').on('keydown',function(e){if(e.key==='Enter')doArchiveSave();});
+});
+
+function loadDetail(){
+  $.get('/table_master/projects/'+PROJECT_ID+'/detail',function(data){
+    if(!data.success){toast(data.error,'err');return;}
+    var p=data.project;
+    $('#hdr-name').text(p.name);$('#hdr-sub').text(p.description||'');
+    $('#proj-name-label').text(p.name);document.title=p.name+' - プロジェクト詳細';
+    renderViewRows(data.views||[]);
+    renderProjectTables(data.tables||[]);
+  });
+}
+
+function renderViewRows(views){
+  $('#view-count').text(views.length+' 件');
+  var $list=$('#view-row-list').empty();
+  if(!views.length){
+    $list.html('<div id="view-empty">ビューが登録されていません。<br>「＋ ビューを追加」でビューを登録するか、<br><a href="/table_master/view_editor/" style="color:#9b59b6">ビューエディタ</a>で新規作成してください。</div>');
+    return;
+  }
+  views.forEach(function(v){
+    var vn=v.view_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var db=v.source_database.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var qt=v.query_text.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+    var hasHtml=v.has_html?'<span class="vr-has-html">💾 HTML保存済</span>':'';
+    $list.append('<div class="view-row"><span class="vr-db">'+esc(v.source_database)+'</span><span class="vr-name">'+esc(v.view_name)+'</span><span class="vr-desc">'+esc(v.description||'')+'</span>'+hasHtml+'<button class="vr-run" onclick="openViewModal('+v.view_id+','+v.link_id+',\''+vn+'\',\''+db+'\',\''+qt+'\')">▶ 編集</button><button class="vr-del" onclick="removeView('+v.link_id+')">✕</button></div>');
+  });
+}
+
+function removeView(linkId){
+  if(!confirm('このビューをプロジェクトから外しますか？'))return;
+  $.ajax({url:'/table_master/projects/'+PROJECT_ID+'/remove_view',type:'POST',contentType:'application/json',
+    data:JSON.stringify({link_id:linkId}),
+    success:function(r){if(r.success){toast(r.message,'ok');loadDetail();}else toast(r.error,'err');}
+  });
+}
+
+function renderProjectTables(tables){
+  projectTables.clear();
+  tables.forEach(function(t){projectTables.add(t.database_name+':'+t.table_name);});
+  $('#tbl-count-label').text(tables.length+' テーブル');
+  var $list=$('#project-table-list').empty();
+  if(!tables.length){$list.html('<div class="empty" style="padding:10px">テーブルが登録されていません</div>');return;}
+  tables.forEach(function(t){
+    $list.append('<div class="proj-item"><span class="pi-db">'+esc(t.database_name)+'</span><span class="pi-name">'+esc(t.table_name)+'</span><button class="pi-del" onclick="removeTable('+t.id+')">✕</button></div>');
+  });
+  updateAllTableHighlight();
+}
+
+function removeTable(entryId){
+  $.ajax({url:'/table_master/projects/'+PROJECT_ID+'/remove_table',type:'POST',contentType:'application/json',
+    data:JSON.stringify({id:entryId}),
+    success:function(r){if(r.success){toast(r.message,'ok');loadDetail();}else toast(r.error,'err');}
+  });
+}
+
+function loadAllTables(){
+  $.get('/table_master/get_all_tables',function(data){
+    if(!data.tables)return;
+    allTables=data.tables;renderAllTables(allTables);
+  });
+}
+function renderAllTables(tables){
+  var $list=$('#all-table-list').empty();
+  tables.forEach(function(t){
+    var key=t.database+':'+t.table_name,inP=projectTables.has(key);
+    var db=t.database.replace(/'/g,"\\'"),tbl=t.table_name.replace(/'/g,"\\'");
+    $list.append('<div class="all-item '+(inP?'in-project':'')+'" data-db="'+esc(t.database)+'" data-table="'+esc(t.table_name)+'"><span class="ai-db">'+esc(t.database)+'</span><span class="ai-name">'+esc(t.table_name)+'</span><button class="ai-add" onclick="event.stopPropagation();addTable(\''+db+'\',\''+tbl+'\')">'+(inP?'済':'＋')+'</button></div>');
+  });
+}
+function filterAllTables(){
+  var q=$('#all-search').val().toLowerCase();
+  renderAllTables(allTables.filter(function(t){return t.table_name.toLowerCase().includes(q)||t.database.toLowerCase().includes(q);}));
+}
+function updateAllTableHighlight(){
+  $('#all-table-list .all-item').each(function(){
+    var key=$(this).data('db')+':'+$(this).data('table'),inP=projectTables.has(key);
+    $(this).toggleClass('in-project',inP);$(this).find('.ai-add').text(inP?'済':'＋');
+  });
+}
+function addTable(db,tbl){
+  if(projectTables.has(db+':'+tbl)){toast('既に追加済みです','err');return;}
+  $.ajax({url:'/table_master/projects/'+PROJECT_ID+'/add_table',type:'POST',contentType:'application/json',
+    data:JSON.stringify({database_name:db,table_name:tbl}),
+    success:function(r){if(r.success){toast(r.message,'ok');loadDetail();}else toast(r.error,'err');}
+  });
+}
+
+function openAddView(){
+  $('#av-list').html('<div class="loading">読み込み中...</div>');
+  $('#add-view-modal').addClass('show');$('#add-view-overlay').show();
+  $.get('/table_master/projects/'+PROJECT_ID+'/available_views',function(data){
+    availableViewsAll=data.views||[];renderAv(availableViewsAll);
+  });
+}
+function closeAddView(){$('#add-view-modal').removeClass('show');$('#add-view-overlay').hide();}
+function filterAv(q){renderAv(availableViewsAll.filter(function(v){return v.view_name.toLowerCase().includes(q.toLowerCase());}));}
+function renderAv(views){
+  var $list=$('#av-list').empty();
+  if(!views.length){$list.html('<div class="empty">追加できるビューがありません</div>');return;}
+  views.forEach(function(v){
+    $list.append('<div class="av-item"><div style="flex:1;min-width:0"><div class="av-name">'+esc(v.view_name)+'</div><div class="av-db">'+esc(v.source_database)+' &nbsp; '+esc(v.description||'')+'</div></div><button class="av-add-btn" onclick="addView('+v.id+')">＋ 追加</button></div>');
+  });
+}
+function addView(viewId){
+  $.ajax({url:'/table_master/projects/'+PROJECT_ID+'/add_view',type:'POST',contentType:'application/json',
+    data:JSON.stringify({view_id:viewId}),
+    success:function(r){
+      if(r.success){toast(r.message,'ok');loadDetail();availableViewsAll=availableViewsAll.filter(function(v){return v.id!==viewId;});renderAv(availableViewsAll);}
+      else toast(r.error,'err');
+    }
+  });
+}
+
+// ===== ビューモーダル =====
+function openViewModal(viewId, linkId, name, db, query){
+  vmCurrentDb=db; vmCurrentQuery=query; vmCurrentViewId=viewId; vmCurrentLinkId=linkId;
+  $('#vm-title').text('▶ '+name);
+  $('#vm-db-label').text('DB: '+db);
+  $('#vm-query-text').val(query);
+  $('#vm-run-status').html('');
+  $('#vm-save-indicator').text('');
+  $('#vmtab-table').html('<div class="vm-table-wrap"><div style="color:#bbb;padding:16px;text-align:center;font-size:12px">実行すると結果が表示されます</div></div>');
+  $('#vm-markdown').text('');
+  $('#vm-edit-wrap').html('<div style="color:#bbb;padding:20px;text-align:center;font-size:12px">読み込み中...</div>');
+  $('#vm-html-code').text('');
+  vmSelectedCells=[];
+  $('.vmtab').removeClass('active');$('.vmtab[data-tab="table"]').addClass('active');
+  $('.vmtab-content').removeClass('active');$('#vmtab-table').addClass('active');
+  $('#view-modal-overlay').show();$('#view-modal').addClass('show');
+
+  // 保存済みHTMLをまず確認
+  $.get('/table_master/projects/'+PROJECT_ID+'/views/'+linkId+'/html', function(data){
+    if(data.success && data.html_content){
+      restoreFromSavedHtml(data.html_content);
+      $('#vm-run-status').html('<span class="s-ok">✓ 前回の編集を復元しました</span>');
+    } else {
+      $('#vm-edit-wrap').html('<div style="color:#bbb;padding:20px;text-align:center;font-size:12px">「▶ DBから再取得」ボタンでデータを取得してください</div>');
+    }
+  }).fail(function(){
+    $('#vm-edit-wrap').html('<div style="color:#bbb;padding:20px;text-align:center;font-size:12px">「▶ DBから再取得」ボタンでデータを取得してください</div>');
+  });
+}
+
+function restoreFromSavedHtml(htmlContent){
+  // HTMLコードエリアに表示
+  $('#vm-html-code').text(htmlContent);
+  // DOMに変換して編集テーブルに投入
+  var $parsed=$(htmlContent);
+  var $table=$parsed.is('table')?$parsed:$parsed.find('table').first();
+  if(!$table.length){
+    $('#vm-edit-wrap').html('<div style="color:#e74c3c;padding:20px;text-align:center;font-size:12px">保存済みHTMLからテーブルを取得できませんでした。再取得してください。</div>');
+    return;
+  }
+  // edit-tbl クラスを付与
+  $table.addClass('edit-tbl').attr('id','vm-edit-table');
+  // th に contenteditable と data-col-idx を付与
+  $table.find('thead th').each(function(i){
+    $(this).attr('contenteditable','true').attr('data-col-idx',i).css('position','');
+    // 古いvm-col-rzが残っていれば除去（ハンドルバー方式に移行）
+    $(this).find('.vm-col-rz').remove();
+  });
+  // td に contenteditable と data属性を付与
+  $table.find('tbody tr').each(function(ri){
+    $(this).attr('data-row-idx',ri);
+    $(this).find('td').each(function(ci){
+      $(this).attr('contenteditable','true').attr('data-row-idx',ri).attr('data-col-idx',ci);
+    });
+  });
+  $('#vm-edit-wrap').html(
+    '<div class="table-rz-wrapper" id="vm-table-wrapper">'
+    +$table[0].outerHTML
+    +'<div class="tbl-rz-handle" id="vm-rz-handle"></div>'
+    +'</div>'
+  );
+  vmSetupCells(); vmSetupResize(); vmBuildColHandleBar();
+}
+
+function closeViewModal(){$('#view-modal-overlay').hide();$('#view-modal').removeClass('show');}
+
+function runViewQuery(){
+  var db=vmCurrentDb,q=$('#vm-query-text').val().trim();
+  if(!db){toast('DBが不明です','err');return;}
+  if(!q){toast('クエリが空です','err');return;}
+  if($('#vm-edit-wrap').find('#vm-edit-table').length){
+    if(!confirm('DBから再取得すると現在の編集・装飾がリセットされます。よろしいですか？'))return;
+  }
+  vmCurrentQuery=q;
+  $('#vm-run-status').html('<span style="color:#888">実行中...</span>');
+  $.ajax({
+    url:'/table_master/execute_query',type:'POST',contentType:'application/json',
+    data:JSON.stringify({database:db,query:q}),
+    success:function(resp){
+      if(!resp.success){$('#vm-run-status').html('<span class="s-err">✗ '+esc(resp.error)+'</span>');return;}
+      $('#vm-run-status').html('<span class="s-ok">✓ '+resp.row_count+'行</span> <span style="color:#aaa;font-size:11px">'+resp.execution_time+'秒</span>');
+      renderVmTable(resp.columns,resp.rows);renderVmMarkdown(resp.columns,resp.rows);generateVmEditTable(resp.columns,resp.rows);
+    },
+    error:function(xhr){$('#vm-run-status').html('<span class="s-err">✗ '+esc(xhr.responseJSON&&xhr.responseJSON.error?xhr.responseJSON.error:'エラー')+'</span>');}
+  });
+}
+
+function renderVmTable(cols,rows){
+  var h='<table class="vm-res-table"><thead><tr>';
+  cols.forEach(function(c){h+='<th>'+esc(c)+'</th>';});
+  h+='</tr></thead><tbody>';
+  rows.forEach(function(row){h+='<tr>';cols.forEach(function(c){h+='<td>'+esc(row[c]!=null?row[c]:'')+'</td>';});h+='</tr>';});
+  h+='</tbody></table>';
+  $('#vmtab-table').html('<div class="vm-table-wrap">'+h+'</div>');
+}
+
+function renderVmMarkdown(cols,rows){
+  var md='| '+cols.join(' | ')+' |\n';
+  md+='|'+cols.map(function(){return ' --- ';}).join('|')+'|\n';
+  rows.forEach(function(row){
+    var vals=cols.map(function(c){return String(row[c]!=null?row[c]:'').replace(/\|/g,'\\|').replace(/\n/g,' ');});
+    md+='| '+vals.join(' | ')+' |\n';
+  });
+  $('#vm-markdown').text(md);
+}
+
+function generateVmEditTable(cols,rows){
+  var h='<thead><tr>';
+  cols.forEach(function(c,i){
+    h+='<th data-col-idx="'+i+'" contenteditable="true">'+esc(c)+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  rows.forEach(function(row,ri){
+    h+='<tr data-row-idx="'+ri+'">';
+    cols.forEach(function(c,ci){h+='<td contenteditable="true" data-row-idx="'+ri+'" data-col-idx="'+ci+'">'+esc(row[c]!=null?row[c]:'')+'</td>';});
+    h+='</tr>';
+  });
+  h+='</tbody>';
+  $('#vm-edit-wrap').html('<div class="table-rz-wrapper" id="vm-table-wrapper"><table class="edit-tbl" id="vm-edit-table">'+h+'</table><div class="tbl-rz-handle" id="vm-rz-handle"></div></div>');
+  vmSetupCells();vmSetupResize();vmBuildColHandleBar();vmUpdateHtmlCode();
+}
+
+function vmSetupCells(){
+  $('#vm-edit-table td, #vm-edit-table th').off('click').on('click',function(e){
+    var $c=$(this);
+    if(e.ctrlKey||e.metaKey){$c.toggleClass('sel');}
+    else if(e.shiftKey&&vmSelectedCells.length>0){vmSelectRange(vmSelectedCells[vmSelectedCells.length-1],$c[0]);}
+    else{$('#vm-edit-table td, #vm-edit-table th').removeClass('sel');$c.addClass('sel');}
+    vmSelectedCells=$('#vm-edit-table td.sel, #vm-edit-table th.sel').toArray();
+  });
+  $('#vm-edit-table td, #vm-edit-table th').off('input').on('input',function(){clearTimeout(window._vmHtmlTimer);window._vmHtmlTimer=setTimeout(vmUpdateHtmlCode,300);});
+  $('#vm-edit-table td, #vm-edit-table th').off('blur').on('blur',function(){setTimeout(vmUpdateHtmlCode,50);});
+}
+function vmSelectRange(c1,c2){
+  var r1=parseInt($(c1).data('row-idx')),r2=parseInt($(c2).data('row-idx'));
+  var col1=parseInt($(c1).data('col-idx')),col2=parseInt($(c2).data('col-idx'));
+  var minR=Math.min(r1,r2),maxR=Math.max(r1,r2),minC=Math.min(col1,col2),maxC=Math.max(col1,col2);
+  $('#vm-edit-table td').removeClass('sel');
+  for(var r=minR;r<=maxR;r++)for(var c=minC;c<=maxC;c++)$('#vm-edit-table td[data-row-idx="'+r+'"][data-col-idx="'+c+'"]').addClass('sel');
+}
+function vmSetupResize(){
+  $(document).off('mousemove.vmrz mouseup.vmrz');
+  var isR=false,sx=0,sy=0,sw=0,sh=0;
+  $('#vm-rz-handle').off('mousedown').on('mousedown',function(e){
+    e.preventDefault();isR=true;var $t=$('#vm-edit-table');sx=e.pageX;sy=e.pageY;sw=$t.outerWidth();sh=$t.outerHeight();
+    $(document).off('mousemove.vmrz mouseup.vmrz')
+    .on('mousemove.vmrz',function(e){if(!isR)return;var w=sw+(e.pageX-sx),h=sh+(e.pageY-sy);if(w<200)w=200;if(h<80)h=80;$('#vm-edit-table').css({width:w+'px',height:h+'px'});})
+    .on('mouseup.vmrz',function(){isR=false;$(document).off('mousemove.vmrz mouseup.vmrz');vmUpdateHtmlCode();});
+  });
+}
+function vmBuildColHandleBar(){
+  var $tbl=$('#vm-edit-table');
+  if(!$tbl.length){$('#vm-col-handlebar').hide();return;}
+  // ハンドルバー要素を確保（#vm-edit-wrap先頭、#vm-table-wrapperの前）
+  if(!$('#vm-col-handlebar').length){
+    $('<div id="vm-col-handlebar"></div>').prependTo('#vm-edit-wrap');
+  }
+  // #vm-table-wrapperより前に移動（table htmlリセット後は先頭に戻す）
+  if($('#vm-col-handlebar').next().attr('id')!=='vm-table-wrapper'){
+    $('#vm-col-handlebar').insertBefore('#vm-table-wrapper');
+  }
+  var $bar=$('#vm-col-handlebar').empty().show();
+  // 各thの幅に合わせてセルを生成
+  $tbl.find('thead th').each(function(i){
+    var w=$(this).outerWidth()||80;
+    var $cell=$('<div class="vm-ch-cell"></div>').css('width',w+'px');
+    // 最後の列以外にドラッグハンドルを付ける
+    if(i < $tbl.find('thead th').length-1){
+      var $drag=$('<div class="vm-ch-drag"></div>').attr('data-col-idx',i);
+      $cell.append($drag);
+      // マウスダウン → ドラッグで列幅変更
+      (function(ci){
+        var startX,startW,active=false;
+        $drag.on('mousedown',function(e){
+          e.preventDefault();e.stopPropagation();
+          active=true;startX=e.pageX;
+          startW=$tbl.find('th[data-col-idx="'+ci+'"]').outerWidth()||80;
+          $(document).off('mousemove.vmch mouseup.vmch')
+          .on('mousemove.vmch',function(e){
+            if(!active)return;
+            var w=startW+(e.pageX-startX);if(w<40)w=40;
+            $tbl.find('th[data-col-idx="'+ci+'"]').css('width',w+'px');
+            $tbl.find('td[data-col-idx="'+ci+'"]').css('width',w+'px');
+            $bar.find('.vm-ch-cell').eq(ci).css('width',w+'px');
+          }).on('mouseup.vmch',function(){
+            active=false;$(document).off('mousemove.vmch mouseup.vmch');
+            vmUpdateHtmlCode();
+          });
+        });
+      })(i);
+    }
+    $bar.append($cell);
+  });
+  // テーブル幅グリップをハンドルバー右端に追加
+  if(!$('#vm-tbl-width-grip').length){
+    var $grip=$('<div id="vm-tbl-width-grip" title="ドラッグで表の幅を変更"></div>');
+    var startX,startW,active=false;
+    $grip.on('mousedown',function(e){
+      e.preventDefault();e.stopPropagation();
+      active=true;startX=e.pageX;startW=$('#vm-edit-table').outerWidth()||400;
+      $(document).off('mousemove.vmtblw mouseup.vmtblw')
+      .on('mousemove.vmtblw',function(e){
+        if(!active)return;
+        var w=startW+(e.pageX-startX);if(w<200)w=200;
+        $('#vm-edit-table').css('width',w+'px');
+        // ハンドルバーのセルは列幅追従
+        $('#vm-edit-table thead th').each(function(i){
+          $('#vm-col-handlebar .vm-ch-cell').eq(i).css('width',$(this).outerWidth()+'px');
+        });
+      }).on('mouseup.vmtblw',function(){
+        active=false;$(document).off('mousemove.vmtblw mouseup.vmtblw');vmUpdateHtmlCode();
+      });
+    });
+    $bar.append($grip);
+  }
+}
+function vmApplyWidth(){var w=$('#vm-tb-width').val(),u=$('#vm-tb-unit').val();if(u==='auto')$('#vm-edit-table').css('width','auto');else if(w)$('#vm-edit-table').css('width',w+u);vmUpdateHtmlCode();}
+function vmMerge(){
+  if(vmSelectedCells.length<2){toast('2つ以上のセルを選択してください','err');return;}
+  var rs=vmSelectedCells.map(function(c){return parseInt($(c).data('row-idx'));}),cs=vmSelectedCells.map(function(c){return parseInt($(c).data('col-idx'));});
+  var minR=Math.min.apply(null,rs),maxR=Math.max.apply(null,rs),minC=Math.min.apply(null,cs),maxC=Math.max.apply(null,cs);
+  var $f=$('#vm-edit-table td[data-row-idx="'+minR+'"][data-col-idx="'+minC+'"]');
+  if(maxR-minR+1>1)$f.attr('rowspan',maxR-minR+1);if(maxC-minC+1>1)$f.attr('colspan',maxC-minC+1);
+  vmSelectedCells.forEach(function(c){var $c=$(c);if(parseInt($c.data('row-idx'))!==minR||parseInt($c.data('col-idx'))!==minC)$c.hide().attr('data-merged','true');});
+  $('#vm-edit-table td').removeClass('sel');vmUpdateHtmlCode();
+}
+function vmUnmerge(){vmSelectedCells.forEach(function(c){$(c).removeAttr('rowspan colspan');});$('#vm-edit-table td[data-merged="true"]').show().removeAttr('data-merged');vmUpdateHtmlCode();}
+function vmAlign(a){vmSelectedCells.forEach(function(c){$(c).css('text-align',a);});vmUpdateHtmlCode();}
+function vmVAlign(a){vmSelectedCells.forEach(function(c){$(c).css('vertical-align',a);});vmUpdateHtmlCode();}
+function vmAddRow(){
+  var $t=$('#vm-edit-table tbody');if(!$t.length){toast('テーブルがありません','err');return;}
+  var $lastRow=$t.find('tr:last');var colCount=$('#vm-edit-table thead th').length;
+  var ri=parseInt($lastRow.data('row-idx')||0)+1;
+  var $newRow=$('<tr data-row-idx="'+ri+'"></tr>');
+  for(var ci=0;ci<colCount;ci++){
+    $newRow.append('<td contenteditable="true" data-row-idx="'+ri+'" data-col-idx="'+ci+'" style="padding:5px 9px;border:1px solid #ddd;min-width:50px;position:relative"></td>');
+  }
+  $t.append($newRow);
+  vmSetupCells();vmSetupResize();vmBuildColHandleBar();vmUpdateHtmlCode();toast('行を追加しました','ok');
+}
+function vmDelRow(){
+  var cells=vmSelectedCells.length?vmSelectedCells:$('#vm-edit-table td.sel').toArray();
+  if(!cells.length){toast('削除する行のセルを選択してください','err');return;}
+  var rows=[];
+  cells.forEach(function(c){var r=$(c).data('row-idx');if(rows.indexOf(r)<0)rows.push(r);});
+  rows.sort(function(a,b){return b-a;});
+  rows.forEach(function(r){$('#vm-edit-table tbody tr[data-row-idx="'+r+'"]').remove();});
+  vmSelectedCells=[];vmUpdateHtmlCode();toast(rows.length+'行を削除しました','ok');
+}
+function vmAddCol(){
+  var $thead=$('#vm-edit-table thead');var $tbody=$('#vm-edit-table tbody');
+  if(!$thead.length){toast('テーブルがありません','err');return;}
+  var colCount=$thead.find('th').length;
+  var newColIdx=colCount;
+  $thead.find('tr').each(function(){
+    $(this).append('<th data-col-idx="'+newColIdx+'" contenteditable="true" style="background:#34495e;color:white;padding:7px 9px;text-align:left;border:1px solid #2c3e50;position:relative"><div contenteditable="false" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize;z-index:3" class="vm-col-rz" data-col-idx="'+newColIdx+'"></div>新列</th>');
+  });
+  $tbody.find('tr').each(function(){
+    var ri=$(this).data('row-idx');
+    $(this).append('<td contenteditable="true" data-row-idx="'+ri+'" data-col-idx="'+newColIdx+'" style="padding:5px 9px;border:1px solid #ddd;min-width:50px;position:relative"></td>');
+  });
+  vmSetupCells();vmSetupResize();vmBuildColHandleBar();vmUpdateHtmlCode();toast('列を追加しました','ok');
+}
+function vmDelCol(){
+  var cells=vmSelectedCells.length?vmSelectedCells:$('#vm-edit-table td.sel, #vm-edit-table th.sel').toArray();
+  if(!cells.length){toast('削除する列のセルを選択してください','err');return;}
+  var cols=[];
+  cells.forEach(function(c){var ci=$(c).data('col-idx');if(cols.indexOf(ci)<0)cols.push(ci);});
+  cols.sort(function(a,b){return b-a;});
+  cols.forEach(function(ci){
+    $('#vm-edit-table th[data-col-idx="'+ci+'"]').remove();
+    $('#vm-edit-table td[data-col-idx="'+ci+'"]').remove();
+  });
+  vmSelectedCells=[];vmUpdateHtmlCode();toast(cols.length+'列を削除しました','ok');
+}
+function vmFontSize(){
+  var sz=$('#vm-font-size').val();
+  if(!sz){toast('サイズを入力してください','err');return;}
+  vmSelectedCells.forEach(function(c){$(c).css('font-size',sz+'px');});
+  vmUpdateHtmlCode();
+}
+function vmTag(tag){
+  var sel=window.getSelection();if(!sel||sel.isCollapsed){toast('テキストを選択してください','err');return;}
+  var range=sel.getRangeAt(0),el=document.createElement(tag);el.textContent=range.toString();range.deleteContents();range.insertNode(el);sel.removeAllRanges();vmUpdateHtmlCode();
+}
+function vmColor(){
+  var color=$('#vm-color').val(),sel=window.getSelection();if(!sel||sel.isCollapsed){toast('テキストを選択してください','err');return;}
+  var range=sel.getRangeAt(0),el=document.createElement('span');el.style.color=color;el.textContent=range.toString();range.deleteContents();range.insertNode(el);sel.removeAllRanges();vmUpdateHtmlCode();
+}
+function vmBg(){vmSelectedCells.forEach(function(c){$(c).css('background-color',$('#vm-bg').val());});vmUpdateHtmlCode();}
+function vmClearBg(){vmSelectedCells.forEach(function(c){$(c).css('background-color','');});vmUpdateHtmlCode();}
+function vmBorder(){vmSelectedCells.forEach(function(c){$(c).css('border',$('#vm-border').val());});vmUpdateHtmlCode();}
+function vmRuby(){
+  var rt=$('#vm-ruby').val().trim();if(!rt){toast('ふりがなを入力してください','err');return;}
+  var sel=window.getSelection();if(!sel||sel.isCollapsed){toast('テキストを選択してください','err');return;}
+  var range=sel.getRangeAt(0),ruby=document.createElement('ruby');ruby.textContent=range.toString();
+  var rtEl=document.createElement('rt');rtEl.textContent=rt;ruby.appendChild(rtEl);
+  range.deleteContents();range.insertNode(ruby);sel.removeAllRanges();$('#vm-ruby').val('');vmUpdateHtmlCode();
+}
+function vmLink(){
+  var url=$('#vm-link').val().trim();if(!url){toast('URLを入力してください','err');return;}
+  var sel=window.getSelection();if(!sel||sel.isCollapsed){toast('テキストを選択してください','err');return;}
+  var range=sel.getRangeAt(0),el=document.createElement('a');el.href=url;el.target='_blank';el.textContent=range.toString();
+  range.deleteContents();range.insertNode(el);sel.removeAllRanges();$('#vm-link').val('');vmUpdateHtmlCode();
+}
+function vmReset(){
+  if(!confirm('スタイルをリセットしますか？'))return;
+  $('#vm-edit-table td,#vm-edit-table th').each(function(){var t=$(this).text();$(this).removeAttr('style rowspan colspan data-merged').show().text(t);});
+  $('#vm-edit-table').removeAttr('style');vmUpdateHtmlCode();
+}
+function vmUpdateHtmlCode(){
+  var $t=$('#vm-edit-table');if(!$t.length){$('#vm-html-code').text('');return;}
+  var html=$t[0].outerHTML;
+  html=html.replace(/\s*contenteditable="[^"]*"/g,'')
+           .replace(/\s*data-[a-z-]+="[^"]*"/g,'')
+           .replace(/\s*class="(sel|edit-tbl)[^"]*"/g,'')
+           .replace(/\s*class="vm-col-rz[^"]*"/g,'')
+           .replace(/<div[^>]*class="[^"]*vm-col-rz[^"]*"[^>]*><\/div>/g,'')
+           .replace(/></g,'>\n<');
+  var lines=html.split('\n'),out='',ind=0;
+  for(var i=0;i<lines.length;i++){var ln=lines[i].trim();if(!ln)continue;if(ln.startsWith('</'))ind=Math.max(0,ind-1);out+='  '.repeat(ind)+ln+'\n';if(ln.startsWith('<')&&!ln.startsWith('</')&&!ln.endsWith('/>')&&!ln.includes('</'))ind++;}
+  $('#vm-html-code').text(out.trim());
+  if($('#vm-preview-area').is(':visible'))refreshVmPreview();
+}
+function toggleVmPreview(){
+  var $area=$('#vm-preview-area'),showing=$area.is(':visible');
+  $area.toggle();
+  $('#btn-vm-preview').text(showing?'👁 プレビュー':'👁 プレビュー非表示');
+  if(!showing)refreshVmPreview();
+}
+function refreshVmPreview(){
+  var html=$('#vm-html-code').text();
+  document.getElementById('vm-preview-frame').srcdoc='<html><body style="margin:10px;font-family:sans-serif;font-size:13px">'+html+'</body></html>';
+}
+function saveHtml(){
+  var html=$('#vm-html-code').text().trim();
+  if(!html){toast('保存するHTMLがありません','err');return;}
+  if(!vmCurrentLinkId){toast('ビューが選択されていません','err');return;}
+  $('#vm-save-indicator').text('保存中...');
+  $.ajax({
+    url:'/table_master/projects/'+PROJECT_ID+'/views/'+vmCurrentLinkId+'/html',
+    type:'POST',contentType:'application/json',
+    data:JSON.stringify({html_content:html}),
+    success:function(r){
+      if(r.success){
+        $('#vm-save-indicator').text('✓ 保存しました');
+        toast('HTMLを保存しました','ok');
+        loadDetail(); // 一覧の「💾 HTML保存済」表示を更新
+      } else {
+        $('#vm-save-indicator').text('');
+        toast(r.error,'err');
+      }
+    },
+    error:function(xhr){
+      $('#vm-save-indicator').text('');
+      toast(xhr.responseJSON&&xhr.responseJSON.error?xhr.responseJSON.error:'保存エラー','err');
+    }
+  });
+}
+function copyHtml(){var t=$('#vm-html-code').text();if(!t){toast('HTMLコードがありません','err');return;}clip(t);toast('HTMLコードをコピーしました','ok');}
+function copySchema(){clip($('#schema-text').val());toast('コピーしました','ok');}
+function clip(text){if(navigator.clipboard)navigator.clipboard.writeText(text);else{var $t=$('<textarea>').css({position:'fixed',top:0,left:0,opacity:0}).val(text).appendTo('body');$t[0].select();document.execCommand('copy');$t.remove();}}
+function openArchive(){
+  var html=$('#vm-html-code').text().trim();
+  if(!html){toast('先にクエリを実行するか、保存済みHTMLを開いてください','err');return;}
+  $('#arch-title').val('');$('#arch-desc').val('');$('#arch-public').val('1');
+  $('#arch-result').hide();$('#arch-err').hide();$('#btn-do-arch').prop('disabled',false).text('💾 保存');
+  $('#arch-overlay,#arch-dialog').show();setTimeout(function(){$('#arch-title').focus();},100);
+}
+function closeArchive(){$('#arch-overlay,#arch-dialog').hide();}
+function doArchiveSave(){
+  var title=$('#arch-title').val().trim();
+  if(!title){$('#arch-title').css('border-color','#e74c3c').focus();setTimeout(function(){$('#arch-title').css('border-color','#ccc');},2000);return;}
+  $('#btn-do-arch').prop('disabled',true).text('保存中...');$('#arch-err').hide();
+  $.ajax({url:'/table_master/archive/save',type:'POST',contentType:'application/json',
+    data:JSON.stringify({id:null,title:title,description:$('#arch-desc').val().trim(),source_view_id:vmCurrentViewId,source_database:vmCurrentDb,source_query:vmCurrentQuery,html_content:$('#vm-html-code').text().trim(),is_public:$('#arch-public').val()==='1'}),
+    success:function(r){
+      if(r.success){var url=window.location.origin+'/table_master/archive/'+r.archive_number;$('#arch-url').attr('href',url).text(url);$('#arch-result').show();$('#btn-do-arch').prop('disabled',true).text('✓ 保存済み');}
+      else{$('#arch-err').text('エラー: '+r.error).show();$('#btn-do-arch').prop('disabled',false).text('💾 保存');}
+    },
+    error:function(xhr){$('#arch-err').text(xhr.responseJSON&&xhr.responseJSON.error?xhr.responseJSON.error:'通信エラー').show();$('#btn-do-arch').prop('disabled',false).text('💾 保存');}
+  });
+}
+function openSchema(){
+  $('#schema-text').val('取得中...');$('#schema-overlay').show();$('#schema-modal').addClass('show');
+  $.get('/table_master/projects/'+PROJECT_ID+'/schema',function(data){
+    if(!data.success){$('#schema-text').val('エラー: '+data.error);return;}
+    $('#schema-text').val(data.schema);$('#schema-info').text(data.table_count+' テーブル分のCREATE TABLE文');
+  });
+}
+function closeSchema(){$('#schema-overlay').hide();$('#schema-modal').removeClass('show');}
+function esc(s){return String(s!=null?s:'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toast(msg,type){$('#toast').attr('class',type||'ok').text(msg).fadeIn(200);setTimeout(function(){$('#toast').fadeOut(400);},3000);}
+</script>
+</body>
+</html>
