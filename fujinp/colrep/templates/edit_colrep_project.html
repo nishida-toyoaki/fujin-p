@@ -190,7 +190,7 @@
                                         <label class="form-check-label" for="isPublic">
                                             <strong>公開プロジェクト</strong>
                                             <small class="d-block text-muted mt-1">
-                                                全ユーザーがプレビューとComposerソースを閲覧可能
+                                                全ログインユーザーがプレビューとComposerソースを閲覧可能
                                             </small>
                                         </label>
                                     </div>
@@ -348,23 +348,23 @@
                         </label>
                         <label class="policy-item">
                             <input type="radio" name="sharePolicy" value="public">
-                            <span class="pbadge pb-public">🌐 一般公開</span>
-                            <span class="pdesc">ログイン済みユーザなら誰でも</span>
+                            <span class="pbadge pb-public">🌐 ゲストにも</span>
+                            <span class="pdesc">ログイン済みの全ユーザに開示</span>
                         </label>
                         <label class="policy-item">
                             <input type="radio" name="sharePolicy" value="domestic">
-                            <span class="pbadge pb-domestic">🏢 学内公開</span>
-                            <span class="pdesc">regularユーザ（学内者）のみ</span>
+                            <span class="pbadge pb-domestic">🏢 構成員だけ</span>
+                            <span class="pdesc">ログイン済みの構成員だけに開示</span>
                         </label>
                         <label class="policy-item">
                             <input type="radio" name="sharePolicy" value="group">
                             <span class="pbadge pb-group">👥 グループ</span>
-                            <span class="pdesc">指定グループの所属者（カテゴリ不問）</span>
+                            <span class="pdesc">指定グループの所属者に開示</span>
                         </label>
                         <label class="policy-item">
                             <input type="radio" name="sharePolicy" value="domestic_group">
-                            <span class="pbadge pb-domgroup">🏢＋👥 学内＋グループ</span>
-                            <span class="pdesc">regularユーザ、または指定グループの所属者</span>
+                            <span class="pbadge pb-domgroup">🏢＋👥 構成員＋グループ</span>
+                            <span class="pdesc">構成員と指定グループの所属者に開示</span>
                         </label>
                     </div>
                 </div>
@@ -397,7 +397,10 @@
                 <div class="alert alert-info mt-3 mb-0 small">
                     <i class="bi bi-info-circle"></i>
                     「公開プロジェクト（is_public）」がONの場合は、この設定に関わらず全ログインユーザーが閲覧できます。
-                    責任者・担当者・adminは設定に関わらず常に閲覧できます。
+                    <strong>これは公開範囲の「🌐 ゲストにも」と同じ意味です。</strong>
+                    責任者・担当者・adminは設定に関わらず常に閲覧できます。<br>
+                    CoRePo からのインターネット公開（未ログインでの閲覧）は行いません。
+                    インターネットへ出す場合は、文書アーカイブへ保存してから公開してください。
                 </div>
             </div>
             <div class="modal-footer">

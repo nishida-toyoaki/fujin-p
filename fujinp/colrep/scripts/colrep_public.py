@@ -71,15 +71,23 @@ colrep_public_bp = Blueprint('colrep_public', __name__,
                             url_prefix='/colrep_public',
                             template_folder='../templates')
 
+# 2026-08-03: 未ログイン公開を廃止。全ルートを @login_required とした。
+# CoRePo は執筆用アプリであり、執筆物をそのままインターネットへ出さない方針。
+# インターネット公開は文書アーカイブ（document_archive）へ移してから行う。
+# これにより is_public=TRUE の意味は「全ログインユーザが閲覧可」となり、
+# access_policy='public' と同義になる。
+
 logging.basicConfig(level=logging.DEBUG)
 
 
 @colrep_public_bp.route('/')
+@login_required
 def public_projects_list():
     """公開プロジェクト一覧ページ"""
     return render_template('colrep_public_list.html')
 
 @colrep_public_bp.route('/api/projects')
+@login_required
 def get_public_projects():
     """公開プロジェクト一覧取得API"""
     try:
@@ -113,6 +121,7 @@ def get_public_projects():
             conn.close()
 
 @colrep_public_bp.route('/<int:project_id>/detail')
+@login_required
 def project_detail(project_id):
     """プロジェクト詳細ページ（Composer + 部品一覧）"""
     try:
@@ -164,6 +173,7 @@ def project_detail(project_id):
             conn.close()
 
 @colrep_public_bp.route('/<int:project_id>/api/composer')
+@login_required
 def get_composer_info(project_id):
     """Composer情報取得API"""
     try:
@@ -210,6 +220,7 @@ def get_composer_info(project_id):
 
 
 @colrep_public_bp.route('/<int:project_id>/api/components')
+@login_required
 def get_components(project_id):
     """部品一覧取得API（JSON）"""
     try:
@@ -271,6 +282,7 @@ def get_components(project_id):
             conn.close()
 
 @colrep_public_bp.route('/<int:project_id>/api/component/<int:component_id>')
+@login_required
 def get_component_source(project_id, component_id):
     """部品のソースコンテンツ取得API"""
     try:
@@ -342,6 +354,7 @@ def get_component_source(project_id, component_id):
             conn.close()
 
 @colrep_public_bp.route('/<int:project_id>/preview')
+@login_required
 def get_integrated_preview(project_id):
     """統合プレビューをプレーン HTML で返す（完全なHTMLドキュメント）"""
     try:
