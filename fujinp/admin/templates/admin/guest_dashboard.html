@@ -146,10 +146,7 @@
         <h3 class="section-separator">🧑‍🍳 FUJIN-Pソムリエ用アプリ</h3>
         <div class="apps-grid">
 
-            <a href="{{ url_for('migration_assistant.index') }}" class="app-card sommelier clickable">
-                <div class="app-title"><span class="app-icon">👣</span><h3>まいあし</h3></div>
-                <p>FUJIN-Pマイグレーション支援</p>
-            </a>
+
             <a href="{{ url_for('table_share.dashboard') }}" class="app-card sommelier">
                 <div class="app-title"><span class="app-icon">🔗️</span><h3>テーシャ</h3></div>
                 <p>SQLテーブルの共有</p>
@@ -187,6 +184,10 @@
                 <div class="app-title"><span class="app-icon">📮</span><h3>テーブルポスト</h3></div>
                 <p>テーブル更新の申請・適用</p>
             </a>
+            <a href="{{ url_for('migration_assistant.index') }}" class="app-card admin-support">
+                <div class="app-title"><span class="app-icon">👣</span><h3>まいあし</h3></div>
+                <p>FUJIN-Pマイグレーション支援</p>
+            </a>
         </div>
 
 
@@ -214,6 +215,10 @@
             <a href="{{ url_for('stats.stat_main') }}" class="app-card highlight">
                 <div class="app-title"><span class="app-icon">📊</span><h3>スタッツ</h3></div>
                 <p>利用状況の表示</p>
+            </a>
+            <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="app-card highlight">
+                <div class="app-title"><span class="app-icon">🛳️</span><h3>さいまる</h3></div>
+                <p>サイオン丸ごとマイグレーション</p>
             </a>
         </div>
         {% endif %}
