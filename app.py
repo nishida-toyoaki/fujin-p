@@ -131,7 +131,6 @@ def create_app():
     app.register_blueprint(strm_bp)
 
 
-
     # ログ設定
     if not app.debug:
         import logging
