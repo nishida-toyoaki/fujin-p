@@ -82,6 +82,7 @@ def create_app():
     from fujinp.ts_solvers.routes import ts_solvers_bp
     from fujinp.solar_gl import solar_gl_bp
     from fujinp.sorakara import sorakara_bp
+    from fujinp.lookout import lookout_bp
     from fujinp.block_breaker import block_breaker_bp
     from fujinp.window_shopping import window_shopping_bp
     from fujinp.tag_chase import tag_chase_bp
@@ -123,6 +124,7 @@ def create_app():
     app.register_blueprint(ts_solvers_bp, url_prefix='/ts_solvers')
     app.register_blueprint(solar_gl_bp)
     app.register_blueprint(sorakara_bp)
+    app.register_blueprint(lookout_bp)
     app.register_blueprint(block_breaker_bp)
 
     app.register_blueprint(window_shopping_bp)
