@@ -1,0 +1,730 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>みはらし（lookout） - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+               background: #f2f4f6; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+        .header { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+        .header h1 { font-size: 1.35em; color: #24425e; }
+        .back-btn { text-decoration: none; color: #24425e; background: #fff;
+                    border: 1px solid #c8d2dc; border-radius: 6px; padding: 6px 12px; }
+        .panel { background: #fff; border: 1px solid #dde3e9; border-radius: 8px;
+                 padding: 12px; margin-bottom: 14px; }
+        .panel h2 { font-size: 1.0em; color: #24425e; margin-bottom: 8px; }
+        #map { height: 340px; border-radius: 6px; }
+        .note { font-size: 0.8em; color: #667; margin-top: 6px; }
+        #result { display: none; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; }
+        #result.success { background: #e6f4e8; color: #1d6b2f; }
+        #result.error { background: #fbe8e8; color: #a02525; }
+        .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+        .controls button { font-size: 1.05em; padding: 6px 14px; border: 1px solid #c8d2dc;
+                           background: #f6f8fa; border-radius: 6px; cursor: pointer; }
+        .controls button:hover { background: #e8eef4; }
+        .azlabel { font-weight: bold; color: #24425e; min-width: 9em; text-align: center; }
+        .hgt { display: flex; align-items: center; gap: 8px; }
+        #panoWrap { overflow-x: auto; }
+        #pano svg { display: block; }
+        #spotInfo { font-size: 0.9em; color: #345; margin-top: 6px; }
+        #readout { font-size: 0.85em; color: #24425e; height: 1.4em; margin-top: 4px; }
+        progress { width: 100%; height: 16px; }
+        .spinner { display: inline-block; width: 16px; height: 16px; vertical-align: -3px;
+                   border: 3px solid #c8d2dc; border-top-color: #24425e; border-radius: 50%;
+                   animation: spin 0.9s linear infinite; margin-right: 8px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .panoLayout { display: flex; gap: 6px; align-items: stretch; }
+        .sideCol { display: flex; flex-direction: column; }
+        .sideCol.left { justify-content: center; }
+        .sideCol.right { justify-content: space-between; }
+        .sideCol button { font-size: 1.0em; padding: 10px 10px; border: 1px solid #c8d2dc;
+                          background: #f6f8fa; border-radius: 6px; cursor: pointer; }
+        .sideCol button:hover { background: #e8eef4; }
+        .zoomPct { font-weight: bold; color: #24425e; min-width: 3.2em; text-align: center; }
+        .compassBox { width: 128px; display: flex; flex-direction: column;
+                      align-items: center; justify-content: center; gap: 6px;
+                      border: 1px solid #e2e8ee; border-radius: 6px; background: #fafbfc; }
+        .heightBox { width: 64px; display: flex; flex-direction: column; align-items: center;
+                     justify-content: center; gap: 6px; border: 1px solid #e2e8ee;
+                     border-radius: 6px; background: #fafbfc; font-size: 0.8em; color: #345; }
+        .heightBox input[type=range] { writing-mode: vertical-lr; direction: rtl;
+                     -webkit-appearance: slider-vertical; width: 26px; height: 190px; }
+        .rotRow { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+        .rotRow input[type=range] { flex: 1; }
+        .rotRow span { font-size: 0.85em; color: #345; white-space: nowrap; }
+        #compassTxt { font-size: 0.85em; color: #24425e; font-weight: bold; }
+        table.hist { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .modalOverlay { display: none; position: fixed; inset: 0; z-index: 2000;
+                        background: rgba(20,30,40,0.45); }
+        .modalBox { background: #fff; max-width: 760px; margin: 40px auto; padding: 18px;
+                    border-radius: 10px; max-height: 85vh; overflow: auto;
+                    box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+        .modalBox h3 { color: #24425e; margin-bottom: 10px; }
+        table.rg { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-bottom: 12px; }
+        table.rg th { text-align: left; border-bottom: 2px solid #dde3e9; padding: 5px 6px;
+                      color: #24425e; }
+        table.rg td { border-bottom: 1px solid #eef1f4; padding: 5px 6px; }
+        .rgForm { border-top: 1px solid #dde3e9; padding-top: 12px; display: flex;
+                  flex-wrap: wrap; gap: 10px; align-items: center; }
+        .rgForm input[type=text] { padding: 5px 8px; border: 1px solid #c8d2dc; border-radius: 5px; }
+        .rgForm select, .rgForm button { padding: 6px 10px; border: 1px solid #c8d2dc;
+                  border-radius: 6px; background: #f6f8fa; cursor: pointer; }
+        #rgEst { width: 100%; font-size: 0.9em; color: #345; }
+        .pickHint { position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+                    z-index: 2100; background: #24425e; color: #fff; padding: 8px 18px;
+                    border-radius: 20px; display: none; }
+        table.hist td { border-bottom: 1px solid #eef1f4; padding: 4px 6px; }
+        table.hist tr:hover { background: #f2f7fb; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <a href="{{ url_for('lookout.return_to_fujin') }}" class="back-btn">🏠 FUJINダッシュボードに戻る</a>
+        <h1>🔭 みはらし（lookout） — 地形パノラマ展望</h1>
+    </div>
+
+    <div id="result"></div>
+
+    <div class="panel">
+        <h2>⛰️ パノラマ（縦横1:1）</h2>
+        <div class="controls">
+            <button id="btnZoomOut">🔍 −</button>
+            <button id="btnZoomIn">🔍 ＋</button>
+            <span class="zoomPct" id="zoomPct">100%</span>
+            <span class="azlabel" id="azLabel">中心方位：北（0°）</span>
+            <button id="btnAuto">上下自動</button>
+        </div>
+        <div id="spotInfo">地図をクリックすると，その地点からの全方位スカイラインを計算します．</div>
+        <div class="panoLayout">
+            <div class="sideCol left"><button id="btnLeft" title="左へ回す">◀</button></div>
+            <div id="panoWrap"><div id="pano"></div></div>
+            <div class="sideCol right">
+                <button id="btnUp" title="見上げる">▲</button>
+                <button id="btnRight" title="右へ90°">▶</button>
+                <button id="btnDown" title="見下げる">▼</button>
+            </div>
+            <div class="compassBox">
+                <svg width="112" height="112" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="#ffffff" stroke="#c8d2dc" stroke-width="2"/>
+                    <g stroke="#c8d2dc"><line x1="60" y1="6" x2="60" y2="14"/><line x1="60" y1="106" x2="60" y2="114"/>
+                    <line x1="6" y1="60" x2="14" y2="60"/><line x1="106" y1="60" x2="114" y2="60"/>
+                    <line x1="21.8" y1="21.8" x2="27.5" y2="27.5"/><line x1="98.2" y1="21.8" x2="92.5" y2="27.5"/>
+                    <line x1="21.8" y1="98.2" x2="27.5" y2="92.5"/><line x1="98.2" y1="98.2" x2="92.5" y2="92.5"/></g>
+                    <text x="60" y="30" text-anchor="middle" font-size="13" font-weight="bold" fill="#c05050">北</text>
+                    <text x="94" y="65" text-anchor="middle" font-size="12" fill="#24425e">東</text>
+                    <text x="60" y="98" text-anchor="middle" font-size="12" fill="#24425e">南</text>
+                    <text x="26" y="65" text-anchor="middle" font-size="12" fill="#24425e">西</text>
+                    <g id="needle" transform="rotate(0 60 60)">
+                        <polygon points="60,16 54,62 66,62" fill="#c05050"/>
+                        <polygon points="60,104 54,62 66,62" fill="#9aa5b1"/>
+                        <circle cx="60" cy="60" r="4.5" fill="#24425e"/>
+                    </g>
+                </svg>
+                <div id="compassTxt">正面：北</div>
+            </div>
+            <div class="heightBox">
+                <label for="hgt">視点高</label>
+                <input type="range" id="hgt" min="0" max="100" step="5" value="0">
+                <span id="hgtVal">0 m</span>
+            </div>
+        </div>
+        <div class="rotRow">
+            <span>← 左回り</span>
+            <input type="range" id="rotSlider" min="-100" max="100" step="1" value="0"
+                   title="倒した量で回転速度が変わり，離すと止まります">
+            <span>右回り →</span>
+            <span id="rotSpeedTxt" style="min-width:6.5em; text-align:right;">停止</span>
+        </div>
+        <div id="readout"></div>
+    </div>
+
+    <div class="panel">
+        <h2>🗺️ 地点を選ぶ（枠内をクリック）
+            <button id="rgOpen" style="float:right; font-size:0.8em;
+                padding:5px 12px; border:1px solid #c8d2dc; border-radius:6px;
+                background:#f6f8fa; cursor:pointer;">📍 適用地域</button>
+        </h2>
+        <div id="map"></div>
+        <div class="note">地図・標高データ：<a href="https://maps.gsi.go.jp/development/ichiran.html"
+            target="_blank" rel="noopener">地理院タイル</a>（国土地理院）を加工して利用．山名：mountains.csv および © OpenStreetMap contributors（ODbL）</div>
+    </div>
+
+    <div class="panel">
+        <h2>🕐 最近見た地点</h2>
+        <table class="hist"><tbody id="histBody"><tr><td>（まだありません）</td></tr></tbody></table>
+    </div>
+</div>
+
+<div class="pickHint" id="pickHint">地図をクリックして地域の中心を指定してください（Escで中止）</div>
+
+<div class="modalOverlay" id="regionModal">
+  <div class="modalBox">
+    <h3>📍 適用地域</h3>
+    <table class="rg">
+      <thead><tr><th>名前</th><th>中心／半径</th><th>タイル</th><th>保存</th><th>状態</th><th></th></tr></thead>
+      <tbody id="rgBody"></tbody>
+    </table>
+    {% if not is_admin %}<div class="note">地域の追加・取得・削除は管理者が行います．</div>{% endif %}
+    <div class="rgForm">
+      {% if is_admin %}<b>地域を追加：</b>
+      <input type="text" id="rgName" placeholder="名前（省略可）" size="14">
+      <span id="rgCenter">中心：未指定</span>
+      <button id="rgPick">地図で選ぶ</button>
+      <label>半径
+        <select id="rgRadius">
+          <option value="5">5km</option><option value="10" selected>10km</option>
+          <option value="15">15km</option><option value="20">20km</option>
+          <option value="30">30km</option>
+        </select></label>
+      <div id="rgEst">見積り：中心を指定してください</div>
+      <button id="rgCreate" disabled>この内容で取得開始</button>{% endif %}
+      <button id="rgClose">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------- 共通 ----------------
+function ajaxErrText(xhr) {
+    if (!xhr || xhr.status === 0) return '通信できません（回線またはタイムアウト）';
+    const m = xhr.responseJSON && xhr.responseJSON.error;
+    if (xhr.status === 400 && m) return m;  // 案内メッセージはそのまま
+    return 'サーバエラー(' + xhr.status + ')' + (m ? ': ' + m : '（詳細はサーバのerror.log参照）');
+}
+
+function showResult(message, isError) {
+    const $r = $('#result');
+    $r.text(message).removeClass('success error')
+      .addClass(isError ? 'error' : 'success').show();
+    setTimeout(() => $r.fadeOut(), 5000);
+}
+
+const URLS = {
+    regions:    '{{ url_for("lookout.api_regions") }}',
+    rgEstimate: '{{ url_for("lookout.api_region_estimate") }}',
+    rgCreate:   '{{ url_for("lookout.api_region_create") }}',
+    rgStep:     '{{ url_for("lookout.api_region_build_step") }}',
+    rgDelete:   '{{ url_for("lookout.api_region_delete") }}',
+    rgPeaks:    '{{ url_for("lookout.api_region_fetch_peaks") }}',
+    rgSavePeaks:'{{ url_for("lookout.api_region_save_peaks") }}',
+    pano:       '{{ url_for("lookout.api_panorama") }}',
+    histAdd:    '{{ url_for("lookout.api_history_add") }}',
+    histRec:    '{{ url_for("lookout.api_history_recent") }}'
+};
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+
+// ---------------- 状態 ----------------
+let ready = false;         // readyな地域が1つでもあるか
+let cur = null;            // {lat, lon}
+let pano = null;           // /api/panorama のレスポンス
+let centerAz = 0;          // 表示中心方位
+let marker = null;
+
+// ---------------- 地図 ----------------
+const map = L.map('map').setView([35.40, 135.15], 9);
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+    { attribution: '地理院タイル', maxZoom: 17 }).addTo(map);
+
+map.on('click', function(e) {
+    const lat = e.latlng.lat, lon = e.latlng.lng;
+    if (pickMode) {
+        pickCenter = { lat: lat, lon: lon };
+        endPick(true);
+        return;
+    }
+    if (!ready) {
+        showResult('取得済みの適用地域がまだありません' +
+            (IS_ADMIN ? '（⚙️ 地域管理から追加してください）' : '（管理者に地域の追加を依頼してください）'), true);
+        return;
+    }
+    cur = { lat: lat, lon: lon };
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lon]).addTo(map);
+    requestPanorama(true);
+});
+
+// ---------------- 地域管理 ----------------
+function fmtMB(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+let regions = [];
+const regionLayer = L.layerGroup().addTo(map);
+let pickMode = false, pickCenter = null;
+const building = {};
+
+function refreshRegions(cb) {
+    $.get(URLS.regions, function(resp) {
+        if (!resp.success) return;
+        regions = resp.regions;
+        ready = regions.some(r => r.done);
+        regionLayer.clearLayers();
+        regions.forEach(function(r) {
+            L.rectangle([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]],
+                { color: r.done ? '#4a5b6a' : '#c05050', weight: 1.5,
+                  dashArray: r.done ? null : '6 6', fill: false })
+             .bindTooltip(r.name + (r.done ? '' : '（取得中）')).addTo(regionLayer);
+        });
+        renderRegionTable();
+        if (cb) cb();
+    });
+}
+
+function renderRegionTable() {
+    const $b = $('#rgBody').empty();
+    if (!regions.length) {
+        $b.append('<tr><td colspan="6">（まだ地域がありません．下のフォームから追加してください）</td></tr>');
+        return;
+    }
+    regions.forEach(function(r) {
+        const center = (r.center_lat != null)
+            ? r.center_lat.toFixed(3) + '，' + r.center_lon.toFixed(3)
+              + (r.radius_km ? '／' + r.radius_km + 'km' : '')
+            : '—';
+        const state = r.done
+            ? '✅ 利用可' + (r.peaks_count >= 0 ? '（山名' + r.peaks_count + '件）' : '')
+            : '取得中 ' + r.next_i + '/' + r.total + '（受信' + fmtMB(r.bytes) + '）';
+        const $tr = $('<tr>').append(
+            $('<td>').text(r.name), $('<td>').text(center),
+            $('<td>').text(r.total + '枚'), $('<td>').text(r.disk_mb + ' MB'),
+            $('<td>').attr('id', 'rgst_' + r.id).text(state), $('<td>'));
+        const $ops = $tr.children().last();
+        $ops.append($('<button>').text('選択').on('click', function() {
+            $('#regionModal').hide();
+            map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]],
+                          { padding: [20, 20] });
+        }));
+        if (IS_ADMIN) {
+            if (!r.done) {
+                $ops.append($('<button>').text('取得／続行')
+                    .on('click', function() { buildRegion(r.id); }));
+            }
+            if (r.done && r.peaks_count < 0) {
+                $ops.append($('<button>').text('山名取得')
+                    .on('click', function() { fetchPeaks(r.id); }));
+            }
+            $ops.append($('<button>').text('削除').on('click', function() {
+                if (!confirm('「' + r.name + '」を削除します．よろしいですか？')) return;
+                $.ajax({ url: URLS.rgDelete, method: 'POST', contentType: 'application/json',
+                         data: JSON.stringify({ id: r.id }) })
+                 .done(function(res) {
+                     if (!res.success) showResult(res.error, true);
+                     refreshRegions();
+                 })
+                 .fail(function(x) { showResult(ajaxErrText(x), true); });
+            }));
+        }
+        $b.append($tr);
+    });
+}
+
+function buildRegion(id) {
+    if (building[id]) return;
+    building[id] = true;
+    (function loop() {
+        $.ajax({ url: URLS.rgStep, method: 'POST', contentType: 'application/json',
+                 data: JSON.stringify({ id: id }) })
+        .done(function(resp) {
+            if (!resp.success) {
+                showResult('エラー: ' + resp.error, true);
+                building[id] = false; refreshRegions(); return;
+            }
+            $('#rgst_' + id).text(resp.busy ? '別の処理が取得中（待機）' :
+                (resp.state === 'ready' ? '✅ 利用可' :
+                 '取得中 ' + resp.next_i + '/' + resp.total + '（' + fmtMB(resp.bytes) + '）'));
+            if (resp.state === 'ready') {
+                building[id] = false;
+                fetchPeaks(id);
+            }
+            else setTimeout(loop, resp.busy ? 2000 : 0);
+        })
+        .fail(function(x) {
+            building[id] = false;
+            showResult(ajaxErrText(x) + '（「取得／続行」で再開できます）', true);
+            refreshRegions();
+        });
+    })();
+}
+
+const OVERPASS_URLS = ['https://overpass.osm.jp/api/interpreter',
+                       'https://overpass-api.de/api/interpreter'];
+
+function fetchPeaks(id) {
+    $('#rgst_' + id).text('山名を取得中…');
+    $.ajax({ url: URLS.rgPeaks, method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ id: id }) })
+    .done(function(r) {
+        if (!r.success) { fetchPeaksBrowser(id); return; }
+        refreshRegions();
+    })
+    .fail(function() { fetchPeaksBrowser(id); });
+}
+
+function fetchPeaksBrowser(id, mirror) {
+    // サーバから届かないとき：そらから方式＝ブラウザが直接Overpassへ
+    mirror = mirror || 0;
+    const r = regions.find(x => x.id === id);
+    if (!r || mirror >= OVERPASS_URLS.length) {
+        showResult('山名の取得に失敗しました（時間をおいて「山名取得」を再度押してください）', true);
+        refreshRegions();
+        return;
+    }
+    $('#rgst_' + id).text('山名を取得中…（ブラウザ経由' + (mirror + 1) + '）');
+    const q = '[out:json][timeout:25];node["natural"="peak"]["name"](' +
+        r.bbox[0] + ',' + r.bbox[1] + ',' + r.bbox[2] + ',' + r.bbox[3] + ');out qt 1200;';
+    fetch(OVERPASS_URLS[mirror], {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(q),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+    .then(function(resp) { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json(); })
+    .then(function(data) {
+        const peaks = [];
+        (data.elements || []).forEach(function(el) {
+            const name = el.tags && el.tags.name;
+            if (!name || el.lat == null) return;
+            let ele = el.tags.ele != null
+                ? parseFloat(String(el.tags.ele).replace(/[^0-9.]/g, '')) : null;
+            if (isNaN(ele)) ele = null;
+            peaks.push({ name: name, lat: el.lat, lon: el.lon, elev: ele });
+        });
+        return $.ajax({ url: URLS.rgSavePeaks, method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ id: id, peaks: peaks }) });
+    })
+    .then(function(res) {
+        if (res && !res.success) showResult(res.error, true);
+        refreshRegions();
+    })
+    .catch(function() { fetchPeaksBrowser(id, mirror + 1); });
+}
+
+function openModal() { $('#regionModal').show(); refreshRegions(); }
+$('#rgOpen').on('click', openModal);
+$('#rgClose').on('click', function() { $('#regionModal').hide(); });
+$('#rgPick').on('click', function() {
+    pickMode = true;
+    $('#regionModal').hide();
+    $('#pickHint').show();
+});
+function endPick(ok) {
+    pickMode = false;
+    $('#pickHint').hide();
+    if (ok && pickCenter) {
+        $('#rgCenter').text('中心：' + pickCenter.lat.toFixed(4) + '，' + pickCenter.lon.toFixed(4));
+        updateEstimate();
+    }
+    $('#regionModal').show();
+}
+$(document).on('keyup', function(e) { if (e.key === 'Escape' && pickMode) endPick(false); });
+
+function updateEstimate() {
+    if (!pickCenter) return;
+    $('#rgEst').text('見積り中…');
+    $.ajax({ url: URLS.rgEstimate, method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ lat: pickCenter.lat, lon: pickCenter.lon,
+                                    radius_km: +$('#rgRadius').val() }) })
+    .done(function(r) {
+        if (!r.success) { $('#rgEst').text('見積りエラー: ' + r.error); return; }
+        $('#rgEst').text('見積り：タイル' + r.tiles + '枚・ダウンロード約' + r.dl_mb +
+            ' MB・保存約' + r.disk_mb + ' MB・所要約' + r.minutes + '分');
+        $('#rgCreate').prop('disabled', false);
+    })
+    .fail(function(x) { $('#rgEst').text(ajaxErrText(x)); });
+}
+$('#rgRadius').on('change', updateEstimate);
+
+$('#rgCreate').on('click', function() {
+    if (!pickCenter) return;
+    $('#rgCreate').prop('disabled', true);
+    $.ajax({ url: URLS.rgCreate, method: 'POST', contentType: 'application/json',
+             data: JSON.stringify({ lat: pickCenter.lat, lon: pickCenter.lon,
+                                    radius_km: +$('#rgRadius').val(),
+                                    name: $('#rgName').val() }) })
+    .done(function(r) {
+        if (!r.success) {
+            showResult('エラー: ' + r.error, true);
+            $('#rgCreate').prop('disabled', false); return;
+        }
+        pickCenter = null;
+        $('#rgCenter').text('中心：未指定');
+        $('#rgName').val('');
+        $('#rgEst').text('見積り：中心を指定してください');
+        refreshRegions(function() { buildRegion(r.id); });
+    })
+    .fail(function(x) { showResult(ajaxErrText(x), true); $('#rgCreate').prop('disabled', false); });
+});
+
+// ---------------- パノラマ取得 ----------------
+let panoBusy = false;
+function requestPanorama(isNewSpot) {
+    if (!cur || panoBusy) return;
+    panoBusy = true;
+    $('#spotInfo').text('計算中…');
+    $.ajax({
+        url: URLS.pano, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ lat: cur.lat, lon: cur.lon, height: +$('#hgt').val() })
+    })
+    .done(function(resp) {
+        panoBusy = false;
+        if (!resp.success) { showResult('エラー: ' + resp.error, true); $('#spotInfo').text(''); return; }
+        pano = resp;
+        $('#spotInfo').html(
+            '地点：北緯' + cur.lat.toFixed(5) + '，東経' + cur.lon.toFixed(5) +
+            '　地表標高 <b>' + resp.ground_elev + ' m</b>' +
+            (resp.elev_source === 'dem10' ? '（10m DEM）' : '（40m格子・参考値）') +
+            '　視点標高 <b>' + resp.eye_elev + ' m</b>（地上+' + resp.height + ' m）');
+        if (isNewSpot) autoPitch();
+        drawPano();
+        if (marker) {
+            marker.bindPopup('🏔 パノラマができました（' +
+                (resp.region ? resp.region.name : '') + '）').openPopup();
+            setTimeout(function() { if (marker) marker.closePopup(); }, 3500);
+        }
+        if (isNewSpot) {
+            $.ajax({ url: URLS.histAdd, method: 'POST', contentType: 'application/json',
+                     data: JSON.stringify({ lat: cur.lat, lon: cur.lon,
+                                            ground_elev: resp.ground_elev }) })
+             .done(loadHistory);
+        }
+    })
+    .fail(function(xhr) {
+        panoBusy = false;
+        showResult(ajaxErrText(xhr), true);
+        $('#spotInfo').text('');
+        if (marker) {
+            marker.bindPopup('⚠ ' + ajaxErrText(xhr)).openPopup();
+            setTimeout(function() { if (marker) marker.closePopup(); }, 5000);
+        }
+    });
+}
+
+// ---------------- パノラマ描画 ----------------
+const W = 720, H = 340, VTOP = 20, VBOT = 300, HORY = 160;
+let PXD = 6;      // 1度あたりのピクセル（縦横共通＝1:1）．3/6/12/24の4段
+let pitch = 0;    // 表示中心の仰角（度）．正＝見上げ，負＝見下げ
+const CARD = { 0:'北', 45:'北東', 90:'東', 135:'南東', 180:'南', 225:'南西', 270:'西', 315:'北西' };
+
+function winDeg() { return W / PXD; }
+function pitchStep() { return Math.max(0.5, 12 / PXD); }
+
+function azIndex(az) {
+    const n = pano.skyline.all.length;
+    let i = Math.round(((az % 360) + 360) % 360 / pano.az_step);
+    return ((i % n) + n) % n;
+}
+function yOf(ang) { return HORY - (ang - pitch) * PXD; }
+function clampY(y) { return Math.max(VTOP, Math.min(VBOT, y)); }
+
+function bandPath(key) {
+    const pts = [];
+    for (let x = 0; x <= W; x += 2) {
+        const az = centerAz - winDeg() / 2 + x / PXD;
+        const ang = pano.skyline[key][azIndex(az)];
+        pts.push(x + ' ' + clampY(yOf(ang)).toFixed(1));
+    }
+    return 'M' + pts.join('L') + 'L' + W + ' ' + VBOT + 'L0 ' + VBOT + 'Z';
+}
+
+function autoPitch() {
+    if (!pano) return;
+    let mn = 90, mx = -90;
+    for (let x = 0; x <= W; x += 4) {
+        const a = pano.skyline.all[azIndex(centerAz - winDeg() / 2 + x / PXD)];
+        if (a > -60) { mn = Math.min(mn, a); mx = Math.max(mx, a); }
+    }
+    if (mx < mn) { pitch = 0; return; }
+    pitch = Math.round((mn + mx) / 2 * 2) / 2;
+}
+
+function drawPano() {
+    if (!pano) return;
+    let s = '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += '<rect x="0" y="' + VTOP + '" width="' + W + '" height="' + (VBOT - VTOP) + '" fill="#dcebf5"/>';
+    s += '<path d="' + bandPath('far') + '" fill="#f4f9fd"/>';
+    s += '<path d="' + bandPath('mid') + '" fill="#9db1c2"/>';
+    s += '<path d="' + bandPath('near') + '" fill="#6b7a6e"/>';
+    // データ範囲の縁（遠景が欠ける方位）
+    for (let x = 0; x < W; x += 3) {
+        const az = centerAz - winDeg() / 2 + x / PXD;
+        if (pano.skyline.exit[azIndex(az)] < 25000) {
+            s += '<rect x="' + x + '" y="' + VTOP + '" width="3" height="' + (VBOT - VTOP) +
+                 '" fill="#ffffff" opacity="0.35"/>';
+        }
+    }
+    // 0度（水平）の線：画面外に出るときは上端／下端で止めて表示し続ける
+    const y0raw = yOf(0);
+    const y0 = Math.max(VTOP + 1, Math.min(VBOT - 1, y0raw));
+    const clipped = (y0 !== y0raw);
+    s += '<line x1="0" y1="' + y0 + '" x2="' + W + '" y2="' + y0 +
+         '" stroke="#e8821e" stroke-width="' + (clipped ? 2.2 : 1.4) + '" opacity="0.9"/>';
+    const y0t = (y0 < VTOP + 16) ? y0 + 13 : y0 - 4;
+    s += '<text x="' + (W - 4) + '" y="' + y0t + '" text-anchor="end" font-size="11" font-weight="bold" fill="#e8821e">視点と同じ高さ（0°）' +
+         (clipped ? (y0raw < y0 ? '↑' : '↓') : '') + '</text>';
+    // 左端の仰角目盛
+    const gstep = PXD >= 24 ? 1 : (PXD >= 12 ? 2 : 5);
+    const gMin = pitch - (VBOT - HORY) / PXD, gMax = pitch + (HORY - VTOP) / PXD;
+    for (let g = Math.ceil(gMin / gstep) * gstep; g <= gMax; g += gstep) {
+        const gy = yOf(g);
+        if (gy < VTOP + 8 || gy > VBOT - 2) continue;
+        s += '<line x1="0" y1="' + gy + '" x2="6" y2="' + gy + '" stroke="#5a6b7a"/>';
+        s += '<text x="9" y="' + (gy + 4) + '" font-size="10" fill="#5a6b7a">' + (g > 0 ? '+' : '') + g + '°</text>';
+    }
+    // 真北・真東・真南・真西の垂直線（N/E/S/W）
+    [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']].forEach(function(ew) {
+        const rel = (((ew[0] - (centerAz - winDeg() / 2)) % 360) + 360) % 360;
+        if (rel <= winDeg()) {
+            const x = rel * PXD;
+            s += '<line x1="' + x + '" y1="' + VTOP + '" x2="' + x + '" y2="' + VBOT +
+                 '" stroke="#e8821e" stroke-width="1.4" opacity="0.9"/>';
+            s += '<text x="' + (x + 5) + '" y="' + (VTOP + 17) + '" font-size="14" font-weight="bold" fill="#e8821e">' + ew[0 + 1] + '</text>';
+        }
+    });
+    // 山名ラベル（見えている山のみ．3段に振り分けて重なりを回避）
+    if (pano.peaks && pano.peaks.length) {
+        const rows = [42, 60, 78];
+        const lastEnd = [-999, -999, -999];
+        const inWin = [];
+        pano.peaks.forEach(function(p) {
+            const rel = (((p.az - (centerAz - winDeg() / 2)) % 360) + 360) % 360;
+            if (rel <= winDeg()) inWin.push({ p: p, x: rel * PXD });
+        });
+        inWin.sort((a, b) => a.x - b.x);
+        inWin.forEach(function(e) {
+            const p = e.p, x = e.x;
+            const txt = p.name + ' ' + p.elev + 'm';
+            const wpx = txt.length * 11;
+            let lx = Math.min(Math.max(x - 18, 2), W - wpx - 2);
+            let row = -1;
+            for (let r = 0; r < rows.length; r++) {
+                if (lx > lastEnd[r] + 10) { row = r; break; }
+            }
+            if (row < 0) return;
+            lastEnd[row] = lx + wpx;
+            const ypk = clampY(yOf(p.ang));
+            s += '<line x1="' + x + '" y1="' + (rows[row] + 4) + '" x2="' + x + '" y2="' +
+                 (ypk - 3) + '" stroke="#4a5b6a" stroke-width="0.8" stroke-dasharray="3 3"/>';
+            s += '<text x="' + lx + '" y="' + rows[row] + '" font-size="11" fill="#24425e">' + txt + '</text>';
+        });
+    }
+    // 方位目盛（下部固定帯）
+    s += '<line x1="0" y1="' + VBOT + '" x2="' + W + '" y2="' + VBOT + '" stroke="#8a8f88"/>';
+    const tstep = PXD >= 24 ? 5 : 15;
+    const azStart = Math.ceil((centerAz - winDeg() / 2) / tstep) * tstep;
+    for (let a = azStart; a <= centerAz + winDeg() / 2; a += tstep) {
+        const x = (a - (centerAz - winDeg() / 2)) * PXD;
+        const azN = ((a % 360) + 360) % 360;
+        const isCard = CARD[azN] !== undefined;
+        s += '<line x1="' + x + '" y1="' + VBOT + '" x2="' + x + '" y2="' +
+             (VBOT + (isCard ? 7 : 4)) + '" stroke="#8a8f88"/>';
+        const lbl = isCard ? CARD[azN] : (azN + '°');
+        s += '<text x="' + x + '" y="' + (VBOT + 22) + '" text-anchor="middle" ' +
+             'font-size="' + (isCard ? 13 : 10) + '" fill="' + (isCard ? '#24425e' : '#8a8f88') + '"' +
+             (isCard ? ' font-weight="bold"' : '') + '>' + lbl + '</text>';
+    }
+    s += '<text x="6" y="14" font-size="11" fill="#5a6b7a">縦横1:1・表示幅' + Math.round(winDeg()) +
+         '°・中心仰角' + (pitch > 0 ? '+' : '') + pitch.toFixed(1) + '°・淡色帯＝計算範囲の縁</text>';
+    s += '<line id="cursorLine" x1="-10" y1="' + VTOP + '" x2="-10" y2="' + VBOT +
+         '" stroke="#607080" stroke-width="1"/>';
+    s += '</svg>';
+    $('#pano').html(s);
+    const azN = ((centerAz % 360) + 360) % 360;
+    const azD = Math.round(azN) % 360;
+    $('#azLabel').text('中心方位：' + (CARD[azD] || '') + '（' + azD + '°）／幅' + Math.round(winDeg()) + '°');
+    $('#zoomPct').text(Math.round(PXD / 6 * 100) + '%');
+    $('#needle').attr('transform', 'rotate(' + azN + ' 60 60)');
+    $('#compassTxt').text('正面：' + (CARD[azD] ? CARD[azD] + '（' + azD + '°）' : azD + '°'));
+
+    $('#pano svg').on('mouseleave', function() {
+        $('#cursorLine').attr({ x1: -10, x2: -10 });
+        $('#readout').text('');
+    });
+    $('#pano svg').on('mousemove', function(ev) {
+        const rect = this.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        if (x < 0 || x > W) return;
+        const az = centerAz - winDeg() / 2 + x / PXD;
+        const i = azIndex(az);
+        const azN2 = ((Math.round(az) % 360) + 360) % 360;
+        $('#cursorLine').attr({ x1: x, x2: x });
+        $('#readout').text('方位 ' + azN2 + '°　仰角 ' + pano.skyline.all[i].toFixed(1) +
+            '°　稜線まで ' + (pano.skyline.dist[i] / 1000).toFixed(1) + ' km　その標高 ' +
+            pano.skyline.elev[i] + ' m');
+    });
+}
+
+$('#btnLeft').on('click', function() { if (pano) { centerAz -= 90; drawPano(); } });
+$('#btnRight').on('click', function() { if (pano) { centerAz += 90; drawPano(); } });
+// 回転バー＝速度制御（中央0で停止，倒した量の2乗に比例した速度，離すと中央へ戻る）
+let rotSpeed = 0, rotTimer = null, rotLast = 0;
+function setRotSpeed(v) {
+    rotSpeed = Math.sign(v) * Math.pow(Math.abs(v) / 100, 2) * 120;  // 最大120度/秒
+    $('#rotSpeedTxt').text(rotSpeed === 0 ? '停止' :
+        (rotSpeed > 0 ? '→ ' : '← ') + Math.abs(rotSpeed).toFixed(0) + '°/秒');
+    if (rotSpeed !== 0 && !rotTimer) {
+        rotLast = performance.now();
+        rotTimer = setInterval(function() {
+            if (!pano || rotSpeed === 0) return;
+            const now = performance.now();
+            centerAz += rotSpeed * (now - rotLast) / 1000;
+            rotLast = now;
+            drawPano();
+        }, 70);
+    }
+    if (rotSpeed === 0 && rotTimer) { clearInterval(rotTimer); rotTimer = null; }
+}
+$('#rotSlider').on('input', function() { setRotSpeed(+this.value); });
+function rotRelease() { $('#rotSlider').val(0); setRotSpeed(0); }
+$('#rotSlider').on('pointerup mouseup touchend keyup change blur', rotRelease);
+$('#btnZoomIn').on('click', function() { if (pano && PXD < 24) { PXD *= 2; drawPano(); } });
+$('#btnZoomOut').on('click', function() { if (pano && PXD > 3) { PXD /= 2; drawPano(); } });
+$('#btnUp').on('click', function() { if (pano) { pitch += pitchStep(); drawPano(); } });
+$('#btnDown').on('click', function() { if (pano) { pitch -= pitchStep(); drawPano(); } });
+$('#btnAuto').on('click', function() { if (pano) { autoPitch(); drawPano(); } });
+
+let hgtTimer = null;
+$('#hgt').on('input', function() {
+    $('#hgtVal').text($(this).val() + ' m');
+    clearTimeout(hgtTimer);
+    hgtTimer = setTimeout(() => requestPanorama(false), 400);
+});
+
+// ---------------- 履歴 ----------------
+function loadHistory() {
+    $.get(URLS.histRec, function(resp) {
+        if (!resp.success || !resp.items.length) return;
+        const $b = $('#histBody').empty();
+        resp.items.forEach(function(it) {
+            const $tr = $('<tr>').append(
+                $('<td>').text(it.created_at),
+                $('<td>').text('北緯' + it.lat.toFixed(4) + '，東経' + it.lon.toFixed(4)),
+                $('<td>').text('標高 ' + it.ground_elev + ' m'));
+            $tr.on('click', function() {
+                cur = { lat: it.lat, lon: it.lon };
+                if (marker) map.removeLayer(marker);
+                marker = L.marker([it.lat, it.lon]).addTo(map);
+                map.panTo([it.lat, it.lon]);
+                requestPanorama(false);
+            });
+            $b.append($tr);
+        });
+    });
+}
+
+// ---------------- 初期化 ----------------
+refreshRegions();
+loadHistory();
+</script>
+</body>
+</html>
