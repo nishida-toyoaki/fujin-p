@@ -1,0 +1,82 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>かたりべ — プレゼン一覧</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background:#eef2f3; color:#233038; min-height:100vh;
+            font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
+            line-height:1.7;
+        }
+        .header {
+            background:#1c2733; color:#fff; padding:12px 20px;
+            display:flex; align-items:center; gap:16px;
+        }
+        .header h1 { font-size:18px; font-weight:600; letter-spacing:.04em; }
+        .header a {
+            color:#e8eef1; text-decoration:none; font-size:13px;
+            border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:5px 14px;
+        }
+        .header a:hover { border-color:#10b5a0; color:#fff; }
+        .wrap { max-width:900px; margin:0 auto; padding:24px 20px 60px; }
+        .lead { font-size:14px; color:#5a6a74; margin-bottom:16px; }
+        .card {
+            background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(28,39,51,.08);
+            padding:6px 0; overflow:hidden;
+        }
+        .row {
+            display:flex; align-items:center; gap:14px;
+            padding:12px 20px; border-bottom:1px solid #eef2f3;
+            text-decoration:none; color:inherit;
+        }
+        .row:last-child { border-bottom:none; }
+        .row:hover { background:#eef7f6; }
+        .row .ttl { flex:1; font-size:15.5px; font-weight:600; }
+        .row .meta { font-size:12px; color:#5a6a74; white-space:nowrap; }
+        .row .go { font-size:13px; color:#0b6c60; white-space:nowrap; }
+        .empty { padding:28px 20px; text-align:center; color:#5a6a74; font-size:14px; }
+        .note { margin-top:14px; font-size:12.5px; color:#5a6a74; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="{{ url_for('kataribe.return_to_fujin') }}">🏠 FUJINダッシュボードに戻る</a>
+        <h1>🗣 かたりべ — プレゼン一覧</h1>
+    </div>
+
+    <div class="wrap">
+        <p class="lead">見たいプレゼンを選んでください．上映画面が開きます（→ または Space で進みます）．</p>
+
+        <div class="card">
+            {% if presentations %}
+                {% for p in presentations %}
+                <a class="row" href="{{ url_for('kataribe.play', pres_id=p.id) }}">
+                    <span class="ttl">{{ p.title }}</span>
+                    {% if p.author %}<span class="meta">{{ p.author }}</span>{% endif %}
+                    <span class="meta">{{ p.updated_at }}</span>
+                    <span class="go">▶ 見る</span>
+                </a>
+                {% endfor %}
+            {% else %}
+                <p class="empty">まだプレゼンがありません．</p>
+            {% endif %}
+        </div>
+
+        {% if can_edit %}
+        <p class="note"><a href="{{ url_for('kataribe.index') }}">✎ 編集画面へ</a></p>
+        {% else %}
+        <p class="note">プレゼンの作成・編集は管理者が行います．</p>
+        {% endif %}
+    </div>
+</body>
+</html>

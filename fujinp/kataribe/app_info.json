@@ -1,0 +1,75 @@
+{
+  "fields": {
+    "blueprint_name": {
+      "hint": "",
+      "note": "",
+      "value": "kataribe_bp"
+    },
+    "config_notes": {
+      "hint": "",
+      "note": "",
+      "value": "config.pyへの追記は不要。依存アプリなし。外部APIを使用しない（生成AIとの協働は作品JSONの受け渡しで行う）。jQuery 3.6.0のみCDN（code.jquery.com）から読み込む。作品はMySQLへ保存するため、同一利用者であれば別ブラウザ・別端末からも同じ作品を編集できる。"
+    },
+    "description": {
+      "hint": "",
+      "note": "",
+      "value": "タイル（HTML断片）の出入りでプレゼンを組み立てるページレス・スライドエディタ兼プレイヤー。タイル生成（HTML編集）とレイアウト・表示制御の二モードで編集し、作品JSONの取り込み／書き出しで外部とやりとりする。"
+    },
+    "directory_structure": {
+      "hint": "",
+      "note": "",
+      "value": "kataribe/\n├── __init__.py\n├── routes.py\n├── schema.sql\n├── app_info.json\n├── kataribe_manual.md\n├── img/                      （画像アップロード先・自動生成）\n├── data_for_distribution/\n│   └── sample_presentation.json\n└── templates/\n    └── kataribe/\n        ├── index.html\n        ├── play.html\n        └── _player.html"
+    },
+    "display_name": {
+      "hint": "",
+      "note": "v3.7（タイル方式・自動縮小）",
+      "value": "かたりべ（kataribe）"
+    },
+    "endpoints": {
+      "hint": "",
+      "note": "",
+      "value": "GET  /kataribe/                     - エディタ画面（編集できない利用者は /gallery へ転送）\nGET  /kataribe/gallery              - 閲覧用のプレゼン一覧（ログイン済みなら誰でも）\nGET  /kataribe/play/&lt;pres_id&gt;       - 再生専用画面（ログイン済みなら誰でも。一覧から開く）\nGET  /kataribe/return_to_fujin      - 利用者カテゴリに応じたFUJINダッシュボードへ戻る\nGET  /kataribe/api/list             - 自分のプレゼン一覧\nGET  /kataribe/api/get/&lt;pres_id&gt;    - プレゼン1件取得（本人のもののみ）\nPOST /kataribe/api/save             - 新規作成・更新\nPOST /kataribe/api/delete/&lt;pres_id&gt; - 削除（本人のもののみ）\nGET  /kataribe/api/sample           - 同梱サンプルスペックの取得\nGET  /kataribe/img/&lt;filename&gt;       - アップロード画像の配信（send_from_directory）\nPOST /kataribe/api/upload_image     - 画像アップロード（multipart/form-data, field名 file）\nGET  /kataribe/api/images           - アップロード済み画像の一覧（新しい順）\n\n認可は deny by default。ブループリントの before_request（_gate）で入口を一括して判定する。\n閲覧系（VIEW_ENDPOINTS = index / gallery / play / api_get / image / return_to_fujin）はログイン済みなら誰でも通し、\nそれ以外（作成・更新・削除・アップロード・一覧API・サンプル）は _may_edit() が真の利用者だけを通す。\n_may_edit() の現在の条件は session['user_category'] == 'admin' のみ。\n各ルートには閲覧系 @login_required／編集系 @admin_required を付与して二重の関所とする。\n将来グループへ広げるときは ALLOWED_GROUPS にグループコードを並べ、_may_edit() に判定を1行足す（各ルートは触らない）。\n編集系のデータAPIはさらに WHERE ... AND user_id = %s で本人のレコードに限定する。\napi_get だけは例外で、編集できる利用者には本人のもの、閲覧だけの利用者には誰のものでも返す（上映のため）。レスポンスは {success: bool, ...} 形式で、エラー時は {success: false, error: \"...\"} とHTTPステータスを返す。"
+    },
+    "libraries": {
+      "hint": "",
+      "note": "",
+      "value": "Flask（FUJIN-P既存環境）\nmysql-connector-python\npytz\njQuery 3.6.0（CDN）\n\nFUJIN-P共通モジュール: config.Config、db.DatabaseConfig / Tables、decorators.login_required / admin_required、auth.redirect_to_dashboard。"
+    },
+    "migration_guide": {
+      "hint": "",
+      "note": "",
+      "value": "※本欄のHTML・コードは実体参照（&amp;lt; など）で記述している。コピーして使う際は表示されている文字（&lt; &gt;）のとおりに入力すること。&lt;owner&gt; はPythonAnywhereのユーザ名に置き換える。\n\n1. 配置\n/home/&lt;owner&gt;/fujinp/kataribe/ にディレクトリ一式を置く。\n\n2. app.py登録2行\nfrom fujinp.kataribe import kataribe_bp\napp.register_blueprint(kataribe_bp)\n\n3. admin_dashboard.html と guest_dashboard.html の両方に追加（閲覧は全利用者に開いているため）\n&lt;a href=\"{{ url_for('kataribe.index') }}\" class=\"app-card feature-app\"&gt;\n    &lt;div class=\"app-title\"&gt;&lt;span class=\"app-icon\"&gt;🗣&lt;/span&gt;&lt;h3&gt;かたりべ&lt;/h3&gt;&lt;/div&gt;\n    &lt;p&gt;語りとブロックでつくるプレゼン編集・再生&lt;/p&gt;\n&lt;/a&gt;\n※作成・編集は admin だけ。ほかの利用者がカードを押すと閲覧用の一覧が開く。\n\n4. schema.sql\n対象DB &lt;owner&gt;$default で同梱 schema.sql を実行する（CREATE TABLE IF NOT EXISTS kataribe_presentations）。\n\n5. config.py追記\n不要。\n\n6. 依存アプリ・追加ライブラリ\nなし。共通テーブル users と共通認証のみ使用（「まいぐる」不要）。\n\n7. レジストリ\nアプシェアの登録名kataribe、実体ディレクトリkataribe、Blueprint変数kataribe_bpの対応を確認。\n\n8. 画像ディレクトリ\n~/fujinp/kataribe/img は初回アップロード時に自動生成される。手動で作る場合は書き込み権限を確認すること。\nバックアップ・移設時はこのディレクトリも一緒に運ぶ（作品JSONにはURL参照しか入らない）。\n\n9. PythonAnywhereのWebタブでリロードする。\n\n10. 動作確認\nエディタを開く → サンプル読み込み → 保存 → 再生画面を開く → ステップ送り・自動送り・加速の順に確認する。"
+    },
+    "mysql_schema": {
+      "hint": "",
+      "note": "",
+      "value": "適用は同梱 schema.sql を実行。\n\nCREATE TABLE kataribe_presentations (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  user_id INT NOT NULL COMMENT 'ユーザーID（users.id）',\n  title VARCHAR(200) NOT NULL COMMENT 'プレゼン題名',\n  spec_json MEDIUMTEXT COMMENT 'スペック（場面・ブロック・語り）のJSON',\n  created_at DATETIME COMMENT '作成日時（JST）',\n  updated_at DATETIME COMMENT '更新日時（JST）',\n  INDEX idx_user (user_id),\n  INDEX idx_updated (updated_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;\n\n※導入後に実DBで SHOW CREATE TABLE kataribe_presentations を実行し、本欄を実物の出力で確定すること。"
+    },
+    "overview": {
+      "hint": "",
+      "note": "",
+      "value": "## 概要\nかたりべは、ページを先に並べる代わりに、テーマ単位の「シーン」と、その中に置く「タイル」を編集する。\nタイルはHTML断片で中身は自由。タイルには row（行）／span（行内の幅比）／in（登場ステップ）／out（退場ステップ）が付き、\n同じ row のタイルは横に並び、in で現れ out で消える。シーンの切り替えが従来のページ替えに相当する。\n中身の生成は生成AIに任せ、人は初期スライドを手直しして流れを整える、という使い方を想定した設計である。\n\n## 編集の二モード\n- 🧱 タイル編集: シーン内のタイル一覧を出し、選択した1枚だけを開いて編集する（同時編集ではなく単一選択方式）。\n  一覧の各行に名前と row・span・in・out を表示し、行をクリックするとその in ステップにプレビューを送る。\n  選択タイルでは名前・row/span/in/out・HTML本文を編集でき、一覧下のボタンで追加・複製・並べ替え・削除を行う。\n  削除時は compactSteps() が in・out に使われている値を昇順に取り直して 1,2,3… へ写像し、欠番を自動的に詰める\n  （総ステップ数は in・out の最大値なので、欠番が残ると上映時に何も起きない無音のステップとして間延びする。\n  複製が in=最大+1 を割り当てる仕様や、途中タイルの削除で欠番が生じやすい）。\n  in・out欄の隣の「⇅ 自動整列」（autoArrange）は compactSteps で欠番を詰めたうえで、タイル配列を in の昇順に安定ソートする。\n  同じ in のタイルは同番のまま（1,2,2,3 のように）並び、選択中のタイルは並べ替え後も選択が追随する。\n  「⧉ 複製」は同じ書式のタイルを増やすためのもので、列挙（①②③など）は1枚仕上げて複製し文字だけ差し替える運用を想定する。\n  「🖼 画像を挿入」でローカル画像をアップロードしカーソル位置に img タグ（幅%指定つき）を挿入、「🗂 アップ済み画像」で既存画像から選び直せる。\n  「📐 部品の書き方」で使えるクラス一覧を専用モーダルに表示する。\n- 🧩 レイアウト・表示: タイル一覧表で row / span / in / out をまとめて設定し、表示確認スライダでプレビューを任意のステップに送る。\n- 🗂 シーン一覧（ダッシュボード）: 全シーンを表で俯瞰する。種別（sceneLabel）・題名（その場で編集可）・タイル数・ステップ数を並べ、\n  「✎」でそのシーンの編集へ移動、「▲▼」で並べ替え（moveScene は選択状態 scenePick と curScene も追随させる）。\n  チェックで選んだシーンを exportScenes が {export_type:'kataribe_scenes', format_version:1, from_title, scenes:[...]} 形式のJSONで書き出す。\n  「📂 シーンを取り込む」は scenesFromText がシーン書き出しJSON・作品JSON・生の配列のいずれも受け取り、\n  kind/theme をホワイトリストで丸めたうえで、いま選ばれているシーンの前または後ろに splice で挿入する（挿入は commit('scene') でundo可能）。\nシーンの選択・挿入・並べ替え・削除、題名・英字サブタイトル・種別（kind）・テーマ（light / dark / cover）は左上のシーン欄で操作する。\nシーンの追加は addSceneAt(pos) による「＋前に」（curScene の位置に splice）と「＋後に」（curScene+1 に splice）の2ボタンで、挿入後は新しいシーンを選択状態にする（末尾追加も「＋後に」で行える）。\nシーンを切り替える・並べ替えると、プレビューは KtbPlayer.showAll() でそのシーンの最終ステップ（全タイル表示）を映す（空表示では前後を見比べられないため）。\n右上の「⛶ 全コンテンツ表示」で編集ペインとヘッダを隠しプレビューを全画面化する（body.fullview クラス）。「✎ 編集画面に戻る」またはEscで復帰。\n初回の全コンテンツ表示時に KtbPlayer.bindKeys() を呼ぶため、キー操作（→/Space・←・↑↓・Home・P）も再生専用画面と同じように使える。\n再生専用画面（/kataribe/play/&lt;pres_id&gt;）と機能が重複するため、エディタからの「▶ 再生画面を開く」ボタンは廃止した\n（ルートとテンプレートは残してあるので、URL直打ちや外部リンクからは従来どおり開ける。保存済みの内容のみを映す点だけが全コンテンツ表示との違い）。\n\n## タイル用スタイルキット（_player.html に同梱）\nk-title / k-sub / k-lead / k-card（violet・rose・green・navy の色違い）/ k-band / k-note / k-kicker / k-chip / k-badge /\nk-stat（大きな数値＋ラベル）/ k-num / k-accent / k-head / k-arrow / k-img（既定で max-height:52vh・object-fit:contain に収め、他タイルを押し出さない。sm=22vh / md=36vh / lg=68vh / full=幅100%・高さ制限なし の修飾クラスあり。エディタの画像挿入は style=\"width:N%;\" 付きのタグを生成する。Nはボタン横の「幅 ○%」入力の値で既定60、挿入後にHTMLの数字を書き換えて手動調整もできる）。\n自由なHTMLとstyle属性も使える。タイルHTMLは描画時に sanitize() を通し、script・object・embed・link・meta・on*属性・javascript: URLを除去する。\niframe は例外扱いで、src が /kataribe/img/ 配下（自分でアップロードしたファイル）を指すものだけ残し、sandbox=\"allow-scripts\" を強制付与する\n（同一オリジン権限を与えないため、埋め込んだHTMLからセッションやAPIには触れない）。外部サイトを指す iframe は除去する。\nこれにより、自己完結HTML（アニメーション作品など）をエンドノート等のタイルに埋め込める。シーン描画のたびに iframe が作り直されるので、\nそのシーンに入るたびアニメーションは最初から再生される。\n\n## 主な機能\n- シーン／タイルの二モード編集とライブプレビュー（編集中のシーンを映し、ステップ位置を保持）\n- 全画面再生（ステップ送り・シーン送り・自動送り・自動プレゼン・√2ルールの無段階加減速・標準速度復帰・キー操作）\n- 作品の別名保存、作品JSONの取り込み／書き出し、完成プレゼンHTML（自己完結1ファイル）の書き出し\n- 元に戻す／やり直す（undo / redo）: 変更のたびに作品全体のスナップショット（題名＋spec のJSON文字列）を履歴に積む方式。\n  commit(tag) が現在値を積み、tag='text' の連続入力は900ms以内なら直前の1手にまとめる（1文字ずつ戻らない）。\n  undo/redo は restore() で spec を差し替え、curScene・curTile を範囲内に丸めて再描画する（restoring フラグで再入を防ぐ）。\n  履歴上限120手。ボタンは押せないときdisabledになり、Ctrl+Z / Ctrl+Shift+Z・Ctrl+Y でも操作できる。\n  履歴の起点をリセットするのは、起動直後・作品読み込み・新規・削除・サンプル読み込み・作品JSON取り込みの各時点（resetHistory）。\n  履歴はブラウザ内のみでDBには残らない。\n- 未保存の変更の検出: 題名＋spec のJSON文字列を保存・読み込み・新規・削除の時点でスナップショットし（markSaved）、\n  現在値との差で isDirty を判定する。FUJINダッシュボードへ戻るリンクを押したとき未保存なら遷移を止めて確認モーダルを出し、\n  「保存して移動」（save完了後に遷移）／「保存せずに移動」（スナップショットを更新して遷移）／「このまま編集を続ける」から選ばせる。\n  beforeunload でもタブを閉じる・別URLへ移動する場合の保険をかける\n- 画像・埋め込みHTMLのアップロード: PNG / JPG / SVG / HTML を ~/fujinp/kataribe/img（routes.py と同階層の img/）へ保存し、/kataribe/img/&lt;filename&gt; で配信する。\n  保存名は「JSTタイムスタンプ_ユーザID_安全化した元ファイル名.拡張子」。1枚8MBまで。拡張子ホワイトリストと _safe_stem() による\n  パス要素除去でトラバーサルを防ぐ。プレゼンHTML書き出し時は /kataribe/img/ を location.origin 付きの絶対URLへ書き換える\n  （サイト外で開いてもログイン済みブラウザなら表示される）\n- 同梱サンプル（タイルの出入りを実演するセルフデモ）\n\n## シーン種別（kind）\nbody（本文）／cover（表紙）／end（エンドノート）の3種。cover と end はシーン番号も題名バーも表示せず、\nステップを持たない（totalSteps=0）ためタイルは一括表示される（in / out は無視）。番号は body シーンだけを数えた通し番号で、\n「シーン 3 / 12」のように表示する。エディタのシーン選択欄も「表紙」「エンドノート」「シーンn」と表示する。\nこの呼び名は sceneLabel(i) に一本化し、シーン選択欄・削除確認・挿入完了メッセージが同じ番号を使う\n（以前は削除確認だけが配列添字+1を使っており、表紙がある作品で1つずれて表示されていた）。\n種別変更時は地色の既定を追随させる（cover→cover、end→dark、body→light。個別変更は後から可能）。\n\n## スペック形式（v2・タイル方式）\n{title, scenes:[{title, subtitle, kind, theme, tiles:[{name, html, row, span, in, out, narration}]}]}\n表示条件は in &amp;lt;= step かつ（out が null または step &amp;lt; out）。シーンの総ステップ数は in・out の最大値から自動算出する。\n\n## 旧形式（v1・ブロック方式）との互換\nシーンに tiles がなければ blocks（type: title|lead|card|band|note）として描画する。\n既存の保存済み作品はそのまま開け、エディタの「🔁 このシーンをタイルに変換」で blocks を等価なタイルHTMLへ変換できる（変換後は tiles として保存される）。\n\n## 設計上の要点\n- 作品1件のすべての内容を spec_json 1カラムに収める。編集単位が常に作品全体であり、AIとの往復も総替えで行うため、取り込みが1回のUPDATEで完結する。\n- routes.py の normalize_spec() が保存時・取得時に検証・補完する。tiles があればタイル方式、なければ blocks 方式として正規化し、\n  row・span・in・out を整数化（out が in 以下なら in+1 に補正、span は1〜6）。外部から入るスペックが多少崩れていても画面が壊れないための防壁で、\n  バリデーションエラーで作業を止めない方針を取る。\n- シーン進入の一貫則（enterScene(i, mode)）: 順送り（次のステップ・自動プレゼンの進行）で入るシーンは mode='zero' で0ステップから積み上げ、\n  飛び越し（次のシーンへ／前のシーン／先頭へ／エディタからのシーン移動）は mode='full' で完成形（全タイル表示）、\n  逆戻り（前のステップ）は 'full' で入ってから1つずつ消す。編集用の全表示（showAll）が残したステップ値がプレゼン進行を汚染しないための規則。\n- 自動縮小（fitScene）: シーンを描くたびに .ktb-fit（行・タイルを包むラッパ）の scrollHeight と\n  .ktb-stage の内寸を比べ、収まらない分だけ transform:scale で全体を等比縮小する（transform-origin は top center）。\n  縮小中は .ktb-player.fitted が付き .ktb-stage の overflow を切る。下限は0.45で、それを超える長さはスクロールに委ねる。\n  出入りのアニメーション後にも測り直すため paint 時と700ms後の2回実行し、画像の load と window の resize でも測り直す。\n  これにより、画像やタイルの高さを手で詰めなくても上映時に下が切れない。\n- 行の伸縮は grid-template-rows を 0fr ⇄ 1fr で、行内のタイルは flex-grow 0 ⇄ span で遷移させる。退場時に高さも幅も滑らかに縮む。\n- 自動送りは標準3000msを基準に、加速・減速1押下ごとに √2 倍で無段階に変化する（安全弁30ms〜48000ms）。700msを切ると fastmode となりフェードを省く。\n- 完成プレゼンHTMLの書き出しは、ページ内に読み込み済みの _player.html のstyle要素（.ktb-stage / .ktb-blk / .ktb-ctrl をすべて含むもの。\n  エディタ自身のCSSにも .ktb-player の記述があるため単一の手がかりでは取り違える）とscript要素（var KtbPlayerを含むもの）の textContent を流用するため、\n  プレイヤーを改修すれば書き出し結果も自動追随する。スペックは JSON.stringify 後に &amp;lt; を \\u003c に置換して埋め込む。生成物はオフライン・CDN不要で動作する。\n\n## 外部とのやりとり（v2.5で単純化）\nインポート／エクスポートは作品JSON（プレゼンの全情報を含むスペックJSON）1本に統一した。\n「📂 作品JSONを取り込む」はファイル選択（.json）または貼り付けで読み込み、常に新規作品として開く（presId=null。保存するまでDBには書かない）。\nコードフェンス付きの貼り付けにも耐えるよう、importSpecText() が ``` を剥がし最初の { から最後の } までを parse する。\n「⬇ 作品JSONを書き出す」は spec をそのままJSONファイルとして保存する。\n生成AIとの協働は、この作品JSONを人が受け渡す形で行う（アプリ内の依頼文生成・回答取り込み機能は廃止した）。\n将来API化する場合は routes.py に /api/ai を1本追加し、戻り値を normalize_spec() に通せばよい。"
+    },
+    "python_files": {
+      "hint": "",
+      "note": "",
+      "value": "__init__.py - Blueprint定義（kataribe_bp、url_prefix='/kataribe'）\nroutes.py - 画面ルート、データAPI、スペック正規化（normalize_spec・_step_pair：タイル方式とブロック方式の両対応）、日時ヘルパー（get_jst_now / fmt_datetime）、画像アップロード（IMG_DIR / ALLOWED_IMG_EXT / MAX_IMG_BYTES / _safe_stem）"
+    },
+    "sql_tables_description": {
+      "hint": "",
+      "note": "",
+      "value": "## kataribe_presentations\n- id: 主キー\n- user_id: 所有ユーザ（共通 users.id を参照。FK制約は張らない）\n- title: 作品の題名\n- spec_json: シーン・タイル（またはブロック）・語りを含むスペックJSON（MEDIUMTEXT）\n- created_at / updated_at: JSTのDATETIME（get_jst_now() で書き込む）\n\nシーン・タイルは別テーブルに正規化しない。将来、共有・共同編集・版管理を実装する段階で公開フラグ列や版テーブルを追加する。"
+    },
+    "template_files": {
+      "hint": "",
+      "note": "",
+      "value": "templates/kataribe/index.html - エディタ画面（作品一覧・シーン欄・二モード編集・ライブプレビュー・作品JSONの取り込み/書き出し・プレゼンHTML書き出し・画像アップロード）\ntemplates/kataribe/gallery.html - 閲覧用の一覧画面（全プレゼンを更新日時の新しい順に並べ、上映画面へ導く）\ntemplates/kataribe/play.html - 再生専用画面（can_edit で「エディタへ」と「一覧へ」を出し分ける）\ntemplates/kataribe/_player.html - 共通プレイヤー部品。CSS（テーマ・行/タイル・スタイルキット・旧ブロック描画）とJSを内包し、index.htmlとplay.htmlから include する。グローバルに KtbPlayer を公開する（init(container) / load(spec, {keepPosition, scene}) / bindKeys() / autoPresent() / goScene(i) / getScene() / getStep() / setStep(s) / showAll() / getTotal() / fit() / onSceneChange(fn)）。keepPosition と scene により、編集中のシーンとステップを保ったままライブプレビューを更新できる（エディタ側は入力を400msデバウンスして呼ぶ）。"
+    },
+    "url": {
+      "hint": "",
+      "note": "",
+      "value": "/kataribe/"
+    }
+  },
+  "general_notes": "かたりべ v3.7（タイル方式）。タイル生成（HTML編集）とレイアウト・表示制御の二モードエディタ。外部とのやりとりは作品JSONのインポート／エクスポートに統一（アプリ内のAI依頼文生成・回答取り込み、および画面下部の語りキャプションは廃止）。作品はMySQLの kataribe_presentations に保存する。v1（ブロック方式）の作品も読める。スペックの narration 欄はデータとしては残るが、現在は表示に使わない。公開範囲: 作成・編集は admin 限定、閲覧はログイン済みの全利用者（before_request の _gate と _may_edit で判定。将来 ALLOWED_GROUPS で編集をグループへ拡張予定）。制約: 共有機能なし（作成者本人のみ閲覧・編集）、アップロード画像の配信は要ログインのため書き出したプレゼンHTMLを別環境で開くと表示されない場合がある、版管理なし、印刷・PDF出力なし、エディタは自動保存しない（離脱時に確認あり）、同一作品を複数タブで開くと後勝ち。"
+}

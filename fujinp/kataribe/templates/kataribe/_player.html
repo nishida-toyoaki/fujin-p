@@ -1,0 +1,529 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!-- かたりべ 共通プレイヤー部品（index.html / play.html から include） -->
+<style>
+  .ktb-player{
+    --navy:#1c2733; --navy-deep:#141d26; --teal:#10b5a0; --teal-soft:#d9f3ef;
+    --bg:#eef2f3; --card:#ffffff; --ink:#233038; --ink-sub:#5a6a74;
+    position:relative; display:flex; flex-direction:column;
+    background:var(--bg); color:var(--ink); overflow:hidden;
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
+    line-height:1.65;
+  }
+  .ktb-bar{
+    background:var(--navy); color:#fff; padding:14px 26px; flex:0 0 auto;
+    display:flex; align-items:baseline; justify-content:space-between;
+  }
+  .ktb-bar .ktb-scene-title{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-size:22px; font-weight:600; letter-spacing:.04em;
+  }
+  .ktb-bar .ktb-scene-sub{ font-size:13px; font-style:italic; color:var(--teal); letter-spacing:.06em; }
+  .ktb-bar .ktb-counter{ font-size:12px; color:var(--teal); letter-spacing:.06em; white-space:nowrap; }
+  .ktb-bar.hidden{ display:none; }
+  .ktb-stage{
+    flex:1 1 auto; overflow-y:auto; padding:22px 30px 16px;
+  }
+  /* 画面に収まらないシーンは，中身ごと等比縮小して収める */
+  .ktb-fit{ transform-origin:top center; transition:transform .35s ease; will-change:transform; }
+  .ktb-player.fitted .ktb-stage{ overflow:hidden; }
+  /* ── ブロックの出入り（fade + 高さの伸縮） ── */
+  .ktb-blk{
+    display:grid; grid-template-rows:0fr;
+    opacity:0; transform:translateY(8px);
+    transition:grid-template-rows .7s ease, opacity .7s ease, transform .7s ease;
+  }
+  .ktb-blk.on{ grid-template-rows:1fr; opacity:1; transform:none; }
+  .ktb-blk.gone{ grid-template-rows:0fr; opacity:0; transform:translateY(-8px); }
+  .ktb-blk > .ktb-blk-in{ overflow:hidden; min-height:0; }
+  .ktb-player.fastmode .ktb-blk{ transition:none; }
+  @media (prefers-reduced-motion: reduce){ .ktb-blk{ transition:none; transform:none; } }
+
+  /* ── ブロック部品 ── */
+  .ktb-b-title{
+    font-family:"Hiragino Mincho ProN","Yu Mincho",serif;
+    font-size:34px; font-weight:600; letter-spacing:.03em; color:var(--navy);
+    margin:10px 0 14px;
+  }
+  .ktb-b-lead{
+    font-size:16.5px; line-height:1.95; color:var(--ink);
+    border-left:4px solid var(--teal); padding-left:16px; margin:8px 0 14px;
+    white-space:pre-wrap;
+  }
+  .ktb-b-card{
+    background:var(--card); border-radius:12px; border-top:6px solid var(--teal);
+    box-shadow:0 4px 12px rgba(28,39,51,.08);
+    padding:16px 22px; margin:8px 0 14px;
+  }
+  .ktb-b-card h4{ font-size:17px; font-weight:700; color:var(--navy); margin:0 0 6px; }
+  .ktb-b-card p{ font-size:14.5px; line-height:1.85; margin:0; white-space:pre-wrap; }
+  .ktb-b-band{
+    background:var(--navy); color:#fff; border-radius:10px;
+    padding:12px 22px; margin:8px 0 14px; font-size:16px; text-align:center;
+  }
+  .ktb-b-band b, .ktb-b-band .tl{ color:var(--teal); }
+  .ktb-b-band p{ margin:0; white-space:pre-wrap; }
+  .ktb-b-note{
+    font-size:13px; color:var(--ink-sub); font-style:italic; margin:6px 0 10px;
+    white-space:pre-wrap;
+  }
+
+
+  /* ── シーンのテーマ ── */
+  .ktb-player.theme-dark{ background:radial-gradient(circle at 82% 8%,#26343f 0%,var(--navy-deep) 55%); color:#e9f0f2; }
+  .ktb-player.theme-cover{ background:linear-gradient(160deg,var(--navy) 0%,var(--navy-deep) 100%); color:#fff; }
+  .ktb-player.theme-cover .ktb-stage{ display:flex; flex-direction:column; justify-content:center; }
+  .ktb-player.theme-dark .k-card{ background:rgba(255,255,255,.05); color:#e9f0f2; border:1.5px solid rgba(16,181,160,.65); }
+  .ktb-player.theme-cover .k-card{ background:rgba(255,255,255,.06); color:#fff; border:1px solid rgba(255,255,255,.25); }
+  .ktb-player.theme-dark .k-note, .ktb-player.theme-cover .k-note{ color:#9fb3ba; }
+  .ktb-player.theme-dark .k-stat .l, .ktb-player.theme-cover .k-stat .l{ color:#9fb3ba; }
+  .ktb-player.theme-cover .k-chip, .ktb-player.theme-dark .k-chip{ border-color:rgba(255,255,255,.45); color:#e8eef1; }
+
+  /* ── 行とタイル（レイアウト＋出入り） ── */
+  .ktb-row{ display:grid; grid-template-rows:0fr; opacity:0; margin:0;
+            transition:grid-template-rows .6s ease, margin .6s ease, opacity .6s ease; }
+  .ktb-row.on{ grid-template-rows:1fr; opacity:1; margin:0 0 14px; }
+  .ktb-row > .ktb-row-in{ overflow:hidden; min-height:0; display:flex; gap:16px; align-items:stretch; }
+  .ktb-tile{ flex:0 1 0; min-width:0; opacity:0; transform:translateY(8px);
+             transition:flex-grow .6s ease, opacity .6s ease, transform .6s ease; }
+  .ktb-tile.on{ flex:var(--span,1) 1 0; opacity:1; transform:none; }
+  .ktb-player.fastmode .ktb-row, .ktb-player.fastmode .ktb-tile{ transition:none; }
+  @media (prefers-reduced-motion: reduce){ .ktb-row, .ktb-tile{ transition:none; transform:none; } }
+
+  /* ── タイル用スタイルキット（生成HTMLはこれを使う） ── */
+  .k-title{ font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:40px; font-weight:600; letter-spacing:.03em; line-height:1.25; }
+  .k-sub{ font-size:17px; font-style:italic; color:var(--teal); letter-spacing:.05em; margin-top:4px; }
+  .k-lead{ font-size:16.5px; line-height:1.95; border-left:4px solid var(--teal); padding-left:16px; }
+  .k-card{ background:var(--card); border-radius:12px; border-top:6px solid var(--teal); box-shadow:0 4px 12px rgba(28,39,51,.08); padding:16px 22px; height:100%; }
+  .k-card.violet{ border-top-color:var(--violet); } .k-card.rose{ border-top-color:var(--rose); }
+  .k-card.green{ border-top-color:var(--green); } .k-card.navy{ border-top-color:var(--navy); }
+  .k-card h4{ font-size:17px; font-weight:700; margin:0 0 6px; }
+  .k-card p{ font-size:14.5px; line-height:1.85; margin:0; }
+  .k-band{ background:var(--navy); color:#fff; border-radius:10px; padding:12px 22px; font-size:16px; text-align:center; }
+  .k-band b, .k-accent{ color:var(--teal); font-weight:700; }
+  .k-note{ font-size:13px; color:var(--ink-sub); font-style:italic; }
+  .k-chip{ display:inline-block; border:1px solid rgba(28,39,51,.35); border-radius:999px; padding:5px 16px; font-size:14px; margin:0 8px 8px 0; }
+  .k-kicker{ display:inline-block; background:var(--teal); color:#fff; font-size:14px; font-weight:700; letter-spacing:.06em; padding:7px 18px; border-radius:8px; }
+  .k-badge{ display:inline-block; background:var(--teal-soft); color:#0b7f70; font-size:13.5px; font-weight:700; border-radius:8px; padding:6px 14px; margin:0 8px 8px 0; }
+  .k-stat{ text-align:center; } .k-stat .v{ font-size:36px; font-weight:700; color:var(--teal); line-height:1.2; }
+  .k-stat .v small{ font-size:18px; } .k-stat .l{ font-size:13.5px; color:var(--ink-sub); margin-top:2px; }
+  .k-num{ font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:26px; color:var(--teal); }
+  .k-head{ background:var(--navy); color:#fff; border-radius:10px 10px 0 0; padding:8px 0; text-align:center; font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:20px; letter-spacing:.08em; }
+  .k-img{ max-width:100%; max-height:52vh; width:auto; height:auto; display:block;
+          margin:0 auto; object-fit:contain; border-radius:10px; }
+  .k-img.sm{ max-height:22vh; } .k-img.md{ max-height:36vh; } .k-img.lg{ max-height:68vh; }
+  .k-img.full{ max-height:none; width:100%; }
+  .k-arrow{ display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--teal); font-weight:700; height:100%; }
+  /* 埋め込みHTML（自己完結の作品をそのまま動かす枠） */
+  .k-frame{ display:block; width:100%; height:60vh; border:0; border-radius:10px; background:#02040d; }
+  .k-frame.sm{ height:30vh; } .k-frame.md{ height:45vh; } .k-frame.lg{ height:75vh; } .k-frame.full{ height:86vh; border-radius:0; }
+
+  /* ── 操作バー ── */
+  .ktb-ctrl{
+    flex:0 0 auto; min-height:48px; display:flex; align-items:center;
+    justify-content:space-between; flex-wrap:wrap; gap:4px; padding:5px 12px;
+    background:rgba(20,29,38,.95); border-top:1px solid rgba(255,255,255,.14);
+  }
+  .ktb-ctrl .grp{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ktb-ctrl button{
+    font:inherit; font-size:12px; color:#e8eef1;
+    background:rgba(28,39,51,.82); border:1px solid rgba(255,255,255,.25);
+    border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap;
+  }
+  .ktb-ctrl button:hover{ border-color:var(--teal); color:#fff; }
+  .ktb-ctrl button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  .ktb-ctrl .spd{ font-size:12px; color:#9fb3ba; min-width:44px; text-align:center; }
+</style>
+
+<script>
+/* かたりべ 共通プレイヤー
+   使い方：
+     KtbPlayer.init($('#player')[0]);          // コンテナ（.ktb-player を内側に構築）
+     KtbPlayer.load(spec, {keepPosition:true}); // スペックを（再）読み込み
+   キー操作を有効にする場合は KtbPlayer.bindKeys() を呼ぶ（再生専用画面向け）．
+*/
+var KtbPlayer = (function(){
+  var root = null;          // .ktb-player 要素
+  var spec = null;
+  var cur = 0;              // 現在のシーン番号
+  var steps = [];           // シーンごとの現在ステップ
+  var totalSteps = [];      // シーンごとの総ステップ数
+  var timer = null;
+  var STD_MS = 3000, RATE = Math.SQRT2, intervalMs = STD_MS;
+  var els = {};
+
+  function h(tag, cls, html){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  // タイルのHTMLからスクリプト等を取り除く
+  // /kataribe/img/ 配下（自分でアップロードしたファイル）を指すURLかどうか
+  function isOwnAsset(url){
+    var u = String(url || '');
+    if (u.indexOf('/kataribe/img/') === 0) return true;
+    try {
+      var a = document.createElement('a');
+      a.href = u;
+      return a.pathname.indexOf('/kataribe/img/') === 0;
+    } catch (e) { return false; }
+  }
+  function sanitize(html){
+    var box = document.createElement('div');
+    box.innerHTML = String(html == null ? '' : html);
+    // 自分のサイトにアップロードしたHTMLを指す iframe だけは残す（花火などの作品を埋め込むため）
+    [].slice.call(box.querySelectorAll('iframe')).forEach(function(f){
+      if (isOwnAsset(f.getAttribute('src'))){
+        f.setAttribute('sandbox', 'allow-scripts');   // 同一オリジン権限は与えない
+        f.setAttribute('loading', 'eager');
+      } else {
+        f.parentNode.removeChild(f);
+      }
+    });
+    [].slice.call(box.querySelectorAll('script,object,embed,link,meta')).forEach(function(n){ n.parentNode.removeChild(n); });
+    [].slice.call(box.querySelectorAll('*')).forEach(function(n){
+      [].slice.call(n.attributes).forEach(function(a){
+        if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+        if (/^(href|src)$/i.test(a.name) && /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+      });
+    });
+    return box.innerHTML;
+  }
+  function tilesOf(sc){ return (sc && sc.tiles && sc.tiles.length) ? sc.tiles : null; }
+  // シーン種別：cover＝表紙／end＝エンドノート／body＝本文
+  function kindOf(sc){
+    var k = sc && sc.kind;
+    return (k === 'cover' || k === 'end') ? k : 'body';
+  }
+  // 本文シーンだけを数えた通し番号（表紙・エンドノートは番号を持たない）
+  function bodyIndex(i){
+    var no = 0, total = 0;
+    spec.scenes.forEach(function(s, j){
+      if (kindOf(s) !== 'body') return;
+      total++;
+      if (j === i) no = total;
+    });
+    return { no: no, total: total };
+  }
+
+  function bindFitWatchers(){
+    var t = null;
+    addEventListener('resize', function(){
+      clearTimeout(t);
+      t = setTimeout(fitScene, 120);
+    }, { passive: true });
+  }
+
+  function init(container){
+    root = h('div', 'ktb-player');
+    container.innerHTML = '';
+    container.appendChild(root);
+
+    var bar = h('div', 'ktb-bar');
+    var left = h('div');
+    els.sceneTitle = h('div', 'ktb-scene-title', '');
+    els.sceneSub = h('div', 'ktb-scene-sub', '');
+    left.appendChild(els.sceneTitle); left.appendChild(els.sceneSub);
+    els.counter = h('div', 'ktb-counter', '');
+    bar.appendChild(left); bar.appendChild(els.counter);
+    els.bar = bar;
+    root.appendChild(bar);
+
+    els.stage = h('div', 'ktb-stage');
+    root.appendChild(els.stage);
+
+    var ctrl = h('div', 'ktb-ctrl');
+    var g1 = h('div', 'grp'), g2 = h('div', 'grp');
+    function btn(label, fn, id){
+      var b = h('button', null, label);
+      b.type = 'button';
+      b.addEventListener('click', fn);
+      if (id) els[id] = b;
+      return b;
+    }
+    g1.appendChild(btn('⏮ 先頭へ', function(){ stopAuto(); goTop(); }));
+    g1.appendChild(btn('◀◀ 前のシーン', function(){ stopAuto(); goScene(cur-1); }));
+    g1.appendChild(btn('◀ 前のステップ', function(){ stopAuto(); prevStep(); }));
+    g1.appendChild(btn('次のステップ ▶', function(){ stopAuto(); nextStep(); }));
+    g1.appendChild(btn('次のシーンへ ▶▶', function(){ stopAuto(); goScene(cur+1); }));
+    g2.appendChild(btn('− 減速', function(){ intervalMs = Math.min(48000, intervalMs*RATE); paintSpeed(); restartAuto(); }));
+    els.spd = h('span', 'spd', '×1.0'); g2.appendChild(els.spd);
+    g2.appendChild(btn('＋ 加速', function(){ intervalMs = Math.max(30, intervalMs/RATE); paintSpeed(); restartAuto(); }));
+    g2.appendChild(btn('×1 標準', function(){ intervalMs = STD_MS; paintSpeed(); restartAuto(); }));
+    g2.appendChild(btn('▶ 自動送り', function(){ timer ? stopAuto() : startAuto(); }, 'autoBtn'));
+    g2.appendChild(btn('🎬 自動プレゼン', function(){ autoPresent(); }, 'presentBtn'));
+    ctrl.appendChild(g1); ctrl.appendChild(g2);
+    root.appendChild(ctrl);
+
+    bindFitWatchers();
+  }
+
+  function computeTotals(){
+    totalSteps = spec.scenes.map(function(sc){
+      if (kindOf(sc) !== 'body') return 0;      // 表紙・エンドノートは一括表示（アクションなし）
+      var items = tilesOf(sc) || sc.blocks || [], m = 0;
+      items.forEach(function(b){ m = Math.max(m, b['in'] || 1, b['out'] || 0); });
+      return m;
+    });
+  }
+
+  function load(newSpec, opts){
+    opts = opts || {};
+    spec = newSpec;
+    if (!spec.scenes) spec.scenes = [];
+    computeTotals();
+    if (!opts.keepPosition || cur >= spec.scenes.length){
+      cur = 0;
+      steps = spec.scenes.map(function(){ return 0; });
+    } else {
+      // シーン数が変わった場合に合わせて伸縮
+      while (steps.length < spec.scenes.length) steps.push(0);
+      steps = steps.slice(0, spec.scenes.length);
+      steps = steps.map(function(s, i){ return Math.min(s, totalSteps[i]); });
+    }
+    if (typeof opts.scene === 'number' && opts.scene >= 0 && opts.scene < spec.scenes.length) cur = opts.scene;
+    renderScene();
+  }
+
+  function renderScene(){
+    els.stage.innerHTML = '';
+    root.classList.remove('theme-dark', 'theme-cover');
+    if (!spec || !spec.scenes.length){
+      els.sceneTitle.textContent = '（シーンがありません）';
+      els.sceneSub.textContent = '';
+      els.counter.textContent = '';
+      return;
+    }
+    var sc = spec.scenes[cur];
+    var theme = sc.theme || 'light';
+    if (theme === 'dark') root.classList.add('theme-dark');
+    if (theme === 'cover') root.classList.add('theme-cover');
+    var kind = kindOf(sc);
+    els.bar.classList.toggle('hidden', kind !== 'body');   // 表紙・エンドノートは題名も番号も出さない
+    els.sceneTitle.textContent = sc.title || '';
+    els.sceneSub.textContent = sc.subtitle || '';
+
+    els.fit = h('div', 'ktb-fit');
+    els.stage.appendChild(els.fit);
+
+    var tiles = tilesOf(sc);
+    if (tiles){
+      var rows = {}, order = [];
+      tiles.forEach(function(t, i){
+        var r = t.row || 1;
+        if (!rows[r]){ rows[r] = []; order.push(r); }
+        rows[r].push({ t: t, i: i });
+      });
+      order.sort(function(a, b){ return a - b; });
+      order.forEach(function(r){
+        var rowEl = h('div', 'ktb-row');
+        rowEl.dataset.row = r;
+        var inner = h('div', 'ktb-row-in');
+        rows[r].forEach(function(rec){
+          var tile = h('div', 'ktb-tile');
+          tile.dataset.ti = rec.i;
+          tile.style.setProperty('--span', String(rec.t.span || 1));
+          var box = h('div', 'ktb-tile-in', sanitize(rec.t.html));
+          [].slice.call(box.querySelectorAll('img')).forEach(function(im){
+            im.addEventListener('load', scheduleFit);   // 画像が届いてから測り直す
+          });
+          tile.appendChild(box);
+          inner.appendChild(tile);
+        });
+        rowEl.appendChild(inner);
+        els.fit.appendChild(rowEl);
+      });
+    } else {
+      (sc.blocks || []).forEach(function(b, bi){
+        var wrap = h('div', 'ktb-blk');
+        wrap.dataset.bi = bi;
+        var inner = h('div', 'ktb-blk-in');
+        inner.appendChild(renderBlock(b));
+        wrap.appendChild(inner);
+        els.fit.appendChild(wrap);
+      });
+    }
+    paint();
+  }
+
+  function renderBlock(b){
+    var t = b.type || 'card';
+    if (t === 'title') return h('div', 'ktb-b-title', esc(b.heading || b.body));
+    if (t === 'lead')  return h('div', 'ktb-b-lead', esc(b.body || b.heading));
+    if (t === 'band'){
+      var band = h('div', 'ktb-b-band');
+      var htmlStr = '';
+      if (b.heading) htmlStr += '<span class="tl"><b>' + esc(b.heading) + '</b></span>　';
+      band.appendChild(h('p', null, htmlStr + esc(b.body)));
+      return band;
+    }
+    if (t === 'note')  return h('div', 'ktb-b-note', esc(b.body || b.heading));
+    var card = h('div', 'ktb-b-card');
+    if (b.heading) card.appendChild(h('h4', null, esc(b.heading)));
+    if (b.body) card.appendChild(h('p', null, esc(b.body)));
+    return card;
+  }
+
+  // ── 画面に収める（縦にはみ出したぶんだけ全体を等比縮小する） ──
+  var MIN_SCALE = 0.45;          // これ以上は縮めない（読めなくなるため．超過分はスクロール）
+  var fitTimer = null;
+
+  function fitScene(){
+    if (!els.fit || !els.stage) return;
+    els.fit.style.transform = 'none';
+    var cs = getComputedStyle(els.stage);
+    var avail = els.stage.clientHeight
+              - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    var natural = els.fit.scrollHeight;
+    if (!avail || !natural){ root.classList.remove('fitted'); return; }
+    var k = avail / natural;
+    if (k >= 1){
+      root.classList.remove('fitted');
+      return;                      // そのまま収まっている
+    }
+    k = Math.max(MIN_SCALE, k);
+    els.fit.style.transform = 'scale(' + k.toFixed(4) + ')';
+    root.classList.add('fitted');
+  }
+
+  // 出入りのアニメーションが終わってからもう一度測る
+  function scheduleFit(){
+    fitScene();
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(fitScene, 700);
+  }
+
+  function paint(){
+    if (!spec || !spec.scenes.length) return;
+    var sc = spec.scenes[cur];
+    var s = steps[cur];
+    var tiles = tilesOf(sc);
+
+    var showAllTiles = (kindOf(sc) !== 'body');
+    if (tiles){
+      var rowVisible = {};
+      [].slice.call(els.fit.querySelectorAll('.ktb-tile')).forEach(function(el){
+        var t = tiles[parseInt(el.dataset.ti, 10)];
+        if (!t) return;
+        var vis = showAllTiles || ((t['in'] <= s) && (t['out'] == null || s < t['out']));
+        el.classList.toggle('on', vis);
+        var r = t.row || 1;
+        rowVisible[r] = rowVisible[r] || vis;
+      });
+      [].slice.call(els.fit.querySelectorAll('.ktb-row')).forEach(function(el){
+        el.classList.toggle('on', !!rowVisible[el.dataset.row]);
+      });
+    } else {
+    var blocks = sc.blocks || [];
+    var nodes = els.fit.children;
+    for (var i = 0; i < nodes.length; i++){
+      var b = blocks[i];
+      if (!b) continue;
+      var visible = showAllTiles || ((b['in'] <= s) && (b['out'] == null || s < b['out']));
+      nodes[i].classList.toggle('on', visible);
+      nodes[i].classList.toggle('gone', !showAllTiles && b['out'] != null && s >= b['out']);
+    }
+    }
+    scheduleFit();
+
+    var bi = bodyIndex(cur);
+    els.counter.textContent = bi.no
+      ? ('シーン ' + bi.no + ' / ' + bi.total + '　　ステップ ' + s + ' / ' + totalSteps[cur])
+      : '';
+  }
+
+  // シーンに入るときの規則：
+  //   'zero' … 0ステップから積み上げる（順送り：次のステップ・自動プレゼンの進行）
+  //   'full' … 完成形（全タイル表示）で入る（飛び越し：次のシーンへ・前のシーン・先頭へ・エディタからの移動）
+  //   逆戻り（前のステップ）は 'full' で入り，そこから1つずつ消していく
+  var onSceneChange = null;
+  function enterScene(i, mode){
+    if (!spec) return;
+    cur = Math.max(0, Math.min(spec.scenes.length - 1, i));
+    if (mode === 'zero') steps[cur] = 0;
+    else if (mode === 'full') steps[cur] = totalSteps[cur];
+    renderScene();
+    if (typeof onSceneChange === 'function') onSceneChange(cur);
+  }
+  function nextStep(){
+    if (!spec || !spec.scenes.length) return false;
+    if (steps[cur] < totalSteps[cur]){ steps[cur]++; paint(); return true; }
+    if (cur < spec.scenes.length - 1){ enterScene(cur + 1, 'zero'); return true; }
+    return false;
+  }
+  function prevStep(){
+    if (!spec || !spec.scenes.length) return false;
+    if (steps[cur] > 0){ steps[cur]--; paint(); return true; }
+    if (cur > 0){ enterScene(cur - 1, 'full'); return true; }
+    return false;
+  }
+  function goScene(i){ enterScene(i, 'full'); }
+  function goTop(){ enterScene(0, 'full'); }
+
+  function paintSpeed(){
+    var x = STD_MS / intervalMs;
+    els.spd.textContent = '×' + (x >= 10 ? x.toFixed(0) : x >= 1 ? x.toFixed(1) : x.toFixed(2));
+    root.classList.toggle('fastmode', !!timer && intervalMs < 700);
+  }
+  function startAuto(){
+    if (timer) return;
+    timer = setInterval(function(){ if (!nextStep()) stopAuto(); }, intervalMs);
+    els.autoBtn.classList.add('active');
+    els.autoBtn.textContent = '⏸ 自動停止';
+    paintSpeed();
+  }
+  function stopAuto(){
+    clearInterval(timer); timer = null;
+    els.autoBtn.classList.remove('active');
+    els.autoBtn.textContent = '▶ 自動送り';
+    root.classList.remove('fastmode');
+  }
+  function restartAuto(){
+    if (timer){ clearInterval(timer); timer = setInterval(function(){ if (!nextStep()) stopAuto(); }, intervalMs); }
+  }
+
+  // 先頭から通しで自動再生する（練習・無人上映用）
+  function autoPresent(){
+    stopAuto();
+    steps = steps.map(function(){ return 0; });
+    cur = 0;
+    renderScene();
+    if (typeof onSceneChange === 'function') onSceneChange(cur);
+    startAuto();
+  }
+
+  function bindKeys(){
+    addEventListener('keydown', function(e){
+      if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      if (e.key === 'ArrowRight' || e.key === ' '){ e.preventDefault(); stopAuto(); nextStep(); }
+      else if (e.key === 'ArrowLeft'){ e.preventDefault(); stopAuto(); prevStep(); }
+      else if (e.key === 'ArrowDown' || e.key === 'PageDown'){ e.preventDefault(); stopAuto(); goScene(cur+1); }
+      else if (e.key === 'ArrowUp' || e.key === 'PageUp'){ e.preventDefault(); stopAuto(); goScene(cur-1); }
+      else if (e.key === 'Home'){ e.preventDefault(); stopAuto(); goTop(); }
+      else if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); autoPresent(); }
+    });
+  }
+
+  return {
+    init: init, load: load, bindKeys: bindKeys, autoPresent: autoPresent,
+    goScene: function(i){ goScene(i); },
+    getScene: function(){ return cur; },
+    getStep: function(){ return steps[cur] || 0; },
+    setStep: function(s){ if (spec && spec.scenes.length){ steps[cur] = Math.max(0, Math.min(totalSteps[cur], s)); paint(); } },
+    fit: function(){ scheduleFit(); },
+    showAll: function(){ if (spec && spec.scenes.length){ steps[cur] = totalSteps[cur]; paint(); } },
+    getTotal: function(){ return totalSteps[cur] || 0; },
+    onSceneChange: function(fn){ onSceneChange = fn; }
+  };
+})();
+</script>

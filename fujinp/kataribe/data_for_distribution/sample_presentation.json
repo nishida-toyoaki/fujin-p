@@ -1,0 +1,181 @@
+{
+  "title": "かたりべの紹介（タイル方式サンプル）",
+  "scenes": [
+    {
+      "title": "",
+      "subtitle": "",
+      "theme": "cover",
+      "tiles": [
+        {
+          "name": "科目タグ",
+          "html": "<span class=\"k-kicker\">かたりべ</span>",
+          "row": 1,
+          "span": 1,
+          "in": 1,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "表題",
+          "html": "<div class=\"k-title\">タイルで組む，語りで動かす</div>\n<div class=\"k-sub\">Tiles &amp; Steps</div>",
+          "row": 2,
+          "span": 1,
+          "in": 2,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "メタ",
+          "html": "<span class=\"k-chip\">中身はHTMLで作る</span><span class=\"k-chip\">行で並べる</span><span class=\"k-chip\">ステップで動かす</span>",
+          "row": 3,
+          "span": 1,
+          "in": 3,
+          "out": null,
+          "narration": ""
+        }
+      ],
+      "kind": "cover"
+    },
+    {
+      "title": "二つのモード",
+      "subtitle": "Two Modes",
+      "theme": "light",
+      "tiles": [
+        {
+          "name": "導入",
+          "html": "<div class=\"k-lead\">編集は二つのモードに分かれています．中身を作るモードと，並べて動かすモードです．</div>",
+          "row": 1,
+          "span": 1,
+          "in": 1,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "モード1",
+          "html": "<div class=\"k-card\"><h4>🧱 タイル編集</h4><p>タイルの中身をHTMLで書きます．k-card や k-band などの部品クラスを使うと体裁が揃います．</p></div>",
+          "row": 2,
+          "span": 2,
+          "in": 2,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "矢印",
+          "html": "<div class=\"k-arrow\">→</div>",
+          "row": 2,
+          "span": 1,
+          "in": 3,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "モード2",
+          "html": "<div class=\"k-card violet\"><h4>🧩 レイアウト・表示</h4><p>行と幅で並べ方を決め，入と出でいつ現れていつ消えるかを決めます．</p></div>",
+          "row": 2,
+          "span": 2,
+          "in": 3,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "まとめ帯",
+          "html": "<div class=\"k-band\"><b>作る</b>と<b>動かす</b>を分ける　——　中身はAIに任せ，流れは自分で握る</div>",
+          "row": 3,
+          "span": 1,
+          "in": 4,
+          "out": null,
+          "narration": ""
+        }
+      ],
+      "kind": "body"
+    },
+    {
+      "title": "行に並べる",
+      "subtitle": "Rows and Columns",
+      "theme": "light",
+      "tiles": [
+        {
+          "name": "説明",
+          "html": "<div class=\"k-lead\">同じ「行」に置いたタイルは横に並びます．列挙はこの形で作ります．</div>",
+          "row": 1,
+          "span": 1,
+          "in": 1,
+          "out": 5,
+          "narration": ""
+        },
+        {
+          "name": "列1",
+          "html": "<div class=\"k-card\"><h4><span class=\"k-num\">①</span> 複製で増やす</h4><p>1枚作って「⧉ 複製」を押せば，同じ書式のタイルが増えます．</p></div>",
+          "row": 2,
+          "span": 1,
+          "in": 2,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "列2",
+          "html": "<div class=\"k-card green\"><h4><span class=\"k-num\">②</span> 行をそろえる</h4><p>複製したタイルの「行」を同じ番号にすると，横に並びます．</p></div>",
+          "row": 2,
+          "span": 1,
+          "in": 3,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "列3",
+          "html": "<div class=\"k-card rose\"><h4><span class=\"k-num\">③</span> 入をずらす</h4><p>「入」を1つずつずらせば，語りに合わせて順に現れます．</p></div>",
+          "row": 2,
+          "span": 1,
+          "in": 4,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "退場の実演",
+          "html": "<div class=\"k-band\">上の説明文はいま退場しました　——　<b>出</b>を入れると場所が空きます</div>",
+          "row": 3,
+          "span": 1,
+          "in": 5,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "脚注",
+          "html": "<div class=\"k-note\">テーマを cover や dark にすると，シーンごとに地色が変わります．</div>",
+          "row": 4,
+          "span": 1,
+          "in": 5,
+          "out": null,
+          "narration": ""
+        }
+      ],
+      "kind": "body"
+    },
+    {
+      "title": "",
+      "subtitle": "",
+      "kind": "end",
+      "theme": "dark",
+      "tiles": [
+        {
+          "name": "むすび",
+          "html": "<div class=\"k-title\">ご清聴ありがとうございました</div>",
+          "row": 1,
+          "span": 1,
+          "in": 1,
+          "out": null,
+          "narration": ""
+        },
+        {
+          "name": "連絡",
+          "html": "<div class=\"k-note\">エンドノートは番号も題名も出ず，タイルが一括で表示されます．</div>",
+          "row": 2,
+          "span": 1,
+          "in": 1,
+          "out": null,
+          "narration": ""
+        }
+      ]
+    }
+  ]
+}

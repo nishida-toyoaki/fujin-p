@@ -1,0 +1,62 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>かたりべ 再生 - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+        body {
+            font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
+            background:#141d26;
+        }
+        .topbar {
+            height:40px; display:flex; align-items:center; gap:14px; padding:0 16px;
+            background:#1c2733; color:#fff;
+        }
+        .topbar a { color:#d9f3ef; text-decoration:none; font-size:13px; }
+        .topbar a:hover { color:#fff; }
+        .topbar .title { font-size:14px; font-weight:700; letter-spacing:.04em; }
+        #player { height:calc(100% - 40px); }
+        #player .ktb-player { height:100%; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        {% if can_edit %}
+        <a href="{{ url_for('kataribe.index') }}">← エディタへ</a>
+        {% else %}
+        <a href="{{ url_for('kataribe.gallery') }}">← 一覧へ</a>
+        {% endif %}
+        <a href="{{ url_for('kataribe.return_to_fujin') }}">🏠 FUJINダッシュボード</a>
+        <span class="title" id="presTitle"></span>
+    </div>
+    <div id="player"></div>
+
+    {% include 'kataribe/_player.html' %}
+
+    <script>
+        const GET_URL = '{{ url_for("kataribe.api_get", pres_id=pres_id) }}';
+        KtbPlayer.init(document.getElementById('player'));
+        KtbPlayer.bindKeys();
+        $.get(GET_URL, resp => {
+            if (!resp.success) {
+                document.getElementById('presTitle').textContent = '読み込みに失敗しました';
+                return;
+            }
+            document.title = resp.presentation.title + ' - かたりべ';
+            document.getElementById('presTitle').textContent = resp.presentation.title;
+            KtbPlayer.load(resp.presentation.spec);
+        });
+    </script>
+</body>
+</html>

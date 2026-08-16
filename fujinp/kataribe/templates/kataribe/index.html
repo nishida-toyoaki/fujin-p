@@ -1,0 +1,1373 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>かたりべ - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
+            background:#eef2f3; color:#233038; line-height:1.6;
+        }
+        .header {
+            background:#1c2733; color:#fff; padding:12px 22px;
+            display:flex; align-items:center; gap:18px;
+        }
+        .header h1 { font-size:19px; font-weight:700; letter-spacing:.04em; }
+        .back-btn {
+            color:#d9f3ef; text-decoration:none; font-size:13px;
+            border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:5px 14px;
+        }
+        .back-btn:hover { border-color:#10b5a0; color:#fff; }
+        #result {
+            display:none; margin:10px 22px 0; padding:8px 16px; border-radius:8px; font-size:14px;
+        }
+        #result.success { background:#d9f3ef; color:#0b6c60; border:1px solid #10b5a0; }
+        #result.error { background:#fbe9ed; color:#b23a52; border:1px solid #d95f76; }
+
+        .layout { display:flex; gap:14px; padding:14px 22px 22px; align-items:stretch; }
+        .pane-editor { flex:0 0 46%; max-width:46%; display:flex; flex-direction:column; gap:12px; }
+        .pane-player { flex:1; min-width:0; }
+        #player { height:calc(100vh - 120px); border-radius:12px; overflow:hidden;
+                  box-shadow:0 6px 18px rgba(28,39,51,.14); }
+        #player .ktb-player { height:100%; }
+
+        .box {
+            background:#fff; border-radius:12px; padding:14px 16px;
+            box-shadow:0 2px 8px rgba(28,39,51,.08);
+        }
+        .box h2 { font-size:14px; color:#10b5a0; letter-spacing:.06em; margin-bottom:8px; }
+        .toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+        button, .btn {
+            font:inherit; font-size:13px; cursor:pointer;
+            background:#1c2733; color:#e8eef1; border:1px solid #1c2733;
+            border-radius:8px; padding:6px 12px;
+        }
+        button:hover { background:#10b5a0; border-color:#10b5a0; color:#fff; }
+        button.ghost { background:#fff; color:#1c2733; border:1px solid #b9c6cc; }
+        button.ghost:hover { border-color:#10b5a0; color:#0b6c60; background:#fff; }
+        button.danger { background:#fff; color:#b23a52; border:1px solid #e6b6c0; }
+        button.danger:hover { background:#fbe9ed; }
+        button.mini { font-size:11px; padding:2px 8px; border-radius:6px; }
+        button:disabled { opacity:.5; cursor:default; }
+        input[type=text], input[type=number], textarea, select {
+            font:inherit; font-size:13px; border:1px solid #c6d0d5; border-radius:6px;
+            padding:5px 8px; background:#fff; color:#233038; width:100%;
+        }
+        textarea { resize:vertical; }
+        #presTitle { font-size:15px; font-weight:700; }
+
+        .pres-list { max-height:130px; overflow-y:auto; }
+        .pres-item {
+            display:flex; align-items:center; gap:8px; padding:5px 6px;
+            border-bottom:1px solid #eef2f3; font-size:13.5px;
+        }
+        .pres-item a { color:#0b6c60; text-decoration:none; cursor:pointer; flex:1; }
+        .pres-item a:hover { text-decoration:underline; }
+        .pres-item .date { color:#5a6a74; font-size:12px; }
+
+        body.fullview .pane-editor,
+        body.fullview #result { display:none !important; }
+        body.fullview .layout { padding:0; }
+        body.fullview .header { display:none; }
+        body.fullview #player { height:100vh; border-radius:0; box-shadow:none; }
+        body.fullview .pane-player .hint { display:none; }
+        #btnBack {
+            display:none; position:fixed; right:14px; top:12px; z-index:120;
+            background:rgba(28,39,51,.85); color:#e8eef1; border:1px solid rgba(255,255,255,.3);
+            border-radius:999px; padding:6px 16px; font-size:13px; cursor:pointer;
+        }
+        body.fullview #btnBack { display:block; }
+        #btnBack:hover { border-color:#10b5a0; color:#fff; }
+        .tabs { display:flex; gap:6px; }
+        .tab {
+            font:inherit; font-size:13px; cursor:pointer; border-radius:10px 10px 0 0;
+            background:#dfe7e9; color:#41525b; border:1px solid #c6d0d5; border-bottom:none; padding:7px 16px;
+        }
+        .tab.active { background:#fff; color:#0b6c60; font-weight:700; }
+        .panebody { flex:1; overflow-y:auto; background:#fff; border-radius:0 12px 12px 12px;
+                    box-shadow:0 2px 8px rgba(28,39,51,.08); padding:12px 14px; }
+        .tilelist { display:flex; flex-direction:column; gap:4px; max-height:190px; overflow-y:auto;
+                    border:1px solid #e2e8ea; border-radius:8px; padding:5px; background:#fafcfc; }
+        .tilerow { display:flex; align-items:center; gap:6px; padding:4px 7px; border-radius:6px;
+                   cursor:pointer; font-size:13px; border:1px solid transparent; }
+        .tilerow:hover { background:#eef7f6; }
+        .tilerow.sel { background:#d9f3ef; border-color:#10b5a0; }
+        .tilerow .nm { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .tilerow .meta { font-size:11px; color:#5a6a74; white-space:nowrap; }
+        .tile { border:1px solid #e2e8ea; border-radius:10px; padding:9px 10px; margin-bottom:10px; background:#fafcfc; }
+        .tile.active { border-color:#10b5a0; box-shadow:0 0 0 2px rgba(16,181,160,.18); }
+        .fieldrow { display:flex; gap:8px; align-items:center; margin:6px 0; font-size:12.5px; color:#41525b; }
+        .fieldrow input[type=number] { width:56px; }
+        .fieldrow input[type=text] { flex:1; }
+        .imggrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px;
+                   max-height:52vh; overflow-y:auto; }
+        .imgcell { border:1px solid #e2e8ea; border-radius:8px; padding:6px; cursor:pointer; background:#fafcfc; }
+        .imgcell:hover { border-color:#10b5a0; box-shadow:0 0 0 2px rgba(16,181,160,.18); }
+        .imgcell img { width:100%; height:86px; object-fit:contain; background:#fff; border-radius:4px; }
+        .imgcell .nm { font-size:10.5px; color:#5a6a74; margin-top:4px; word-break:break-all; }
+        .tile-head { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+        .tile-head .tno { font-size:11px; color:#5a6a74; white-space:nowrap; }
+        .tile textarea.html { width:100%; font-family:ui-monospace,Consolas,monospace; font-size:12px; height:110px; }
+        .tile textarea.narr { width:100%; height:38px; border-color:#bfe8e1; background:#f4fbfa; margin-top:5px; }
+        table.layout { width:100%; border-collapse:collapse; font-size:13px; }
+        table.layout th { text-align:left; font-size:11.5px; color:#5a6a74; font-weight:400; padding:3px 4px; }
+        table.layout td { padding:3px 4px; border-top:1px solid #eef2f3; }
+        table.layout input[type=number] { width:52px; }
+        table.layout input[type=text] { width:100%; }
+        table.scenes { width:100%; border-collapse:collapse; font-size:13px; }
+        table.scenes th { text-align:left; font-size:11.5px; color:#5a6a74; font-weight:400; padding:3px 4px; }
+        table.scenes td { padding:4px; border-top:1px solid #eef2f3; vertical-align:middle; }
+        table.scenes tr.cur td { background:#eef7f6; }
+        table.scenes .kind { white-space:nowrap; color:#0b6c60; font-weight:700; font-size:12px; }
+        table.scenes .ttl { width:100%; }
+        table.scenes .num { text-align:right; color:#5a6a74; font-size:11.5px; white-space:nowrap; }
+        .steprow { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; color:#41525b; }
+        .steprow input[type=range] { flex:1; }
+        .scene {
+            background:#fff; border-radius:12px; border-left:8px solid #10b5a0;
+            box-shadow:0 2px 8px rgba(28,39,51,.08); padding:10px 12px;
+        }
+        .scene-head { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
+        .scene-head .scene-no {
+            font-family:"Hiragino Mincho ProN","Yu Mincho",serif;
+            font-size:15px; color:#10b5a0; white-space:nowrap;
+        }
+        .blk {
+            border:1px solid #e2e8ea; border-radius:8px; padding:8px; margin-bottom:8px;
+            background:#fafcfc;
+        }
+        .blk-row1 { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+        .blk-row1 select { flex:0 0 110px; }
+        .blk-row1 input.b-heading { flex:1; }
+        .blk-row1 input.b-in, .blk-row1 input.b-out { flex:0 0 58px; }
+        .blk-row1 .lbl { font-size:11px; color:#5a6a74; white-space:nowrap; }
+        .blk textarea { margin-bottom:6px; }
+        .blk .narr { border-color:#bfe8e1; background:#f4fbfa; }
+        .blk-btns { display:flex; gap:4px; justify-content:flex-end; }
+        #jsonArea { width:100%; height:220px; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+        .hint { font-size:12px; color:#5a6a74; margin-top:4px; }
+
+        /* AIモーダル */
+        .modal-bg {
+            display:none; position:fixed; inset:0; background:rgba(20,29,38,.55); z-index:100;
+            align-items:center; justify-content:center;
+        }
+        .modal {
+            background:#fff; border-radius:12px; padding:18px 20px; width:min(680px, 92vw);
+            box-shadow:0 12px 40px rgba(0,0,0,.3);
+        }
+        .modal h3 { font-size:15px; color:#1c2733; margin-bottom:8px; }
+        .modal textarea { height:240px; }
+        .modal .modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+        .spin { display:none; font-size:13px; color:#0b6c60; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="{{ url_for('kataribe.return_to_fujin') }}" class="back-btn" id="btnHome">🏠 FUJINダッシュボードに戻る</a>
+        <h1>🗣 かたりべ — タイルで組むプレゼン</h1>
+        <button id="btnFull" class="ghost" style="margin-left:auto;">⛶ 全コンテンツ表示</button>
+    </div>
+    <div id="result"></div>
+    <button id="btnBack" type="button">✎ 編集画面に戻る</button>
+
+    <div class="layout">
+        <!-- ── 左：エディタ ── -->
+        <div class="pane-editor">
+            <div class="box">
+                <h2>プレゼン一覧</h2>
+                <div class="pres-list" id="presList"></div>
+                <div class="toolbar" style="margin-top:8px;">
+                    <button id="btnNew" class="ghost">＋ 新規</button>
+                    <button id="btnSample" class="ghost">サンプル読み込み</button>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="toolbar" style="margin-bottom:8px;">
+                    <input type="text" id="presTitle" placeholder="プレゼンの題名" style="flex:1;">
+                </div>
+                <div class="toolbar">
+                    <button id="btnSave">💾 保存</button>
+                    <button id="btnSaveAs" class="ghost">📄 別名で保存</button>
+                    <button id="btnUndo" class="ghost" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
+                    <button id="btnRedo" class="ghost" title="やり直す（Ctrl+Shift+Z / Ctrl+Y）">↷ やり直す</button>
+                    <button id="btnLoadIn" class="ghost">📂 作品JSONを取り込む</button>
+                    <button id="btnExport" class="ghost">⬇ 作品JSONを書き出す</button>
+                    <button id="btnExportHtml" class="ghost">🎞 プレゼンHTML</button>
+                    <button id="btnJson" class="ghost">{ } JSON</button>
+                    <button id="btnDelete" class="danger">🗑 削除</button>
+                </div>
+                <div id="jsonWrap" style="display:none; margin-top:8px;">
+                    <textarea id="jsonArea" spellcheck="false"></textarea>
+                    <div class="toolbar" style="margin-top:6px;">
+                        <button id="btnJsonApply" class="ghost">JSONを反映</button>
+                        <span class="hint">スペックを直接編集できます（形式はマニュアル参照）</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="box" id="sceneBox">
+                <div class="toolbar" style="margin-bottom:6px;">
+                    <select id="sceneSel" style="flex:1;"></select>
+                    <button id="btnScenePrev" class="mini ghost">◀</button>
+                    <button id="btnSceneNext" class="mini ghost">▶</button>
+                    <button id="btnAddBefore" class="mini ghost" title="このシーンの直前に新しいシーンを挿入">＋前に</button>
+                    <button id="btnAddAfter" class="mini ghost" title="このシーンの直後に新しいシーンを挿入">＋後に</button>
+                    <button id="btnSceneUp" class="mini ghost">▲</button>
+                    <button id="btnSceneDown" class="mini ghost">▼</button>
+                    <button id="btnSceneDel" class="mini danger">✕</button>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="sceneTitle" placeholder="シーンの題名" style="flex:1;">
+                    <input type="text" id="sceneSub" placeholder="英字サブタイトル（任意）" style="flex:1;">
+                    <select id="sceneKind" style="flex:0 0 130px;">
+                        <option value="body">本文</option>
+                        <option value="cover">表紙</option>
+                        <option value="end">エンドノート</option>
+                    </select>
+                    <select id="sceneTheme" style="flex:0 0 110px;">
+                        <option value="light">明色</option>
+                        <option value="dark">ダーク</option>
+                        <option value="cover">表紙</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="tiles">🧱 タイル編集（HTML）</button>
+                <button class="tab" data-tab="layout">🧩 レイアウト・表示</button>
+                <button class="tab" data-tab="scenes">🗂 シーン一覧</button>
+            </div>
+
+            <div class="panebody" id="paneTiles"></div>
+            <div class="panebody" id="paneLayout" style="display:none;"></div>
+            <div class="panebody" id="paneScenes" style="display:none;"></div>
+        </div>
+
+        <!-- ── 右：プレビュー ── -->
+        <div class="pane-player">
+            <div id="player"></div>
+            <p class="hint">編集はプレビューに自動反映されます（現在のシーン・ステップは保たれます）．</p>
+        </div>
+    </div>
+
+    <!-- 作品JSON取り込みモーダル -->
+    <div class="modal-bg" id="loadInModal">
+        <div class="modal" style="width:min(720px,94vw);">
+            <h3>📂 作品JSONを取り込む</h3>
+            <div class="toolbar" style="margin-bottom:8px;">
+                <input type="file" id="inFile" accept=".json" style="flex:1;">
+            </div>
+            <textarea id="inText" style="height:220px; font-family:ui-monospace,Consolas,monospace; font-size:12px;" placeholder="作品JSONを貼り付けるか，上のボタンでファイルを選んでください．&#10;取り込んだ内容は新しい作品として開きます（保存するまでDBには書き込まれません）．"></textarea>
+            <div class="modal-btns">
+                <button class="ghost" id="btnInCancel">閉じる</button>
+                <button id="btnInAsSpec">取り込む</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 未保存確認モーダル -->
+    <div class="modal-bg" id="leaveModal">
+        <div class="modal" style="width:min(520px,94vw);">
+            <h3>保存していない変更があります</h3>
+            <p class="hint" id="leaveMsg" style="margin-bottom:12px;"></p>
+            <div class="modal-btns">
+                <button class="ghost" id="btnLeaveCancel">このまま編集を続ける</button>
+                <button class="danger" id="btnLeaveDiscard">保存せずに移動</button>
+                <button id="btnLeaveSave">保存して移動</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- シーン取り込みモーダル -->
+    <div class="modal-bg" id="sceneInModal">
+        <div class="modal" style="width:min(720px,94vw);">
+            <h3>📂 シーンを取り込む</h3>
+            <p class="hint" style="margin-bottom:8px;">
+                挿入先：<b id="sceneInWhere"></b>　の前または後に入れます．
+            </p>
+            <div class="toolbar" style="margin-bottom:8px;">
+                <input type="file" id="sceneInFile" accept=".json" style="flex:1;">
+            </div>
+            <textarea id="sceneInText" style="height:200px; font-family:ui-monospace,Consolas,monospace; font-size:12px;" placeholder="シーンJSON（書き出したファイル）を貼り付けるか，上のボタンでファイルを選んでください．&#10;作品JSON全体を渡した場合は，その中の全シーンが取り込まれます．"></textarea>
+            <div class="modal-btns">
+                <button class="ghost" id="btnSceneInCancel">閉じる</button>
+                <button class="ghost" id="btnSceneInBefore">このシーンの前に挿入</button>
+                <button id="btnSceneInAfter">このシーンの後に挿入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 部品の書き方モーダル -->
+    <div class="modal-bg" id="kitModal">
+        <div class="modal" style="width:min(760px,94vw);">
+            <h3>📐 タイルの部品の書き方</h3>
+            <textarea id="kitText" style="height:52vh; font-family:ui-monospace,Consolas,monospace; font-size:12px;" readonly></textarea>
+            <div class="modal-btns">
+                <button class="ghost" id="btnKitClose">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- アップ済み画像モーダル -->
+    <div class="modal-bg" id="imgModal">
+        <div class="modal" style="width:min(720px,94vw);">
+            <h3>🗂 アップロード済みの画像</h3>
+            <div id="imgGrid" class="imggrid"></div>
+            <div class="modal-btns">
+                <button class="ghost" id="btnImgClose">閉じる</button>
+            </div>
+            <p class="hint">画像をクリックすると，編集中のタイルのカーソル位置に &lt;img&gt; が挿入されます．</p>
+        </div>
+    </div>
+    <input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.svg" style="display:none;">
+    <input type="file" id="embedFile" accept=".html,.htm" style="display:none;">
+
+    {% include 'kataribe/_player.html' %}
+
+    <script>
+        // ── エンドポイント（url_forで生成） ──
+        const API = {
+            list:   '{{ url_for("kataribe.api_list") }}',
+            get:    '{{ url_for("kataribe.api_get", pres_id=0) }}'.replace('/0', '/'),
+            save:   '{{ url_for("kataribe.api_save") }}',
+            del:    '{{ url_for("kataribe.api_delete", pres_id=0) }}'.replace('/0', '/'),
+            sample: '{{ url_for("kataribe.api_sample") }}',
+            upload: '{{ url_for("kataribe.api_upload_image") }}',
+            images: '{{ url_for("kataribe.api_images") }}',
+            play:   '{{ url_for("kataribe.play", pres_id=0) }}'.replace('/0', '/')
+        };
+
+        // ── 状態 ──
+        let spec = { title: '無題のプレゼン', scenes: [] };
+        let presId = null;
+        let previewTimer = null;
+
+        const BLOCK_TYPES = [
+            ['title', '大見出し'],
+            ['lead',  'リード文'],
+            ['card',  'カード'],
+            ['band',  '強調帯'],
+            ['note',  '脚注']
+        ];
+
+        function showResult(message, isError) {
+            const $r = $('#result');
+            $r.text(message).removeClass('success error')
+              .addClass(isError ? 'error' : 'success').show();
+            setTimeout(() => $r.fadeOut(), 5000);
+        }
+
+        // ── プレビュー ──
+        function refreshPreview(keep) {
+            KtbPlayer.load(JSON.parse(JSON.stringify(spec)),
+                           { keepPosition: keep !== false, scene: curScene });
+        }
+        function schedulePreview() {
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(() => refreshPreview(true), 400);
+        }
+
+        // ── エディタ（二モード：タイル編集／レイアウト・表示） ──
+        let curScene = 0;
+        let curTab = 'tiles';
+
+        const TILE_TEMPLATE =
+            '<div class="k-card">\n  <h4>見出し</h4>\n  <p>本文をここに書きます．</p>\n</div>';
+
+        function scene() {
+            if (!spec.scenes.length) spec.scenes.push({ title:'', subtitle:'', theme:'light', tiles:[] });
+            if (curScene >= spec.scenes.length) curScene = spec.scenes.length - 1;
+            const sc = spec.scenes[curScene];
+            if (!sc.tiles) sc.tiles = [];
+            if (!sc.kind) sc.kind = 'body';
+            return sc;
+        }
+        // シーンの呼び名（表紙／エンドノート／本文だけを数えた通し番号）
+        function sceneLabel(i) {
+            const s = spec.scenes[i];
+            if (!s) return '';
+            const k = s.kind || 'body';
+            if (k === 'cover') return '表紙';
+            if (k === 'end') return 'エンドノート';
+            let no = 0;
+            for (let j = 0; j <= i; j++) {
+                if ((spec.scenes[j].kind || 'body') === 'body') no++;
+            }
+            return 'シーン' + no;
+        }
+
+        function maxIn(sc) {
+            return sc.tiles.reduce((m, t) => Math.max(m, t.in || 1), 0);
+        }
+        function tileLabel(t, i) {
+            if (t.name) return t.name;
+            const m = String(t.html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            return m ? m.slice(0, 18) : ('タイル' + (i + 1));
+        }
+
+        function renderEditor() {
+            $('#presTitle').val(spec.title || '');
+            const sc = scene();
+
+            // シーンバー
+            const $sel = $('#sceneSel').empty();
+            spec.scenes.forEach((s, i) => {
+                $sel.append($('<option>').attr('value', i)
+                    .text(sceneLabel(i) + '：' + (s.title || '（無題）')
+                          + '　［' + ((s.tiles || s.blocks || []).length) + '］'));
+            });
+            $sel.val(curScene);
+            $('#sceneTitle').val(sc.title || '');
+            $('#sceneSub').val(sc.subtitle || '');
+            $('#sceneTheme').val(sc.theme || 'light');
+            $('#sceneKind').val(sc.kind || 'body');
+
+            if (curTab === 'tiles') renderTilePane(sc);
+            else if (curTab === 'layout') renderLayoutPane(sc);
+            else renderScenePane();
+        }
+
+        // ── モード1：タイル編集（一覧から1枚を選んで編集） ──
+        let curTile = 0;
+
+        function renderTilePane(sc) {
+            const $p = $('#paneTiles').empty();
+
+            if (sc.blocks && sc.blocks.length && !sc.tiles.length) {
+                $p.append($('<div class="hint" style="margin-bottom:8px;">')
+                    .text('このシーンは旧形式（ブロック）です．タイルに変換すると編集できます．'))
+                  .append($('<button class="ghost">🔁 このシーンをタイルに変換</button>')
+                    .on('click', () => { convertScene(sc); curTile = 0; renderEditor(); refreshPreview(true); commit('convert'); }));
+                return;
+            }
+            if (curTile >= sc.tiles.length) curTile = Math.max(0, sc.tiles.length - 1);
+
+            // 一覧
+            const $list = $('<div class="tilelist">');
+            if (!sc.tiles.length) {
+                $list.append($('<div class="hint">').text('タイルがありません．下の「＋ タイルを追加」から始めてください．'));
+            }
+            sc.tiles.forEach((t, i) => {
+                const $r = $('<div class="tilerow">').toggleClass('sel', i === curTile)
+                    .on('click', () => { curTile = i; renderTilePane(sc); KtbPlayer.setStep(t.in || 1); });
+                $r.append($('<span class="meta">').text('#' + (i + 1)));
+                $r.append($('<span class="nm">').text(tileLabel(t, i)));
+                $r.append($('<span class="meta">')
+                    .text('行' + (t.row || 1) + '・幅' + (t.span || 1) + '・入' + (t.in || 1)
+                          + (t.out ? '/出' + t.out : '')));
+                $list.append($r);
+            });
+            $p.append($list);
+
+            $p.append($('<div class="toolbar" style="margin:8px 0;">')
+                .append($('<button class="ghost">＋ タイルを追加</button>').on('click', () => addTile(sc)))
+                .append($('<button class="ghost">⧉ 複製</button>').prop('disabled', !sc.tiles.length)
+                    .on('click', () => dupTile(sc, curTile)))
+                .append($('<button class="ghost">▲</button>').prop('disabled', curTile === 0 || !sc.tiles.length)
+                    .on('click', () => { moveTile(sc, curTile, -1); curTile--; renderTilePane(sc); commit('tile'); }))
+                .append($('<button class="ghost">▼</button>').prop('disabled', curTile >= sc.tiles.length - 1)
+                    .on('click', () => { moveTile(sc, curTile, 1); curTile++; renderTilePane(sc); commit('tile'); }))
+                .append($('<button class="danger">🗑 削除</button>').prop('disabled', !sc.tiles.length)
+                    .on('click', () => {
+                        sc.tiles.splice(curTile, 1);
+                        const gaps = compactSteps(sc);          // 空きステップができたら詰める
+                        if (gaps) showResult('タイルを削除し，ステップ番号を詰めました（空のステップ' + gaps + '個を解消）', false);
+                        if (curTile >= sc.tiles.length) curTile = Math.max(0, sc.tiles.length - 1);
+                        renderTilePane(sc); refreshPreview(true); commit('tile');
+                    }))
+                .append($('<button class="ghost">📐 部品の書き方</button>').on('click', showKit)));
+
+            if (!sc.tiles.length) return;
+
+            // 選択したタイルだけを編集する
+            const t = sc.tiles[curTile];
+            const $t = $('<div class="tile active">');
+            $t.append($('<div class="tile-head">')
+                .append($('<span class="tno">').text('編集中 #' + (curTile + 1)))
+                .append($('<input type="text" placeholder="タイル名（任意）">')
+                    .val(t.name || '').css('flex', '1')
+                    .on('input', function(){ t.name = this.value; commit('text'); })
+                    .on('change', () => renderTilePane(sc))));
+
+            const $fr = $('<div class="fieldrow">');
+            [['行', 'row', 1], ['幅', 'span', 1], ['入', 'in', 1]].forEach(([lab, key, min]) => {
+                $fr.append($('<span>').text(lab));
+                $fr.append($('<input type="number">').attr('min', min).val(t[key] || 1)
+                    .on('input', function(){ t[key] = parseInt(this.value) || min; schedulePreview(); commit('num'); }));
+            });
+            $fr.append($('<span>').text('出'));
+            $fr.append($('<input type="number" min="2" placeholder="—">')
+                .val(t.out == null ? '' : t.out)
+                .on('input', function(){ t.out = this.value === '' ? null : (parseInt(this.value) || null); schedulePreview(); commit('num'); }));
+            $fr.append($('<button class="mini ghost" title="入の速い順にタイルを並べ替え，番号の欠番をなくします">⇅ 自動整列</button>')
+                .on('click', () => autoArrange(sc)));
+            $t.append($fr);
+
+            const $ta = $('<textarea class="html" spellcheck="false" placeholder="タイルのHTML">')
+                .val(t.html || '')
+                .on('input', function(){ t.html = this.value; schedulePreview(); commit('text'); });
+            $ta.css('height', '210px');
+            $t.append($ta);
+
+            $t.append($('<div class="toolbar" style="margin-top:6px;">')
+                .append($('<button class="ghost">🖼 画像を挿入</button>')
+                    .on('click', () => $('#imgFile').val('').trigger('click')))
+                .append($('<button class="ghost">🗂 アップ済み画像</button>').on('click', showImages))
+                .append($('<button class="ghost">🎆 HTMLを埋め込む</button>')
+                    .on('click', () => $('#embedFile').val('').trigger('click')))
+                .append($('<span class="hint">').text('幅'))
+                .append($('<input type="number" id="imgWidth" min="5" max="100" step="5">')
+                    .val(imgWidth).css('width', '64px')
+                    .on('input', function(){ imgWidth = Math.max(5, Math.min(100, parseInt(this.value) || 60)); }))
+                .append($('<span class="hint">').text('%　PNG / JPG / SVG（8MBまで）')));
+
+            $p.append($t);
+
+            currentTextarea = $ta[0];
+        }
+
+        // ── 画像の挿入 ──
+        let currentTextarea = null;
+        let imgWidth = 60;          // 挿入時の幅（%）．挿入後はHTMLのwidthを直接書き換えてもよい
+
+        function imgTag(url) {
+            return '<img class="k-img" src="' + url + '" style="width:' + imgWidth + '%;" alt="">';
+        }
+
+        function insertAtCursor(text) {
+            const ta = currentTextarea;
+            if (!ta) return;
+            const s = ta.selectionStart, e = ta.selectionEnd;
+            ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+            ta.selectionStart = ta.selectionEnd = s + text.length;
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.focus();
+        }
+
+        function uploadImage(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            showResult('画像をアップロードしています…', false);
+            $.ajax({
+                url: API.upload, method: 'POST', data: fd,
+                processData: false, contentType: false,
+                success: resp => {
+                    if (!resp.success) return showResult('アップロード失敗: ' + resp.error, true);
+                    insertAtCursor(imgTag(resp.url));
+                    showResult('画像を挿入しました（' + resp.filename + '／幅' + imgWidth
+                               + '%）．HTMLの width の数字を書き換えれば手で調整できます', false);
+                },
+                error: xhr => showResult('アップロードに失敗しました: ' +
+                    (xhr.responseJSON ? xhr.responseJSON.error : '通信エラー'), true)
+            });
+        }
+
+        // 自己完結HTML（花火などの作品）をアップロードして枠として埋め込む
+        function uploadEmbed(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            showResult('HTMLをアップロードしています…', false);
+            $.ajax({
+                url: API.upload, method: 'POST', data: fd,
+                processData: false, contentType: false,
+                success: resp => {
+                    if (!resp.success) return showResult('アップロード失敗: ' + resp.error, true);
+                    insertAtCursor('<iframe class="k-frame" src="' + resp.url + '"></iframe>');
+                    showResult('HTMLを埋め込みました（' + resp.filename +
+                               '）．高さは k-frame sm / md / lg / full で変えられます', false);
+                },
+                error: xhr => showResult('アップロードに失敗しました: ' +
+                    (xhr.responseJSON ? xhr.responseJSON.error : '通信エラー'), true)
+            });
+        }
+
+        function showImages() {
+            $.get(API.images, resp => {
+                if (!resp.success) return showResult('一覧取得に失敗: ' + resp.error, true);
+                const $g = $('#imgGrid').empty();
+                if (!resp.images.length) {
+                    $g.append($('<div class="hint">').text('まだ画像がありません．「🖼 画像を挿入」からアップロードしてください．'));
+                }
+                resp.images.forEach(im => {
+                    const $c = $('<div class="imgcell">');
+                    $c.append($('<img>').attr('src', im.url));
+                    $c.append($('<div class="nm">').text(im.filename));
+                    $c.on('click', () => {
+                        insertAtCursor(imgTag(im.url));
+                        $('#imgModal').hide();
+                        showResult('画像を挿入しました（幅' + imgWidth + '%）', false);
+                    });
+                    $g.append($c);
+                });
+                $('#imgModal').css('display', 'flex');
+            });
+        }
+
+        function addTile(sc, html) {
+            const nextRow = sc.tiles.length ? Math.max(...sc.tiles.map(t => t.row || 1)) + 1 : 1;
+            sc.tiles.push({
+                name: '', html: html || TILE_TEMPLATE,
+                row: nextRow, span: 1, in: maxIn(sc) + 1, out: null, narration: ''
+            });
+            curTile = sc.tiles.length - 1;
+            renderTilePane(sc); refreshPreview(true); commit('tile');
+        }
+        function dupTile(sc, i) {
+            const s = sc.tiles[i];
+            if (!s) return;
+            const c = JSON.parse(JSON.stringify(s));
+            c.in = maxIn(sc) + 1;
+            if (s.name) c.name = s.name + ' の複製';
+            sc.tiles.splice(i + 1, 0, c);
+            curTile = i + 1;
+            renderTilePane(sc); refreshPreview(true); commit('tile');
+            showResult('同じスタイルのタイルを複製しました（同じ行に並びます）', false);
+        }
+        // 使われていないステップ番号を詰めて 1,2,3… に振り直す（空きステップは無音の間になるため）
+        function compactSteps(sc) {
+            const tiles = sc.tiles || [];
+            if (!tiles.length) return 0;
+            const used = new Set();
+            tiles.forEach(t => {
+                used.add(t.in || 1);
+                if (t.out != null) used.add(t.out);
+            });
+            const sorted = [...used].sort((a, b) => a - b);
+            const before = sorted[sorted.length - 1];           // 詰める前の総ステップ数
+            const map = new Map();
+            sorted.forEach((v, i) => map.set(v, i + 1));
+            tiles.forEach(t => {
+                t.in = map.get(t.in || 1) || 1;
+                if (t.out != null) t.out = map.get(t.out) || null;
+            });
+            return before - sorted.length;                      // 解消した空きステップの数
+        }
+
+        // 入の速い順にタイルを並べ替え，番号の欠番を詰める（同番はそのまま並ぶ：1,2,2,3）
+        function autoArrange(sc) {
+            const tiles = sc.tiles || [];
+            if (!tiles.length) return;
+            const keep = tiles[curTile];                 // 選択中のタイルを見失わないよう控える
+            const before = tiles.map(t => t.in || 1).join(',');
+            const gaps = compactSteps(sc);
+            // 入の昇順（同番は元の並び順を保つ安定ソート）
+            tiles.map((t, i) => ({ t: t, i: i }))
+                 .sort((a, b) => (a.t.in - b.t.in) || (a.i - b.i))
+                 .forEach((rec, k) => { tiles[k] = rec.t; });
+            curTile = Math.max(0, tiles.indexOf(keep));
+            renderTilePane(sc); refreshFull(); commit('arrange');
+            const after = tiles.map(t => t.in || 1).join(',');
+            showResult('自動整列しました（入 ' + before + ' → ' + after +
+                       (gaps ? '／空のステップ' + gaps + '個を解消' : '') + '）', false);
+        }
+
+        function moveTile(sc, i, d) {
+            const t = sc.tiles.splice(i, 1)[0];
+            sc.tiles.splice(i + d, 0, t);
+        }
+
+        // 旧形式（blocks）をタイルに変換する
+        function convertScene(sc) {
+            const esc = s => String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            sc.tiles = (sc.blocks || []).map((b, i) => {
+                let html;
+                if (b.type === 'title')      html = '<div class="k-title">' + esc(b.heading || b.body) + '</div>';
+                else if (b.type === 'lead')  html = '<div class="k-lead">' + esc(b.body || b.heading) + '</div>';
+                else if (b.type === 'band')  html = '<div class="k-band">' + (b.heading ? '<b>' + esc(b.heading) + '</b>　' : '') + esc(b.body) + '</div>';
+                else if (b.type === 'note')  html = '<div class="k-note">' + esc(b.body || b.heading) + '</div>';
+                else html = '<div class="k-card">' + (b.heading ? '<h4>' + esc(b.heading) + '</h4>' : '') +
+                            (b.body ? '<p>' + esc(b.body) + '</p>' : '') + '</div>';
+                return { name:'', html: html, row: i + 1, span: 1,
+                         in: b.in || (i + 1), out: b.out == null ? null : b.out, narration: b.narration || '' };
+            });
+            delete sc.blocks;
+        }
+
+        // ── モード2：レイアウト・表示 ──
+        function renderLayoutPane(sc) {
+            const $p = $('#paneLayout').empty();
+            if (!sc.tiles.length) {
+                $p.append($('<div class="hint">').text('タイルがありません．「🧱 タイル編集」で追加してください．'));
+                return;
+            }
+            const $tbl = $('<table class="layout">');
+            $tbl.append($('<tr><th>#</th><th>タイル</th><th>行</th><th>幅</th><th>入</th><th>出</th><th></th></tr>'));
+            sc.tiles.forEach((t, i) => {
+                const $r = $('<tr>');
+                $r.append($('<td>').text(i + 1));
+                $r.append($('<td>').append($('<input type="text">')
+                    .val(t.name || '').attr('placeholder', tileLabel(t, i))
+                    .on('input', function(){ t.name = this.value; commit('text'); })));
+                $r.append($('<td>').append($('<input type="number" min="1">')
+                    .val(t.row || 1)
+                    .on('input', function(){ t.row = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
+                $r.append($('<td>').append($('<input type="number" min="1" max="6">')
+                    .val(t.span || 1)
+                    .on('input', function(){ t.span = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
+                $r.append($('<td>').append($('<input type="number" min="1">')
+                    .val(t.in || 1)
+                    .on('input', function(){ t.in = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
+                $r.append($('<td>').append($('<input type="number" min="2" placeholder="—">')
+                    .val(t.out == null ? '' : t.out)
+                    .on('input', function(){ t.out = this.value === '' ? null : (parseInt(this.value) || null); schedulePreview(); commit('num'); })));
+                $r.append($('<td>').append($('<button class="mini ghost">▲</button>').prop('disabled', i === 0)
+                        .on('click', () => { moveTile(sc, i, -1); renderEditor(); refreshFull(); commit('tile'); }))
+                    .append($('<button class="mini ghost">▼</button>').prop('disabled', i === sc.tiles.length - 1)
+                        .on('click', () => { moveTile(sc, i, 1); renderEditor(); refreshFull(); commit('tile'); })));
+                $tbl.append($r);
+            });
+            $p.append($tbl);
+            $p.append($('<div class="hint" style="margin-top:8px;">')
+                .text('同じ「行」のタイルは横に並びます．「幅」は行内での比率．「入」で現れ，「出」で消えます（空欄なら残る）．'));
+
+            // ステップ確認スライダ
+            const total = sc.tiles.reduce((m, t) => Math.max(m, t.in || 1, t.out || 0), 0);
+            const $row = $('<div class="steprow">');
+            const $lab = $('<span>').text('ステップ 0 / ' + total);
+            const $rng = $('<input type="range" min="0">').attr('max', total).val(0)
+                .on('input', function(){
+                    $lab.text('ステップ ' + this.value + ' / ' + total);
+                    KtbPlayer.setStep(parseInt(this.value));
+                });
+            $row.append($('<span>').text('表示確認：')).append($rng).append($lab);
+            $p.append($row);
+        }
+
+        function showKit() {
+            const kit = [
+                '【タイルの書き方】タイルはHTML断片です．次のクラスを使うと体裁が揃います．',
+                '',
+                '<div class="k-title">大見出し</div>（明朝・特大）',
+                '<div class="k-sub">English Subtitle</div>',
+                '<div class="k-lead">リード文（左に罫）</div>',
+                '<div class="k-card"><h4>見出し</h4><p>本文</p></div>',
+                '　色違い： k-card violet / rose / green / navy',
+                '<div class="k-band"><b>結論</b>　強調の帯</div>',
+                '<div class="k-note">脚注・出典</div>',
+                '<span class="k-kicker">科目名などのタグ</span>',
+                '<span class="k-chip">メタ情報</span>　<span class="k-badge">実績バッジ</span>',
+                '<div class="k-stat"><div class="v">25<small>万行</small></div><div class="l">ラベル</div></div>',
+                '<span class="k-num">①</span>　<span class="k-accent">アクセント文字</span>',
+                '<div class="k-head">第1回</div>（カード上部の見出し帯）',
+                '<div class="k-arrow">→</div>（横並びの間に置く矢印）',
+                '<iframe class="k-frame" src="/kataribe/img/xxxx.html"></iframe>',
+                '　アップロードした自己完結HTML（アニメーション等）をそのまま動かす枠です．',
+                '　高さ違い： k-frame sm（30vh）/ md（45vh）/ lg（75vh）/ full（86vh）',
+                '　シーンに入るたびに読み込み直されるので，そのつど最初から再生されます．',
+                '',
+                '<img class="k-img" src="URL" style="width:60%;">',
+                '　画像は既定で画面に収まるよう自動調整されます（高さは画面の約半分まで）．',
+                '　幅の手動調整： style="width:40%;" など．挿入時の既定値はボタン横の「幅 ○%」で決められます．',
+                '　大きさ違い： k-img sm（小）/ md（中）/ lg（大）/ full（幅いっぱい）',
+                '',
+                '自由なHTMLとstyle属性も使えます（scriptは安全のため取り除かれます）．'
+            ].join('\n');
+            $('#kitText').val(kit);
+            $('#kitModal').css('display', 'flex');
+        }
+
+        // ── モード3：シーン一覧（エクスポート／インポート／並べ替え） ──
+        let scenePick = [];        // シーンごとの選択状態
+
+        function syncPick() {
+            while (scenePick.length < spec.scenes.length) scenePick.push(false);
+            scenePick = scenePick.slice(0, spec.scenes.length);
+        }
+
+        function sceneSteps(sc) {
+            if ((sc.kind || 'body') !== 'body') return 0;
+            const items = (sc.tiles && sc.tiles.length) ? sc.tiles : (sc.blocks || []);
+            return items.reduce((m, t) => Math.max(m, t.in || 1, t.out || 0), 0);
+        }
+
+        function renderScenePane() {
+            syncPick();
+            const $p = $('#paneScenes').empty();
+
+            const $tbl = $('<table class="scenes">');
+            $tbl.append($('<tr>')
+                .append($('<th>').append($('<input type="checkbox" id="pickAll">')
+                    .on('change', function(){ scenePick = scenePick.map(() => this.checked); renderScenePane(); })))
+                .append($('<th>').text('種別'))
+                .append($('<th>').text('題名'))
+                .append($('<th class="num">').text('タイル'))
+                .append($('<th class="num">').text('ステップ'))
+                .append($('<th>').text('')));
+
+            spec.scenes.forEach((sc, i) => {
+                const $r = $('<tr>').toggleClass('cur', i === curScene);
+                $r.append($('<td>').append($('<input type="checkbox">').prop('checked', !!scenePick[i])
+                    .on('change', function(){ scenePick[i] = this.checked; renderScenePane(); })));
+                $r.append($('<td class="kind">').text(sceneLabel(i)));
+                $r.append($('<td>').append($('<input type="text" class="ttl" placeholder="（無題）">')
+                    .val(sc.title || '')
+                    .on('input', function(){ sc.title = this.value; schedulePreview(); commit('text'); })));
+                $r.append($('<td class="num">').text((sc.tiles || sc.blocks || []).length));
+                $r.append($('<td class="num">').text(sceneSteps(sc) || '—'));
+                $r.append($('<td>')
+                    .append($('<button class="mini ghost" title="このシーンを編集">✎</button>')
+                        .on('click', () => { curTab = 'tiles'; $('.tab').removeClass('active');
+                                             $('.tab[data-tab=tiles]').addClass('active');
+                                             $('#paneScenes').hide(); $('#paneTiles').show();
+                                             gotoScene(i); }))
+                    .append($('<button class="mini ghost">▲</button>').prop('disabled', i === 0)
+                        .on('click', () => moveScene(i, -1)))
+                    .append($('<button class="mini ghost">▼</button>').prop('disabled', i === spec.scenes.length - 1)
+                        .on('click', () => moveScene(i, 1))));
+                $tbl.append($r);
+            });
+            $p.append($tbl);
+
+            const picked = scenePick.filter(Boolean).length;
+            $p.append($('<div class="toolbar" style="margin-top:10px;">')
+                .append($('<button class="ghost">⬇ 選んだシーンを書き出す</button>')
+                    .prop('disabled', !picked)
+                    .on('click', exportScenes))
+                .append($('<button class="ghost">📂 シーンを取り込む</button>')
+                    .on('click', () => {
+                        $('#sceneInText').val(''); $('#sceneInFile').val('');
+                        $('#sceneInWhere').text(sceneLabel(curScene) + '「' + (spec.scenes[curScene].title || '無題') + '」');
+                        $('#sceneInModal').css('display', 'flex');
+                    }))
+                .append($('<span class="hint">').text(picked ? picked + '件を選択中' : 'チェックで書き出すシーンを選びます')));
+            $p.append($('<div class="hint" style="margin-top:6px;">')
+                .text('書き出したJSONは，別の作品に取り込めます．取り込みは，いま選ばれているシーンの前後に挿入します．'));
+        }
+
+        function moveScene(i, d) {
+            const j = i + d;
+            if (j < 0 || j >= spec.scenes.length) return;
+            const sc = spec.scenes.splice(i, 1)[0];
+            spec.scenes.splice(j, 0, sc);
+            const pk = scenePick.splice(i, 1)[0];
+            scenePick.splice(j, 0, pk);
+            if (curScene === i) curScene = j;
+            else if (curScene === j) curScene = i;
+            renderEditor(); refreshFull(); commit('scene');
+        }
+
+        // 選んだシーンをJSONファイルに書き出す
+        function exportScenes() {
+            const picked = spec.scenes.filter((sc, i) => scenePick[i]);
+            if (!picked.length) return showResult('書き出すシーンを選んでください', true);
+            const out = {
+                export_type: 'kataribe_scenes',
+                format_version: 1,
+                from_title: spec.title || '',
+                scenes: JSON.parse(JSON.stringify(picked))
+            };
+            const base = (spec.title || 'kataribe').replace(/[\\/:*?"<>|]/g, '_');
+            const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = base + '_scenes' + picked.length + '.json';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            showResult(picked.length + '件のシーンを書き出しました', false);
+        }
+
+        // 取り込んだJSONからシーンの配列を取り出す（シーン書き出し・作品JSONのどちらでも可）
+        function scenesFromText(text) {
+            let t = String(text || '').trim();
+            if (t.startsWith('```')) t = t.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '');
+            const s = t.indexOf('{'), b = t.indexOf('[');
+            const start = (b >= 0 && (s < 0 || b < s)) ? b : s;
+            const endCh = (start === b) ? ']' : '}';
+            if (start < 0) throw new Error('JSONが見つかりません');
+            const o = JSON.parse(t.slice(start, t.lastIndexOf(endCh) + 1));
+            const arr = Array.isArray(o) ? o : o.scenes;
+            if (!Array.isArray(arr) || !arr.length) throw new Error('シーンが入っていません');
+            return arr.map(sc => ({
+                title: String(sc.title || ''),
+                subtitle: String(sc.subtitle || ''),
+                kind: ['body', 'cover', 'end'].includes(sc.kind) ? sc.kind : 'body',
+                theme: ['light', 'dark', 'cover'].includes(sc.theme) ? sc.theme : 'light',
+                tiles: Array.isArray(sc.tiles) ? sc.tiles : [],
+                blocks: Array.isArray(sc.blocks) && !(sc.tiles || []).length ? sc.blocks : undefined
+            })).map(sc => { if (!sc.blocks) delete sc.blocks; return sc; });
+        }
+
+        function importScenes(after) {
+            let arr;
+            try {
+                arr = scenesFromText($('#sceneInText').val());
+            } catch (e) {
+                return showResult('シーンJSONとして読めませんでした: ' + e.message, true);
+            }
+            const pos = after ? curScene + 1 : curScene;
+            spec.scenes.splice(pos, 0, ...arr);
+            scenePick = [];
+            curScene = pos; curTile = 0;
+            $('#sceneInModal').hide();
+            renderEditor(); refreshFull(); commit('scene');
+            showResult(arr.length + '件のシーンを取り込みました（' + sceneLabel(pos) + ' から）', false);
+        }
+
+        // ── シーン操作 ──
+        function gotoScene(i) {
+            curScene = Math.max(0, Math.min(spec.scenes.length - 1, i));
+            curTile = 0;
+            renderEditor();
+            KtbPlayer.goScene(curScene);
+            KtbPlayer.showAll();          // そのシーンが全部表示された状態を映す
+        }
+        // 並べ替え・種別変更などのあと，現在のシーンを全部表示した状態にする
+        function refreshFull() {
+            refreshPreview(false);
+            KtbPlayer.showAll();
+        }
+
+        // ── 一覧・読み込み・保存 ──
+        function loadList() {
+            $.get(API.list, resp => {
+                if (!resp.success) return showResult('一覧取得に失敗: ' + resp.error, true);
+                const $l = $('#presList').empty();
+                if (!resp.presentations.length) {
+                    $l.append($('<div class="hint">').text('まだプレゼンがありません．「＋ 新規」か「サンプル読み込み」から始めてください．'));
+                }
+                resp.presentations.forEach(p => {
+                    const $i = $('<div class="pres-item">');
+                    $i.append($('<a>').text(p.title).on('click', () => openPres(p.id)));
+                    $i.append($('<span class="date">').text(p.updated_at));
+                    $l.append($i);
+                });
+            });
+        }
+
+        function openPres(id) {
+            $.get(API.get + id, resp => {
+                if (!resp.success) return showResult('読み込みに失敗: ' + resp.error, true);
+                presId = resp.presentation.id;
+                spec = resp.presentation.spec;
+                spec.title = resp.presentation.title;
+                curScene = 0;
+                renderEditor(); refreshPreview(false); syncJson();
+                markSaved(); resetHistory();
+                showResult('「' + spec.title + '」を開きました', false);
+            });
+        }
+
+        function save(done) {
+            spec.title = $('#presTitle').val().trim() || spec.title;
+            $.ajax({
+                url: API.save, method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ id: presId, title: spec.title, spec: spec }),
+                success: resp => {
+                    if (resp.success) {
+                        presId = resp.id;
+                        markSaved();
+                        showResult('保存しました', false);
+                        loadList();
+                        if (typeof done === 'function') done();
+                    }
+                    else showResult('エラー: ' + resp.error, true);
+                },
+                error: xhr => showResult('保存に失敗しました: ' + (xhr.responseJSON ? xhr.responseJSON.error : '通信エラー'), true)
+            });
+        }
+
+        // ── 未保存の変更の検出 ──
+        let savedSnapshot = null;          // 最後に保存（または読み込み）した時点の内容
+
+        function snapshot() {
+            return JSON.stringify({ t: $('#presTitle').val(), s: spec });
+        }
+        function markSaved() { savedSnapshot = snapshot(); }
+        function hasContent() {
+            return (spec.scenes || []).some(sc => (sc.tiles || sc.blocks || []).length)
+                   || ($('#presTitle').val() || '').trim() !== '';
+        }
+        function isDirty() {
+            if (savedSnapshot === null) return hasContent();
+            return snapshot() !== savedSnapshot;
+        }
+
+        // ── 元に戻す／やり直す ──
+        // 変更のたびに作品全体のスナップショットを積む．文字入力は短時間なら1手にまとめる．
+        const HIST_MAX = 120;
+        let history = [], hIndex = -1, lastTag = '', lastAt = 0, restoring = false;
+
+        function resetHistory() {
+            history = [snapshot()]; hIndex = 0; lastTag = ''; lastAt = 0;
+            paintHistoryButtons();
+        }
+        function commit(tag) {
+            if (restoring) return;
+            const snap = snapshot();
+            if (hIndex >= 0 && history[hIndex] === snap) return;      // 変化なし
+            const now = Date.now();
+            const coalesce = (tag === 'text' && lastTag === 'text' && now - lastAt < 900 && hIndex > 0);
+            if (coalesce) {
+                history[hIndex] = snap;                                // 連続入力は1手にまとめる
+            } else {
+                history = history.slice(0, hIndex + 1);                // やり直し分を捨てる
+                history.push(snap);
+                if (history.length > HIST_MAX) history.shift();
+                hIndex = history.length - 1;
+            }
+            lastTag = tag || ''; lastAt = now;
+            paintHistoryButtons();
+        }
+        function restore(snap) {
+            const o = JSON.parse(snap);
+            restoring = true;
+            spec = o.s;
+            $('#presTitle').val(o.t || '');
+            if (curScene >= spec.scenes.length) curScene = Math.max(0, spec.scenes.length - 1);
+            const tiles = (spec.scenes[curScene] || {}).tiles || [];
+            if (curTile >= tiles.length) curTile = Math.max(0, tiles.length - 1);
+            renderEditor(); refreshFull(); syncJson();
+            restoring = false;
+            lastTag = ''; lastAt = 0;
+            paintHistoryButtons();
+        }
+        function undo() {
+            if (hIndex <= 0) return showResult('これ以上戻せません', true);
+            hIndex--; restore(history[hIndex]);
+            showResult('元に戻しました（あと' + hIndex + '手戻せます）', false);
+        }
+        function redo() {
+            if (hIndex >= history.length - 1) return showResult('やり直せる操作はありません', true);
+            hIndex++; restore(history[hIndex]);
+            showResult('やり直しました', false);
+        }
+        function paintHistoryButtons() {
+            $('#btnUndo').prop('disabled', hIndex <= 0);
+            $('#btnRedo').prop('disabled', hIndex >= history.length - 1);
+        }
+
+        // ── JSON編集 ──
+        function syncJson() {
+            if ($('#jsonWrap').is(':visible')) $('#jsonArea').val(JSON.stringify(spec, null, 2));
+        }
+
+        // ── 作品JSONの解釈（コードフェンス付きの貼り付けにも耐える） ──
+        function importSpecText(text) {
+            let t = text.trim();
+            // コードフェンスを剥がす
+            if (t.startsWith('```')) {
+                t = t.replace(/^```[a-zA-Z]*\s*/, '');
+                const fence = t.lastIndexOf('```');
+                if (fence !== -1) t = t.slice(0, fence);
+            }
+            const start = t.indexOf('{');
+            const end = t.lastIndexOf('}');
+            if (start === -1 || end === -1) throw new Error('JSONが見つかりません');
+            const parsed = JSON.parse(t.slice(start, end + 1));
+            if (!parsed.scenes || !Array.isArray(parsed.scenes)) throw new Error('scenes がありません');
+            return parsed;
+        }
+
+        // ── 別名保存・書き出し ──
+        function saveAs() {
+            const base = ($('#presTitle').val() || spec.title || '無題のプレゼン').trim();
+            const t = prompt('別名で保存します．新しい題名を入力してください．', base + ' のコピー');
+            if (t === null) return;
+            const title = t.trim();
+            if (!title) return showResult('題名を入力してください', true);
+            presId = null;                 // 新規レコードとして保存する
+            spec.title = title;
+            $('#presTitle').val(title);
+            save();
+        }
+
+        function exportSpec() {
+            const name = (spec.title || 'kataribe').replace(/[\\/:*?"<>|]/g, '_');
+            const blob = new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name + '.json';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            showResult('作品JSONを書き出しました', false);
+        }
+
+        // ── 完成プレゼンHTMLの書き出し（自己完結・1ファイル） ──
+        function exportHtml() {
+            if (!spec.scenes || !spec.scenes.length) return showResult('シーンがありません', true);
+            // このページに読み込まれているプレイヤー部品のCSS・JSをそのまま流用する
+            // プレイヤー本体のCSSだけを選ぶ（このページ自身のCSSにも .ktb-player の記述があるため，
+            // プレイヤー固有のセレクタを複数条件にして取り違えを防ぐ）
+            const css = [...document.querySelectorAll('style')]
+                .map(e => e.textContent)
+                .filter(t => t && t.indexOf('.ktb-stage') !== -1
+                          && t.indexOf('.ktb-blk') !== -1
+                          && t.indexOf('.ktb-ctrl') !== -1)
+                .join('\n');
+            const js = [...document.querySelectorAll('script')]
+                .map(e => e.textContent).find(t => t && t.indexOf('var KtbPlayer') !== -1);
+            if (!css || !js) return showResult('プレイヤー部品を取り出せませんでした', true);
+
+            const title = spec.title || 'かたりべプレゼン';
+            const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const abs = JSON.parse(JSON.stringify(spec));
+            (abs.scenes || []).forEach(sc => (sc.tiles || []).forEach(t => {
+                if (t.html) t.html = t.html.replace(/(src\s*=\s*["'])\/kataribe\/img\//g,
+                                                    '$1' + location.origin + '/kataribe/img/');
+            }));
+            const specLiteral = JSON.stringify(abs).replace(/</g, '\\u003c');
+            const html =
+'<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
+'<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'<title>' + esc(title) + '</title>\n<style>\n' +
+'* { margin:0; padding:0; box-sizing:border-box; }\n' +
+'html, body { height:100%; background:#141d26; overflow:hidden; }\n' +
+'body { font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif; }\n' +
+'#player { height:100%; }\n#player .ktb-player { height:100%; }\n' +
+css +
+'\n</style>\n</head>\n<body>\n<div id="player"></div>\n<script>\n' +
+js +
+'\nvar KTB_SPEC = ' + specLiteral + ';\n' +
+'KtbPlayer.init(document.getElementById("player"));\n' +
+'KtbPlayer.bindKeys();\nKtbPlayer.load(KTB_SPEC);\n' +
+'<\/script>\n</body>\n</html>\n';
+
+            const name = title.replace(/[\\/:*?"<>|]/g, '_');
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name + '.html';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            showResult('プレゼンHTMLを書き出しました（1ファイルで再生できます）', false);
+        }
+
+        // ── 作品JSONの取り込み ──
+        function loadSpecFromText(text) {
+            const parsed = importSpecText(text);
+            spec = parsed;
+            presId = null;                       // 取り込みは常に新規作品として扱う
+            if (!spec.title) spec.title = '取り込んだプレゼン';
+            curScene = 0; curTile = 0;
+        }
+
+        // ── イベント ──
+        $('#btnNew').on('click', () => {
+            presId = null;
+            spec = { title: '無題のプレゼン', scenes: [ { title: '', subtitle: '', theme: 'cover', kind: 'cover', tiles: [] } ] };
+            curScene = 0;
+            renderEditor(); refreshPreview(false); syncJson();
+            markSaved(); resetHistory();
+        });
+        $('#btnSample').on('click', () => {
+            $.get(API.sample, resp => {
+                if (!resp.success) return showResult('サンプル取得に失敗: ' + resp.error, true);
+                presId = null;
+                spec = resp.spec;
+                curScene = 0; curTile = 0;
+                renderEditor(); refreshPreview(false); syncJson(); resetHistory();
+                showResult('サンプルを読み込みました（保存すると自分のプレゼンになります）', false);
+            });
+        });
+        $('#btnSave').on('click', () => save());
+        $('#btnDelete').on('click', () => {
+            if (!presId) return showResult('保存されていないプレゼンです', true);
+            if (!confirm('「' + spec.title + '」を削除しますか？')) return;
+            $.post(API.del + presId, resp => {
+                if (resp.success) {
+                    showResult('削除しました', false);
+                    presId = null;
+                    spec = { title: '無題のプレゼン', scenes: [] };
+                    renderEditor(); refreshPreview(false); loadList();
+                    markSaved(); resetHistory();
+                } else showResult('削除に失敗: ' + resp.error, true);
+            });
+        });
+        $('#btnJson').on('click', () => {
+            $('#jsonWrap').toggle();
+            syncJson();
+        });
+        $('#btnJsonApply').on('click', () => {
+            try {
+                spec = JSON.parse($('#jsonArea').val());
+                curScene = Math.min(curScene, Math.max(0, (spec.scenes || []).length - 1));
+                curTile = 0;
+                renderEditor(); refreshFull(); commit('json');
+                showResult('JSONを反映しました', false);
+            } catch (e) {
+                showResult('JSONの形式が不正です: ' + e.message, true);
+            }
+        });
+        $('#presTitle').on('input', function(){ spec.title = this.value; commit('text'); });
+        // 現在のシーンの直前／直後に新しいシーンを挿入する
+        function addSceneAt(pos) {
+            spec.scenes.splice(pos, 0, { title: '', subtitle: '', theme: 'light', kind: 'body', tiles: [] });
+            curScene = pos; curTile = 0;
+            renderEditor(); refreshFull(); commit('scene');
+            showResult(sceneLabel(pos) + ' として挿入しました', false);
+        }
+        $('#btnAddBefore').on('click', () => addSceneAt(curScene));
+        $('#btnAddAfter').on('click', () => addSceneAt(curScene + 1));
+        $('#sceneSel').on('change', function(){ gotoScene(parseInt(this.value)); });
+        $('#btnScenePrev').on('click', () => gotoScene(curScene - 1));
+        $('#btnSceneNext').on('click', () => gotoScene(curScene + 1));
+        $('#btnSceneUp').on('click', () => {
+            if (curScene === 0) return;
+            const t = spec.scenes.splice(curScene, 1)[0];
+            spec.scenes.splice(curScene - 1, 0, t); curScene--;
+            renderEditor(); refreshFull(); commit('scene');
+        });
+        $('#btnSceneDown').on('click', () => {
+            if (curScene >= spec.scenes.length - 1) return;
+            const t = spec.scenes.splice(curScene, 1)[0];
+            spec.scenes.splice(curScene + 1, 0, t); curScene++;
+            renderEditor(); refreshFull(); commit('scene');
+        });
+        $('#btnSceneDel').on('click', () => {
+            if (spec.scenes.length <= 1) return showResult('シーンは1つ以上必要です', true);
+            const label = sceneLabel(curScene);
+            const t = spec.scenes[curScene].title;
+            if (!confirm(label + (t ? '「' + t + '」' : '（無題）') + 'を削除しますか？')) return;
+            spec.scenes.splice(curScene, 1);
+            if (curScene >= spec.scenes.length) curScene = spec.scenes.length - 1;
+            curTile = 0;
+            renderEditor(); refreshFull(); commit('scene');
+        });
+        $('#sceneTitle').on('input', function(){ scene().title = this.value; schedulePreview(); commit('text'); });
+        $('#sceneSub').on('input', function(){ scene().subtitle = this.value; schedulePreview(); commit('text'); });
+        $('#sceneTheme').on('change', function(){ scene().theme = this.value; refreshFull(); commit('scene'); });
+        $('#sceneKind').on('change', function(){
+            const sc = scene();
+            sc.kind = this.value;
+            // 種別を変えたら地色の既定も合わせる（あとから個別に変更できる）
+            if (sc.kind === 'cover' && sc.theme === 'light') sc.theme = 'cover';
+            if (sc.kind === 'end'   && sc.theme === 'light') sc.theme = 'dark';
+            if (sc.kind === 'body'  && sc.theme !== 'light') sc.theme = 'light';
+            $('#sceneTheme').val(sc.theme);
+            renderEditor(); refreshFull(); commit('scene');
+            showResult(sc.kind === 'body'
+                ? '本文シーンです（シーン番号・題名・ステップ送りが有効）'
+                : '表紙／エンドノートです（番号・題名・ステップ送りなし．タイルは一括表示）', false);
+        });
+        $('.tab').on('click', function(){
+            curTab = $(this).data('tab');
+            $('.tab').removeClass('active'); $(this).addClass('active');
+            $('#paneTiles').toggle(curTab === 'tiles');
+            $('#paneLayout').toggle(curTab === 'layout');
+            $('#paneScenes').toggle(curTab === 'scenes');
+            renderEditor();
+        });
+        $('#imgFile').on('change', function(){
+            const f = this.files && this.files[0];
+            if (f) uploadImage(f);
+        });
+        $('#embedFile').on('change', function(){
+            const f = this.files && this.files[0];
+            if (f) uploadEmbed(f);
+        });
+        $('#btnImgClose').on('click', () => { $('#imgModal').hide(); });
+        $('#btnKitClose').on('click', () => { $('#kitModal').hide(); });
+        $('#btnSceneInCancel').on('click', () => { $('#sceneInModal').hide(); });
+        $('#btnSceneInBefore').on('click', () => importScenes(false));
+        $('#btnSceneInAfter').on('click', () => importScenes(true));
+        $('#sceneInFile').on('change', function(){
+            const f = this.files && this.files[0];
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = () => $('#sceneInText').val(r.result);
+            r.readAsText(f);
+        });
+
+        // ── FUJINダッシュボードへ戻るとき，未保存の変更を確認する ──
+        let leaveTo = null;
+        $('#btnHome').on('click', function(e){
+            if (!isDirty()) return;                     // 変更がなければそのまま移動
+            e.preventDefault();
+            leaveTo = this.href;
+            $('#leaveMsg').text('「' + ($('#presTitle').val() || '無題のプレゼン')
+                + '」に，まだ保存していない変更があります．どうしますか？');
+            $('#leaveModal').css('display', 'flex');
+        });
+        $('#btnLeaveCancel').on('click', () => { $('#leaveModal').hide(); leaveTo = null; });
+        $('#btnLeaveDiscard').on('click', () => {
+            $('#leaveModal').hide();
+            savedSnapshot = snapshot();                 // 以後の離脱警告を止める
+            if (leaveTo) window.location.href = leaveTo;
+        });
+        $('#btnLeaveSave').on('click', () => {
+            const title = ($('#presTitle').val() || '').trim();
+            if (!title) { showResult('題名を入れてから保存してください', true); return; }
+            $('#leaveModal').hide();
+            save(() => { if (leaveTo) window.location.href = leaveTo; });
+        });
+        // タブを閉じる・別のURLへ移動する場合の保険
+        window.addEventListener('beforeunload', function(e){
+            if (isDirty()) { e.preventDefault(); e.returnValue = ''; }
+        });
+        let keysBound = false;
+        function setFullView(on) {
+            $('body').toggleClass('fullview', on);
+            if (on) {
+                // 全コンテンツ表示は再生画面と同等に使えるようキー操作も有効にする
+                if (!keysBound) { KtbPlayer.bindKeys(); keysBound = true; }
+                KtbPlayer.showAll();
+            } else {
+                renderEditor();
+            }
+        }
+        $('#btnFull').on('click', () => setFullView(true));
+        $('#btnBack').on('click', () => setFullView(false));
+        $(document).on('keydown', e => {
+            if (e.key === 'Escape' && $('body').hasClass('fullview')) setFullView(false);
+        });
+        $('#btnUndo').on('click', undo);
+        $('#btnRedo').on('click', redo);
+        $(document).on('keydown', e => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            const k = (e.key || '').toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+        });
+        $('#btnSaveAs').on('click', saveAs);
+        $('#btnExport').on('click', exportSpec);
+        $('#btnExportHtml').on('click', exportHtml);
+        $('#btnLoadIn').on('click', () => {
+            $('#inText').val('');
+            $('#inFile').val('');
+            $('#loadInModal').css('display', 'flex');
+        });
+        $('#btnInCancel').on('click', () => { $('#loadInModal').hide(); });
+        $('#inFile').on('change', function(){
+            const f = this.files && this.files[0];
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = () => $('#inText').val(r.result);
+            r.readAsText(f);
+        });
+        $('#btnInAsSpec').on('click', () => {
+            try {
+                loadSpecFromText($('#inText').val());
+                $('#loadInModal').hide();
+                renderEditor(); refreshFull(); syncJson(); resetHistory();
+                showResult('作品JSONを取り込みました（新規作品です．保存してください）', false);
+            } catch (e) {
+                showResult('作品JSONとして読めませんでした: ' + e.message, true);
+            }
+        });
+
+        // ── 初期化 ──
+        KtbPlayer.init(document.getElementById('player'));
+        KtbPlayer.onSceneChange(function(i){
+            if (i !== curScene){ curScene = i; renderEditor(); }
+        });
+        renderEditor();
+        refreshPreview(false);
+        loadList();
+        markSaved();          // 起動直後は「変更なし」から始める
+        resetHistory();       // 履歴の起点
+    </script>
+</body>
+</html>
