@@ -76,6 +76,7 @@ def create_app():
     from fujinp.index_review import index_review_bp
     from fujinp.stats.stats import stats_bp
 
+    from fujinp.kataribe import kataribe_bp
     from fujinp.awami import our_meeting_bp
     from fujinp.document_archive import document_archive_bp
     from fujinp.free_hand_curve.routes import free_hand_curve_bp
@@ -117,7 +118,7 @@ def create_app():
     app.register_blueprint(index_review_bp)
     app.register_blueprint(stats_bp, url_prefix='/stats')
 
-
+    app.register_blueprint(kataribe_bp)
     app.register_blueprint(our_meeting_bp)
     app.register_blueprint(document_archive_bp, url_prefix='/document_archive')
     app.register_blueprint(free_hand_curve_bp, url_prefix='/free_hand_curve')
