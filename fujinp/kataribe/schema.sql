@@ -1,3 +1,8 @@
+-- This file is part of FUJIN-P.
+-- SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+-- Source: https://github.com/nishida-toyoaki/fujin-p
+
 -- かたりべ (kataribe) テーブル定義
 -- 実行先: <owner>$default データベース
 

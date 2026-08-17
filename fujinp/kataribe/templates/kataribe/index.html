@@ -369,6 +369,18 @@
             setTimeout(() => $r.fadeOut(), 5000);
         }
 
+        // APIがJSON以外（認証画面への転送など）を返しても undefined にしない。
+        function apiErrorMessage(xhr, textStatus, errorThrown) {
+            const body = xhr && xhr.responseJSON;
+            if (body && (body.error || body.message)) return body.error || body.message;
+            if (xhr && xhr.status === 401) return 'ログインが切れています。再ログインしてください';
+            if (xhr && xhr.status === 403) return 'この操作を行う編集権限がありません';
+            const text = String((xhr && xhr.responseText) || '').trim();
+            if (/^\s*</.test(text)) return '保存APIが別画面を返しました。再ログイン後にもう一度お試しください';
+            if (text) return text.slice(0, 240);
+            return errorThrown || textStatus || '通信エラー';
+        }
+
         // ── プレビュー ──
         function refreshPreview(keep) {
             KtbPlayer.load(JSON.parse(JSON.stringify(spec)),
@@ -964,18 +976,21 @@
             spec.title = $('#presTitle').val().trim() || spec.title;
             $.ajax({
                 url: API.save, method: 'POST', contentType: 'application/json',
+                dataType: 'json',
                 data: JSON.stringify({ id: presId, title: spec.title, spec: spec }),
                 success: resp => {
-                    if (resp.success) {
+                    if (resp && resp.success) {
                         presId = resp.id;
                         markSaved();
                         showResult('保存しました', false);
                         loadList();
                         if (typeof done === 'function') done();
                     }
-                    else showResult('エラー: ' + resp.error, true);
+                    else showResult('保存に失敗しました: ' +
+                        ((resp && (resp.error || resp.message)) || 'サーバーから想定外の応答がありました'), true);
                 },
-                error: xhr => showResult('保存に失敗しました: ' + (xhr.responseJSON ? xhr.responseJSON.error : '通信エラー'), true)
+                error: (xhr, textStatus, errorThrown) =>
+                    showResult('保存に失敗しました: ' + apiErrorMessage(xhr, textStatus, errorThrown), true)
             });
         }
 

@@ -21,6 +21,7 @@
 
 """かたりべ (kataribe) - ルート定義（v1はClaude連携を依頼文コピー方式で行うため，AI呼び出しAPIは持たない）"""
 import datetime
+from functools import wraps
 import json
 import logging
 import os
@@ -37,7 +38,7 @@ import mysql.connector
 # FUJIN-P共通モジュール（常に存在する前提）
 from config import Config
 from db import DatabaseConfig, Tables
-from decorators import login_required, admin_required
+from decorators import login_required
 from auth import redirect_to_dashboard
 
 from . import kataribe_bp
@@ -63,6 +64,18 @@ def _may_edit():
     return False
 
 
+def edit_required(view):
+    """編集API用の認可。HTMLへ転送せず、常にJSONで失敗理由を返す。"""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get('user_id'):
+            return jsonify({'success': False, 'error': 'ログインが切れています。再ログインしてください'}), 401
+        if not _may_edit():
+            return jsonify({'success': False, 'error': 'この操作を行う編集権限がありません'}), 403
+        return view(*args, **kwargs)
+    return wrapped
+
+
 @kataribe_bp.before_request
 def _gate():
     """入口で一括して閉じる．未ログインは各ルートのデコレータに任せる．"""
@@ -71,6 +84,8 @@ def _gate():
     if request.endpoint in VIEW_ENDPOINTS:
         return None                      # 閲覧はログイン済みなら通す
     if not _may_edit():
+        if request.endpoint and request.endpoint.startswith('kataribe.api_'):
+            return jsonify({'success': False, 'error': 'この操作を行う編集権限がありません'}), 403
         return redirect_to_dashboard()   # 編集系は admin だけ
     return None
 
@@ -263,7 +278,7 @@ def return_to_fujin():
 # ── データAPI ──
 
 @kataribe_bp.route('/api/list', methods=['GET'])
-@admin_required
+@edit_required
 def api_list():
     """自分のプレゼン一覧を取得"""
     try:
@@ -336,7 +351,7 @@ def api_get(pres_id):
 
 
 @kataribe_bp.route('/api/save', methods=['POST'])
-@admin_required
+@edit_required
 def api_save():
     """プレゼンの新規作成・更新"""
     try:
@@ -388,7 +403,7 @@ def api_save():
 
 
 @kataribe_bp.route('/api/delete/<int:pres_id>', methods=['POST'])
-@admin_required
+@edit_required
 def api_delete(pres_id):
     """プレゼンの削除（本人のもののみ）"""
     try:
@@ -413,7 +428,7 @@ def api_delete(pres_id):
 
 
 @kataribe_bp.route('/api/sample', methods=['GET'])
-@admin_required
+@edit_required
 def api_sample():
     """同梱サンプル（data_for_distribution/sample_presentation.json）を返す"""
     try:
@@ -452,7 +467,7 @@ def image(filename):
 
 
 @kataribe_bp.route('/api/upload_image', methods=['POST'])
-@admin_required
+@edit_required
 def api_upload_image():
     """画像を ~/fujinp/kataribe/img に保存し，参照用URLを返す"""
     try:
@@ -488,7 +503,7 @@ def api_upload_image():
 
 
 @kataribe_bp.route('/api/images', methods=['GET'])
-@admin_required
+@edit_required
 def api_images():
     """アップロード済み画像の一覧（新しい順）"""
     try:

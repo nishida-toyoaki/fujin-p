@@ -29,9 +29,10 @@
   .ktb-stage{
     flex:1 1 auto; overflow-y:auto; padding:22px 30px 16px;
   }
-  /* 画面に収まらないシーンは，中身ごと等比縮小して収める */
+  /* 画面に収まらないシーンは，横幅を先に活用してから必要分だけ縮小する */
   .ktb-fit{ transform-origin:top center; transition:transform .35s ease; will-change:transform; }
   .ktb-player.fitted .ktb-stage{ overflow:hidden; }
+  .ktb-player.fit-overflow .ktb-stage{ overflow-y:auto; overflow-x:hidden; }
   /* ── ブロックの出入り（fade + 高さの伸縮） ── */
   .ktb-blk{
     display:grid; grid-template-rows:0fr;
@@ -91,6 +92,9 @@
   .ktb-row > .ktb-row-in{ overflow:hidden; min-height:0; display:flex; gap:16px; align-items:stretch; }
   .ktb-tile{ flex:0 1 0; min-width:0; opacity:0; transform:translateY(8px);
              transition:flex-grow .6s ease, opacity .6s ease, transform .6s ease; }
+  /* 非表示タイルの中身を寸法計算から外す。幅0で折り返した将来の本文が
+     現在表示中の画像を誤って縮小させることを防ぐ。 */
+  .ktb-tile:not(.on) > .ktb-tile-in{ display:none; }
   .ktb-tile.on{ flex:var(--span,1) 1 0; opacity:1; transform:none; }
   .ktb-player.fastmode .ktb-row, .ktb-player.fastmode .ktb-tile{ transition:none; }
   @media (prefers-reduced-motion: reduce){ .ktb-row, .ktb-tile{ transition:none; transform:none; } }
@@ -126,18 +130,19 @@
   /* ── 操作バー ── */
   .ktb-ctrl{
     flex:0 0 auto; min-height:48px; display:flex; align-items:center;
-    justify-content:space-between; flex-wrap:wrap; gap:4px; padding:5px 12px;
+    justify-content:flex-start; flex-wrap:wrap; gap:6px; padding:5px 12px;
     background:rgba(20,29,38,.95); border-top:1px solid rgba(255,255,255,.14);
   }
-  .ktb-ctrl .grp{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  /* グループ枠をレイアウト上は透過し、各操作を個別に折り返す。 */
+  .ktb-ctrl .grp{ display:contents; }
   .ktb-ctrl button{
-    font:inherit; font-size:12px; color:#e8eef1;
+    font:inherit; font-size:6px; color:#e8eef1;
     background:rgba(28,39,51,.82); border:1px solid rgba(255,255,255,.25);
     border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap;
   }
   .ktb-ctrl button:hover{ border-color:var(--teal); color:#fff; }
   .ktb-ctrl button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
-  .ktb-ctrl .spd{ font-size:12px; color:#9fb3ba; min-width:44px; text-align:center; }
+  .ktb-ctrl .spd{ font-size:6px; color:#9fb3ba; min-width:44px; text-align:center; }
 </style>
 
 <script>
@@ -374,26 +379,68 @@ var KtbPlayer = (function(){
     return card;
   }
 
-  // ── 画面に収める（縦にはみ出したぶんだけ全体を等比縮小する） ──
+  // ── 画面に収める ──
+  // タイル方式では，単純な等比縮小に入る前に仮想的な横幅を広げる。
+  // 広げた横幅を逆数で縮小すれば表示幅は常にステージ一杯のままなので，
+  // 改行が減り，横の空白を残さず，文字も可能な限り大きく保てる。
   var MIN_SCALE = 0.45;          // これ以上は縮めない（読めなくなるため．超過分はスクロール）
+  var PACK_SEARCH_STEPS = 10;    // 横幅の最小拡張率を二分探索する回数
   var fitTimer = null;
 
   function fitScene(){
     if (!els.fit || !els.stage) return;
+    root.classList.remove('fitted', 'fit-overflow');
     els.fit.style.transform = 'none';
+    els.fit.style.transformOrigin = 'top center';
+    els.fit.style.width = '100%';
+    els.fit.style.marginBottom = '0';
     var cs = getComputedStyle(els.stage);
     var avail = els.stage.clientHeight
               - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
     var natural = els.fit.scrollHeight;
-    if (!avail || !natural){ root.classList.remove('fitted'); return; }
+    if (!avail || !natural) return;
     var k = avail / natural;
-    if (k >= 1){
-      root.classList.remove('fitted');
-      return;                      // そのまま収まっている
+    if (k >= 1) return;             // そのまま収まっている
+
+    var sc = spec && spec.scenes ? spec.scenes[cur] : null;
+    if (tilesOf(sc)){
+      var low = 1;
+      var high = 1 / MIN_SCALE;
+
+      function measurePacked(pack){
+        els.fit.style.width = (pack * 100).toFixed(4) + '%';
+        var h = els.fit.scrollHeight;
+        return { natural: h, visual: h / pack };
+      }
+
+      // 最大まで横に広げれば収まる場合，収まる最小の拡張率を探す。
+      // 最小率を選ぶことが，表示文字を最も大きく保つことに相当する。
+      var measured = measurePacked(high);
+      if (measured.visual <= avail){
+        for (var i = 0; i < PACK_SEARCH_STEPS; i++){
+          var mid = (low + high) / 2;
+          var probe = measurePacked(mid);
+          if (probe.visual <= avail) high = mid;
+          else low = mid;
+        }
+        measured = measurePacked(high);
+      }
+
+      k = 1 / high;
+      els.fit.style.transformOrigin = 'top left';
+      els.fit.style.transform = 'scale(' + k.toFixed(4) + ')';
+      // transform はレイアウト上の高さを変えないため，余分な高さを相殺する。
+      els.fit.style.marginBottom = (-Math.max(0, measured.natural - measured.visual)).toFixed(2) + 'px';
+      root.classList.add(measured.visual <= avail + 1 ? 'fitted' : 'fit-overflow');
+      return;
     }
+
+    // 旧ブロック形式は従来どおり，中央を基準に等比縮小する。
     k = Math.max(MIN_SCALE, k);
     els.fit.style.transform = 'scale(' + k.toFixed(4) + ')';
-    root.classList.add('fitted');
+    var visual = natural * k;
+    els.fit.style.marginBottom = (-Math.max(0, natural - visual)).toFixed(2) + 'px';
+    root.classList.add(visual <= avail + 1 ? 'fitted' : 'fit-overflow');
   }
 
   // 出入りのアニメーションが終わってからもう一度測る
