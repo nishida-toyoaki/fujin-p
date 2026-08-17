@@ -175,6 +175,18 @@
             height: auto;
         }
 
+        /* mermaid 図（描画前はソースが折り返して見える） */
+        .preview-content .mermaid {
+            margin: 15px 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+
+        .preview-content .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
         .share-section {
             margin-top: 20px;
             padding: 15px;
@@ -353,7 +365,7 @@
 
                     <div class="form-group">
                         <label for="content">内容（Markdown形式）</label>
-                        <textarea id="content" name="content" onkeyup="debouncePreview()">{{ note.内容 if note.内容 else '' }}</textarea>
+                        <textarea id="content" name="content" oninput="debouncePreview()">{{ note.内容 if note.内容 else '' }}</textarea>
                     </div>
 
                     <div class="share-section">
@@ -437,31 +449,134 @@
             debounceTimer = setTimeout(updatePreview, 500);
         }
 
-        function updatePreview() {
+        // -------------------------------------------------------------
+        // プレビュー描画
+        //   innerHTML で差し込んだ HTML の中の <script> はブラウザが実行しない。
+        //   process_markdown が返す mermaid 等の描画スクリプトはこれに該当するため、
+        //   差し込んだあとに script 要素を作り直して実行させる（activateScripts）。
+        //   閲覧画面（view_note）はページ読み込み時に実行されるので同じ処理は不要。
+        // -------------------------------------------------------------
+
+        // 一度読み込んだ外部スクリプトの URL（プレビューのたびの二重読み込みを防ぐ）
+        const loadedScriptSrc = new Set();
+
+        // 応答の追い越しを捨てるための通し番号
+        let previewSeq = 0;
+
+        async function activateScripts(root) {
+            for (const oldScript of Array.from(root.querySelectorAll('script'))) {
+                const src = oldScript.getAttribute('src');
+
+                // 読み込み済みの外部スクリプトは捨てる
+                if (src && loadedScriptSrc.has(src)) {
+                    oldScript.remove();
+                    continue;
+                }
+
+                const newScript = document.createElement('script');
+                for (const attr of oldScript.attributes) {
+                    newScript.setAttribute(attr.name, attr.value);
+                }
+                newScript.async = false;  // 挿入順に実行させる
+                if (!src) {
+                    newScript.textContent = oldScript.textContent;
+                }
+
+                const loaded = src
+                    ? new Promise(resolve => { newScript.onload = resolve; newScript.onerror = resolve; })
+                    : null;
+
+                oldScript.replaceWith(newScript);
+
+                if (src) {
+                    loadedScriptSrc.add(src);
+                    await loaded;  // 外部スクリプトは読み込み完了を待ってから次へ
+                }
+            }
+        }
+
+        // mermaid の保険：スクリプト実行後もソースのまま残っている図があれば描画する
+        async function renderMermaidIn(root) {
+            // <pre><code class="language-mermaid"> 形式は div.mermaid に正規化する
+            root.querySelectorAll('code.language-mermaid, code.mermaid').forEach(code => {
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.textContent = code.textContent;
+                (code.closest('pre') || code).replaceWith(div);
+            });
+
+            // 差し込んだスクリプト側が描画してくれる場合があるので、少し待ってから判定する
+            await new Promise(resolve => setTimeout(resolve, 80));
+
+            const nodes = Array.from(root.querySelectorAll('.mermaid'))
+                               .filter(n => !n.querySelector('svg'));
+            if (nodes.length === 0) return;
+
+            if (!window.mermaid) {
+                try {
+                    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+                    window.mermaid = mod.default;
+                    window.mermaid.initialize({ startOnLoad: false });
+                } catch (e) {
+                    console.error('mermaid の読み込みに失敗しました:', e);
+                    return;
+                }
+            }
+
+            // 描画済み印を外し、元のソースから描き直せるようにする
+            nodes.forEach(n => {
+                if (!n.dataset.src) n.dataset.src = n.textContent;
+                n.removeAttribute('data-processed');
+                n.innerHTML = n.dataset.src;
+            });
+
+            try {
+                await window.mermaid.run({ nodes });
+            } catch (e) {
+                // 編集途中の未完成な図では例外が出るのが普通なので、警告だけ残す
+                console.warn('mermaid の描画をスキップしました:', e);
+            }
+        }
+
+        async function updatePreview() {
             const content = document.getElementById('content').value;
+            const seq = ++previewSeq;
+            const preview = document.getElementById('preview');
 
-            fetch("{{ url_for('my_md_notes.preview_markdown') }}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ markdown: content })
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('preview').innerHTML = data.html;
+            try {
+                const response = await fetch("{{ url_for('my_md_notes.preview_markdown') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ markdown: content })
+                });
+                const data = await response.json();
 
-                // KaTeX レンダリング
-                renderMathInElement(document.getElementById('preview'), {
+                if (seq !== previewSeq) return;  // 新しい入力に追い越されていたら捨てる
+
+                preview.innerHTML = data.html;
+
+                // 差し込んだ HTML 内のスクリプト（mermaid 等）を実行させる
+                await activateScripts(preview);
+
+                // mermaid が未描画なら描画する
+                await renderMermaidIn(preview);
+
+                // KaTeX レンダリング（mermaid 図の中は触らない）
+                renderMathInElement(preview, {
                     delimiters: [
                         {left: '$$', right: '$$', display: true},
                         {left: '$', right: '$', display: false},
                         {left: '\\[', right: '\\]', display: true},
                         {left: '\\(', right: '\\)', display: false}
-                    ]
+                    ],
+                    ignoredClasses: ['mermaid'],
+                    throwOnError: false
                 });
-            })
-            .catch(error => console.error('Error:', error));
+            } catch (error) {
+                console.error('Error:', error);
+            }
         }
 
         function insertMarkdown(before, after = '') {
