@@ -1,0 +1,286 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>かたりべ シーン一覧PDF - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
+            background:#dfe5e8; color:#233038;
+            -webkit-print-color-adjust:exact; print-color-adjust:exact;
+        }
+        /* 画面上の操作列（印刷には出ない） */
+        .toolbar {
+            display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+            padding:10px 18px; background:#1c2733; color:#fff; font-size:13px;
+        }
+        .toolbar a { color:#d9f3ef; text-decoration:none; }
+        .toolbar select { font:inherit; padding:3px 6px; border-radius:6px; border:1px solid #999; }
+        .toolbar button {
+            font:inherit; padding:5px 16px; border-radius:999px; cursor:pointer;
+            border:1px solid rgba(255,255,255,.4); background:#10b5a0; color:#fff;
+        }
+        .toolbar .hint { color:#9fb3ba; font-size:12px; }
+
+        /* ── A4縦のシート ── */
+        @page { size:A4 portrait; margin:10mm; }
+        .sheet {
+            width:190mm; height:277mm; margin:6mm auto; background:#fff;
+            display:flex; flex-direction:column; padding:0;
+            box-shadow:0 2px 10px rgba(0,0,0,.25);
+        }
+        .sheet .grid { flex:1 1 auto; display:grid; gap:4mm; min-height:0; }
+        .sheet .foot {
+            flex:0 0 auto; display:flex; justify-content:space-between; align-items:baseline;
+            padding-top:2mm; font-size:9pt; color:#5a6a74;
+        }
+        .cell {
+            position:relative; overflow:hidden; min-height:0;
+            border:0.3mm solid #c3ccd1; border-radius:2mm; background:#eef2f3;
+        }
+        .cell .tag {
+            position:absolute; right:1.2mm; top:1.2mm; z-index:5;
+            font-size:7.5pt; color:#5a6a74; background:rgba(255,255,255,.85);
+            border:0.2mm solid #c3ccd1; border-radius:2mm; padding:0.3mm 1.6mm;
+        }
+        .snapwrap { position:absolute; left:0; top:0; transform-origin:top left; }
+        @media print {
+            body { background:#fff; }
+            .toolbar { display:none; }
+            .sheet { margin:0; box-shadow:none; page-break-after:always; }
+            .sheet:last-child { page-break-after:auto; }
+        }
+
+        /* スナップショット用の上書き：プレイヤーの完成形を静的に固める */
+        .snap.ktb-player { display:block; width:1100px; height:auto; overflow:visible; }
+        .snap .ktb-stage { flex:none; overflow:visible; height:auto; }
+        .snap .ktb-fit { transform:none !important; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <a href="{{ url_for('kataribe.index') }}">← エディタへ</a>
+        <span id="docTitle" style="font-weight:700;"></span>
+        <label>横 <select id="selCols"></select> 枚</label>
+        <label>× 縦 <select id="selRows"></select> 枚</label>
+        <button id="btnPrint">🖨 印刷（PDFに保存）</button>
+        <span class="hint">印刷ダイアログで「A4・縦」を選んでください．背景色が出ないときは「背景のグラフィック」をオンに．</span>
+    </div>
+    <div id="sheets"></div>
+
+    {% include 'kataribe/_player.html' %}
+
+    <script>
+        const GET_URL = '{{ url_for("kataribe.api_get", pres_id=pres_id) }}';
+        let spec = null;
+
+        // 縦横とも10まで選べる（overspecは創造性の源）
+        const MAX_GRID = 10;
+        for (var v = 1; v <= MAX_GRID; v++){
+            $('#selCols').append($('<option>').val(v).text(v));
+            $('#selRows').append($('<option>').val(v).text(v));
+        }
+        $('#selCols').val(2); $('#selRows').val(3);
+
+        // ── _player.html と同じ規則のスナップショット描画（静的・完成形） ──
+        function isOwnAsset(url){
+            var u = String(url || '');
+            if (u.indexOf('/kataribe/img/') === 0) return true;
+            try { var a = document.createElement('a'); a.href = u;
+                  return a.pathname.indexOf('/kataribe/img/') === 0; } catch (e){ return false; }
+        }
+        function sanitize(html){
+            var box = document.createElement('div');
+            box.innerHTML = String(html == null ? '' : html);
+            [].slice.call(box.querySelectorAll('iframe')).forEach(function(f){
+                if (isOwnAsset(f.getAttribute('src'))){
+                    f.setAttribute('sandbox', 'allow-scripts'); f.setAttribute('loading', 'eager');
+                } else { f.parentNode.removeChild(f); }
+            });
+            [].slice.call(box.querySelectorAll('script,object,embed,link,meta')).forEach(function(n){ n.parentNode.removeChild(n); });
+            [].slice.call(box.querySelectorAll('*')).forEach(function(n){
+                [].slice.call(n.attributes).forEach(function(a){
+                    if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+                    if (/^(href|src)$/i.test(a.name) && /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+                });
+            });
+            return box.innerHTML;
+        }
+        function kindOf(sc){ var k = sc && sc.kind; return (k === 'cover' || k === 'end') ? k : 'body'; }
+        function totalOf(sc){
+            if (kindOf(sc) !== 'body') return 0;
+            var items = (sc.tiles && sc.tiles.length) ? sc.tiles : (sc.blocks || []), m = 0;
+            items.forEach(function(b){ m = Math.max(m, b['in'] || 1, b['out'] || 0); });
+            return m;
+        }
+        // 完成形（プレイヤーの「次のシーンへ」で入ったときと同じ最終ステップの見え方）
+        function visibleAtEnd(item, total, showAll){
+            if (showAll) return true;
+            return ((item['in'] || 1) <= total) && (item['out'] == null || total < item['out']);
+        }
+        function h(tag, cls, html){
+            var e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (html !== undefined) e.innerHTML = html;
+            return e;
+        }
+        function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+        // 旧ブロック形式の描画（_player.html の renderBlock と同じ規則）
+        function renderBlock(b){
+            var t = b.type || 'card';
+            if (t === 'title') return h('div', 'ktb-b-title', esc(b.heading || b.body));
+            if (t === 'lead')  return h('div', 'ktb-b-lead', esc(b.body || b.heading));
+            if (t === 'band'){
+                var band = h('div', 'ktb-b-band');
+                var htmlStr = '';
+                if (b.heading) htmlStr += '<span class="tl"><b>' + esc(b.heading) + '</b></span>　';
+                band.appendChild(h('p', null, htmlStr + esc(b.body)));
+                return band;
+            }
+            if (t === 'note')  return h('div', 'ktb-b-note', esc(b.body || b.heading));
+            var card = h('div', 'ktb-b-card');
+            if (b.heading) card.appendChild(h('h4', null, esc(b.heading)));
+            if (b.body) card.appendChild(h('p', null, esc(b.body)));
+            return card;
+        }
+
+        function snapFor(sc){
+            var wrap = h('div', 'snapwrap');
+            var pl = h('div', 'ktb-player static snap');
+            var theme = sc.theme || 'light';
+            if (theme === 'dark') pl.classList.add('theme-dark');
+            if (theme === 'cover') pl.classList.add('theme-cover');
+            var kind = kindOf(sc);
+            if (kind === 'body'){
+                var bar = h('div', 'ktb-bar');
+                var left = h('div');
+                left.appendChild(h('div', 'ktb-scene-title', esc(sc.title || '')));
+                if (sc.subtitle) left.appendChild(h('div', 'ktb-scene-sub', esc(sc.subtitle)));
+                bar.appendChild(left);
+                pl.appendChild(bar);
+            }
+            var stage = h('div', 'ktb-stage');
+            var fit = h('div', 'ktb-fit');
+            stage.appendChild(fit); pl.appendChild(stage);
+
+            var total = totalOf(sc), showAll = (kind !== 'body');
+            var tiles = (sc.tiles && sc.tiles.length) ? sc.tiles : null;
+            if (tiles){
+                var rows = {}, order = [];
+                tiles.forEach(function(t, i){
+                    var r = t.row || 1;
+                    if (!rows[r]){ rows[r] = []; order.push(r); }
+                    rows[r].push(t);
+                });
+                order.sort(function(a, b){ return a - b; });
+                order.forEach(function(r){
+                    var rowEl = h('div', 'ktb-row on');
+                    var inner = h('div', 'ktb-row-in');
+                    rows[r].forEach(function(t){
+                        var tile = h('div', 'ktb-tile');
+                        tile.style.setProperty('--span', String(t.span || 1));
+                        if (visibleAtEnd(t, total, showAll)) tile.classList.add('on');
+                        var box = h('div', 'ktb-tile-in', sanitize(t.html));
+                        tile.appendChild(box);
+                        inner.appendChild(tile);
+                    });
+                    rowEl.appendChild(inner);
+                    fit.appendChild(rowEl);
+                });
+            } else {
+                (sc.blocks || []).forEach(function(b){
+                    var wrapB = h('div', 'ktb-blk');
+                    if (visibleAtEnd(b, total, showAll)) wrapB.classList.add('on');
+                    var inner = h('div', 'ktb-blk-in');
+                    inner.appendChild(renderBlock(b));
+                    wrapB.appendChild(inner);
+                    fit.appendChild(wrapB);
+                });
+            }
+            wrap.appendChild(pl);
+            return wrap;
+        }
+
+        // シーンのラベル（エディタと同じ数え方：表紙／シーンn／エンドノート）
+        function sceneLabel(i){
+            var sc = spec.scenes[i], k = kindOf(sc);
+            if (k === 'cover') return '表紙';
+            if (k === 'end') return 'エンドノート';
+            var no = 0;
+            for (var j = 0; j <= i; j++) if (kindOf(spec.scenes[j]) === 'body') no++;
+            return 'シーン' + no;
+        }
+
+        const BASE_W = 1100;      // スナップショットの仮想横幅（px）
+        function build(){
+            var M = parseInt($('#selCols').val(), 10), N = parseInt($('#selRows').val(), 10);
+            var $sheets = $('#sheets').empty();
+            if (!spec || !spec.scenes.length) return;
+            var per = M * N, pages = Math.ceil(spec.scenes.length / per);
+            for (var p = 0; p < pages; p++){
+                var sheet = h('div', 'sheet');
+                var grid = h('div', 'grid');
+                grid.style.gridTemplateColumns = 'repeat(' + M + ',1fr)';
+                grid.style.gridTemplateRows = 'repeat(' + N + ',1fr)';
+                grid.style.gap = (Math.max(M, N) >= 7 ? '1.2mm' : Math.max(M, N) >= 5 ? '2.5mm' : '4mm');
+                for (var k = p * per; k < Math.min((p + 1) * per, spec.scenes.length); k++){
+                    var cell = h('div', 'cell');
+                    if (Math.max(M, N) <= 6) cell.appendChild(h('div', 'tag', esc(sceneLabel(k))));
+                    cell.appendChild(snapFor(spec.scenes[k]));
+                    grid.appendChild(cell);
+                }
+                sheet.appendChild(grid);
+                var foot = h('div', 'foot');
+                foot.appendChild(h('span', null, esc(spec.title || '')));
+                foot.appendChild(h('span', null, (p + 1) + ' / ' + pages + ' ページ'));
+                sheet.appendChild(foot);
+                $sheets.append(sheet);
+            }
+            layoutAll();
+        }
+
+        // 各セルに合わせてスナップショットを縮小・中央寄せする
+        function layoutAll(){
+            $('.cell').each(function(){
+                var cell = this, wrap = cell.querySelector('.snapwrap');
+                if (!wrap) return;
+                wrap.style.transform = 'none';
+                wrap.style.width = BASE_W + 'px';
+                var cw = cell.clientWidth, ch = cell.clientHeight;
+                var nh = wrap.scrollHeight || 1;
+                var s = Math.min(cw / BASE_W, ch / nh);
+                wrap.style.transform = 'scale(' + s.toFixed(4) + ')';
+                wrap.style.left = Math.max(0, (cw - BASE_W * s) / 2).toFixed(1) + 'px';
+                wrap.style.top = Math.max(0, (ch - nh * s) / 2).toFixed(1) + 'px';
+            });
+        }
+        var relayoutTimer = null;
+        function scheduleLayout(){ clearTimeout(relayoutTimer); relayoutTimer = setTimeout(layoutAll, 200); }
+        addEventListener('resize', scheduleLayout, { passive: true });
+        addEventListener('beforeprint', layoutAll);
+
+        $('#selCols, #selRows').on('change', build);
+        $('#btnPrint').on('click', function(){ window.print(); });
+
+        $.get(GET_URL, function(resp){
+            if (!resp.success){ $('#docTitle').text('読み込みに失敗しました'); return; }
+            spec = resp.presentation.spec;
+            document.title = (resp.presentation.title || 'かたりべ') + ' シーン一覧';
+            $('#docTitle').text(resp.presentation.title || '');
+            build();
+            // 画像が届くたびに測り直す
+            $('#sheets img').on('load', scheduleLayout);
+        });
+    </script>
+</body>
+</html>

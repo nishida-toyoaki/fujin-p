@@ -64,6 +64,24 @@
             background-color: #38a169;
         }
 
+        /* 未変更のときの保存ボタン（押せないことを見た目でも示す） */
+        .top-bar button:disabled,
+        .top-bar button:disabled:hover {
+            background-color: #718096;
+            color: #cbd5e0;
+            cursor: default;
+        }
+
+        .preview-btn {
+            background-color: #f6ad55;
+            color: #744210;
+        }
+
+        .preview-btn:hover {
+            background-color: #ed8936;
+            color: white;
+        }
+
         .back-btn {
             background-color: #4299e1;
             color: white;
@@ -324,8 +342,10 @@
     <div class="top-bar">
         <h1>ノート編集: {{ note.名前 }} (ID: {{ note.id }})</h1>
         <div class="top-bar-buttons">
-            <button class="save-btn" onclick="saveContent()">保存して戻る</button>
-            <a href="{{ url_for('my_md_notes.index') }}" class="back-btn">キャンセル</a>
+            <button type="button" class="preview-btn" onclick="openPreview()">プレビュー</button>
+            <button type="button" id="saveOnlyBtn" class="save-btn" onclick="saveOnly()" disabled>保存</button>
+            <button type="button" id="saveReturnBtn" class="save-btn" onclick="saveAndReturn()" disabled>保存して戻る</button>
+            <button type="button" class="back-btn" onclick="cancelEdit()">キャンセル</button>
         </div>
     </div>
 
@@ -347,7 +367,8 @@
                 <button onclick="insertMarkdown('$$\n', '\n$$')">数式ブロック</button>
                 <button onclick="insertMarkdown('- ')">リスト</button>
                 <button onclick="insertMarkdown('[', '](url)')">リンク</button>
-                <button type="button" onclick="document.getElementById('imageUpload').click()">画像・PDF添付</button>
+                <button type="button" onclick="document.getElementById('imageUpload').click()">画像挿入</button>
+                <button type="button" onclick="document.getElementById('pdfUpload').click()">PDFのUP・リンク挿入</button>
             </div>
 
             <div class="editor-area">
@@ -369,54 +390,72 @@
                     </div>
 
                     <div class="share-section">
-                        <h3>共有設定</h3>
+                        <h3>共有設定（公開範囲）</h3>
 
                         <div class="share-option">
                             <label>
                                 <input type="radio" name="share_key" value="private"
-                                    {% if note.共有キー not in ['public', 'shared'] %}checked{% endif %}>
-                                <strong>非公開</strong>
+                                    {% if note.共有キー not in ['public', 'domestic', 'group', 'domestic_group'] %}checked{% endif %}>
+                                <strong>🔒 非公開</strong>
                             </label>
-                            <div class="share-description">自分だけが閲覧・編集できます</div>
+                            <div class="share-description">自分とadminだけが閲覧・編集できます（既定）</div>
                         </div>
 
                         <div class="share-option">
                             <label>
                                 <input type="radio" name="share_key" value="public"
                                     {% if note.共有キー == 'public' %}checked{% endif %}>
-                                <strong>公開</strong>
+                                <strong>🌐 ゲストにも</strong>
                             </label>
-                            <div class="share-description">全員が閲覧できます（編集は自分のみ）</div>
+                            <div class="share-description">ログイン済みの全ユーザに開示します（インターネットへの一般公開は「アーカイブに保存」してから文書アーカイブで行います。編集は自分のみ）</div>
                         </div>
 
                         <div class="share-option">
                             <label>
-                                <input type="radio" name="share_key" value="shared"
-                                    {% if note.共有キー == 'shared' %}checked{% endif %}>
-                                <strong>特定のユーザーと共有</strong>
+                                <input type="radio" name="share_key" value="domestic"
+                                    {% if note.共有キー == 'domestic' %}checked{% endif %}>
+                                <strong>🏢 構成員だけ</strong>
                             </label>
-                            <div class="share-description">選択したユーザーとのみ共有します</div>
+                            <div class="share-description">ログイン済みの構成員だけが閲覧できます</div>
                         </div>
 
-                        <div id="userList" class="user-list" style="display: {% if note.共有キー == 'shared' %}block{% else %}none{% endif %};">
-                            <h4 style="margin-top: 0;">共有するユーザーを選択</h4>
-                            {% for user in all_users %}
+                        <div class="share-option">
+                            <label>
+                                <input type="radio" name="share_key" value="group"
+                                    {% if note.共有キー == 'group' %}checked{% endif %}>
+                                <strong>👥 グループ</strong>
+                            </label>
+                            <div class="share-description">指定グループの所属者だけが閲覧できます</div>
+                        </div>
+
+                        <div class="share-option">
+                            <label>
+                                <input type="radio" name="share_key" value="domestic_group"
+                                    {% if note.共有キー == 'domestic_group' %}checked{% endif %}>
+                                <strong>🏢＋👥 構成員＋グループ</strong>
+                            </label>
+                            <div class="share-description">構成員と指定グループの所属者が閲覧できます</div>
+                        </div>
+
+                        <div id="groupList" class="user-list" style="display: {% if note.共有キー in ['group', 'domestic_group'] %}block{% else %}none{% endif %};">
+                            <h4 style="margin-top: 0;">許可するグループを選択（チェックしたグループの所属者に公開）</h4>
+                            {% for group in all_groups %}
                             <div class="user-item">
                                 <label>
-                                    <input type="checkbox" name="shared_users" value="{{ user.id }}"
-                                        {% if user.id in shared_user_ids %}checked{% endif %}>
-                                    {{ user.氏名 }} ({{ user.カテゴリー }})
+                                    <input type="checkbox" name="access_groups" value="{{ group.id }}"
+                                        {% if group.id in note_group_ids %}checked{% endif %}>
+                                    {{ group.name }}
                                 </label>
-                                <select name="user_permission_{{ user.id }}">
-                                    <option value="閲覧" {% if shared_permissions.get(user.id) == '閲覧' %}selected{% endif %}>閲覧のみ</option>
-                                    <option value="編集" {% if shared_permissions.get(user.id) == '編集' %}selected{% endif %}>編集可能</option>
-                                </select>
                             </div>
                             {% endfor %}
+                            {% if not all_groups %}
+                            <div style="color: #718096;">（ユーザーグループが未登録です）</div>
+                            {% endif %}
                         </div>
                     </div>
 
-                    <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" style="display:none" onchange="uploadImage(this)">
+                    <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="uploadFile(this)">
+                    <input type="file" id="pdfUpload" accept=".pdf,application/pdf" style="display:none" onchange="uploadFile(this)">
                 </form>
             </div>
         </div>
@@ -436,11 +475,11 @@
     <script>
         let debounceTimer;
 
-        // 共有設定の表示切り替え
+        // 共有設定の表示切り替え（グループ公開のときだけグループ一覧を出す）
         document.querySelectorAll('input[name="share_key"]').forEach(radio => {
             radio.addEventListener('change', function() {
-                const userList = document.getElementById('userList');
-                userList.style.display = this.value === 'shared' ? 'block' : 'none';
+                const groupList = document.getElementById('groupList');
+                groupList.style.display = (this.value === 'group' || this.value === 'domestic_group') ? 'block' : 'none';
             });
         });
 
@@ -591,11 +630,12 @@
             textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
 
             debouncePreview();
+            refreshButtons();
         }
 
         const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
 
-        function uploadImage(input) {
+        function uploadFile(input) {
             const file = input.files[0];
             if (!file) return;
 
@@ -615,12 +655,15 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    const fullUrl = window.location.origin + data.url;
                     if (data.kind === 'pdf') {
-                        insertMarkdown(`[${data.filename}](${data.url})`);
-                        showStatus('PDFを添付しました');
+                        // PDFはサーバに置き、リンクを挿入する
+                        insertMarkdown(`[${data.filename}](${fullUrl})`);
+                        showStatus('PDFをアップロードし、リンクを挿入しました');
                     } else {
-                        insertMarkdown(`![画像](${data.url})`);
-                        showStatus('画像をアップロードしました');
+                        // 画像は幅指定つきのimgタグ（フルURL）を挿入する
+                        insertMarkdown(`<img class="k-img" src="${fullUrl}" style="width:100%;" alt="">`);
+                        showStatus('画像をアップロードし、画像タグを挿入しました');
                     }
                 } else {
                     alert('アップロードに失敗しました: ' + data.error);
@@ -633,25 +676,138 @@
             .finally(() => { input.value = ''; });
         }
 
-        function saveContent() {
+        // ===== 変更検知 =====
+        // 読み込み時のフォーム内容を控えておき、現在の内容と突き合わせて
+        // 「未保存の変更があるか」を判定する。保存に成功したら控えを取り直す。
+        let baselineState = null;
+
+        function currentState() {
+            const form = document.getElementById('noteForm');
+            const groups = Array.from(
+                form.querySelectorAll('input[name="access_groups"]:checked')
+            ).map(el => el.value).sort().join(',');
+            const share = form.querySelector('input[name="share_key"]:checked');
+            return JSON.stringify({
+                name: document.getElementById('name').value,
+                sequence: document.getElementById('sequence').value,
+                content: document.getElementById('content').value,
+                share_key: share ? share.value : '',
+                groups: groups
+            });
+        }
+
+        function isDirty() {
+            return baselineState !== null && currentState() !== baselineState;
+        }
+
+        function refreshButtons() {
+            const dirty = isDirty();
+            document.getElementById('saveOnlyBtn').disabled = !dirty;
+            document.getElementById('saveReturnBtn').disabled = !dirty;
+        }
+
+        function resetBaseline() {
+            baselineState = currentState();
+            refreshButtons();
+        }
+
+        // ===== 保存 =====
+        function postForm(stay) {
             const form = document.getElementById('noteForm');
             const formData = new FormData(form);
-
-            fetch(form.action || window.location.href, {
+            if (stay) {
+                formData.append('stay', '1');
+            }
+            return fetch(form.action || window.location.href, {
                 method: 'POST',
                 body: formData
-            })
-            .then(response => {
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else {
-                    return response.text();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('保存に失敗しました');
             });
+        }
+
+        // 「保存」：この画面にとどまったまま保存する
+        function saveOnly() {
+            if (!isDirty()) return;
+
+            const buttons = [document.getElementById('saveOnlyBtn'),
+                             document.getElementById('saveReturnBtn')];
+            buttons.forEach(b => b.disabled = true);
+
+            postForm(true)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        resetBaseline();
+                        showStatus(data.message || '保存しました');
+                    } else {
+                        alert(data.error || '保存に失敗しました');
+                        refreshButtons();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('保存に失敗しました');
+                    refreshButtons();
+                });
+        }
+
+        // 「保存して戻る」：保存してノートの閲覧画面へ移動する
+        function saveAndReturn() {
+            if (!isDirty()) return;
+
+            postForm(false)
+                .then(response => {
+                    if (response.redirected) {
+                        baselineState = currentState();  // 離脱確認を出さない
+                        window.location.href = response.url;
+                    } else {
+                        return response.text();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('保存に失敗しました');
+                });
+        }
+
+        // 「プレビュー」：仕上がりの画面（閲覧画面）へ移動する。
+        // 閲覧画面は保存済みの内容を表示するので、未保存の変更があるときは
+        // 先に保存してから移動する（右ペインの下書きプレビューとは別物）。
+        function openPreview() {
+            const url = "{{ url_for('my_md_notes.view_note', note_id=note.id) }}?from=edit";
+
+            if (!isDirty()) {
+                window.location.href = url;
+                return;
+            }
+
+            if (!confirm('保存していない変更があります。保存してからプレビューを開きますか？')) {
+                return;
+            }
+
+            postForm(true)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        baselineState = currentState();  // 離脱確認を出さない
+                        window.location.href = url;
+                    } else {
+                        alert(data.error || '保存に失敗しました');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('保存に失敗しました');
+                });
+        }
+
+        // 「キャンセル」：変更があるときだけ確認してから一覧へ戻る
+        function cancelEdit() {
+            if (isDirty() &&
+                !confirm('保存していない変更があります。破棄して一覧に戻りますか？')) {
+                return;
+            }
+            baselineState = currentState();  // 離脱確認を二重に出さない
+            window.location.href = "{{ url_for('my_md_notes.index') }}";
         }
 
         function showStatus(message) {
@@ -662,6 +818,21 @@
                 statusMsg.classList.remove('show');
             }, 3000);
         }
+
+        // フォームのどの項目が変わってもボタン状態を見直す
+        document.getElementById('noteForm').addEventListener('input', refreshButtons);
+        document.getElementById('noteForm').addEventListener('change', refreshButtons);
+
+        // 未保存のまま画面を離れようとしたら引き止める（ブラウザの戻る・タブを閉じる等）
+        window.addEventListener('beforeunload', function(e) {
+            if (isDirty()) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // 初期状態を控え、ボタンを未変更（押せない）状態にする
+        resetBaseline();
 
         // 初期プレビュー
         updatePreview();

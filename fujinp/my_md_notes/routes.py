@@ -19,15 +19,18 @@
 #
 # Source: https://github.com/nishida-toyoaki/fujin-p
 
-from flask import render_template, request, jsonify, session, url_for, redirect, flash
+from flask import render_template, request, jsonify, session, url_for, redirect, flash, Response
 from decorators import login_required
 from config import Config
 from db import DatabaseConfig
 from mysql.connector import Error
 import mysql.connector
 import os
+import re
+import uuid
+import html
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 from werkzeug.utils import secure_filename
 from markdown_converter import process_markdown
 from datetime import datetime
@@ -48,10 +51,11 @@ UPLOAD_SUBDIR = 'mdimgs'
 UPLOAD_FOLDER = os.path.join(UPLOAD_BASE_DIR, 'static', UPLOAD_SUBDIR)
 UPLOAD_URL_PREFIX = f'/static/{UPLOAD_SUBDIR}'
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'svg', 'pdf'}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB
 
 # 拡張子ごとのマジックナンバー（拡張子偽装の検出用）
+# SVGはテキスト形式のため別扱い（svg_head_ok で検査し、保存前にサニタイズする）
 MAGIC_NUMBERS = {
     'png': (b'\x89PNG\r\n\x1a\n',),
     'jpg': (b'\xff\xd8\xff',),
@@ -59,10 +63,172 @@ MAGIC_NUMBERS = {
     'pdf': (b'%PDF-',),
 }
 
-# 共有キーは以下の3値のみを取る（乱数トークンは廃止）
-SHARE_KEYS = ('private', 'public', 'shared')
+# 公開範囲（コレポ／文書アーカイブ／あわならと同じ区分）
+#   private        - 所有者とadminのみ
+#   public         - ログイン済みの全ユーザに開示（＝コレポの「ゲストにも」と同義）
+#   domestic       - 構成員（regular）だけ
+#   group          - 指定グループの有効所属者だけ
+#   domestic_group - 構成員または指定グループの有効所属者（和集合）
+#
+# 未ログイン公開（旧・公開URL）は廃止。マイノートは執筆用アプリであり、
+# 執筆物をそのままインターネットへ出さない方針（コレポと同じ）。
+# インターネット公開は「アーカイブに保存」（archive_note）で
+# 文書アーカイブ（document_archive）へ移してから行う。
+SHARE_KEYS = ('private', 'public', 'domestic', 'group', 'domestic_group')
+
+SHARE_LABELS = {
+    'private': '非公開',
+    'public': 'ゲストにも',
+    'domestic': '構成員だけ',
+    'group': 'グループ',
+    'domestic_group': '構成員＋グループ',
+}
 
 JST = pytz.timezone('Asia/Tokyo')
+
+# HTMLダウンロード（download_html）が生成する文書のスタイル。
+# 閲覧画面（view_note.html）の .content-area 用CSSと同じ規則を持たせ、
+# ダウンロードしたファイル単体でも画面と同じ見え方になるようにする。
+# ★ここを変えたときは view_note.html 側も合わせること。
+DOWNLOAD_HTML_CSS = """
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background-color: #f5f7fa;
+            color: #2d3748;
+        }
+
+        .content-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .content-area {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            line-height: 1.7;
+        }
+
+        /* Markdown コンテンツスタイル */
+        .content-area h1, .content-area h2, .content-area h3,
+        .content-area h4, .content-area h5, .content-area h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #2d3748;
+        }
+
+        .content-area h1 {
+            font-size: 2em;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.3em;
+        }
+
+        .content-area h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.3em;
+        }
+
+        .content-area h3 { font-size: 1.25em; }
+
+        .content-area p { margin-bottom: 1em; }
+
+        .content-area a { color: #4299e1; text-decoration: none; }
+        .content-area a:hover { text-decoration: underline; }
+
+        .content-area ul, .content-area ol {
+            padding-left: 2em;
+            margin-bottom: 1em;
+        }
+
+        .content-area li { margin-bottom: 0.25em; }
+
+        .content-area blockquote {
+            border-left: 4px solid #e2e8f0;
+            padding-left: 1em;
+            margin-left: 0;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .content-area code {
+            background-color: #f7fafc;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e53e3e;
+        }
+
+        .content-area pre {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+
+        .content-area pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 0.9em;
+        }
+
+        .content-area table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1em;
+            overflow-x: auto;
+            display: block;
+        }
+
+        .content-area th, .content-area td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .content-area th {
+            background-color: #f7fafc;
+            font-weight: 600;
+        }
+
+        .content-area tbody tr:nth-child(even) { background-color: #f7fafc; }
+
+        .content-area img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin: 1em 0;
+        }
+
+        .content-area hr {
+            border: none;
+            border-top: 2px solid #e2e8f0;
+            margin: 2em 0;
+        }
+
+        /* SQL結果テーブル */
+        .sql-result-table { font-size: 0.85em; }
+        .table-container { overflow-x: auto; margin-bottom: 1em; }
+
+        /* KaTeX数式 */
+        .katex-display { margin: 1em 0; }
+
+        @media (max-width: 768px) {
+            .content-area { padding: 20px; }
+        }
+"""
 
 
 # =============================================================================
@@ -88,10 +254,11 @@ def fmt_dt(value):
 
 
 def add_display_dates(rows):
-    """行dictに表示用の日時文字列を付与する"""
+    """行dictに表示用の日時文字列と公開範囲ラベルを付与する"""
     for row in rows:
         row['作成日時表示'] = fmt_dt(row.get('作成日時'))
         row['更新日時表示'] = fmt_dt(row.get('更新日時'))
+        row['共有表示'] = SHARE_LABELS.get(row.get('共有キー'), '非公開')
     return rows
 
 
@@ -104,7 +271,7 @@ def to_int(value, default=0):
 
 
 def normalize_share_key(value, current='private'):
-    """共有キーを3値のいずれかに正規化する"""
+    """公開範囲キーを SHARE_KEYS のいずれかに正規化する"""
     if value in SHARE_KEYS:
         return value
     return current if current in SHARE_KEYS else 'private'
@@ -144,12 +311,130 @@ def magic_ok(head_bytes, ext):
     return any(head_bytes.startswith(sig) for sig in signatures)
 
 
+def svg_head_ok(head_bytes):
+    """SVGらしさの簡易検査（先頭付近に <svg タグがあるか）"""
+    try:
+        text = head_bytes.decode('utf-8', errors='replace')
+    except Exception:
+        return False
+    return '<svg' in text.lower()
+
+
+def _sanitize_svg(data):
+    """アップロードされた SVG から script / on* / javascript: を除去する簡易サニタイズ
+    （コレポと同じ規則）"""
+    try:
+        text = data.decode('utf-8', errors='replace')
+    except Exception:
+        return data
+    # <script>...</script> 除去
+    text = re.sub(r'<script\b[^>]*>.*?</script\s*>', '', text,
+                  flags=re.IGNORECASE | re.DOTALL)
+    # 自己終端の <script .../> 除去
+    text = re.sub(r'<script\b[^>]*/\s*>', '', text, flags=re.IGNORECASE)
+    # on*="..." イベントハンドラ除去
+    text = re.sub(r'\son\w+\s*=\s*"[^"]*"', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"\son\w+\s*=\s*'[^']*'", '', text, flags=re.IGNORECASE)
+    # javascript: URI 除去
+    text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
+    return text.encode('utf-8')
+
+
+# =============================================================================
+# ユーザーグループ（公開範囲の判定用。コレポと同じ参照規則）
+# =============================================================================
+
+def get_user_active_group_ids(user_id):
+    """ユーザーが現在有効に所属しているグループIDのリスト
+    （user_groups / user_group_memberships を参照、有効期間チェック付き）"""
+    if not user_id:
+        return []
+    try:
+        now = get_jst_now()
+        with mysql.connector.connect(**DatabaseConfig.default()) as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT group_id FROM user_group_memberships
+                    WHERE user_id = %s
+                      AND (valid_from IS NULL OR valid_from <= %s)
+                      AND (valid_until IS NULL OR valid_until >= %s)
+                """, (user_id, now, now))
+                return [r['group_id'] for r in cursor.fetchall()]
+    except mysql.connector.Error as e:
+        print(f"[my_md_notes] get_user_active_group_ids error: {e}")
+        return []
+
+
+def get_all_user_groups():
+    """全ユーザーグループの一覧（共有設定の選択肢用）"""
+    try:
+        with mysql.connector.connect(**DatabaseConfig.default()) as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                cursor.execute("SELECT id, name FROM user_groups ORDER BY id DESC")
+                return cursor.fetchall()
+    except mysql.connector.Error as e:
+        print(f"[my_md_notes] get_all_user_groups error: {e}")
+        return []
+
+
+def get_note_access_group_ids(note_id):
+    """ノートのグループ公開で許可されているグループIDのリスト"""
+    try:
+        with mysql.connector.connect(**DatabaseConfig.default()) as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT group_id FROM my_md_notes_access_groups WHERE ノートID = %s
+                """, (note_id,))
+                return [r['group_id'] for r in cursor.fetchall()]
+    except mysql.connector.Error as e:
+        print(f"[my_md_notes] get_note_access_group_ids error: {e}")
+        return []
+
+
+def can_view_note(note, user_id, user_category):
+    """ノートの閲覧可否を公開範囲（共有キー）に基づいて判定する。
+
+    呼び出し元はすべて @login_required 配下にある。したがって
+
+      admin／所有者     - 常に可
+      public            - ログイン済みの全ユーザ（ゲスト含む）
+      domestic          - 構成員（regular）のみ
+      group             - 指定グループの有効所属者のみ
+      domestic_group    - 構成員または指定グループの有効所属者
+      private           - 所有者とadminのみ
+    """
+    if user_category == 'admin' or note['オーナーID'] == user_id:
+        return True
+
+    policy = note.get('共有キー') or 'private'
+
+    if policy == 'public':
+        return True
+
+    if policy == 'domestic':
+        return user_category == 'regular'
+
+    if policy in ('group', 'domestic_group'):
+        if policy == 'domestic_group' and user_category == 'regular':
+            return True
+        allowed = set(get_note_access_group_ids(note['id']))
+        mine = set(get_user_active_group_ids(user_id))
+        return bool(allowed & mine)
+
+    return False
+
+
 # =============================================================================
 # データアクセス
 # =============================================================================
 
 def get_user_notes_flat(user_id, category=None):
-    """更新日時の逆順で全ノートを取得する"""
+    """更新日時の逆順でノートを取得する。
+
+    admin   - 全ノート
+    その他  - 自分のノート ＋ グループ公開で自分が対象のノート
+              （public / domestic のノートは一覧には出さず、閲覧URLで到達する）
+    """
     try:
         with mysql.connector.connect(**DatabaseConfig.default()) as conn:
             with conn.cursor(dictionary=True) as cursor:
@@ -162,19 +447,28 @@ def get_user_notes_flat(user_id, category=None):
                     """)
                     return add_display_dates(cursor.fetchall())
 
-                cursor.execute("""
-                    SELECT DISTINCT ns.*, u.full_name AS オーナー名,
-                        CASE
-                            WHEN ns.オーナーID = %s THEN '所有者'
-                            WHEN nsh.権限 IS NOT NULL THEN nsh.権限
-                            ELSE NULL
-                        END AS 権限
-                    FROM my_md_notes_notes ns
-                    LEFT JOIN users u ON ns.オーナーID = u.id
-                    LEFT JOIN my_md_notes_shares nsh ON ns.id = nsh.ノートID AND nsh.共有先ユーザID = %s
-                    WHERE ns.オーナーID = %s OR nsh.共有先ユーザID = %s
-                    ORDER BY ns.更新日時 DESC
-                """, (user_id, user_id, user_id, user_id))
+                group_ids = get_user_active_group_ids(user_id)
+                if group_ids:
+                    placeholders = ', '.join(['%s'] * len(group_ids))
+                    cursor.execute(f"""
+                        SELECT DISTINCT ns.*, u.full_name AS オーナー名,
+                            CASE WHEN ns.オーナーID = %s THEN '所有者' ELSE '閲覧' END AS 権限
+                        FROM my_md_notes_notes ns
+                        LEFT JOIN users u ON ns.オーナーID = u.id
+                        WHERE ns.オーナーID = %s
+                           OR (ns.共有キー IN ('group', 'domestic_group')
+                               AND ns.id IN (SELECT ノートID FROM my_md_notes_access_groups
+                                             WHERE group_id IN ({placeholders})))
+                        ORDER BY ns.更新日時 DESC
+                    """, tuple([user_id, user_id] + group_ids))
+                else:
+                    cursor.execute("""
+                        SELECT ns.*, u.full_name AS オーナー名, '所有者' AS 権限
+                        FROM my_md_notes_notes ns
+                        LEFT JOIN users u ON ns.オーナーID = u.id
+                        WHERE ns.オーナーID = %s
+                        ORDER BY ns.更新日時 DESC
+                    """, (user_id,))
                 return add_display_dates(cursor.fetchall())
     except mysql.connector.Error as e:
         print(f"データベースエラー: {e}")
@@ -182,7 +476,7 @@ def get_user_notes_flat(user_id, category=None):
 
 
 def create_note(user_id, name, sequence=0):
-    """空のノートを1件作成して note_id を返す。共有キーの初期値は 'private'。"""
+    """空のノートを1件作成して note_id を返す。公開範囲の初期値は 'private'。"""
     conn = mysql.connector.connect(**DatabaseConfig.default())
     cursor = conn.cursor()
     try:
@@ -240,6 +534,7 @@ def create_note_route():
 @my_md_notes_bp.route('/edit_note/<int:note_id>', methods=['GET', 'POST'])
 @login_required
 def edit_note(note_id):
+    """ノート編集（所有者とadminのみ）"""
     if request.method == 'POST' and not origin_ok():
         flash('不正な要求元です。', 'error')
         return redirect(url_for('my_md_notes.index'))
@@ -250,19 +545,18 @@ def edit_note(note_id):
         user_category = session.get('user_category')
         if user_category == 'admin':
             cursor.execute("""
-                SELECT ns.*, nc.内容, NULL AS 権限
+                SELECT ns.*, nc.内容
                 FROM my_md_notes_notes ns
                 LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
                 WHERE ns.id = %s
             """, (note_id,))
         else:
             cursor.execute("""
-                SELECT ns.*, nc.内容, nsh.権限
+                SELECT ns.*, nc.内容
                 FROM my_md_notes_notes ns
                 LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
-                LEFT JOIN my_md_notes_shares nsh ON ns.id = nsh.ノートID AND nsh.共有先ユーザID = %s
-                WHERE ns.id = %s AND (ns.オーナーID = %s OR (nsh.共有先ユーザID = %s AND nsh.権限 = '編集'))
-            """, (session['user_id'], note_id, session['user_id'], session['user_id']))
+                WHERE ns.id = %s AND ns.オーナーID = %s
+            """, (note_id, session['user_id']))
         note = cursor.fetchone()
 
         if not note:
@@ -270,15 +564,29 @@ def edit_note(note_id):
             return redirect(url_for('my_md_notes.index'))
 
         if request.method == 'POST':
+            # stay=1 は編集画面にとどまったままの「保存」ボタンからの要求。
+            # 画面遷移しないので、リダイレクトやフラッシュではなくJSONで結果を返す。
+            stay = request.form.get('stay') == '1'
+
+            def fail(message):
+                if stay:
+                    return jsonify({'success': False, 'error': message}), 400
+                flash(message, 'error')
+                return redirect(url_for('my_md_notes.edit_note', note_id=note_id))
+
             name = request.form.get('name', '').strip()
             if not name:
-                flash('ノート名は必須です。', 'error')
-                return redirect(url_for('my_md_notes.edit_note', note_id=note_id))
+                return fail('ノート名は必須です。')
 
             content = request.form.get('content', '')
             sequence = to_int(request.form.get('sequence'), 0)
             current_share_key = note['共有キー']
             new_share_key = normalize_share_key(request.form.get('share_key'), current_share_key)
+
+            group_ids = [to_int(g) for g in request.form.getlist('access_groups')]
+            group_ids = [g for g in group_ids if g > 0]
+            if new_share_key in ('group', 'domestic_group') and not group_ids:
+                return fail('グループ公開では、許可するグループを1つ以上選んでください。')
 
             try:
                 current_time = get_jst_now()
@@ -295,55 +603,46 @@ def edit_note(note_id):
                     WHERE ノートID = %s
                 """, (content, current_time, note_id))
 
-                cursor.execute("DELETE FROM my_md_notes_shares WHERE ノートID = %s", (note_id,))
-                if new_share_key == 'shared':
-                    for shared_user_id in request.form.getlist('shared_users'):
-                        permission = request.form.get(f'user_permission_{shared_user_id}')
-                        if permission not in ('閲覧', '編集'):
-                            permission = '閲覧'
+                # 許可グループはコレポと同じ保存規則（全削除→再挿入）
+                cursor.execute("DELETE FROM my_md_notes_access_groups WHERE ノートID = %s",
+                               (note_id,))
+                if new_share_key in ('group', 'domestic_group'):
+                    for gid in group_ids:
                         cursor.execute("""
-                            INSERT INTO my_md_notes_shares (ノートID, 共有先ユーザID, 権限)
-                            VALUES (%s, %s, %s)
-                        """, (note_id, shared_user_id, permission))
+                            INSERT INTO my_md_notes_access_groups (ノートID, group_id)
+                            VALUES (%s, %s)
+                        """, (note_id, gid))
 
                 conn.commit()
 
                 if current_share_key != new_share_key:
-                    labels = {'private': '非公開', 'public': '公開', 'shared': '特定のユーザーと共有'}
-                    flash(f'ノートを更新し、共有設定を「{labels[new_share_key]}」に変更しました。', 'success')
+                    message = (f'ノートを更新し、公開範囲を「{SHARE_LABELS[new_share_key]}」に'
+                               '変更しました。')
                 else:
-                    flash('ノートを更新しました。', 'success')
+                    message = 'ノートを更新しました。'
 
+                if stay:
+                    return jsonify({'success': True,
+                                    'message': message,
+                                    'updated_at': fmt_dt(current_time)})
+
+                flash(message, 'success')
                 return redirect(url_for('my_md_notes.view_note', note_id=note_id))
 
             except mysql.connector.Error as err:
                 conn.rollback()
-                flash(f'更新中にエラーが発生しました: {err}', 'error')
-                return redirect(url_for('my_md_notes.edit_note', note_id=note_id))
+                return fail(f'更新中にエラーが発生しました: {err}')
 
         # GET
         cursor.execute("""
-            SELECT id, full_name AS 氏名, category AS カテゴリー
-            FROM users
-            WHERE id != %s AND is_active = 1
-            ORDER BY full_name
-        """, (session['user_id'],))
-        all_users = cursor.fetchall()
-
-        cursor.execute("""
-            SELECT 共有先ユーザID, 権限
-            FROM my_md_notes_shares
-            WHERE ノートID = %s
+            SELECT group_id FROM my_md_notes_access_groups WHERE ノートID = %s
         """, (note_id,))
-        shared_rows = cursor.fetchall()
-        shared_user_ids = [row['共有先ユーザID'] for row in shared_rows]
-        shared_permissions = {row['共有先ユーザID']: row['権限'] for row in shared_rows}
+        note_group_ids = [row['group_id'] for row in cursor.fetchall()]
 
         return render_template('edit_note.html',
                                note=note,
-                               all_users=all_users,
-                               shared_user_ids=shared_user_ids,
-                               shared_permissions=shared_permissions)
+                               all_groups=get_all_user_groups(),
+                               note_group_ids=note_group_ids)
 
     except mysql.connector.Error as err:
         conn.rollback()
@@ -375,7 +674,7 @@ def preview_markdown():
 @login_required
 @same_origin_required
 def upload_image():
-    """画像・PDFのアップロード（png / jpg / jpeg / pdf、20MBまで）"""
+    """画像・PDFのアップロード（png / jpg / jpeg / svg / pdf、20MBまで）"""
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'ファイルが選択されていません'}), 400
 
@@ -384,7 +683,8 @@ def upload_image():
         return jsonify({'success': False, 'error': 'ファイルが選択されていません'}), 400
 
     if not allowed_file(file.filename):
-        return jsonify({'success': False, 'error': '許可されていない形式です（png / jpg / jpeg / pdf のみ）'}), 400
+        return jsonify({'success': False,
+                        'error': '許可されていない形式です（png / jpg / jpeg / svg / pdf のみ）'}), 400
 
     ext = file.filename.rsplit('.', 1)[1].lower()
 
@@ -398,23 +698,37 @@ def upload_image():
         limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
         return jsonify({'success': False, 'error': f'ファイルサイズが上限（{limit_mb}MB）を超えています'}), 400
 
-    # 内容検証（拡張子偽装の検出）
-    head = file.stream.read(8)
-    file.stream.seek(0)
-    if not magic_ok(head, ext):
-        return jsonify({'success': False, 'error': 'ファイルの内容が拡張子と一致しません'}), 400
+    # 内容検証（拡張子偽装の検出。SVGはテキスト形式なので先頭付近の <svg タグを見る）
+    if ext == 'svg':
+        head = file.stream.read(2048)
+        file.stream.seek(0)
+        if not svg_head_ok(head):
+            return jsonify({'success': False, 'error': 'ファイルの内容が拡張子と一致しません'}), 400
+    else:
+        head = file.stream.read(8)
+        file.stream.seek(0)
+        if not magic_ok(head, ext):
+            return jsonify({'success': False, 'error': 'ファイルの内容が拡張子と一致しません'}), 400
 
     try:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+        # 乱数8桁を先頭に付け、URLの総当たり推測を防ぐ（コレポと同じ規則）
         timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
         filename = secure_filename(file.filename)
         name, _ = os.path.splitext(filename)
         if not name:
             name = 'file'
-        unique_filename = f"{name}_{timestamp}.{ext}"
+        unique_filename = f"{uuid.uuid4().hex[:8]}_{name}_{timestamp}.{ext}"
 
-        file.save(os.path.join(UPLOAD_FOLDER, unique_filename))
+        filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
+        if ext == 'svg':
+            # SVG はサニタイズしてから保存
+            svg_data = _sanitize_svg(file.read())
+            with open(filepath, 'wb') as f:
+                f.write(svg_data)
+        else:
+            file.save(filepath)
 
         return jsonify({
             'success': True,
@@ -436,33 +750,27 @@ def view_note(note_id):
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT ns.*, nc.内容, nsh.権限
+            SELECT ns.*, nc.内容
             FROM my_md_notes_notes ns
             LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
-            LEFT JOIN my_md_notes_shares nsh ON ns.id = nsh.ノートID AND nsh.共有先ユーザID = %s
             WHERE ns.id = %s
-        """, (session['user_id'], note_id))
+        """, (note_id,))
         note = cursor.fetchone()
 
         if not note:
             flash('ノートが見つかりません。', 'error')
             return redirect(url_for('my_md_notes.index'))
 
-        is_owner = note['オーナーID'] == session['user_id']
-        is_public = note['共有キー'] == 'public'
-        is_shared = (note['共有キー'] == 'shared' and note['権限'] is not None)
-        if not (user_category == 'admin' or is_owner or is_public or is_shared):
+        if not can_view_note(note, session['user_id'], user_category):
             flash('このノートにアクセスする権限がありません。', 'error')
             return redirect(url_for('my_md_notes.index'))
 
         add_display_dates([note])
         html_content = process_markdown(note['内容'] or '', user_category)
-        public_url = url_for('my_md_notes.public_view_by_id', note_id=note['id'], _external=True) if is_public else None
 
         return render_template('view_note.html',
                                note=note,
                                html_content=html_content,
-                               public_url=public_url,
                                session=session,
                                user_category=user_category)
     except mysql.connector.Error as err:
@@ -481,23 +789,18 @@ def view_markdown_note(note_id):
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT ns.*, nc.内容, nsh.権限
+            SELECT ns.*, nc.内容
             FROM my_md_notes_notes ns
             LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
-            LEFT JOIN my_md_notes_shares nsh ON ns.id = nsh.ノートID AND nsh.共有先ユーザID = %s
             WHERE ns.id = %s
-        """, (session['user_id'], note_id))
+        """, (note_id,))
         note = cursor.fetchone()
 
         if not note:
             flash('ノートが見つかりません。', 'error')
             return redirect(url_for('my_md_notes.index'))
 
-        allowed = (user_category == 'admin'
-                   or note['オーナーID'] == session['user_id']
-                   or note['共有キー'] == 'public'
-                   or (note['共有キー'] == 'shared' and note['権限'] is not None))
-        if not allowed:
+        if not can_view_note(note, session['user_id'], user_category):
             flash('ノートが見つからないか、アクセス権限がありません。', 'error')
             return redirect(url_for('my_md_notes.index'))
 
@@ -509,6 +812,256 @@ def view_markdown_note(note_id):
     finally:
         cursor.close()
         conn.close()
+
+
+@my_md_notes_bp.route('/download_md/<int:note_id>')
+@login_required
+def download_md(note_id):
+    """ソースMDファイルのダウンロード（閲覧できる人はダウンロードもできる）"""
+    user_category = session.get('user_category')
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT ns.*, nc.内容
+            FROM my_md_notes_notes ns
+            LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
+            WHERE ns.id = %s
+        """, (note_id,))
+        note = cursor.fetchone()
+
+        if not note:
+            flash('ノートが見つかりません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        if not can_view_note(note, session['user_id'], user_category):
+            flash('このノートにアクセスする権限がありません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        # ノート名からファイル名を作る（パスに使えない文字は _ に）
+        safe_name = re.sub(r'[\\/:*?"<>|\r\n]+', '_', note['名前'] or '').strip()
+        if not safe_name:
+            safe_name = f'note_{note_id}'
+        download_name = f'{safe_name}.md'
+
+        response = Response(note['内容'] or '', mimetype='text/markdown; charset=utf-8')
+        # 日本語ファイル名は RFC 5987 の filename* で渡す（filename はASCIIの控え）
+        response.headers['Content-Disposition'] = (
+            f'attachment; filename="note_{note_id}.md"; '
+            f"filename*=UTF-8''{quote(download_name)}"
+        )
+        return response
+    except mysql.connector.Error as err:
+        flash(f'データベースエラーが発生しました: {err}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@my_md_notes_bp.route('/download_html/<int:note_id>')
+@login_required
+def download_html(note_id):
+    """HTMLファイルのダウンロード（閲覧できる人はダウンロードもできる）。
+
+    本文を process_markdown でHTML化し、KaTeXの数式描画スクリプトを同梱した
+    自己完結のHTML文書として返す。
+    """
+    user_category = session.get('user_category')
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT ns.*, nc.内容
+            FROM my_md_notes_notes ns
+            LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
+            WHERE ns.id = %s
+        """, (note_id,))
+        note = cursor.fetchone()
+
+        if not note:
+            flash('ノートが見つかりません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        if not can_view_note(note, session['user_id'], user_category):
+            flash('このノートにアクセスする権限がありません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        title = note['名前'] or f'note_{note_id}'
+        body_html = process_markdown(note['内容'] or '', user_category)
+
+        # 閲覧画面と同じ枠組み（.content-container > .content-area）に収めて返す。
+        # 枠を合わせないと、表・引用・コードブロックに素のブラウザ既定スタイルが
+        # 当たって崩れる。
+        #
+        # KaTeX の区切り指定は、生成されるJavaScript側で '\\[' の2文字になる必要がある。
+        # Python の通常文字列で '\\[' と書くと出力が '\[' になり、JavaScript では
+        # 単なる '[' として解釈される。すると本文中の [ ... ] が数式と見なされて
+        # 置換され、mermaid のソースが壊れて "Syntax error in text" になる。
+        # そのため、この部分はraw文字列で組み立てる。
+        # 併せて ignoredClasses で mermaid のソースを走査対象から外す。
+        final_html = ("""<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>""" + html.escape(title) + """</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <style>""" + DOWNLOAD_HTML_CSS + """</style>
+</head>
+<body>
+    <div class="content-container">
+        <div class="content-area">
+""" + body_html + """
+        </div>
+    </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    renderMathInElement(document.querySelector('.content-area'), {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false},
+            {left: '\\\\[', right: '\\\\]', display: true},
+            {left: '\\\\(', right: '\\\\)', display: false}
+        ],
+        ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option'],
+        ignoredClasses: ['mermaid'],
+        throwOnError: false
+    });
+});
+</script>
+</body>
+</html>""")
+
+        # ノート名からファイル名を作る（パスに使えない文字は _ に）
+        safe_name = re.sub(r'[\\/:*?"<>|\r\n]+', '_', note['名前'] or '').strip()
+        if not safe_name:
+            safe_name = f'note_{note_id}'
+        download_name = f'{safe_name}.html'
+
+        response = Response(final_html, mimetype='text/html; charset=utf-8')
+        response.headers['Content-Disposition'] = (
+            f'attachment; filename="note_{note_id}.html"; '
+            f"filename*=UTF-8''{quote(download_name)}"
+        )
+        return response
+    except mysql.connector.Error as err:
+        flash(f'データベースエラーが発生しました: {err}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@my_md_notes_bp.route('/archive_note/<int:note_id>', methods=['POST'])
+@login_required
+def archive_note(note_id):
+    """ノートを文書アーカイブ（document_archive）に保存する（所有者とadminのみ）。
+
+    コレポの archive_project と同じ規則：
+      - HTMLに変換した完成稿を public_documents に登録する
+      - 登録時の access_policy は 'private'。インターネットへの一般公開は
+        文書アーカイブ側で公開範囲を変更して行う
+    """
+    if not origin_ok():
+        flash('不正な要求元です。', 'error')
+        return redirect(url_for('my_md_notes.index'))
+
+    user_category = session.get('user_category')
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT ns.*, nc.内容
+            FROM my_md_notes_notes ns
+            LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
+            WHERE ns.id = %s
+        """, (note_id,))
+        note = cursor.fetchone()
+
+        if not note:
+            flash('ノートが見つかりません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        if not (user_category == 'admin' or note['オーナーID'] == session['user_id']):
+            flash('このノートをアーカイブする権限がありません。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        title = request.form.get('archive_title', '').strip()
+        public_description = request.form.get('public_description', '')
+        owner_memo = request.form.get('owner_memo', '')
+
+        if not title:
+            flash('アーカイブタイトルは必須です。', 'error')
+            return redirect(url_for('my_md_notes.index'))
+
+        body_html = process_markdown(note['内容'] or '', user_category)
+
+        # 最小限のHTMLドキュメント構造に整形（コレポの generate_complete_archive_html と同形）
+        final_html = """<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>""" + title + """</title>
+</head>
+<body>
+    """ + body_html + """
+</body>
+</html>"""
+
+        success, message = save_to_archive(
+            title=title,
+            public_description=public_description,
+            owner_memo=owner_memo,
+            html_content=final_html,
+        )
+
+        if success:
+            flash(f'ノート「{note["名前"]}」をアーカイブに保存しました（{message}）。'
+                  'インターネットへの公開は文書アーカイブで公開範囲を設定してください。', 'success')
+        else:
+            flash(f'アーカイブ保存中にエラーが発生しました: {message}', 'error')
+
+        return redirect(url_for('my_md_notes.index'))
+    except mysql.connector.Error as err:
+        flash(f'データベースエラーが発生しました: {err}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def save_to_archive(title, public_description, owner_memo, html_content):
+    """文書アーカイブ（public_documents）に保存する。
+    コレポの save_to_colrep_archive と同じテーブル・同じ既定値（access_policy='private'）。"""
+    try:
+        connection = mysql.connector.connect(**DatabaseConfig.fujinp())
+        cursor = connection.cursor()
+
+        formatted_now = get_jst_now().strftime('%Y-%m-%d %H:%M:%S')
+
+        cursor.execute("""
+            INSERT INTO public_documents
+            (title, public_description, owner_memo, content,
+             created_by, created_at, updated_at, access_policy)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (title, public_description, owner_memo, html_content,
+              session.get('user_id'), formatted_now, formatted_now, 'private'))
+        connection.commit()
+        doc_id = cursor.lastrowid
+
+        cursor.close()
+        connection.close()
+
+        print(f"[my_md_notes] ノートをアーカイブに保存しました (ID: {doc_id}): {title}")
+        return True, f"ID:{doc_id} として保存されました"
+    except Exception as e:
+        print(f"[my_md_notes] アーカイブ保存エラー: {e}")
+        return False, str(e)
 
 
 @my_md_notes_bp.route('/delete_note/<int:note_id>', methods=['POST'])
@@ -535,7 +1088,7 @@ def delete_note(note_id):
         if not note:
             return jsonify({'success': False, 'error': '権限がありません'}), 403
 
-        cursor.execute("DELETE FROM my_md_notes_shares WHERE ノートID = %s", (note_id,))
+        cursor.execute("DELETE FROM my_md_notes_access_groups WHERE ノートID = %s", (note_id,))
         cursor.execute("DELETE FROM my_md_notes_contents WHERE ノートID = %s", (note_id,))
         cursor.execute("DELETE FROM my_md_notes_notes WHERE id = %s", (note_id,))
 
@@ -553,39 +1106,10 @@ def delete_note(note_id):
             conn.close()
 
 
-@my_md_notes_bp.route('/public_view/<int:note_id>')
-def public_view_by_id(note_id):
-    """公開ノートの閲覧（ログイン不要、共有キー='public' のみ）"""
-    conn = mysql.connector.connect(**DatabaseConfig.default())
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT ns.*, nc.内容
-            FROM my_md_notes_notes ns
-            LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
-            WHERE ns.id = %s AND ns.共有キー = 'public'
-        """, (note_id,))
-        note = cursor.fetchone()
-
-        if not note:
-            return render_template('public_not_found.html'), 404
-
-        add_display_dates([note])
-        html_content = process_markdown(note['内容'] or '')
-
-        return render_template('public_view.html', note=note, html_content=html_content)
-    except mysql.connector.Error as err:
-        print(f"[my_md_notes] public_view error: {err}")
-        return render_template('public_error.html'), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
 @my_md_notes_bp.route('/search')
 @login_required
 def search_notes():
-    """ノート検索（ノート名の部分一致）"""
+    """ノート検索（ノート名の部分一致。可視範囲は一覧と同じ）"""
     user_category = session.get('user_category')
     keyword = request.args.get('keyword', '').strip()
     sort_by = request.args.get('sort_by', 'updated_desc')
@@ -619,25 +1143,31 @@ def search_notes():
             else:
                 cursor.execute(base.format(where=''))
         else:
+            uid = session['user_id']
+            group_ids = get_user_active_group_ids(uid)
+            if group_ids:
+                placeholders = ', '.join(['%s'] * len(group_ids))
+                visible_clause = f"""(ns.オーナーID = %s
+                       OR (ns.共有キー IN ('group', 'domestic_group')
+                           AND ns.id IN (SELECT ノートID FROM my_md_notes_access_groups
+                                         WHERE group_id IN ({placeholders}))))"""
+                params = [uid, uid] + group_ids
+            else:
+                visible_clause = "ns.オーナーID = %s"
+                params = [uid, uid]
             base = f"""
                 SELECT DISTINCT ns.*, u.full_name AS オーナー名,
-                    CASE
-                        WHEN ns.オーナーID = %s THEN '所有者'
-                        WHEN nsh.権限 IS NOT NULL THEN nsh.権限
-                        ELSE NULL
-                    END AS 権限
+                    CASE WHEN ns.オーナーID = %s THEN '所有者' ELSE '閲覧' END AS 権限
                 FROM my_md_notes_notes ns
                 LEFT JOIN users u ON ns.オーナーID = u.id
-                LEFT JOIN my_md_notes_shares nsh ON ns.id = nsh.ノートID AND nsh.共有先ユーザID = %s
-                WHERE (ns.オーナーID = %s OR nsh.共有先ユーザID = %s){{keyword_clause}}
+                WHERE {visible_clause}{{keyword_clause}}
                 {order_clause}
             """
-            uid = session['user_id']
             if keyword:
                 cursor.execute(base.format(keyword_clause=' AND ns.名前 LIKE %s'),
-                               (uid, uid, uid, uid, f'%{keyword}%'))
+                               tuple(params + [f'%{keyword}%']))
             else:
-                cursor.execute(base.format(keyword_clause=''), (uid, uid, uid, uid))
+                cursor.execute(base.format(keyword_clause=''), tuple(params))
 
         notes = add_display_dates(cursor.fetchall())
 

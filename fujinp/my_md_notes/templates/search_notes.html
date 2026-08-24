@@ -282,6 +282,24 @@
             background-color: #c6f6d5;
         }
 
+        .action-buttons button.md-btn {
+            background-color: #e6fffa;
+            color: #234e52;
+        }
+
+        .action-buttons button.md-btn:hover {
+            background-color: #b2f5ea;
+        }
+
+        .action-buttons button.html-btn {
+            background-color: #ebf8ff;
+            color: #2c5282;
+        }
+
+        .action-buttons button.html-btn:hover {
+            background-color: #bee3f8;
+        }
+
         .action-buttons button.delete-btn {
             background-color: #fed7d7;
             color: #742a2a;
@@ -390,12 +408,11 @@
                         {% endif %}
                         <th style="width: 8%;">序列</th>
                         <th style="width: 12%;">共有状態</th>
-                        <th style="width: 13%;">作成日時</th>
-                        <th style="width: 13%;">更新日時</th>
+                        <th style="width: 14%;">更新日時</th>
                         {% if user_category != 'admin' %}
                         <th style="width: 8%;">権限</th>
                         {% endif %}
-                        <th style="width: 18%;">操作</th>
+                        <th style="width: 30%;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -425,22 +442,17 @@
                         </td>
                         <td>
                             {% if note.共有キー == 'public' %}
-                                <span class="permission-badge" style="background-color: #c6f6d5; color: #22543d;">公開</span>
-                            {% elif note.共有キー == 'shared' %}
-                                <span class="permission-badge" style="background-color: #bee3f8; color: #2c5282;">特定共有</span>
+                                <span class="permission-badge" style="background-color: #c6f6d5; color: #22543d;">{{ note.共有表示 }}</span>
+                            {% elif note.共有キー in ['domestic', 'group', 'domestic_group'] %}
+                                <span class="permission-badge" style="background-color: #bee3f8; color: #2c5282;">{{ note.共有表示 }}</span>
                             {% else %}
                                 <span class="permission-badge" style="background-color: #fed7d7; color: #742a2a;">非公開</span>
                             {% endif %}
                         </td>
-                        <td class="date-cell">{{ note.作成日時表示 }}</td>
                         <td class="date-cell">{{ note.更新日時表示 or '-' }}</td>
                         {% if user_category != 'admin' %}
                         <td>
-                            {% if note.権限 == '所有者' or note.オーナーID == session.user_id %}
-                                <span class="permission-badge permission-所有者">所有者</span>
-                            {% elif note.権限 == '編集' %}
-                                <span class="permission-badge permission-編集">編集</span>
-                            {% elif note.権限 == '閲覧' %}
+                            {% if note.権限 == '閲覧' and note.オーナーID != session.user_id %}
                                 <span class="permission-badge permission-閲覧">閲覧</span>
                             {% else %}
                                 <span class="permission-badge permission-所有者">所有者</span>
@@ -450,9 +462,11 @@
                         <td>
                             <div class="action-buttons">
                                 <button class="view-btn" onclick="viewNote({{ note.id }})">閲覧</button>
-                                {% if user_category == 'admin' or note.オーナーID == session.user_id or note.権限 == '編集' %}
+                                {% if user_category == 'admin' or note.オーナーID == session.user_id %}
                                 <button class="edit-btn" onclick="editNote({{ note.id }})">編集</button>
                                 {% endif %}
+                                <button class="md-btn" onclick="downloadMd({{ note.id }})">MD⬇</button>
+                                <button class="html-btn" onclick="downloadHtml({{ note.id }})">HTML⬇</button>
                                 {% if user_category == 'admin' or note.オーナーID == session.user_id %}
                                 <button class="delete-btn" data-name="{{ note.名前 }}" onclick="deleteNote({{ note.id }}, this)">削除</button>
                                 {% endif %}
@@ -480,6 +494,14 @@
         }
         function editNote(noteId) {
             window.location.href = "{{ url_for('my_md_notes.edit_note', note_id=0) }}".replace('0', noteId);
+        }
+
+        function downloadMd(noteId) {
+            window.location.href = "{{ url_for('my_md_notes.download_md', note_id=0) }}".replace('0', noteId);
+        }
+
+        function downloadHtml(noteId) {
+            window.location.href = "{{ url_for('my_md_notes.download_html', note_id=0) }}".replace('0', noteId);
         }
         function deleteNote(noteId, btn) {
             const noteName = btn.dataset.name;

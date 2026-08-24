@@ -206,6 +206,33 @@
             background-color: #c6f6d5;
         }
 
+        .action-buttons button.md-btn {
+            background-color: #e6fffa;
+            color: #234e52;
+        }
+
+        .action-buttons button.md-btn:hover {
+            background-color: #b2f5ea;
+        }
+
+        .action-buttons button.html-btn {
+            background-color: #ebf8ff;
+            color: #2c5282;
+        }
+
+        .action-buttons button.html-btn:hover {
+            background-color: #bee3f8;
+        }
+
+        .action-buttons button.archive-btn {
+            background-color: #faf5ff;
+            color: #553c9a;
+        }
+
+        .action-buttons button.archive-btn:hover {
+            background-color: #e9d8fd;
+        }
+
         .action-buttons button.delete-btn {
             background-color: #fed7d7;
             color: #742a2a;
@@ -229,6 +256,102 @@
         .note-type-note {
             color: #4299e1;
         }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            white-space: pre-line;
+        }
+
+        .alert-success {
+            background-color: #c6f6d5;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background-color: #fed7d7;
+            color: #742a2a;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            max-width: 640px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #2d3748;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-info {
+            background-color: #ebf8ff;
+            color: #2c5282;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .modal-submit-btn {
+            background-color: #805ad5;
+            color: white;
+        }
+
+        .modal-submit-btn:hover {
+            background-color: #6b46c1;
+        }
+
+        .modal-close-btn {
+            background-color: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .modal-close-btn:hover {
+            background-color: #cbd5e0;
+        }
     </style>
 </head>
 <body>
@@ -242,6 +365,14 @@
     </div>
 
     <div class="notes-table-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
         {% if notes %}
             <table class="notes-table">
                 <thead>
@@ -251,12 +382,11 @@
                         <th style="width: 10%;">オーナー</th>
                         {% endif %}
                         <th style="width: 12%;">共有状態</th>
-                        <th style="width: 13%;">作成日時</th>
-                        <th style="width: 13%;">更新日時</th>
+                        <th style="width: 14%;">更新日時</th>
                         {% if user_category != 'admin' %}
                         <th style="width: 8%;">権限</th>
                         {% endif %}
-                        <th style="width: 18%;">操作</th>
+                        <th style="width: 30%;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -274,22 +404,17 @@
                         {% endif %}
                         <td>
                             {% if note.共有キー == 'public' %}
-                                <span class="permission-badge" style="background-color: #c6f6d5; color: #22543d;">公開</span>
-                            {% elif note.共有キー == 'shared' %}
-                                <span class="permission-badge" style="background-color: #bee3f8; color: #2c5282;">特定共有</span>
+                                <span class="permission-badge" style="background-color: #c6f6d5; color: #22543d;">{{ note.共有表示 }}</span>
+                            {% elif note.共有キー in ['domestic', 'group', 'domestic_group'] %}
+                                <span class="permission-badge" style="background-color: #bee3f8; color: #2c5282;">{{ note.共有表示 }}</span>
                             {% else %}
                                 <span class="permission-badge" style="background-color: #fed7d7; color: #742a2a;">非公開</span>
                             {% endif %}
                         </td>
-                        <td class="date-cell">{{ note.作成日時表示 }}</td>
                         <td class="date-cell">{{ note.更新日時表示 or '-' }}</td>
                         {% if user_category != 'admin' %}
                         <td>
-                            {% if note.権限 == '所有者' or note.オーナーID == session.user_id %}
-                                <span class="permission-badge permission-所有者">所有者</span>
-                            {% elif note.権限 == '編集' %}
-                                <span class="permission-badge permission-編集">編集</span>
-                            {% elif note.権限 == '閲覧' %}
+                            {% if note.権限 == '閲覧' and note.オーナーID != session.user_id %}
                                 <span class="permission-badge permission-閲覧">閲覧</span>
                             {% else %}
                                 <span class="permission-badge permission-所有者">所有者</span>
@@ -299,8 +424,13 @@
                         <td>
                             <div class="action-buttons">
                                 <button class="view-btn" onclick="viewNote({{ note.id }})">閲覧</button>
-                                {% if user_category == 'admin' or note.オーナーID == session.user_id or note.権限 == '編集' %}
+                                {% if user_category == 'admin' or note.オーナーID == session.user_id %}
                                 <button class="edit-btn" onclick="editNote({{ note.id }})">編集</button>
+                                {% endif %}
+                                <button class="md-btn" onclick="downloadMd({{ note.id }})">MD⬇</button>
+                                <button class="html-btn" onclick="downloadHtml({{ note.id }})">HTML⬇</button>
+                                {% if user_category == 'admin' or note.オーナーID == session.user_id %}
+                                <button class="archive-btn" data-note-id="{{ note.id }}" data-note-name="{{ note.名前 }}" data-updated="{{ note.更新日時表示 }}" onclick="openArchiveModal(this)">アーカイブ</button>
                                 {% endif %}
                                 {% if user_category == 'admin' or note.オーナーID == session.user_id %}
                                 <button class="delete-btn" data-name="{{ note.名前 }}" onclick="deleteNote({{ note.id }}, this)">削除</button>
@@ -318,6 +448,42 @@
         {% endif %}
     </div>
 
+    <!-- アーカイブ保存モーダル -->
+    <div id="archiveModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🗄 アーカイブに保存 - <span id="archiveNoteName"></span></h2>
+                <button type="button" class="modal-btn modal-close-btn" onclick="closeArchiveModal()">✕ 閉じる</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    💡 完成稿をHTMLに変換して文書アーカイブに保存します。保存直後は「非公開」です。
+                    インターネットへの一般公開は、文書アーカイブで公開範囲を設定して行います。
+                </div>
+                <form id="archiveForm" method="POST" action="">
+                    <div style="margin-bottom: 15px;">
+                        <label for="archive_title" style="display: block; font-weight: bold; margin-bottom: 5px;">アーカイブタイトル <span style="color: #e53e3e;">*</span></label>
+                        <input type="text" id="archive_title" name="archive_title" required
+                               style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="public_description" style="display: block; font-weight: bold; margin-bottom: 5px;">パブリック説明</label>
+                        <textarea id="public_description" name="public_description" rows="3"
+                                  style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="owner_memo" style="display: block; font-weight: bold; margin-bottom: 5px;">オーナーメモ</label>
+                        <textarea id="owner_memo" name="owner_memo" rows="3"
+                                  style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div style="text-align: right;">
+                        <button type="submit" class="modal-btn modal-submit-btn">🗄 保存する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         function viewNote(noteId) {
             window.location.href = "{{ url_for('my_md_notes.view_note', note_id=0) }}".replace('0', noteId);
@@ -325,6 +491,47 @@
         function editNote(noteId) {
             window.location.href = "{{ url_for('my_md_notes.edit_note', note_id=0) }}".replace('0', noteId);
         }
+
+        function downloadMd(noteId) {
+            window.location.href = "{{ url_for('my_md_notes.download_md', note_id=0) }}".replace('0', noteId);
+        }
+
+        function downloadHtml(noteId) {
+            window.location.href = "{{ url_for('my_md_notes.download_html', note_id=0) }}".replace('0', noteId);
+        }
+
+        function openArchiveModal(btn) {
+            const noteId = btn.dataset.noteId;
+            const noteName = btn.dataset.noteName;
+            const updated = btn.dataset.updated;
+
+            document.getElementById('archiveForm').action =
+                "{{ url_for('my_md_notes.archive_note', note_id=0) }}".replace('0', noteId);
+            document.getElementById('archiveNoteName').textContent = noteName;
+            document.getElementById('archive_title').value = noteName;
+            document.getElementById('public_description').value = 'マイノート「' + noteName + '」の完成稿です。';
+            document.getElementById('owner_memo').value = 'ソース: マイノート (ノートID: ' + noteId + '、更新日時: ' + updated + ')';
+            document.getElementById('archiveModal').classList.add('show');
+        }
+
+        function closeArchiveModal() {
+            document.getElementById('archiveModal').classList.remove('show');
+        }
+
+        // モーダル外をクリックで閉じる
+        window.onclick = function(event) {
+            const modal = document.getElementById('archiveModal');
+            if (event.target === modal) {
+                closeArchiveModal();
+            }
+        }
+
+        // ESCキーでモーダルを閉じる
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeArchiveModal();
+            }
+        });
         function deleteNote(noteId, btn) {
             const noteName = btn.dataset.name;
             if (!confirm(`ノート「${noteName}」を本当に削除しますか？\n\n※ 削除すると元に戻せません。`)) {
