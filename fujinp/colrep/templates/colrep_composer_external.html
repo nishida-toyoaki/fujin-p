@@ -482,9 +482,9 @@ flowchart LR
                     const result = await response.json();
 
                     if (result.success) {
-                        // エディタに画像マークダウンを挿入
-                        const imageMarkdown = `![${result.filename}](${result.url})`;
-                        this.insertTextAtCursor(imageMarkdown);
+                        // エディタに画像タグ（幅100%指定・フルURL）を挿入
+                        const imageTag = `<img class="k-img" src="${window.location.origin}${result.url}" style="width:100%;" alt="">`;
+                        this.insertTextAtCursor(imageTag);
                         this.showMessage('画像がアップロードされました', 'success');
                         this.updatePreview();
                     } else {

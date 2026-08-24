@@ -338,8 +338,8 @@
                     const result = await response.json();
 
                     if (result.success) {
-                        const imageMarkdown = `![${result.filename}](${result.url})`;
-                        this.insertTextAtCursor(imageMarkdown);
+                        const imageTag = `<img class="k-img" src="${window.location.origin}${result.url}" style="width:100%;" alt="">`;
+                        this.insertTextAtCursor(imageTag);
                         this.showMessage('画像がアップロードされました', 'success');
                         this.updatePreview();
                     } else {

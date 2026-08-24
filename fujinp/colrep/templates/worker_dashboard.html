@@ -120,7 +120,7 @@
                 <p class="text-muted">あなたにアサインされたタスク一覧</p>
             </div>
             <div class="d-flex align-items-center gap-3">
-                {# ★追加: クイック作成（CoRePo管理者以上のみ表示） #}
+                {# クイック作成（システム管理者またはコレポ管理者のみ表示） #}
                 {% if permissions and (permissions.is_colrep_admin or permissions.is_colrep_manager) %}
                 <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#quickCreateModal">
                     <i class="bi bi-pencil-square"></i> 新規執筆を開始

@@ -25,7 +25,6 @@ import json
 import uuid
 import logging
 import mysql.connector
-import pandas as pd
 from flask import Blueprint, request, jsonify, send_file, session, render_template, redirect, url_for, flash
 from flask import Response  # 追加
 from auth import login_required
@@ -38,12 +37,10 @@ from db import DatabaseConfig, Tables
 import re
 # from medit.external import medit_external
 # from markupsafe import Markup
-import markdown
 from markdown_converter import process_markdown
 from markdown_converter import process_markdown_for_preview
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 from werkzeug.utils import secure_filename
 from auth import redirect_to_dashboard
 
@@ -112,22 +109,19 @@ colrep_bp = Blueprint('colrep', __name__,
 
 logging.basicConfig(level=logging.DEBUG)
 
+# ============================================================
 # 定数定義
-# ファイル先頭付近に追加
-# UPLOAD_FOLDER = '/home/nishida/static/mdimgs'
-# ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-# COLREP_ADMIN_CATEGORY = "colrep総管理者"  # colrep総管理者
-# COLREP_MANAGER_FEATURE = "CoRePo管理者"   # ★新規追加: CoRePo管理者フィーチャー名
-# COLREP_PROJECTS_TABLE = "nishida$fujinp.colrep_projects"
-# TARGET_DATABASE = "nishida$fujinp"
-
-### 定数定義
+#   ※ 権限は 2026-07 に features 方式（旧「colrep総管理者」「CoRePo管理者」）から
+#      user_groups 方式へ移行済み。旧定数はコード・DBとも使用しない。
+#      現在の判定は システム管理者（user_category=='admin'）と
+#      グループ「コレポ管理者」への有効所属の2本立て（get_user_permissions 参照）。
+#   ※ 接続先・アップロード先はすべて config.py / db.py に集約する
+#      （サイト固有の値をこのファイルに書かない）。
+# ============================================================
 
 UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 
-# COLREP_ADMIN_CATEGORY = "colrep総管理者"   # 廃止: システム管理者(user_category=='admin')に統合
-# COLREP_MANAGER_FEATURE = "CoRePo管理者"    # 廃止: user_groupベースに移行
 COLREP_MANAGER_GROUP = "コレポ管理者"  # プロジェクト作成を許可するユーザーグループ名（完全一致）
 COLREP_PROJECTS_TABLE = Tables.COLREP_PROJECTS
 TARGET_DATABASE = Tables.DB_FUJINP
@@ -322,10 +316,6 @@ def check_shared_preview_access(project_id, user_id):
             cursor.close()
             conn.close()
 
-def check_colrep_admin_permission():
-    """全プロジェクト管理権限をチェック（旧colrep総管理者はシステム管理者に統合）"""
-    return session.get('user_category') == 'admin'
-
 def get_user_permissions():
     """ユーザーの権限情報を取得（user_groupベース）
     - is_colrep_admin  : 全プロジェクトの閲覧・管理（システム管理者 user_category=='admin'）
@@ -433,10 +423,10 @@ def index():
 def create_project():
     """プロジェクト作成"""
 
-    # ★修正: 権限チェックを変更 (総管理者 OR CoRePo管理者 ならOK)
+    # 権限チェック：システム管理者 または コレポ管理者グループ所属者
     permissions = get_user_permissions()
     if not (permissions['is_colrep_admin'] or permissions['is_colrep_manager']):
-        flash('プロジェクト作成権限（CoRePo管理者以上）が必要です。', 'error')
+        flash('プロジェクト作成権限（システム管理者またはコレポ管理者グループ）が必要です。', 'error')
         return redirect(url_for('colrep.index'))
 
     if request.method == 'GET':
@@ -571,7 +561,7 @@ def quick_create_project():
     permissions = get_user_permissions()
     if not (permissions['is_colrep_admin'] or permissions['is_colrep_manager']):
         return jsonify({'success': False,
-                        'error': 'プロジェクト作成権限（CoRePo管理者以上）が必要です。'}), 403
+                        'error': 'プロジェクト作成権限（システム管理者またはコレポ管理者グループ）が必要です。'}), 403
 
     user_id = session.get('user_id')
     data = request.get_json() or {}
@@ -963,7 +953,7 @@ def delete_project(project_id):
         if not project:
             return jsonify({'success': False, 'error': 'プロジェクトが見つかりません。'}), 404
 
-        # ★★★ 権限チェック修正: 総管理者 OR プロジェクト責任者のみ許可 ★★★
+        # 権限チェック：システム管理者 または プロジェクト責任者のみ許可
         is_system_admin = (session.get('user_category') == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
         is_owner = (project['責任者'] == user_id)
@@ -1038,7 +1028,7 @@ def manage_project_table(project_id):
             flash('プロジェクトが見つかりません。', 'error')
             return redirect(url_for('colrep.index'))
 
-        # 権限チェック：システム管理者、CoRePo総管理者、または責任者
+        # 権限チェック：システム管理者 または プロジェクト責任者
         permissions = get_user_permissions()
         is_system_admin = (session.get('user_category') == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
@@ -1055,7 +1045,7 @@ def manage_project_table(project_id):
         table_exists = cursor.fetchone() is not None
 
         if not table_exists:
-            flash('テーブルがまだ作成されていません。総管理者にテーブル作成を依頼してください。', 'warning')
+            flash('テーブルがまだ作成されていません。システム管理者にテーブル作成を依頼してください。', 'warning')
             return redirect(url_for('colrep.view_project', project_id=project_id))
 
         table_data = []
@@ -1115,7 +1105,7 @@ def add_table_row(project_id):
         if not project:
             return jsonify({'success': False, 'error': 'プロジェクトが見つかりません。'}), 404
 
-        # 権限チェック：システム管理者、CoRePo総管理者、または責任者
+        # 権限チェック：システム管理者 または プロジェクト責任者
         is_system_admin = (session.get('user_category') == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
         is_owner = (project['責任者'] == user_id)
@@ -1188,17 +1178,6 @@ def safe_process_content(content):
     except Exception as e:
         logging.error(f"Content processing error: {str(e)}")
         return ""
-
-def safe_calculate_length(content):
-    """安全な文字数計算"""
-    try:
-        if content is None:
-            return 0
-        if not isinstance(content, str):
-            content = str(content)
-        return len(content.strip())
-    except Exception:
-        return 0
 
 def calculate_safe_statistics(all_tasks):
     """統計情報の安全な計算（関数として分離）"""
@@ -1737,7 +1716,7 @@ def get_composer(project_id):
         if not project:
             return jsonify({'success': False, 'error': 'プロジェクトが見つかりません。'}), 404
 
-        # プロジェクト責任者または総管理者のみ表示可能
+        # プロジェクト責任者またはシステム管理者のみ表示可能
         permissions = get_user_permissions()
         if not (project['責任者'] == user_id or permissions['is_colrep_admin']):
             return jsonify({'success': False, 'error': '権限がありません。'}), 403
@@ -1789,7 +1768,7 @@ def export_project(project_id):
             flash('プロジェクトが見つかりません。', 'error')
             return redirect(url_for('colrep.index'))
 
-        # 権限チェック：プロジェクト責任者または総管理者
+        # 権限チェック：プロジェクト責任者またはシステム管理者
         permissions = get_user_permissions()
         if not (project['責任者'] == user_id or permissions['is_colrep_admin']):
             flash('エクスポート権限がありません。', 'error')
@@ -2045,7 +2024,7 @@ def delete_task(project_id, task_id):
         if not project:
             return jsonify({'success': False, 'error': 'プロジェクトが見つかりません。'}), 404
 
-        # 権限チェック：システム管理者、CoRePo総管理者、または責任者
+        # 権限チェック：システム管理者 または プロジェクト責任者
         is_system_admin = (session.get('user_category') == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
         is_owner = (project['責任者'] == user_id)
@@ -2170,7 +2149,7 @@ def preview_integrated(project_id):
         if not project:
             return Response("<p>プロジェクトが見つかりません。</p>", mimetype='text/html'), 404
 
-        # 権限チェック：プロジェクト責任者または総管理者
+        # 権限チェック：プロジェクト責任者またはシステム管理者
         # ★★★ ここを修正：権限チェックにシステムAdminを追加 ★★★
         permissions = get_user_permissions()
         is_system_admin = (user_category == 'admin') # ★追加
@@ -2631,7 +2610,7 @@ def archive_project(project_id):
             flash('プロジェクトが見つかりません。', 'error')
             return redirect(url_for('colrep.index'))
 
-        # 権限チェック：プロジェクト責任者または総管理者
+        # 権限チェック：プロジェクト責任者またはシステム管理者
         permissions = get_user_permissions()
         if not (project['責任者'] == user_id or permissions['is_colrep_admin']):
             flash('このプロジェクトをアーカイブする権限がありません。', 'error')
@@ -2829,7 +2808,7 @@ def update_task(project_id, task_id):
         if not project:
             return jsonify({'success': False, 'error': 'プロジェクトが見つかりません'}), 404
 
-        # 権限チェック：システム管理者、CoRePo総管理者、または責任者
+        # 権限チェック：システム管理者 または プロジェクト責任者
         is_system_admin = (session.get('user_category') == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
         is_owner = (project['責任者'] == user_id)
@@ -2977,45 +2956,6 @@ def check_project_access_permission(project_id, user_id):
             cursor.close()
             conn.close()
 
-
-def get_project_contributors(project_id):
-    """
-    プロジェクトの執筆者（コンテンツが入っているユーザー）を取得
-    """
-    try:
-        # conn = mysql.connector.connect(**base_db_config, database=TARGET_DATABASE)
-        conn = mysql.connector.connect(**DatabaseConfig.fujinp())
-        cursor = conn.cursor(dictionary=True)
-
-        # プロジェクト情報を取得
-        cursor.execute(f"""
-            SELECT テーブル名 FROM {COLREP_PROJECTS_TABLE}
-            WHERE id = %s
-        """, (project_id,))
-
-        project = cursor.fetchone()
-        if not project:
-            return []
-
-        table_name = project['テーブル名']
-
-        # コンテンツが入っている執筆者を取得
-        cursor.execute(f"""
-            SELECT DISTINCT 担当者アカウント
-            FROM `{table_name}`
-            WHERE content IS NOT NULL AND content != ''
-        """)
-
-        contributors = cursor.fetchall()
-        return [c['担当者アカウント'] for c in contributors]
-
-    except Exception as e:
-        logging.error(f"Error in get_project_contributors: {str(e)}")
-        return []
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
 
 # ============================================================
 # 5. 新規エンドポイント: 公開ドキュメントビューア用API
@@ -3285,7 +3225,7 @@ def export_project_data(project_id):
             flash('プロジェクトが見つかりません。', 'error')
             return redirect(url_for('colrep.index'))
 
-        # ★★★ 権限チェック修正: システムadmin, CoRePo総管理者, 責任者, 公開設定のいずれかなら許可 ★★★
+        # 権限チェック：システム管理者／責任者／担当者／公開プロジェクトのいずれかなら許可
         user_category = session.get('user_category')
         permissions = get_user_permissions()
 
@@ -3616,7 +3556,7 @@ def export_project_data_json(project_id):
             flash('プロジェクトが見つかりません。', 'error')
             return redirect(url_for('colrep.index'))
 
-        # ★★★ 権限チェック: システムadmin, CoRePo総管理者, 責任者, 公開設定のいずれかなら許可 ★★★
+        # 権限チェック：システム管理者／責任者／担当者／公開プロジェクトのいずれかなら許可
         is_system_admin = (user_category == 'admin')
         is_colrep_admin = permissions['is_colrep_admin']
         is_owner = (project['責任者'] == user_id)
@@ -3690,10 +3630,10 @@ def export_project_data_json(project_id):
 @login_required
 def import_project():
     """Excelファイルからプロジェクトをインポート（新プラットフォーム用 - インポート者が責任者・担当者）"""
-    # ★修正: 権限チェックを変更 (総管理者 OR CoRePo管理者 ならOK)
+    # 権限チェック：システム管理者 または コレポ管理者グループ所属者
     permissions = get_user_permissions()
     if not (permissions['is_colrep_admin'] or permissions['is_colrep_manager']):
-        flash('プロジェクト作成権限（CoRePo管理者以上）が必要です。', 'error')
+        flash('プロジェクト作成権限（システム管理者またはコレポ管理者グループ）が必要です。', 'error')
         return redirect(url_for('colrep.index'))
 
     if request.method == 'POST':
@@ -3959,7 +3899,7 @@ def import_project_json():
     """JSONファイルからプロジェクトをインポート（インポート者が責任者・担当者）"""
     permissions = get_user_permissions()
     if not (permissions['is_colrep_admin'] or permissions['is_colrep_manager']):
-        flash('プロジェクト作成権限（CoRePo管理者以上）が必要です。', 'error')
+        flash('プロジェクト作成権限（システム管理者またはコレポ管理者グループ）が必要です。', 'error')
         return redirect(url_for('colrep.index'))
 
     if request.method == 'POST':
@@ -4023,7 +3963,7 @@ def import_from_archive(doc_id):
     権限: システム管理者(admin) または コレポ管理者グループ所属者。"""
     permissions = get_user_permissions()
     if not (permissions['is_colrep_admin'] or permissions['is_colrep_manager']):
-        flash('この操作にはCoRePo総管理者以上の権限が必要です。', 'error')
+        flash('プロジェクト作成権限（システム管理者またはコレポ管理者グループ）が必要です。', 'error')
         return redirect(url_for('document_archive.dashboard'))
 
     import_user_id = session.get('user_id')
@@ -4106,7 +4046,7 @@ def upload_image():
         timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
         filename = secure_filename(file.filename)
         name, ext = os.path.splitext(filename)
-        unique_filename = f"{name}_{timestamp}{ext}"
+        unique_filename = f"{uuid.uuid4().hex[:8]}_{name}_{timestamp}{ext}"
 
         filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
 

@@ -122,14 +122,14 @@
             </div>
 
             <div class="flex flex-wrap gap-2 items-center">
-                <!-- 新規プロジェクト作成: 総管理者またはCoRePo管理者 -->
+                <!-- 新規プロジェクト作成: システム管理者またはコレポ管理者 -->
                 {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
                 <a href="{{ url_for('colrep.create_project') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow flex items-center transition-colors">
                     <i data-lucide="plus" class="w-4 h-4 mr-1"></i> 新規プロジェクト
                 </a>
                 {% endif %}
 
-                <!-- インポート: 総管理者またはCoRePo管理者 -->
+                <!-- インポート: システム管理者またはコレポ管理者 -->
                 {% if permissions.is_colrep_admin or permissions.is_colrep_manager %}
                 <button onclick="openModal('importJsonModal')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow flex items-center transition-colors">
                     <i data-lucide="upload" class="w-4 h-4 mr-1"></i> インポート (JSON)
@@ -141,9 +141,9 @@
 
                 <!-- バッジ表示 -->
                 {% if permissions.is_colrep_admin %}
-                    <span class="bg-green-600 text-white text-sm px-3 py-1.5 rounded-full">colrep総管理者</span>
+                    <span class="bg-green-600 text-white text-sm px-3 py-1.5 rounded-full">システム管理者</span>
                 {% elif permissions.is_colrep_manager %}
-                    <span class="bg-cyan-500 text-white text-sm px-3 py-1.5 rounded-full">CoRePo管理者</span>
+                    <span class="bg-cyan-500 text-white text-sm px-3 py-1.5 rounded-full">コレポ管理者</span>
                 {% else %}
                     <span class="bg-gray-500 text-white text-sm px-3 py-1.5 rounded-full">非管理者</span>
                 {% endif %}
@@ -231,7 +231,7 @@
                         {# --- 権限判定ロジック：元のスタイルを維持しつつ判定条件だけ追加 --- #}
                         {% set is_system_admin = (session.get('user_category') == 'admin') %}
                         {% set is_owner = (project.責任者 == permissions.user_info.user_id) %}
-                        {# システムadmin、CoRePo総管理者、責任者のいずれかであれば管理可能 #}
+                        {# システム管理者または責任者であれば管理可能 #}
                         {% set can_manage_all = (is_system_admin or permissions.is_colrep_admin or is_owner) %}
 
                         <tr class="hover:bg-gray-50 transition-colors">

@@ -13,81 +13,177 @@
     <title>CoRePo - Collaborative RePort composer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-
-<style>
-pre {
-    margin: 0;
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 15px;
-    overflow: auto;
-}
-
-code {
-    background-color: transparent;
-    color: inherit;
-    padding: 0;
-}
-
-/* ダークモード対応 */
-@media (prefers-color-scheme: dark) {
-    pre {
-        background-color: #2d2d2d;
-        color: #f8f8f2;
-        border-color: #444;
-    }
-}
-</style>
-
 <div class="container mt-4">
     <!-- ヘッダー部分 -->
-    <div class="d-flex justify-content-between align-items-start mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1><i class="bi bi-file-text"></i> {{ project.プロジェクト名 }}</h1>
-            <p class="text-muted">
-                <i class="bi bi-person"></i> 責任者:
-                {% if project.責任者名 %}
-                    {{ project.責任者名 }}
-                {% else %}
-                    未設定
-                {% endif %}
-            </p>
-            <p class="text-muted">
-                <i class="bi bi-clock"></i> 更新日時: {{ project.更新日時.strftime('%Y年%m月%d日 %H:%M') }}
-            </p>
+            <h1><i class="bi bi-folder"></i> {{ project.プロジェクト名 }}</h1>
+            <p class="text-muted">プロジェクト詳細情報</p>
         </div>
-        <a href="/colrep_public/" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> 一覧に戻る
-        </a>
+        <div>
+            <a href="{{ url_for('colrep.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> プロジェクト一覧
+            </a>
+            {% if permissions.user_info.user_id == project.責任者 or permissions.is_colrep_admin %}
+            <button class="btn btn-success" onclick="previewIntegratedContent()">
+                <i class="bi bi-eye"></i> 統合ビュー表示
+            </button>
+            {% endif %}
+            {% if permissions.is_colrep_admin %}
+            <a href="{{ url_for('colrep.edit_project', project_id=project.id) }}" class="btn btn-primary">
+                <i class="bi bi-pencil"></i> 編集
+            </a>
+            {% endif %}
+        </div>
     </div>
 
-    <!-- ✅ 修正：Composerセクション（ソースコードのみ） -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-book"></i> 統合指示書（Composer）</h5>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}" role="alert">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- プロジェクト基本情報 -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> 基本情報</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-3">プロジェクト名</dt>
+                        <dd class="col-sm-9">{{ project.プロジェクト名 }}</dd>
+
+                        <dt class="col-sm-3">責任者</dt>
+                        <dd class="col-sm-9">{{ project.責任者名 }}{% if project.責任者氏名 %} ({{ project.責任者氏名 }}){% endif %}</dd>
+
+                        <dt class="col-sm-3">テーブル名</dt>
+                        <dd class="col-sm-9">
+                            <code>{{ project.テーブル名 }}</code>
+                            {% if table_exists %}
+                                <span class="badge bg-success ms-2"><i class="bi bi-check-circle"></i> 自動生成完了</span>
+                            {% else %}
+                                <span class="badge bg-warning ms-2">未作成</span>
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-3">更新日時</dt>
+                        <dd class="col-sm-9">
+                            {% if project.更新日時 %}
+                                {{ project.更新日時.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
         </div>
-        <div class="card-body" id="composerContent">
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">読み込み中...</span>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-gear"></i> 操作</h5>
+                </div>
+                <div class="card-body">
+                    <!-- プロジェクト責任者のみ表示される操作 -->
+                    {% if permissions.user_info.user_id == project.責任者 %}
+                        {% if table_exists %}
+                        <a href="{{ url_for('colrep.manage_project_table', project_id=project.id) }}"
+                           class="btn btn-primary w-100 mb-2">
+                            <i class="bi bi-list-task"></i> タスク管理
+                        </a>
+                        {% endif %}
+
+                        <!-- Composer編集ボタン -->
+                        <button class="btn btn-info w-100 mb-2" onclick="editComposer()">
+                            <i class="bi bi-file-earmark-text"></i> Composer編集
+                        </button>
+
+                        <!-- アーカイブに保存ボタン -->
+                        {% if permissions.is_colrep_admin or project.責任者 == permissions.user_info.user_id %}
+                            <button type="button" class="btn btn-warning w-100 mb-2" data-bs-toggle="modal" data-bs-target="#archiveProjectModal">
+                                <i class="fas fa-archive"></i> アーカイブに保存
+                            </button>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if permissions.is_colrep_admin %}
+                    <button class="btn btn-outline-danger w-100" onclick="deleteProject()">
+                        <i class="bi bi-trash"></i> プロジェクト削除
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 部品一覧 -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-list-task"></i> 部品一覧</h5>
+    <!-- テーブル未作成時の詳細案内（プロジェクト責任者向け） -->
+    {% if permissions.user_info.user_id == project.責任者 and not table_exists %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-warning" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> 作業開始前の準備について</h5>
+                <p class="mb-2">
+                    このプロジェクトではまだデータテーブルが作成されていないため、タスクの割り当てや作業の開始ができません。
+                </p>
+                <p class="mb-2">
+                    <strong>次のステップ:</strong>
+                </p>
+                <ol class="mb-2">
+                    <li>システム管理者に連絡してテーブルの作成を依頼してください</li>
+                    <li>テーブルが作成されると「タスク管理」ボタンが表示されます</li>
+                    <li>その後、作業者へのタスク割り当てが可能になります</li>
+                </ol>
+                <p class="mb-0">
+                    <small class="text-muted">
+                        テーブル名: <code>{{ project.テーブル名 }}</code>
+                    </small>
+                </p>
+            </div>
         </div>
-        <div class="card-body p-0">
-            <div id="componentsContainer">
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">読み込み中...</span>
+    </div>
+    {% endif %}
+
+    <!-- Composer情報表示 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1"><i class="bi bi-file-earmark-text"></i> Composer（統合指示書）</h6>
+                            <small class="text-muted">
+                                {% if project.Composer %}
+                                    作成済み（{{ project.Composer|length }}文字）
+                                {% else %}
+                                    未作成
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="btn-group">
+                            {% if project.Composer %}
+                                {% if permissions.user_info.user_id == project.責任者 %}
+                                <button class="btn btn-sm btn-outline-primary" onclick="editComposer()">
+                                    <i class="bi bi-pencil"></i> 編集
+                                </button>
+                                {% endif %}
+                            {% else %}
+                                {% if permissions.user_info.user_id == project.責任者 %}
+                                <button class="btn btn-sm btn-warning" onclick="editComposer()">
+                                    <i class="bi bi-plus"></i> Composer作成
+                                </button>
+                                {% endif %}
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -95,270 +191,169 @@ code {
     </div>
 </div>
 
-<!-- コンポーネント詳細モーダル -->
-<div class="modal fade" id="componentModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
+<div class="modal fade" id="archiveProjectModal" tabindex="-1" aria-labelledby="archiveProjectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="componentTitle">部品詳細</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="archiveProjectModalLabel">
+                    <i class="fas fa-archive me-2"></i>プロジェクトをアーカイブに保存
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="componentContent">
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">読み込み中...</span>
+
+            <form method="POST" action="{{ url_for('colrep.archive_project', project_id=project.id) }}">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        このプロジェクトの情報をアーカイブシステムに保存します。
+                    </div>
+
+                    <!-- アーカイブタイトル -->
+                    <div class="mb-3">
+                        <label for="archive_title" class="form-label">
+                            <strong>アーカイブタイトル <span class="text-danger">*</span></strong>
+                        </label>
+                        <input type="text" class="form-control" id="archive_title" name="archive_title"
+                               value="{{ project.プロジェクト名 }}_プロジェクト詳細" required>
+                    </div>
+
+                    <!-- パブリック説明 -->
+                    <div class="mb-3">
+                        <label for="public_description" class="form-label">
+                            <strong>パブリック説明</strong>
+                        </label>
+                        <textarea class="form-control" id="public_description" name="public_description" rows="3">{{ project.プロジェクト名 }}のプロジェクト詳細情報です。
+
+**プロジェクト情報**:
+- 責任者: {{ project.責任者名 }}
+- テーブル名: {{ project.テーブル名 }}
+- 更新日時: {{ project.更新日時.strftime('%Y年%m月%d日') if project.更新日時 else '不明' }}</textarea>
+                    </div>
+
+                    <!-- オーナーメモ -->
+                    <div class="mb-3">
+                        <label for="owner_memo" class="form-label">
+                            <strong>オーナーメモ</strong>
+                        </label>
+                        <textarea class="form-control" id="owner_memo" name="owner_memo" rows="4">**プロジェクト詳細アーカイブ**:
+- プロジェクト名: {{ project.プロジェクト名 }}
+- プロジェクトID: {{ project.id }}
+- 責任者: {{ project.責任者名 }} (ID: {{ project.責任者 }})
+- テーブル名: {{ project.テーブル名 }}
+- 更新日時: {{ project.更新日時.strftime('%Y年%m月%d日 %H:%M') if project.更新日時 else '不明' }}
+- ソース: CoRePoプロジェクト詳細</textarea>
+                    </div>
+
+                    <!-- プレビュー情報 -->
+                    <div class="card bg-light">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-eye me-1"></i>アーカイブ対象情報
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small><strong>プロジェクト名:</strong> {{ project.プロジェクト名 }}</small><br>
+                                    <small><strong>責任者:</strong> {{ project.責任者名 }}</small><br>
+                                    <small><strong>テーブル:</strong> {{ project.テーブル名 }}</small><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <small><strong>保存形式:</strong> HTML</small><br>
+                                    <small><strong>保存先:</strong> public_documents テーブル</small><br>
+                                    <small><strong>アーカイブ日時:</strong> {{ now_datetime }}</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>キャンセル
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-archive me-1"></i>アーカイブに保存
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <script>
-const projectId = {{ project.id }};
+// Composer編集関数
+function editComposer() {
+    const editorUrl = `/colrep/edit_composer_external/{{ project.id }}`;
 
-document.addEventListener('DOMContentLoaded', function() {
-    loadComposerInfo();
-    loadComponents();
-});
+    const editorWindow = window.open(
+        editorUrl,
+        'composerEditor',
+        'width=1200,height=800,scrollbars=yes,resizable=yes'
+    );
 
-// ✅ 修正：Composerのソースコードのみ表示
-function loadComposerInfo() {
-    fetch(`/colrep_public/${projectId}/api/composer`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const container = document.getElementById('composerContent');
-                if (data.composer_md) {
-                    container.innerHTML = `
-                        <h6>マークダウンソース</h6>
-                        <pre style="max-height: 400px; overflow-y: auto; background: #f5f5f5; padding: 15px; border-radius: 4px; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;"><code>${escapeHtml(data.composer_md)}</code></pre>
-                    `;
-                } else {
-                    container.innerHTML = `<p class="text-muted">Composerがまだ作成されていません</p>`;
-                }
-            } else {
-                showComposerError('Composerの取得に失敗しました');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showComposerError('エラーが発生しました');
-        });
-}
-
-function showComposerError(message) {
-    const container = document.getElementById('composerContent');
-    container.innerHTML = `<p class="text-danger"><i class="bi bi-exclamation-triangle"></i> ${message}</p>`;
-}
-
-function loadComponents() {
-    fetch(`/colrep_public/${projectId}/api/components`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                renderComponents(data.components);
-            } else {
-                showComponentsError('部品一覧の取得に失敗しました');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showComponentsError('エラーが発生しました');
-        });
-}
-
-function renderComponents(components) {
-    const container = document.getElementById('componentsContainer');
-
-    if (components.length === 0) {
-        container.innerHTML = `
-            <div class="alert alert-info" role="alert">
-                <i class="bi bi-info-circle"></i> 部品がまだ追加されていません
-            </div>
-        `;
+    if (!editorWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
         return;
     }
 
-    let html = `
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 6%;">ID</th>
-                        <th style="width: 20%;">カラム名</th>
-                        <th style="width: 25%;">説明</th>
-                        <th style="width: 10%;">ステータス</th>
-                        <th style="width: 15%;">担当者</th>
-                        <th style="width: 10%;">コンテンツ</th>
-                        <th style="width: 14%;">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    components.forEach(comp => {
-        const statusBadge = getStatusBadge(comp.status);
-        const contentStatus = comp.has_content
-            ? `<span class="badge bg-success">あり</span>`
-            : `<span class="badge bg-secondary">なし</span>`;
-        const assignee = comp.full_name
-            ? `<small>${escapeHtml(comp.full_name)}</small>`
-            : '<span class="text-muted">-</span>';
-
-        html += `
-            <tr>
-                <td><span class="badge bg-secondary">#${comp.id}</span></td>
-                <td><strong>${escapeHtml(comp['カラム名'])}</strong></td>
-                <td><small>${escapeHtml((comp['説明'] || '').substring(0, 50))}</small></td>
-                <td>${statusBadge}</td>
-                <td>${assignee}</td>
-                <td>${contentStatus}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary"
-                            onclick="showComponentDetail(${comp.id})"
-                            ${comp.has_content ? '' : 'disabled'}>
-                        <i class="bi bi-eye"></i> 詳細
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
-
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    container.innerHTML = html;
+    window.composerCallback = function(result) {
+        if (result.success) {
+            window.location.reload();
+        } else if (result.aborted) {
+            console.log('Composer編集が中断されました');
+        } else {
+            alert('保存に失敗しました: ' + (result.error || '不明なエラー'));
+        }
+        editorWindow.close();
+    };
 }
 
-function showComponentsError(message) {
-    const container = document.getElementById('componentsContainer');
-    container.innerHTML = `<div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle"></i> ${message}</div>`;
+// 統合コンテンツプレビュー関数
+function previewIntegratedContent() {
+    const previewUrl = `/colrep/preview_integrated/{{ project.id }}`;
+
+    const previewWindow = window.open(
+        previewUrl,
+        'integratedPreview',
+        'width=900,height=700,scrollbars=yes,resizable=yes'
+    );
+
+    if (!previewWindow) {
+        alert('ポップアップブロッカーが有効になっているようです。ポップアップを許可してください。');
+        return;
+    }
+
+    previewWindow.focus();
 }
 
-function showComponentDetail(componentId) {
-    const componentTitle = document.getElementById('componentTitle');
-    const componentContent = document.getElementById('componentContent');
-
-    componentTitle.textContent = '読み込み中...';
-    componentContent.innerHTML = `
-        <div class="text-center py-4">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">読み込み中...</span>
-            </div>
-        </div>
-    `;
-
-    // モーダルを表示
-    const modal = new bootstrap.Modal(document.getElementById('componentModal'));
-    modal.show();
-
-    // コンポーネント詳細を取得
-    fetch(`/colrep_public/${projectId}/api/component/${componentId}`)
+// プロジェクト削除関数
+function deleteProject() {
+    if (confirm('プロジェクトを削除しますか？この操作は元に戻せません。')) {
+        fetch(`/colrep/delete_project/{{ project.id }}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                const comp = data.component;
-                const statusBadge = getStatusBadge(comp.status);
-
-                componentTitle.textContent = escapeHtml(comp['カラム名']);
-
-                // ✅ 修正：ソースコンテンツのみ表示
-                let html = `
-                    <div class="mb-3">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <small class="text-muted">
-                                    <strong>ステータス:</strong> ${statusBadge}
-                                </small>
-                            </div>
-                            <div class="col-md-6">
-                                <small class="text-muted">
-                                    <strong>担当者:</strong> ${comp['ユーザ名'] ? escapeHtml(comp['ユーザ名']) : '-'}
-                                </small>
-                            </div>
-                        </div>
-                        <div class="row mt-2">
-                            <div class="col-md-6">
-                                <small class="text-muted">
-                                    <strong>更新日時:</strong> ${formatDateTime(comp['更新日時'])}
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <div class="mb-3">
-                        <h6><strong>説明</strong></h6>
-                        <p>${escapeHtml(comp['説明'] || '')}</p>
-                    </div>
-
-                    <hr>
-
-                    <div>
-                        <h6><strong>ソースコンテンツ</strong></h6>
-                        <pre style="max-height: 600px; overflow-y: auto; background: #f5f5f5; padding: 15px; border-radius: 4px; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace; line-height: 1.4;"><code>${escapeHtml(comp['content_md'])}</code></pre>
-                    </div>
-                `;
-
-                componentContent.innerHTML = html;
+                alert(data.message);
+                window.location.href = data.redirect_url;
             } else {
-                componentContent.innerHTML = `<p class="text-danger">エラー: ${data.error}</p>`;
+                alert('エラー: ' + data.error);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            componentContent.innerHTML = `<p class="text-danger">エラーが発生しました</p>`;
+            alert('プロジェクト削除に失敗しました');
         });
-}
-
-function getStatusBadge(status) {
-    switch(status) {
-        case '作業中':
-            return '<span class="badge bg-warning">作業中</span>';
-        case '改訂中':
-            return '<span class="badge bg-info">改訂中</span>';
-        case '完了':
-            return '<span class="badge bg-success">完了</span>';
-        default:
-            return '<span class="badge bg-secondary">-</span>';
     }
 }
-
-function formatDateTime(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${month}/${day} ${hours}:${minutes}`;
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 </script>
-
-<!-- ✅ 追加：Bootstrap JavaScriptを読み込み -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-<style>
-.table-hover tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-h7 {
-    font-size: 0.9rem;
-    font-weight: 600;
-}
-</style>
 </body>
 </html>
