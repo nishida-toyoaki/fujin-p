@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import re
+import uuid
 
 from pytz import timezone
 
@@ -268,6 +269,13 @@ def play(pres_id):
                            pres_id=pres_id, can_edit=_may_edit())
 
 
+@kataribe_bp.route('/handout/<int:pres_id>')
+@login_required
+def handout(pres_id):
+    """シーン一覧の配布資料（M×N・A4縦・印刷でPDF化）"""
+    return render_template('kataribe/handout.html', pres_id=pres_id)
+
+
 @kataribe_bp.route('/return_to_fujin')
 @login_required
 def return_to_fujin():
@@ -448,8 +456,12 @@ def api_sample():
 IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'img')
 ALLOWED_IMG_EXT = ('.png', '.jpg', '.jpeg', '.svg')
 ALLOWED_EMBED_EXT = ('.html', '.htm')          # 埋め込み用の自己完結HTML
+ALLOWED_VIDEO_EXT = ('.mp4',)                  # 公開UPで扱う動画
 ALLOWED_UPLOAD_EXT = ALLOWED_IMG_EXT + ALLOWED_EMBED_EXT
-MAX_IMG_BYTES = 8 * 1024 * 1024      # 1件あたり8MBまで
+MAX_IMG_BYTES = 8 * 1024 * 1024      # 画像は1件8MBまで
+MAX_VIDEO_BYTES = 64 * 1024 * 1024   # 動画は1件64MBまで
+# 公開画像の置き場（PythonAnywhereの /static/ マッピング先．フルURLで参照できる）
+PUBLIC_IMG_DIR = os.path.join(os.path.expanduser('~'), 'static', 'mdimgs')
 
 
 def _safe_stem(name):
@@ -499,6 +511,60 @@ def api_upload_image():
         })
     except Exception as e:
         logging.error("kataribe api_upload_image error: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _light_sanitize_svg(data):
+    """SVGから script 要素とイベント属性を取り除く（公開置き場用の軽い消毒）"""
+    try:
+        text = data.decode('utf-8', errors='ignore')
+    except Exception:
+        return data
+    text = re.sub(r'<script\b[^>]*>.*?</script>', '', text, flags=re.I | re.S)
+    text = re.sub(r'\son[a-z]+\s*=\s*"[^"]*"', '', text, flags=re.I)
+    text = re.sub(r"\son[a-z]+\s*=\s*'[^']*'", '', text, flags=re.I)
+    return text.encode('utf-8')
+
+
+@kataribe_bp.route('/api/upload_image_public', methods=['POST'])
+@edit_required
+def api_upload_image_public():
+    """画像・MP4動画を ~/static/mdimgs に保存し，フルURLを返す（公開置き場）"""
+    try:
+        f = request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'ファイルがありません'}), 400
+        ext = os.path.splitext(f.filename)[1].lower()
+        if ext not in ALLOWED_IMG_EXT + ALLOWED_VIDEO_EXT:
+            return jsonify({'success': False,
+                            'error': '公開UPは PNG / JPG / SVG / MP4 のみ扱えます'}), 400
+
+        data = f.read()
+        limit = MAX_VIDEO_BYTES if ext in ALLOWED_VIDEO_EXT else MAX_IMG_BYTES
+        if len(data) > limit:
+            return jsonify({'success': False,
+                            'error': 'ファイルが大きすぎます（画像8MB／動画64MBまで）'}), 400
+        if ext == '.svg':
+            if b'<svg' not in data[:2048].lower():
+                return jsonify({'success': False, 'error': 'SVGファイルではないようです'}), 400
+            data = _light_sanitize_svg(data)
+
+        os.makedirs(PUBLIC_IMG_DIR, exist_ok=True)
+        stamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
+        fname = '{}_{}_{}_{}{}'.format(uuid.uuid4().hex[:8], _safe_stem(f.filename),
+                                       session.get('user_id', 0), stamp, ext)
+        with open(os.path.join(PUBLIC_IMG_DIR, fname), 'wb') as out:
+            out.write(data)
+
+        return jsonify({
+            'success': True,
+            'filename': fname,
+            'url': request.host_url.rstrip('/') + '/static/mdimgs/' + fname,
+            'size': len(data),
+            'kind': 'video' if ext in ALLOWED_VIDEO_EXT else 'image'
+        })
+    except Exception as e:
+        logging.error("kataribe api_upload_image_public error: %s", e)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

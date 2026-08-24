@@ -79,7 +79,7 @@
   .ktb-player.theme-dark{ background:radial-gradient(circle at 82% 8%,#26343f 0%,var(--navy-deep) 55%); color:#e9f0f2; }
   .ktb-player.theme-cover{ background:linear-gradient(160deg,var(--navy) 0%,var(--navy-deep) 100%); color:#fff; }
   .ktb-player.theme-cover .ktb-stage{ display:flex; flex-direction:column; justify-content:center; }
-  .ktb-player.theme-dark .k-card{ background:rgba(255,255,255,.05); color:#e9f0f2; border:1.5px solid rgba(16,181,160,.65); }
+  .ktb-player.theme-dark .k-card{ background:rgba(255,255,255,.05); color:#e9f0f2; border:1.5px solid rgba(16,181,160,.65); border-top-width:6px; }
   .ktb-player.theme-cover .k-card{ background:rgba(255,255,255,.06); color:#fff; border:1px solid rgba(255,255,255,.25); }
   .ktb-player.theme-dark .k-note, .ktb-player.theme-cover .k-note{ color:#9fb3ba; }
   .ktb-player.theme-dark .k-stat .l, .ktb-player.theme-cover .k-stat .l{ color:#9fb3ba; }
@@ -98,14 +98,29 @@
   .ktb-tile.on{ flex:var(--span,1) 1 0; opacity:1; transform:none; }
   .ktb-player.fastmode .ktb-row, .ktb-player.fastmode .ktb-tile{ transition:none; }
   @media (prefers-reduced-motion: reduce){ .ktb-row, .ktb-tile{ transition:none; transform:none; } }
+  /* ── 固定配置モード（自動送り・自動プレゼン中） ──
+     シーンに入った時点で全タイルを置いた完成形の配置と縮尺を決め，
+     以後は各タイルをその場で表示／消去するだけにする（行の伸縮・再パッキングをしない）。 */
+  .ktb-player.static .ktb-row{ grid-template-rows:1fr; opacity:1; margin:0 0 14px; transition:none; }
+  .ktb-player.static .ktb-tile{ flex:var(--span,1) 1 0; transform:none;
+                                transition:opacity .6s ease; }
+  .ktb-player.static .ktb-tile:not(.on){ opacity:0; }
+  .ktb-player.static .ktb-tile:not(.on) > .ktb-tile-in{ display:block; visibility:hidden; }
+  .ktb-player.static .ktb-blk{ grid-template-rows:1fr; transform:none; transition:opacity .7s ease; }
+  .ktb-player.static .ktb-blk:not(.on), .ktb-player.static .ktb-blk.gone{ opacity:0; }
+  .ktb-player.static .ktb-fit{ transition:none; }
+  .ktb-player.fastmode.static .ktb-tile, .ktb-player.fastmode.static .ktb-blk{ transition:none; }
 
   /* ── タイル用スタイルキット（生成HTMLはこれを使う） ── */
   .k-title{ font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:40px; font-weight:600; letter-spacing:.03em; line-height:1.25; }
   .k-sub{ font-size:17px; font-style:italic; color:var(--teal); letter-spacing:.05em; margin-top:4px; }
   .k-lead{ font-size:16.5px; line-height:1.95; border-left:4px solid var(--teal); padding-left:16px; }
   .k-card{ background:var(--card); border-radius:12px; border-top:6px solid var(--teal); box-shadow:0 4px 12px rgba(28,39,51,.08); padding:16px 22px; height:100%; }
-  .k-card.violet{ border-top-color:var(--violet); } .k-card.rose{ border-top-color:var(--rose); }
-  .k-card.green{ border-top-color:var(--green); } .k-card.navy{ border-top-color:var(--navy); }
+  .ktb-player .k-card.violet{ border-top-color:#8a63d2; } .ktb-player .k-card.rose{ border-top-color:#e0607e; }
+  .ktb-player .k-card.green{ border-top-color:#2f9e63; } .ktb-player .k-card.navy{ border-top-color:#1f3f7a; }
+  .ktb-player .k-card.blue{ border-top-color:#2f7fd6; } .ktb-player .k-card.orange{ border-top-color:#ef8a3c; }
+  .ktb-player .k-card.yellow{ border-top-color:#e5b62e; } .ktb-player .k-card.skyblue{ border-top-color:#5cbde6; }
+  .ktb-player .k-card.gray{ border-top-color:#8b98a1; }
   .k-card h4{ font-size:17px; font-weight:700; margin:0 0 6px; }
   .k-card p{ font-size:14.5px; line-height:1.85; margin:0; }
   .k-band{ background:var(--navy); color:#fff; border-radius:10px; padding:12px 22px; font-size:16px; text-align:center; }
@@ -127,6 +142,10 @@
   .k-frame{ display:block; width:100%; height:60vh; border:0; border-radius:10px; background:#02040d; }
   .k-frame.sm{ height:30vh; } .k-frame.md{ height:45vh; } .k-frame.lg{ height:75vh; } .k-frame.full{ height:86vh; border-radius:0; }
 
+  /* 動画（公開UPしたMP4を流す枠．受動メディアなのでスクリプトは動かない） */
+  .k-video{ display:block; width:100%; height:60vh; object-fit:contain; border-radius:10px; background:#02040d; }
+  .k-video.sm{ height:30vh; } .k-video.md{ height:45vh; } .k-video.lg{ height:75vh; } .k-video.full{ height:86vh; border-radius:0; }
+
   /* ── 操作バー ── */
   .ktb-ctrl{
     flex:0 0 auto; min-height:48px; display:flex; align-items:center;
@@ -143,6 +162,9 @@
   .ktb-ctrl button:hover{ border-color:var(--teal); color:#fff; }
   .ktb-ctrl button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
   .ktb-ctrl .spd{ font-size:6px; color:#9fb3ba; min-width:44px; text-align:center; }
+  /* 全画面プレゼン：ブラウザのヘッダを消し，最下行のコントローラは残す */
+  .ktb-player:fullscreen{ width:100%; height:100%; }
+  .ktb-player:-webkit-full-screen{ width:100%; height:100%; }
 </style>
 
 <script>
@@ -231,6 +253,7 @@ var KtbPlayer = (function(){
 
   function init(container){
     root = h('div', 'ktb-player');
+    if (staticPref) root.classList.add('static');
     container.innerHTML = '';
     container.appendChild(root);
 
@@ -261,15 +284,18 @@ var KtbPlayer = (function(){
     g1.appendChild(btn('◀ 前のステップ', function(){ stopAuto(); prevStep(); }));
     g1.appendChild(btn('次のステップ ▶', function(){ stopAuto(); nextStep(); }));
     g1.appendChild(btn('次のシーンへ ▶▶', function(){ stopAuto(); goScene(cur+1); }));
+    g1.appendChild(btn('📌 固定配置', function(){ staticPref = !staticPref; paintStatic(); setStatic(staticPref || !!timer); }, 'staticBtn'));
     g2.appendChild(btn('− 減速', function(){ intervalMs = Math.min(48000, intervalMs*RATE); paintSpeed(); restartAuto(); }));
     els.spd = h('span', 'spd', '×1.0'); g2.appendChild(els.spd);
     g2.appendChild(btn('＋ 加速', function(){ intervalMs = Math.max(30, intervalMs/RATE); paintSpeed(); restartAuto(); }));
     g2.appendChild(btn('×1 標準', function(){ intervalMs = STD_MS; paintSpeed(); restartAuto(); }));
     g2.appendChild(btn('▶ 自動送り', function(){ timer ? stopAuto() : startAuto(); }, 'autoBtn'));
     g2.appendChild(btn('🎬 自動プレゼン', function(){ autoPresent(); }, 'presentBtn'));
+    g2.appendChild(btn('⛶ 全画面', function(){ toggleFullscreen(); }, 'fsBtn'));
     ctrl.appendChild(g1); ctrl.appendChild(g2);
     root.appendChild(ctrl);
 
+    paintStatic();
     bindFitWatchers();
   }
 
@@ -342,6 +368,17 @@ var KtbPlayer = (function(){
           [].slice.call(box.querySelectorAll('img')).forEach(function(im){
             im.addEventListener('load', scheduleFit);   // 画像が届いてから測り直す
           });
+          // autoplay付きの動画は属性任せにせず play() で確実に始動させる。
+          // （動的挿入では autoplay が空振りする環境や，低電力モード等で止められる場合の保険．
+          //   無音は自動再生の必要条件なので muted を強制．音を出したい動画は autoplay を外し
+          //   controls を付けて手動再生にする）
+          [].slice.call(box.querySelectorAll('video[autoplay]')).forEach(function(v){
+            v.muted = true;
+            v.setAttribute('playsinline', '');
+            var kick = function(){ var p = v.play(); if (p && p.catch) p.catch(function(){}); };
+            if (v.readyState >= 2) kick();
+            else v.addEventListener('loadeddata', kick);
+          });
           tile.appendChild(box);
           inner.appendChild(tile);
         });
@@ -358,6 +395,7 @@ var KtbPlayer = (function(){
         els.fit.appendChild(wrap);
       });
     }
+    needFit = true;
     paint();
   }
 
@@ -386,6 +424,7 @@ var KtbPlayer = (function(){
   var MIN_SCALE = 0.45;          // これ以上は縮めない（読めなくなるため．超過分はスクロール）
   var PACK_SEARCH_STEPS = 10;    // 横幅の最小拡張率を二分探索する回数
   var fitTimer = null;
+  var needFit = true;     // 固定配置モードでは，シーン描画直後の1回だけ配置と縮尺を計算する
 
   function fitScene(){
     if (!els.fit || !els.stage) return;
@@ -481,7 +520,7 @@ var KtbPlayer = (function(){
       nodes[i].classList.toggle('gone', !showAllTiles && b['out'] != null && s >= b['out']);
     }
     }
-    scheduleFit();
+    if (!root.classList.contains('static') || needFit){ needFit = false; scheduleFit(); }
 
     var bi = bodyIndex(cur);
     els.counter.textContent = bi.no
@@ -522,15 +561,54 @@ var KtbPlayer = (function(){
     els.spd.textContent = '×' + (x >= 10 ? x.toFixed(0) : x >= 1 ? x.toFixed(1) : x.toFixed(2));
     root.classList.toggle('fastmode', !!timer && intervalMs < 700);
   }
+  // 全画面プレゼン：プレイヤー全体を全画面にする（コントローラは最下行に残る）。Escでも解除できる。
+  function fsElement(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function toggleFullscreen(){
+    if (fsElement()){
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (!req){ alert('このブラウザは全画面表示に対応していません'); return; }
+      req.call(root);
+    }
+  }
+  function paintFullscreen(){
+    var on = fsElement() === root;
+    if (els.fsBtn){
+      els.fsBtn.classList.toggle('active', on);
+      els.fsBtn.textContent = on ? '⛶ 全画面解除' : '⛶ 全画面';
+    }
+    needFit = true;       // 画面寸法が変わるので配置と縮尺を取り直す
+    paint();
+  }
+  document.addEventListener('fullscreenchange', paintFullscreen);
+  document.addEventListener('webkitfullscreenchange', paintFullscreen);
+
+  // 固定配置の手動設定（既定ON）。自動送り・自動プレゼン中は設定にかかわらず固定配置になる。
+  var staticPref = true;
+  function paintStatic(){
+    if (!els.staticBtn) return;
+    els.staticBtn.classList.toggle('active', staticPref);
+    els.staticBtn.title = staticPref ? '固定配置：オン（完成形の配置に固定し，表示／消去だけ行う）' : '固定配置：オフ（タイルの出入りに合わせて行を伸縮する）';
+  }
+  // 固定配置モードの切り替え。切り替えた時点の配置・縮尺を取り直す。
+  function setStatic(on){
+    if (root.classList.contains('static') === !!on) return;
+    root.classList.toggle('static', !!on);
+    needFit = true;
+    paint();
+  }
   function startAuto(){
     if (timer) return;
     timer = setInterval(function(){ if (!nextStep()) stopAuto(); }, intervalMs);
+    setStatic(true);
     els.autoBtn.classList.add('active');
     els.autoBtn.textContent = '⏸ 自動停止';
     paintSpeed();
   }
   function stopAuto(){
     clearInterval(timer); timer = null;
+    setStatic(staticPref);
     els.autoBtn.classList.remove('active');
     els.autoBtn.textContent = '▶ 自動送り';
     root.classList.remove('fastmode');
@@ -544,6 +622,7 @@ var KtbPlayer = (function(){
     stopAuto();
     steps = steps.map(function(){ return 0; });
     cur = 0;
+    root.classList.add('static');
     renderScene();
     if (typeof onSceneChange === 'function') onSceneChange(cur);
     startAuto();

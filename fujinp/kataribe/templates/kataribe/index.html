@@ -332,6 +332,7 @@
         </div>
     </div>
     <input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.svg" style="display:none;">
+    <input type="file" id="imgFilePub" accept=".png,.jpg,.jpeg,.svg,.mp4" style="display:none;">
     <input type="file" id="embedFile" accept=".html,.htm" style="display:none;">
 
     {% include 'kataribe/_player.html' %}
@@ -345,6 +346,8 @@
             del:    '{{ url_for("kataribe.api_delete", pres_id=0) }}'.replace('/0', '/'),
             sample: '{{ url_for("kataribe.api_sample") }}',
             upload: '{{ url_for("kataribe.api_upload_image") }}',
+            uploadPub: '{{ url_for("kataribe.api_upload_image_public") }}',
+            handout: '{{ url_for("kataribe.handout", pres_id=0) }}'.replace('/0', '/'),
             images: '{{ url_for("kataribe.api_images") }}',
             play:   '{{ url_for("kataribe.play", pres_id=0) }}'.replace('/0', '/')
         };
@@ -534,8 +537,10 @@
             $t.append($ta);
 
             $t.append($('<div class="toolbar" style="margin-top:6px;">')
-                .append($('<button class="ghost">🖼 画像を挿入</button>')
+                .append($('<button class="ghost" title="このサイト内（/kataribe/img/）に置き，ログイン者だけが見られます">🖼 画像UP（サイトローカル）</button>')
                     .on('click', () => $('#imgFile').val('').trigger('click')))
+                .append($('<button class="ghost" title="~/static/mdimgs/ に置き，フルURLで誰でも参照できます．書き出したHTMLを他所で動かしても読めます">🌐 画像/動画UP（public）</button>')
+                    .on('click', () => $('#imgFilePub').val('').trigger('click')))
                 .append($('<button class="ghost">🗂 アップ済み画像</button>').on('click', showImages))
                 .append($('<button class="ghost">🎆 HTMLを埋め込む</button>')
                     .on('click', () => $('#embedFile').val('').trigger('click')))
@@ -586,6 +591,34 @@
             });
         }
 
+        // 公開画像のアップロード（~/static/mdimgs/ に置き，フルURLで挿入する）
+        function uploadImagePublic(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            showResult('アップロードしています…（public）', false);
+            $.ajax({
+                url: API.uploadPub, method: 'POST', data: fd,
+                processData: false, contentType: false,
+                success: resp => {
+                    if (!resp.success) return showResult('アップロード失敗: ' + resp.error, true);
+                    if (resp.kind === 'video') {
+                        insertAtCursor('<video class="k-video" src="' + resp.url +
+                                       '" autoplay muted playsinline></video>');
+                        showResult('公開動画を挿入しました（' + resp.filename +
+                                   '）．無音で1回だけ自動再生し，最後のフレームで止まります．' +
+                                   '高さは k-video sm / md / lg / full．繰り返したいときは loop を，' +
+                                   '操作パネルを出すなら controls を書き足してください', false);
+                    } else {
+                        insertAtCursor(imgTag(resp.url));
+                        showResult('公開画像を挿入しました（' + resp.filename + '／幅' + imgWidth
+                                   + '%）．フルURLなので書き出したHTMLや他サイトからも参照できます', false);
+                    }
+                },
+                error: xhr => showResult('アップロードに失敗しました: ' +
+                    (xhr.responseJSON ? xhr.responseJSON.error : '通信エラー'), true)
+            });
+        }
+
         // 自己完結HTML（花火などの作品）をアップロードして枠として埋め込む
         function uploadEmbed(file) {
             const fd = new FormData();
@@ -610,7 +643,7 @@
                 if (!resp.success) return showResult('一覧取得に失敗: ' + resp.error, true);
                 const $g = $('#imgGrid').empty();
                 if (!resp.images.length) {
-                    $g.append($('<div class="hint">').text('まだ画像がありません．「🖼 画像を挿入」からアップロードしてください．'));
+                    $g.append($('<div class="hint">').text('まだ画像がありません（サイトローカル分）．「🖼 画像UP（サイトローカル）」からアップロードしてください．'));
                 }
                 resp.images.forEach(im => {
                     const $c = $('<div class="imgcell">');
@@ -766,7 +799,7 @@
                 '<div class="k-sub">English Subtitle</div>',
                 '<div class="k-lead">リード文（左に罫）</div>',
                 '<div class="k-card"><h4>見出し</h4><p>本文</p></div>',
-                '　色違い： k-card violet / rose / green / navy',
+                '　色違い： k-card violet / rose / green / navy / blue / orange / yellow / skyblue / gray',
                 '<div class="k-band"><b>結論</b>　強調の帯</div>',
                 '<div class="k-note">脚注・出典</div>',
                 '<span class="k-kicker">科目名などのタグ</span>',
@@ -779,6 +812,11 @@
                 '　アップロードした自己完結HTML（アニメーション等）をそのまま動かす枠です．',
                 '　高さ違い： k-frame sm（30vh）/ md（45vh）/ lg（75vh）/ full（86vh）',
                 '　シーンに入るたびに読み込み直されるので，そのつど最初から再生されます．',
+                '',
+                '<video class="k-video" src="フルURL" autoplay muted playsinline></video>',
+                '　公開UPしたMP4動画を流す枠です．無音で1回だけ自動再生し，最後のフレームで止まります．',
+                '　繰り返したいときは loop を書き足してください．',
+                '　高さ違い： k-video sm（30vh）/ md（45vh）/ lg（75vh）/ full（86vh）',
                 '',
                 '<img class="k-img" src="URL" style="width:60%;">',
                 '　画像は既定で画面に収まるよう自動調整されます（高さは画面の約半分まで）．',
@@ -830,14 +868,11 @@
                 $r.append($('<td class="num">').text((sc.tiles || sc.blocks || []).length));
                 $r.append($('<td class="num">').text(sceneSteps(sc) || '—'));
                 $r.append($('<td>')
-                    .append($('<button class="mini ghost" title="このシーンを編集">✎</button>')
-                        .on('click', () => { curTab = 'tiles'; $('.tab').removeClass('active');
-                                             $('.tab[data-tab=tiles]').addClass('active');
-                                             $('#paneScenes').hide(); $('#paneTiles').show();
-                                             gotoScene(i); }))
-                    .append($('<button class="mini ghost">▲</button>').prop('disabled', i === 0)
+                    .append($('<button class="mini ghost" title="このシーンへ移動（複数選択時は一番若い番号へ）">→</button>')
+                        .on('click', () => jumpScene(i)))
+                    .append($('<button class="mini ghost" title="上へ（選択中なら選んだシーンをまとめて）">▲</button>').prop('disabled', i === 0)
                         .on('click', () => moveScene(i, -1)))
-                    .append($('<button class="mini ghost">▼</button>').prop('disabled', i === spec.scenes.length - 1)
+                    .append($('<button class="mini ghost" title="下へ（選択中なら選んだシーンをまとめて）">▼</button>').prop('disabled', i === spec.scenes.length - 1)
                         .on('click', () => moveScene(i, 1))));
                 $tbl.append($r);
             });
@@ -854,21 +889,71 @@
                         $('#sceneInWhere').text(sceneLabel(curScene) + '「' + (spec.scenes[curScene].title || '無題') + '」');
                         $('#sceneInModal').css('display', 'flex');
                     }))
-                .append($('<span class="hint">').text(picked ? picked + '件を選択中' : 'チェックで書き出すシーンを選びます')));
+                .append($('<button class="danger">🗑 選んだシーンを削除</button>')
+                    .prop('disabled', !picked)
+                    .on('click', deletePickedScenes))
+                .append($('<button class="ghost">☐ 選択解除</button>')
+                    .prop('disabled', !picked)
+                    .on('click', () => { scenePick = []; renderScenePane(); }))
+                .append($('<button class="ghost" title="全シーンをM×Nで並べたA4縦の一覧を開き，印刷でPDFにします">🖨 一覧PDF</button>')
+                    .on('click', () => {
+                        if (!presId) return showResult('一覧PDFは保存済みの作品で使えます．先に保存してください', true);
+                        if (isDirty()) showResult('未保存の変更は一覧PDFに反映されません（保存してから開き直してください）', true);
+                        window.open(API.handout + presId, '_blank');
+                    }))
+                .append($('<span class="hint">').text(picked ? picked + '件を選択中' : 'チェックでシーンを選びます（書き出し・削除・まとめて移動）')));
             $p.append($('<div class="hint" style="margin-top:6px;">')
-                .text('書き出したJSONは，別の作品に取り込めます．取り込みは，いま選ばれているシーンの前後に挿入します．'));
+                .text('「→」でそのシーンへ移動します（複数選択中は一番若い番号へ）．▲▼は選択中のシーンをまとめて動かします．書き出したJSONは，別の作品に取り込めます（いま選ばれているシーンの前後に挿入）．'));
         }
 
+        // 選択中のシーン番号（昇順）
+        function pickedIdx() {
+            syncPick();
+            return scenePick.map((v, i) => v ? i : -1).filter(i => i >= 0);
+        }
+
+        // 「→」：そのシーンへ移動．複数選択中は一番若い番号へ．移動先だけを選択状態にする
+        function jumpScene(i) {
+            const pk = pickedIdx();
+            const target = pk.length > 1 ? pk[0] : i;
+            scenePick = spec.scenes.map((_, k) => k === target);
+            gotoScene(target);
+        }
+
+        // ▲▼：行 i が選択中なら選択シーンをまとめて 1 つ動かす（チェックは移動後も保つ）．未選択なら i だけ動かす
         function moveScene(i, d) {
-            const j = i + d;
-            if (j < 0 || j >= spec.scenes.length) return;
-            const sc = spec.scenes.splice(i, 1)[0];
-            spec.scenes.splice(j, 0, sc);
-            const pk = scenePick.splice(i, 1)[0];
-            scenePick.splice(j, 0, pk);
-            if (curScene === i) curScene = j;
-            else if (curScene === j) curScene = i;
+            const pk = pickedIdx();
+            const group = pk.includes(i) ? pk : [i];
+            const n = spec.scenes.length;
+            if (d < 0 && group[0] === 0) return;
+            if (d > 0 && group[group.length - 1] === n - 1) return;
+            const curSc = spec.scenes[curScene];
+            const pickedScenes = spec.scenes.filter((_, k) => scenePick[k]);
+            const order = d < 0 ? group : group.slice().reverse();
+            for (const k of order) {
+                const sc = spec.scenes.splice(k, 1)[0];
+                spec.scenes.splice(k + d, 0, sc);
+            }
+            curScene = Math.max(0, spec.scenes.indexOf(curSc));
+            scenePick = spec.scenes.map(sc => pickedScenes.includes(sc));   // チェックを移動先まで追随させる
             renderEditor(); refreshFull(); commit('scene');
+        }
+
+        // 選んだシーンをまとめて削除
+        function deletePickedScenes() {
+            const pk = pickedIdx();
+            if (!pk.length) return showResult('削除するシーンを選んでください', true);
+            if (pk.length >= spec.scenes.length) return showResult('シーンは1つ以上必要です', true);
+            const names = pk.map(k => sceneLabel(k) + (spec.scenes[k].title ? '「' + spec.scenes[k].title + '」' : '（無題）'));
+            if (!confirm(pk.length + '件のシーンを削除しますか？\n' + names.join('\n'))) return;
+            const curSc = spec.scenes[curScene];
+            spec.scenes = spec.scenes.filter((_, k) => !scenePick[k]);
+            scenePick = [];
+            const ci = spec.scenes.indexOf(curSc);
+            curScene = ci >= 0 ? ci : Math.min(pk[0], spec.scenes.length - 1);
+            curTile = 0;
+            renderEditor(); refreshFull(); commit('scene');
+            showResult(pk.length + '件のシーンを削除しました', false);
         }
 
         // 選んだシーンをJSONファイルに書き出す
@@ -1000,7 +1085,7 @@
         function snapshot() {
             return JSON.stringify({ t: $('#presTitle').val(), s: spec });
         }
-        function markSaved() { savedSnapshot = snapshot(); }
+        function markSaved() { savedSnapshot = snapshot(); paintSaveButton(); }
         function hasContent() {
             return (spec.scenes || []).some(sc => (sc.tiles || sc.blocks || []).length)
                    || ($('#presTitle').val() || '').trim() !== '';
@@ -1062,6 +1147,13 @@
         function paintHistoryButtons() {
             $('#btnUndo').prop('disabled', hIndex <= 0);
             $('#btnRedo').prop('disabled', hIndex >= history.length - 1);
+            paintSaveButton();
+        }
+        // 保存ボタンは未保存の変更があるときだけ押せる（変更がなければ薄く表示して無効化）
+        function paintSaveButton() {
+            const dirty = isDirty();
+            $('#btnSave').prop('disabled', !dirty)
+                .attr('title', dirty ? '未保存の変更を保存します' : '変更はありません');
         }
 
         // ── JSON編集 ──
@@ -1187,7 +1279,7 @@ js +
                 showResult('サンプルを読み込みました（保存すると自分のプレゼンになります）', false);
             });
         });
-        $('#btnSave').on('click', () => save());
+        $('#btnSave').on('click', () => { if (isDirty()) save(); });
         $('#btnDelete').on('click', () => {
             if (!presId) return showResult('保存されていないプレゼンです', true);
             if (!confirm('「' + spec.title + '」を削除しますか？')) return;
@@ -1278,6 +1370,10 @@ js +
         $('#imgFile').on('change', function(){
             const f = this.files && this.files[0];
             if (f) uploadImage(f);
+        });
+        $('#imgFilePub').on('change', function(){
+            const f = this.files && this.files[0];
+            if (f) uploadImagePublic(f);
         });
         $('#embedFile').on('change', function(){
             const f = this.files && this.files[0];
