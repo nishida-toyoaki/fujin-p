@@ -1,0 +1,70 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>区画の編集 - アプシャ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1200px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.header h1{font-size:1.3rem;color:#333}
+.hdr-btns{float:right;display:flex;gap:8px}
+a.btn,button.btn{display:inline-block;padding:7px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#6366f1}
+.btn.gray{background:#64748b}.btn.green{background:#10b981}.btn.red{background:#ef4444}.btn.sm{padding:4px 9px;font-size:.75rem}
+.panel{background:#fff;padding:20px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.hint{font-size:.8rem;color:#64748b;margin-bottom:10px;line-height:1.5}
+table{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:8px}
+th,td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left;vertical-align:top}
+th{background:#f3f4f6;font-size:.75rem;white-space:nowrap}
+input[type=text],input[type=number]{width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;font-size:.8rem}
+.toast{position:fixed;top:14px;right:14px;padding:10px 16px;border-radius:8px;color:#fff;background:#10b981;opacity:0;transition:.3s;z-index:100;pointer-events:none}
+.toast.show{opacity:1}.toast.err{background:#ef4444}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a></div>
+    <h1>🗂 ダッシュボードの区画</h1>
+  </div>
+  <div class="panel">
+    <div class="hint">区画の見出し・色クラス・順序・表示先・表示条件（ゲスト側のみ評価）．css_class は admin-function／sommelier／admin-support／highlight／open-sky のいずれか（ダッシュボードのCSSに定義済み）．保存後に「発行」で反映されます．</div>
+    <table><thead><tr><th>key</th><th>見出し</th><th>css_class</th><th>順</th><th>admin</th><th>guest</th><th>要グループ（guest）</th><th>要カテゴリ（guest）</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+    <button class="btn sm gray" onclick="add()">＋ 区画を足す</button>
+    <button class="btn green" onclick="save()">💾 保存</button>
+    <a class="btn" href="{{ url_for('app_share.dashboard') }}#publish">📢 発行はアプシャから</a>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let S=[];
+function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('err',!!e);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+function render(){const tb=document.getElementById('rows');tb.innerHTML='';S.forEach((s,i)=>tb.insertAdjacentHTML('beforeend',`<tr>
+  <td style="width:110px"><input type="text" data-k="section_key" data-i="${i}" value="${esc(s.section_key)}"></td>
+  <td><input type="text" data-k="title" data-i="${i}" value="${esc(s.title)}"></td>
+  <td style="width:130px"><input type="text" data-k="css_class" data-i="${i}" value="${esc(s.css_class)}"></td>
+  <td style="width:60px"><input type="number" data-k="sort_order" data-i="${i}" value="${esc(s.sort_order)}"></td>
+  <td><input type="checkbox" data-k="show_admin" data-i="${i}" ${s.show_admin?'checked':''}></td>
+  <td><input type="checkbox" data-k="show_guest" data-i="${i}" ${s.show_guest?'checked':''}></td>
+  <td><input type="text" data-k="require_groups" data-i="${i}" value="${esc((s.require_groups||[]).join(','))}" placeholder="カンマ区切り"></td>
+  <td><input type="text" data-k="require_categories" data-i="${i}" value="${esc((s.require_categories||[]).join(','))}" placeholder="regular,admin"></td>
+  <td><button class="btn sm red" onclick="del(${i})">✕</button></td></tr>`));
+  tb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{const s=S[+el.dataset.i],k=el.dataset.k;
+    if(el.type==='checkbox')s[k]=el.checked;else if(k==='require_groups'||k==='require_categories')s[k]=el.value.split(',').map(x=>x.trim()).filter(Boolean);else s[k]=el.value}))}
+function add(){S.push({section_key:'',title:'',css_class:'open-sky',sort_order:(S.length+1)*10,show_admin:true,show_guest:true,require_groups:[],require_categories:[]});render()}
+function del(i){if(!confirm('区画を消すと，その区画のカードは表示されなくなります（カードの定義は残ります）'))return;S.splice(i,1);render()}
+async function load(){const r=await (await fetch('/app_share/api/sections')).json();if(!r.success){toast(r.error,true);return}S=r.sections;render()}
+async function save(){const r=await (await fetch('/app_share/api/sections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sections:S})})).json();if(r.success){toast('保存しました（発行で反映）');load()}else toast('保存失敗: '+r.error,true)}
+load();
+</script>
+</body>
+</html>

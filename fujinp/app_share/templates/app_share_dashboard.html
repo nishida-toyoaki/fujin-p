@@ -182,19 +182,26 @@
     <div id="local-tab" class="tab-content active">
         <h2>📂 登録済みアプリ
             <span style="float:right;display:inline-flex;gap:8px">
+                {% if is_admin %}
                 <button class="btn-import" onclick="openAppImport()">📦 新規アプリ取り込み</button>
+                <button class="success" onclick="publishRegistry(false)" title="正本（DB）を fujinp/app_registry.json に写す">📢 発行</button>
+                <button class="secondary" onclick="location.href='{{ url_for('app_share.sections_page') }}'" title="ダッシュボードの区画">🗂 区画</button>
+                <button class="secondary" onclick="location.href='{{ url_for('app_share.api_diag_site') }}'" title="Claude向けのサイト診断JSON">🩺 サイト診断</button>
+                <button class="secondary" id="btn-push" onclick="gitPushAll()" title="関所の未 push コミットを GitHub へ">🚀 push</button>
+                {% endif %}
                 <button class="secondary" onclick="startExport('{{ url_for('app_share.export_kernel_package') }}','カーネル')">⚙ カーネルエクスポート</button>
                 <button class="primary" onclick="startExport('{{ url_for('app_share.export_site_overview') }}','全アプリパッケージ')">⬇ 全アプリパッケージエクスポート</button>
             </span>
         </h2>
         {% if is_admin %}
-        <p style="margin-bottom:15px;color:#666">📖マニュアル・📋仕様書の閲覧、⚙で編集、↑↓で並べ替え。＋で新規登録。</p>
+        <p style="margin-bottom:15px;color:#666">📖マニュアル・📋仕様書の閲覧，🛠管理で正本（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）を編集，📢発行で app_registry.json に反映．⚙で表示情報，↑↓で並べ替え，＋で新規登録．</p>
         <div id="migrate-bar" style="display:none;margin-bottom:15px">
             <div class="warning-box">⚠️ レジストリが空です。<button class="primary" onclick="doMigrate()" style="margin-left:12px">📥 既存アプリを一括取り込み</button></div>
         </div>
         {% else %}
         <p style="margin-bottom:15px;color:#666">📖マニュアル・📋仕様書を閲覧できます。</p>
         {% endif %}
+        {% if is_admin %}<div id="pub-bar" class="info-box" style="display:none;margin-bottom:12px"></div>{% endif %}
         <div id="local-apps-list" class="app-list"></div>
     </div>
     {% if is_admin %}
@@ -423,19 +430,71 @@ function loadLocalApps(){
                 <div class="card-ver">🏷 バージョン: <code>${esc(a.version_id||'未確定')}</code></div>
                 <div class="card-actions">
                     <button class="btn-manual" onclick="openManual('${a.app_name}')">📖 マニュアル</button>
-                    <button class="btn-spec" onclick="openSpec('${a.app_name}')">📋 仕様書</button>
-                    ${IS_ADMIN?`<button class="btn-ver" onclick="confirmVersion('${a.app_name}')" title="ソース・技術仕様書・マニュアルの整合を確認してバージョンを刻む（エクスポートとは独立）">🏷 バージョン確定</button>`:''}
+                    <button class="btn-spec" onclick="location.href='/app_share/spec/'+encodeURIComponent('${a.app_name}')" title="正本と仕様書メモから組み立てた技術仕様書">📋 仕様書</button>
                     <button class="btn-export" onclick="exportApp('${a.app_name}')" title="アプリ一式をJSONパッケージでダウンロード">📦 エクスポート</button>
-                    ${IS_ADMIN?`<button class="btn-import" onclick="importApp('${a.app_name}')" title="エクスポートパッケージを検証して取り込み">📥 インポート</button>`:''}
-                    ${IS_ADMIN?`<button class="btn-mgmt" onclick="openMgmt('${a.app_name}')" title="取り込み診断・管理ノート">🛠 管理</button>`:''}
+                    ${IS_ADMIN?`<button class="btn-mgmt" onclick="location.href='/app_share/app/'+encodeURIComponent('${a.app_name}')" title="正本の管理（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）">🛠 管理</button>`:''}
+                    <span class="card-badges" data-app="${a.app_name}"></span>
                 </div>
             </div>`);
         });
         if(IS_ADMIN){
             $l.append('<div class="add-card" onclick="openAdd()"><div class="plus">＋</div><span>新規アプリ登録</span></div>');
             $('#migrate-bar').toggle(r.apps.length===0);
+            loadSummary();
         }
     }});
+}
+
+// ========== 正本の要約（open件数・起動状態）と発行状態（段階6a） ==========
+function loadSummary(){
+    $.ajax({url:'/app_share/api/summary',success(r){
+        if(!r.success)return;
+        Object.keys(r.apps).forEach(name=>{
+            const s=r.apps[name];let b='';
+            if(s.open_issues)b+=`<span class="badge badge-warning" title="既知の不具合（open）">🐞 ${s.open_issues}</span> `;
+            if(s.kind==='kernel')b+='<span class="badge badge-gray" title="app.py が固定登録">kernel</span> ';
+            else if(!s.enabled)b+='<span class="badge badge-danger">無効</span> ';
+            else if(s.running===false)b+='<span class="badge badge-danger" title="正本にあるが起動中に未登録（発行＋Reload が必要）">未起動</span> ';
+            const g=s.git;
+            if(g&&!g.error){
+                if(g.needs_commit)b+=`<span class="badge badge-warning" title="変更 ${g.changed} / 新規 ${g.added} / 削除 ${g.deleted}" style="cursor:pointer" onclick="location.href='/app_share/app/${name}#ver'">🔶 要commit ${esc(g.last_change||'')}</span> `;
+                else b+='<span class="badge badge-success" title="稼働ツリーと関所が一致">✔ 関所と一致</span> ';
+            }
+            $(`.card-badges[data-app="${name}"]`).html(b);
+        });
+        gitStatusBar();
+        const $p=$('#pub-bar');
+        if(r.stale){$p.html('⚠️ 正本（DB）に未発行の変更があります．<button class="success btn-sm" style="margin-left:8px" onclick="publishRegistry(false)">📢 発行</button> Blueprint の増減があるときは <button class="secondary btn-sm" onclick="publishRegistry(true)">📢 発行＋Reload</button>').show();}
+        else $p.hide();
+    }});
+}
+function gitStatusBar(){
+    $.ajax({url:'/app_share/api/git/status',success(r){
+        const $b=$('#btn-push');if(!r.success||!r.ok){$b.text('🚀 push（関所なし）').prop('disabled',true);return}
+        $b.text(`🚀 push（未push ${r.ahead==null?'?':r.ahead}）`).prop('disabled',!r.ahead);
+    }});
+}
+function gitPushAll(){
+    $.ajax({url:'/app_share/api/git/status',success(s){
+        if(!s.success||!s.ok){showResult(s.error||'関所なし',true);return}
+        if(!s.ahead){showResult('未 push のコミットはありません',false);return}
+        if(!confirm(`GitHub（origin/${s.branch}）へ push します．\n\n${s.unpushed.join('\n')}\n\nよろしいですか？`))return;
+        $.ajax({url:'/app_share/api/git/push',method:'POST',contentType:'application/json',data:'{}',
+            success(r){if(r.pushed)showResult('🚀 push しました（残り '+r.ahead+' 件）',false);else showResult('push 失敗: '+(r.error||'')+(r.manual?'　手動: '+r.manual:''),true);gitStatusBar();},
+            error(x){showResult('push 失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}});
+    }});
+}
+function publishRegistry(withReload){
+    if(withReload&&!confirm('発行してから Web アプリを Reload します．数秒〜十数秒つながらなくなります．よろしいですか？'))return;
+    $.ajax({url:'/app_share/api/publish',method:'POST',contentType:'application/json',data:JSON.stringify({reload:withReload}),
+        success(r){
+            if(!r.success){showResult('発行失敗: '+r.error,true);return}
+            let m=`📢 発行しました（apps ${r.apps}／Blueprint ${r.blueprints}）`;
+            if(r.need_reload&&!withReload)m+='．Blueprint の構成が起動中と違います．「発行＋Reload」を押してください';
+            if(withReload)m+=r.reloaded?'．Reload を要求しました':'．Reload の要求に失敗（Web タブから手動で）';
+            showResult(m,r.need_reload&&!withReload);loadSummary();
+        },
+        error(x){showResult('発行失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}});
 }
 
 // ========== バージョン確定（admin専用・エクスポートとは独立） ==========

@@ -20,20 +20,17 @@
 # Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
-App Share (アプシェア) - FUJIN-Pアプリケーション共有システム
-
-アプリケーションを他のFUJIN-Pサイトと共有・配布するためのシステム。
-テーシャ（Table Share）と連携してアライアンスサイト情報を共有。
+かたりべ (kataribe) - 人×AIコラボのプレゼン語り編集アプリ
+発想をストーリー化する：ブロックの登場・退場で語りを組み立てるページレス・プレゼンエディタ．
+Claudeとの協働は「依頼文の生成→手渡し→回答スペックの総替え取り込み」の手動往復方式（v1）．
 """
 from flask import Blueprint
 
-app_share_bp = Blueprint(
-    'app_share',
+kataribe_bp = Blueprint(
+    'kataribe',
     __name__,
     template_folder='templates',
-    url_prefix='/app_share'
+    url_prefix='/kataribe'
 )
 
 from . import routes
-from . import manage   # 段階6a：正本の管理画面・発行・診断
-from . import gitsync  # 段階6b：関所への写し・commit・push

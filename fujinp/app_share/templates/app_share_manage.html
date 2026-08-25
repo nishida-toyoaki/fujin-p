@@ -1,0 +1,509 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🛠 {{ display_name }} - アプリ管理 - アプシャ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1400px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.header h1{font-size:1.35rem;color:#333}
+.header .sub{color:#666;font-size:.85rem;margin-top:3px}
+.hdr-btns{float:right;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+a.btn,button.btn{display:inline-block;padding:7px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#6366f1;transition:.2s;white-space:nowrap}
+a.btn:hover,button.btn:hover{filter:brightness(.92)}
+.btn.gray{background:#64748b}.btn.green{background:#10b981}.btn.amber{background:#f59e0b}.btn.red{background:#ef4444}.btn.sky{background:#0ea5e9}.btn.sm{padding:4px 9px;font-size:.75rem}
+.btn:disabled{opacity:.5;cursor:default}
+.pubbar{background:#fff;padding:10px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1);display:flex;gap:12px;align-items:center;font-size:.85rem;flex-wrap:wrap}
+.pubbar .st{flex:1}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{padding:9px 16px;background:rgba(255,255,255,.7);border:none;border-radius:8px 8px 0 0;cursor:pointer;font-size:.85rem;font-weight:600;color:#4338ca}
+.tab.active{background:#fff;color:#111}
+.tab .cnt{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:#e0e7ff;color:#3730a3;font-size:.7rem;margin-left:4px}
+.tab .cnt.warn{background:#fef3c7;color:#92400e}.tab .cnt.bad{background:#fee2e2;color:#991b1b}
+.panel{display:none;background:#fff;padding:20px 24px;border-radius:0 10px 10px 10px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.panel.active{display:block}
+.panel h2{font-size:1.05rem;color:#333;margin-bottom:10px}
+.panel h3{font-size:.92rem;color:#4338ca;margin:16px 0 6px}
+.hint{font-size:.8rem;color:#64748b;margin-bottom:10px;line-height:1.5}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+label.f{display:block;font-size:.78rem;color:#374151;font-weight:600;margin-bottom:3px}
+input[type=text],input[type=number],select,textarea{padding:6px 8px;border:1px solid #d1d5db;border-radius:5px;font-size:.85rem;font-family:inherit}
+input[type=text],input[type=number]{width:100%}
+textarea{width:100%;font-family:Consolas,Monaco,monospace;font-size:.8rem}
+table.g{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:8px}
+table.g th,table.g td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left;vertical-align:top}
+table.g th{background:#f3f4f6;font-size:.75rem;color:#374151;white-space:nowrap}
+table.g input[type=text],table.g input[type=number],table.g select{width:100%;padding:4px 6px;font-size:.8rem}
+table.g td.n{white-space:nowrap}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600;white-space:nowrap}
+.b-ok{background:#d1fae5;color:#065f46}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}.b-gray{background:#e5e7eb;color:#374151}.b-info{background:#e0e7ff;color:#3730a3}
+pre.sql{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:.76rem;overflow-x:auto;white-space:pre-wrap;margin:6px 0}
+.box{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fafafa}
+.toast{position:fixed;top:14px;right:14px;padding:10px 16px;border-radius:8px;color:#fff;background:#10b981;box-shadow:0 4px 12px rgba(0,0,0,.2);opacity:0;transition:.3s;z-index:100;pointer-events:none;max-width:60vw}
+.toast.show{opacity:1}.toast.err{background:#ef4444}
+.cand{max-height:360px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px}
+.cand .c{display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px dashed #eee;font-size:.8rem}
+.dirty{color:#b45309;font-size:.78rem;font-weight:600}
+code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;padding:1px 4px;border-radius:3px}
+.iss{border-left:4px solid #f59e0b;padding:8px 10px;margin-bottom:8px;background:#fffbeb;border-radius:0 6px 6px 0}
+.iss.fixed{border-color:#10b981;background:#ecfdf5}.iss.wontfix{border-color:#9ca3af;background:#f3f4f6}
+.iss .t{font-weight:600;font-size:.9rem}.iss .m{font-size:.75rem;color:#64748b;margin-top:2px}
+.iss textarea{margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns">
+      <a class="btn sky" href="{{ url_for('app_share.spec_view', app_name=app_name) }}">📋 仕様書</a>
+      <a class="btn gray" href="{{ url_for('app_share.api_diag', app_name=app_name) }}">🩺 診断JSON</a>
+      <a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+    </div>
+    <h1><span id="h-icon">{{ icon }}</span> <span id="h-name">{{ display_name }}</span> <span style="font-weight:400;color:#666;font-size:.95rem">アプリ管理</span></h1>
+    <div class="sub"><code>{{ app_name }}</code> <span id="h-meta"></span></div>
+  </div>
+
+  <div class="pubbar">
+    <span class="st" id="pub-st">発行状態を確認中…</span>
+    <button class="btn green" onclick="publish(false)">📢 発行</button>
+    <button class="btn amber" onclick="publish(true)">📢 発行＋Reload</button>
+    <button class="btn gray" onclick="loadAll()">🔄 再読込</button>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-p="basic">基本</button>
+    <button class="tab" data-p="bp">起動 <span class="cnt" id="c-bp"></span></button>
+    <button class="tab" data-p="ln">ランチャ <span class="cnt" id="c-ln"></span></button>
+    <button class="tab" data-p="tb">テーブル <span class="cnt" id="c-tb"></span></button>
+    <button class="tab" data-p="lib">ライブラリ <span class="cnt" id="c-lib"></span></button>
+    <button class="tab" data-p="cfg">定数 <span class="cnt" id="c-cfg"></span></button>
+    <button class="tab" data-p="doc">文書</button>
+    <button class="tab" data-p="ver">版</button>
+    <button class="tab" data-p="iss">不具合 <span class="cnt" id="c-iss"></span></button>
+  </div>
+
+  <!-- 基本 -->
+  <div class="panel active" id="p-basic">
+    <h2>基本</h2>
+    <div class="row"><div style="flex:2"><label class="f">表示名</label><input type="text" id="b-display"></div>
+      <div style="flex:0 0 90px"><label class="f">アイコン</label><input type="text" id="b-icon"></div>
+      <div style="flex:0 0 110px"><label class="f">並び順</label><input type="number" id="b-sort" step="any"></div></div>
+    <div class="row"><div style="flex:1"><label class="f">説明（カードに出る2行程度）</label><input type="text" id="b-desc"></div></div>
+    <div class="row">
+      <div><label class="f">kind</label><select id="b-kind"><option value="app">app（正本から Blueprint 登録）</option><option value="kernel">kernel（app.py が固定登録）</option></select></div>
+      <div><label class="f">有効</label><select id="b-enabled"><option value="1">有効</option><option value="0">無効（登録せず・ダッシュボードに出さない）</option></select></div>
+      <div style="align-self:flex-end"><button class="btn green" onclick="saveBasic()">💾 保存</button></div>
+    </div>
+    <div class="hint" id="b-info"></div>
+  </div>
+
+  <!-- 起動 -->
+  <div class="panel" id="p-bp">
+    <h2>起動（Blueprint 登録情報）</h2>
+    <div class="hint">app.py はここに書かれた module から attr を import して register_blueprint します．url_prefix は Blueprint 定義に無い場合だけ入れます（従来 app.py 側で渡していた分）．name は Blueprint 名（endpoint の前半）で，起動中との突合に使います．</div>
+    <table class="g"><thead><tr><th>module</th><th>attr</th><th>name</th><th>url_prefix</th><th>起動中</th><th></th></tr></thead><tbody id="bp-rows"></tbody></table>
+    <div class="row"><button class="btn sm gray" onclick="bpAdd()">＋ 行を足す</button>
+      <button class="btn sm sky" onclick="bpDetect()">🔍 ツリーから検出</button>
+      <button class="btn green" onclick="saveBp()">💾 保存</button> <span class="dirty" id="bp-dirty"></span></div>
+    <div id="bp-found"></div>
+  </div>
+
+  <!-- ランチャ -->
+  <div class="panel" id="p-ln">
+    <h2>ランチャ（ダッシュボードのカード）</h2>
+    <div class="hint">1アプリが複数のカードを持てます．表示条件（グループ・カテゴリ）はゲストダッシュボードだけで評価されます．区画側の条件は <a href="{{ url_for('app_share.sections_page') }}">区画の編集</a> で．</div>
+    <table class="g"><thead><tr><th>admin</th><th>guest</th><th>区画</th><th>endpoint</th><th>ラベル</th><th>アイコン</th><th>説明</th><th>順</th><th>要グループ</th><th>要カテゴリ</th><th>class</th><th></th></tr></thead><tbody id="ln-rows"></tbody></table>
+    <div class="row"><button class="btn sm gray" onclick="lnAdd()">＋ カードを足す</button>
+      <button class="btn sm sky" onclick="lnCheck()">🔗 endpoint 確認</button>
+      <button class="btn green" onclick="saveLn()">💾 保存</button> <span class="dirty" id="ln-dirty"></span></div>
+    <div id="ln-check"></div>
+  </div>
+
+  <!-- テーブル -->
+  <div class="panel" id="p-tb">
+    <h2>テーブル（所有テーブルの台帳）</h2>
+    <div class="hint">DDL は実物から SHOW CREATE TABLE で取り込みます．「比較」で台帳と実物の差を見て，「適用」は足すだけ（CREATE IF NOT EXISTS／ADD COLUMN／ADD INDEX）を実行します．型変更・削除・改名・外部キーは表示のみです．</div>
+    <table class="g"><thead><tr><th>テーブル</th><th>DB</th><th>状態</th><th>取込</th><th>備考</th><th></th></tr></thead><tbody id="tb-rows"></tbody></table>
+    <div class="row"><button class="btn sm gray" onclick="tbCandidates()">＋ 追加（DBから選ぶ）</button>
+      <button class="btn sm gray" onclick="tbRecapture('')">🔄 全部を実物から再取込</button>
+      <button class="btn sm sky" onclick="tbCompare()">🔍 比較</button>
+      <button class="btn amber" onclick="tbApply()">⚙ 適用（足すだけ）</button></div>
+    <div id="tb-cand"></div>
+    <div id="tb-cmp"></div>
+  </div>
+
+  <!-- ライブラリ -->
+  <div class="panel" id="p-lib">
+    <h2>ライブラリ目録</h2>
+    <div class="hint">目録管理だけです（導入はしません）．「点検」で import 可否を見ます．local はサイト内モジュール（pip 不要）．</div>
+    <table class="g"><thead><tr><th>名前（pip）</th><th>import 名</th><th>種別</th><th>状態</th><th>備考</th><th>点検</th><th></th></tr></thead><tbody id="lib-rows"></tbody></table>
+    <div class="row"><button class="btn sm gray" onclick="libAdd()">＋ 行を足す</button>
+      <button class="btn sm sky" onclick="libDetect()">🔍 ツリーから候補検出</button>
+      <button class="btn sm sky" onclick="libCheck()">🩺 点検</button>
+      <button class="btn green" onclick="saveLib()">💾 保存</button> <span class="dirty" id="lib-dirty"></span></div>
+    <div id="lib-found"></div>
+  </div>
+
+  <!-- 定数 -->
+  <div class="panel" id="p-cfg">
+    <h2>定数目録</h2>
+    <div class="hint">config.py の設定名だけを管理します（値は持ちません）．「点検」で Config に有るか，&lt;YOUR_…&gt; のままかを見ます．</div>
+    <table class="g"><thead><tr><th>定数名</th><th>必須</th><th>状態</th><th>説明</th><th>点検</th><th></th></tr></thead><tbody id="cfg-rows"></tbody></table>
+    <div class="row"><button class="btn sm gray" onclick="cfgAdd()">＋ 行を足す</button>
+      <button class="btn sm sky" onclick="cfgDetect()">🔍 ツリーから候補検出</button>
+      <button class="btn sm sky" onclick="cfgCheck()">🩺 点検</button>
+      <button class="btn green" onclick="saveCfg()">💾 保存</button> <span class="dirty" id="cfg-dirty"></span></div>
+    <div id="cfg-found"></div>
+  </div>
+
+  <!-- 文書 -->
+  <div class="panel" id="p-doc">
+    <h2>文書</h2>
+    <div id="doc-body"></div>
+  </div>
+
+  <!-- 版 -->
+  <div class="panel" id="p-ver">
+    <h2>版</h2>
+    <div id="ver-body"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn green" onclick="confirmVersion()">🏷 版確定</button>
+      <a class="btn sky" href="{{ url_for('app_share.export_app_package', app_name=app_name) }}">📦 エクスポート</a>
+      <a class="btn amber" href="{{ url_for('app_share.import_package_page', app_name=app_name) }}">📥 取り込み（パッケージ）</a>
+    </div>
+    <h3>GitHub（関所 → GitHub）</h3>
+    <div id="git-body" class="hint">関所の状態を確認中…</div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn sky" onclick="gitDiff()">🔍 関所との差を見る</button>
+      <button class="btn green" onclick="gitCommit()">⬆ GitHubへcommit</button>
+      <button class="btn amber" onclick="gitPush()">🚀 GitHubへpush</button>
+    </div>
+    <div id="git-out"></div>
+    <div class="hint" style="margin-top:8px">commit はこのアプリのファイルだけ（fujinp/&lt;app&gt;/ と app_registry.json・registry.py）を関所へ写して行います．他のアプリの未整理な変更は巻き込みません．push は確認してから実行します．</div>
+  </div>
+
+  <!-- 不具合 -->
+  <div class="panel" id="p-iss">
+    <h2>不具合（known bugs）</h2>
+    <div class="box">
+      <label class="f">件名（1行）</label><input type="text" id="iss-title" placeholder="例：一覧の並び順が更新日時になっていない">
+      <label class="f" style="margin-top:6px">詳細（任意・Markdown）</label><textarea id="iss-detail" rows="3"></textarea>
+      <div class="row" style="margin-top:6px"><button class="btn green" onclick="issAdd()">🐞 登録</button>
+        <label style="font-size:.8rem"><input type="checkbox" id="iss-showall"> 直したものも表示</label></div>
+    </div>
+    <div id="iss-list"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const APP = {{ app_name|tojson }};
+const API = '/app_share/api/app/' + encodeURIComponent(APP);
+let D = null;          // サーバから取った app データ
+let SECTIONS = [];
+let dirty = {bp:false, ln:false, lib:false, cfg:false};
+
+function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('err',!!err);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),err?5000:2500)}
+async function GET(u){const r=await fetch(u);const j=await r.json();if(!j.success)throw new Error(j.error||('HTTP '+r.status));return j}
+async function POST(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();if(!j.success)throw new Error(j.error||('HTTP '+r.status));return j}
+function badge(ok,yes,no,warn){return ok?`<span class="badge b-ok">${yes}</span>`:`<span class="badge ${warn?'b-warn':'b-bad'}">${no}</span>`}
+function setDirty(k,v){dirty[k]=v;const el=document.getElementById(k+'-dirty');if(el)el.textContent=v?'未保存の変更あり':''}
+window.addEventListener('beforeunload',e=>{if(Object.values(dirty).some(x=>x)){e.preventDefault();e.returnValue=''}});
+
+// ---- タブ ----
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');document.getElementById('p-'+b.dataset.p).classList.add('active');
+  location.hash=b.dataset.p;
+}));
+
+// ---- 読み込み ----
+async function loadAll(){
+  try{
+    const s=await GET('/app_share/api/sections');SECTIONS=s.sections;
+    const r=await GET(API);D=r.app;
+    renderAll();pubStatus();
+  }catch(e){toast('読み込み失敗: '+e.message,true)}
+}
+function renderAll(){
+  document.getElementById('h-icon').textContent=D.icon;document.getElementById('h-name').textContent=D.display_name||APP;
+  document.getElementById('h-meta').innerHTML=`　kind=<b>${esc(D.kind)}</b>　${D.enabled?'有効':'<span class="badge b-bad">無効</span>'}　更新 ${esc(D.updated_at||'-')}　版 <code>${esc(D.version_id||'未確定')}</code>　ディレクトリ ${D.dir_exists?'✅':'❌'}`;
+  renderBasic();renderBp();renderLn();renderTb();renderLib();renderCfg();renderDoc();renderVer();renderIss();gitStatus();
+}
+
+// ---- 発行 ----
+async function pubStatus(){
+  try{const s=await GET('/app_share/api/publish/status');
+    document.getElementById('pub-st').innerHTML=s.stale?`<span class="badge b-warn">未発行の変更あり</span> 最終発行 ${esc(s.published_at||'-')}`:`<span class="badge b-ok">発行済み</span> 最終発行 ${esc(s.published_at||'-')}（app_registry.json ${esc(s.generated_at||'-')}）`;
+  }catch(e){document.getElementById('pub-st').textContent='発行状態: '+e.message}
+}
+async function publish(withReload){
+  if(withReload&&!confirm('発行してから Web アプリを Reload します．数秒〜十数秒つながらなくなります．よろしいですか？'))return;
+  try{const r=await POST('/app_share/api/publish',{reload:withReload});
+    let m=`発行しました（apps ${r.apps}／Blueprint ${r.blueprints}）`;
+    if(r.need_reload&&!withReload)m+='．Blueprint の構成が起動中と違います．「発行＋Reload」を押してください（未起動: '+(r.not_running.join(', ')||'なし')+'）';
+    if(withReload)m+=r.reloaded?'．Reload を要求しました':'．Reload の要求に失敗（Web タブから手動で）';
+    toast(m,r.need_reload&&!withReload);pubStatus();
+  }catch(e){toast('発行失敗: '+e.message,true)}
+}
+
+// ---- 基本 ----
+function renderBasic(){
+  document.getElementById('b-display').value=D.display_name;document.getElementById('b-icon').value=D.icon;
+  document.getElementById('b-sort').value=D.sort_order;document.getElementById('b-desc').value=D.description;
+  document.getElementById('b-kind').value=D.kind;document.getElementById('b-enabled').value=D.enabled?'1':'0';
+  document.getElementById('b-info').textContent=`最終発行 ${D.published_at||'-'}`;
+}
+async function saveBasic(){
+  try{await POST(API+'/basic',{display_name:document.getElementById('b-display').value,icon:document.getElementById('b-icon').value,
+    sort_order:document.getElementById('b-sort').value,description:document.getElementById('b-desc').value,
+    kind:document.getElementById('b-kind').value,enabled:document.getElementById('b-enabled').value==='1'});
+    toast('保存しました');loadAll();}catch(e){toast('保存失敗: '+e.message,true)}
+}
+
+// ---- 起動 ----
+function renderBp(){
+  const tb=document.getElementById('bp-rows');tb.innerHTML='';
+  D.blueprints.forEach((b,i)=>{tb.insertAdjacentHTML('beforeend',`<tr>
+    <td><input type="text" data-k="module" data-i="${i}" value="${esc(b.module)}"></td>
+    <td><input type="text" data-k="attr" data-i="${i}" value="${esc(b.attr)}"></td>
+    <td><input type="text" data-k="name" data-i="${i}" value="${esc(b.name||'')}"></td>
+    <td><input type="text" data-k="url_prefix" data-i="${i}" value="${esc(b.url_prefix||'')}" placeholder="（定義側にあれば空）"></td>
+    <td class="n">${b.name?badge(b.registered,'登録中','未登録'):'<span class="badge b-gray">name 未設定</span>'}</td>
+    <td class="n"><button class="btn sm red" onclick="bpDel(${i})">✕</button></td></tr>`)});
+  tb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{D.blueprints[+el.dataset.i][el.dataset.k]=el.value;setDirty('bp',true)}));
+  const bad=D.blueprints.filter(b=>b.name&&!b.registered).length;
+  const c=document.getElementById('c-bp');c.textContent=D.blueprints.length;c.className='cnt'+(bad?' bad':'');
+}
+function bpAdd(){D.blueprints.push({module:'fujinp.'+APP,attr:APP+'_bp',name:'',url_prefix:null});setDirty('bp',true);renderBp()}
+function bpDel(i){D.blueprints.splice(i,1);setDirty('bp',true);renderBp()}
+async function bpDetect(){
+  try{const r=await GET(API+'/blueprints/detect');const el=document.getElementById('bp-found');
+    if(!r.found.length){el.innerHTML='<div class="hint">ツリーに Blueprint 定義が見つかりません．</div>';return}
+    el.innerHTML='<h3>ツリーで見つかった定義</h3>'+r.found.map((f,i)=>`<div class="row"><code>${esc(f.file)}</code> ${esc(f.attr)} = Blueprint('${esc(f.name)}'…) ${f.defined_prefix?'<span class="badge b-info">url_prefix 定義あり '+esc(f.defined_prefix)+'</span>':''} <button class="btn sm gray" onclick='bpUse(${JSON.stringify(f)})'>この定義を追加</button></div>`).join('');
+  }catch(e){toast(e.message,true)}
+}
+function bpUse(f){D.blueprints.push({module:f.module,attr:f.attr,name:f.name,url_prefix:null});setDirty('bp',true);renderBp()}
+async function saveBp(){try{const r=await POST(API+'/blueprints',{blueprints:D.blueprints});setDirty('bp',false);toast('保存しました（発行で反映）');loadAll()}catch(e){toast('保存失敗: '+e.message,true)}}
+
+// ---- ランチャ ----
+function secOptions(sel){return SECTIONS.map(s=>`<option value="${esc(s.section_key)}" ${s.section_key===sel?'selected':''}>${esc(s.title)}</option>`).join('')}
+function renderLn(){
+  const tb=document.getElementById('ln-rows');tb.innerHTML='';
+  D.launchers.forEach((c,i)=>{tb.insertAdjacentHTML('beforeend',`<tr>
+    <td class="n"><input type="checkbox" data-k="admin" data-i="${i}" ${c.dashboards.includes('admin')?'checked':''}></td>
+    <td class="n"><input type="checkbox" data-k="guest" data-i="${i}" ${c.dashboards.includes('guest')?'checked':''}></td>
+    <td><select data-k="section" data-i="${i}">${secOptions(c.section)}</select></td>
+    <td><input type="text" data-k="endpoint" data-i="${i}" value="${esc(c.endpoint)}"></td>
+    <td><input type="text" data-k="label" data-i="${i}" value="${esc(c.label)}"></td>
+    <td style="width:60px"><input type="text" data-k="icon" data-i="${i}" value="${esc(c.icon)}"></td>
+    <td><input type="text" data-k="description" data-i="${i}" value="${esc(c.description)}"></td>
+    <td style="width:60px"><input type="number" data-k="sort_order" data-i="${i}" value="${esc(c.sort_order)}"></td>
+    <td><input type="text" data-k="require_groups" data-i="${i}" value="${esc((c.require_groups||[]).join(','))}" placeholder="カンマ区切り"></td>
+    <td><input type="text" data-k="require_categories" data-i="${i}" value="${esc((c.require_categories||[]).join(','))}" placeholder="regular,admin"></td>
+    <td style="width:80px"><input type="text" data-k="extra_class" data-i="${i}" value="${esc(c.extra_class||'')}"></td>
+    <td class="n"><button class="btn sm red" onclick="lnDel(${i})">✕</button></td></tr>`)});
+  tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{
+    const c=D.launchers[+el.dataset.i],k=el.dataset.k;
+    if(k==='admin'||k==='guest'){c.dashboards=c.dashboards.filter(x=>x!==k);if(el.checked)c.dashboards.push(k)}
+    else if(k==='require_groups'||k==='require_categories')c[k]=el.value.split(',').map(s=>s.trim()).filter(Boolean);
+    else c[k]=el.value;setDirty('ln',true)}));
+  document.getElementById('c-ln').textContent=D.launchers.length;
+}
+function lnAdd(){D.launchers.push({dashboards:['admin','guest'],section:SECTIONS.length?SECTIONS[SECTIONS.length-1].section_key:'guest',endpoint:(D.blueprints[0]&&D.blueprints[0].name?D.blueprints[0].name:APP)+'.index',label:D.display_name,icon:D.icon,description:D.description,sort_order:(D.launchers.length+1)*10,require_groups:[],require_categories:[],extra_class:''});setDirty('ln',true);renderLn()}
+function lnDel(i){D.launchers.splice(i,1);setDirty('ln',true);renderLn()}
+async function lnCheck(){try{const r=await GET(API+'/launchers/check');document.getElementById('ln-check').innerHTML='<h3>endpoint の解決（保存済みの内容）</h3>'+r.results.map(x=>`<div class="row"><code>${esc(x.endpoint)}</code> ${x.ok?badge(true,'OK → '+esc(x.href)):badge(false,'','解決できない: '+esc(x.error))}</div>`).join('')}catch(e){toast(e.message,true)}}
+async function saveLn(){try{await POST(API+'/launchers',{launchers:D.launchers});setDirty('ln',false);toast('保存しました（発行で反映）');loadAll()}catch(e){toast('保存失敗: '+e.message,true)}}
+
+// ---- テーブル ----
+function renderTb(){
+  const tb=document.getElementById('tb-rows');tb.innerHTML='';
+  D.tables.forEach(t=>{tb.insertAdjacentHTML('beforeend',`<tr>
+    <td><code>${esc(t.table_name)}</code></td><td class="n">${esc(t.db_target)}</td>
+    <td class="n">${t.status==='confirmed'?'<span class="badge b-ok">確定</span>':'<span class="badge b-warn">候補</span>'}</td>
+    <td class="n">${esc(t.captured_at||'-')}</td><td>${esc(t.note||'')}</td>
+    <td class="n">${t.status!=='confirmed'?`<button class="btn sm green" onclick="tbConfirm('${esc(t.table_name)}')">確定</button> `:''}<button class="btn sm gray" onclick="tbRecapture('${esc(t.table_name)}')">再取込</button> <button class="btn sm red" onclick="tbRemove('${esc(t.table_name)}')">外す</button></td></tr>`)});
+  const cand=D.tables.filter(t=>t.status!=='confirmed').length;
+  const c=document.getElementById('c-tb');c.textContent=D.tables.length;c.className='cnt'+(cand?' warn':'');
+}
+async function tbConfirm(n){try{await POST(API+'/tables/confirm',{table_name:n});loadAll()}catch(e){toast(e.message,true)}}
+async function tbRemove(n){if(!confirm(n+' を台帳から外します（DBのテーブルは消しません）'))return;try{await POST(API+'/tables/remove',{table_name:n});loadAll()}catch(e){toast(e.message,true)}}
+async function tbRecapture(n){try{const r=await POST(API+'/tables/recapture',{table_name:n});const ng=r.results.filter(x=>!x.ok);toast(ng.length?'取り込めなかったもの: '+ng.map(x=>x.table_name).join(', '):'実物から取り込みました',ng.length>0);loadAll()}catch(e){toast(e.message,true)}}
+async function tbCandidates(){
+  try{const r=await GET(API+'/tables/candidates');const el=document.getElementById('tb-cand');
+    el.innerHTML='<h3>DB のテーブル（接頭辞一致を先頭に）</h3><div class="cand">'+r.candidates.map(c=>c.error?`<div class="c">${esc(c.db_target)}: ${esc(c.error)}</div>`:
+      `<div class="c"><span style="width:60px;color:#64748b">${esc(c.db_target)}</span><code>${esc(c.table_name)}</code> ${c.prefix_match?'<span class="badge b-info">接頭辞一致</span>':''} ${c.owned_by_me?'<span class="badge b-ok">台帳にあり</span>':''} ${c.owners.length?'<span class="badge b-gray">他: '+esc(c.owners.join(', '))+'</span>':''} ${c.owned_by_me?'':`<button class="btn sm gray" onclick="tbAdd('${esc(c.table_name)}','${esc(c.db_target)}')">追加</button>`}</div>`).join('')+'</div>';
+  }catch(e){toast(e.message,true)}
+}
+async function tbAdd(n,db){try{await POST(API+'/tables/add',{table_name:n,db_target:db});toast('台帳に追加し DDL を取り込みました');loadAll();tbCandidates()}catch(e){toast(e.message,true)}}
+function cmpHtml(t){
+  let h=`<div class="box"><b><code>${esc(t.table_name)}</code></b> <span style="color:#64748b;font-size:.78rem">${esc(t.database||'')}</span> `;
+  if(t.status==='missing'){h+='<span class="badge b-bad">未作成</span>（適用で CREATE TABLE IF NOT EXISTS）<pre class="sql">'+esc(t.create_sql)+'</pre>'}
+  else if(t.status==='same'){h+='<span class="badge b-ok">一致</span>'}
+  else if(t.status==='diff'){h+='<span class="badge b-warn">差あり</span>';
+    if(t.alter_sqls.length)h+='<div style="font-size:.8rem;margin-top:4px">適用で実行する（足すだけ）：</div><pre class="sql">'+esc(t.alter_sqls.join('\n'))+'</pre>'}
+  else{h+=`<span class="badge b-gray">${esc(t.status)}</span> ${esc(t.error||'')}`}
+  if(t.changed_columns&&t.changed_columns.length)h+='<div style="font-size:.8rem;margin-top:4px;color:#92400e">定義が違う列（手で判断）：</div>'+t.changed_columns.map(c=>`<div style="font-size:.78rem">・<code>${esc(c.name)}</code> 台帳: ${esc(c.declared)} ／ 実物: ${esc(c.live)}</div>`).join('');
+  if(t.live_only_columns&&t.live_only_columns.length)h+=`<div style="font-size:.8rem;margin-top:4px;color:#64748b">実物だけにある列（縮めない）： ${t.live_only_columns.map(esc).join(', ')}</div>`;
+  if(t.fk_only_in_declared&&t.fk_only_in_declared.length)h+='<div style="font-size:.8rem;margin-top:4px;color:#64748b">台帳だけにある外部キー（自動では足さない）：</div><pre class="sql">'+esc(t.fk_only_in_declared.map(f=>f.definition).join('\n'))+'</pre>';
+  return h+'</div>';
+}
+async function tbCompare(){try{const r=await GET(API+'/tables/compare');document.getElementById('tb-cmp').innerHTML='<h3>比較結果</h3>'+(r.tables.length?r.tables.map(cmpHtml).join(''):'<div class="hint">台帳が空です．</div>')}catch(e){toast(e.message,true)}}
+async function tbApply(){
+  if(!confirm('台帳の宣言と改訂を実行します（足すだけ）．\n事前に SQL Saver でバックアップを取ってありますか？'))return;
+  try{const r=await POST(API+'/tables/apply',{});
+    document.getElementById('tb-cmp').innerHTML='<h3>実行結果</h3>'+(r.executed.length?r.executed.map(x=>`<div class="box">${x.ok?'<span class="badge b-ok">OK</span>':'<span class="badge b-bad">失敗</span>'} <code>${esc(x.table_name)}</code><pre class="sql">${esc(x.sql)}</pre>${x.error?'<div style="color:#991b1b;font-size:.8rem">'+esc(x.error)+'</div>':''}</div>`).join(''):'<div class="hint">実行するものはありませんでした（すべて一致）．</div>');
+    toast('適用しました．再取込で台帳を実物に揃えられます');
+  }catch(e){toast(e.message,true)}
+}
+
+// ---- ライブラリ ----
+let LIBCHK={};
+function renderLib(){
+  const tb=document.getElementById('lib-rows');tb.innerHTML='';
+  D.libraries.forEach((l,i)=>{const k=LIBCHK[l.import||l.name];tb.insertAdjacentHTML('beforeend',`<tr>
+    <td><input type="text" data-k="name" data-i="${i}" value="${esc(l.name)}"></td>
+    <td><input type="text" data-k="import" data-i="${i}" value="${esc(l.import||'')}"></td>
+    <td><select data-k="kind" data-i="${i}"><option value="pip" ${l.kind==='pip'?'selected':''}>pip</option><option value="local" ${l.kind==='local'?'selected':''}>local</option></select></td>
+    <td><select data-k="status" data-i="${i}"><option value="candidate" ${l.status!=='confirmed'?'selected':''}>候補</option><option value="confirmed" ${l.status==='confirmed'?'selected':''}>確定</option></select></td>
+    <td><input type="text" data-k="note" data-i="${i}" value="${esc(l.note||'')}"></td>
+    <td class="n">${k===undefined?'':badge(k,'import 可','未導入')}</td>
+    <td class="n"><button class="btn sm red" onclick="libDel(${i})">✕</button></td></tr>`)});
+  tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{D.libraries[+el.dataset.i][el.dataset.k]=el.value;setDirty('lib',true)}));
+  const cand=D.libraries.filter(l=>l.status!=='confirmed').length;const c=document.getElementById('c-lib');c.textContent=D.libraries.length;c.className='cnt'+(cand?' warn':'');
+}
+function libAdd(){D.libraries.push({name:'',import:'',kind:'pip',status:'candidate',note:''});setDirty('lib',true);renderLib()}
+function libDel(i){D.libraries.splice(i,1);setDirty('lib',true);renderLib()}
+async function libDetect(){try{const r=await GET(API+'/libraries/detect');const have=new Set(D.libraries.map(l=>l.import||l.name));const nw=r.found.filter(f=>!have.has(f.import));
+  document.getElementById('lib-found').innerHTML='<h3>ツリーで見つかった import</h3>'+(nw.length?nw.map(f=>`<div class="row"><code>${esc(f.import)}</code> ${esc(f.kind)} <button class="btn sm gray" onclick='libUse(${JSON.stringify(f)})'>目録に足す</button></div>`).join(''):'<div class="hint">目録に無い import はありません．</div>')}catch(e){toast(e.message,true)}}
+function libUse(f){D.libraries.push(f);setDirty('lib',true);renderLib()}
+async function libCheck(){try{const r=await GET(API+'/libraries/check');LIBCHK={};r.results.forEach(x=>LIBCHK[x.import]=x.installed);renderLib();const miss=r.results.filter(x=>!x.installed&&x.kind==='pip');if(miss.length)document.getElementById('lib-found').innerHTML='<h3>未導入（保存済みの目録）</h3><pre class="sql">pip install --user '+esc(miss.map(x=>x.name).join(' '))+'</pre>';else toast('すべて import できます')}catch(e){toast(e.message,true)}}
+async function saveLib(){try{await POST(API+'/libraries',{libraries:D.libraries});setDirty('lib',false);toast('保存しました');loadAll()}catch(e){toast('保存失敗: '+e.message,true)}}
+
+// ---- 定数 ----
+let CFGCHK={};
+function renderCfg(){
+  const tb=document.getElementById('cfg-rows');tb.innerHTML='';
+  D.config_keys.forEach((k,i)=>{const c=CFGCHK[k.name];let chk='';
+    if(c)chk=!c.exists?'<span class="badge b-bad">Config に無い</span>':c.placeholder?'<span class="badge b-warn">&lt;YOUR_…&gt; のまま</span>':c.empty?'<span class="badge b-warn">空</span>':'<span class="badge b-ok">設定済み</span>';
+    tb.insertAdjacentHTML('beforeend',`<tr>
+    <td><input type="text" data-k="name" data-i="${i}" value="${esc(k.name)}"></td>
+    <td class="n"><input type="checkbox" data-k="required" data-i="${i}" ${k.required!==false?'checked':''}></td>
+    <td><select data-k="status" data-i="${i}"><option value="candidate" ${k.status!=='confirmed'?'selected':''}>候補</option><option value="confirmed" ${k.status==='confirmed'?'selected':''}>確定</option></select></td>
+    <td><input type="text" data-k="note" data-i="${i}" value="${esc(k.note||'')}"></td>
+    <td class="n">${chk}</td>
+    <td class="n"><button class="btn sm red" onclick="cfgDel(${i})">✕</button></td></tr>`)});
+  tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{const k=el.dataset.k;D.config_keys[+el.dataset.i][k]=(k==='required')?el.checked:el.value;setDirty('cfg',true)}));
+  const cand=D.config_keys.filter(k=>k.status!=='confirmed').length;const c=document.getElementById('c-cfg');c.textContent=D.config_keys.length;c.className='cnt'+(cand?' warn':'');
+}
+function cfgAdd(){D.config_keys.push({name:'',required:true,status:'candidate',note:''});setDirty('cfg',true);renderCfg()}
+function cfgDel(i){D.config_keys.splice(i,1);setDirty('cfg',true);renderCfg()}
+async function cfgDetect(){try{const r=await GET(API+'/config_keys/detect');const have=new Set(D.config_keys.map(k=>k.name));const nw=r.found.filter(f=>!have.has(f.name));
+  document.getElementById('cfg-found').innerHTML='<h3>ツリーで参照している設定名</h3>'+(nw.length?nw.map(f=>`<div class="row"><code>${esc(f.name)}</code> <button class="btn sm gray" onclick='cfgUse(${JSON.stringify(f)})'>目録に足す</button></div>`).join(''):'<div class="hint">目録に無い設定名はありません．</div>')}catch(e){toast(e.message,true)}}
+function cfgUse(f){D.config_keys.push(f);setDirty('cfg',true);renderCfg()}
+async function cfgCheck(){try{const r=await GET(API+'/config_keys/check');CFGCHK={};r.results.forEach(x=>CFGCHK[x.name]=x);renderCfg();const bad=r.results.filter(x=>!x.exists||x.placeholder);toast(bad.length?'要確認 '+bad.length+'件（保存済みの目録で点検）':'すべて設定済み',bad.length>0)}catch(e){toast(e.message,true)}}
+async function saveCfg(){try{await POST(API+'/config_keys',{config_keys:D.config_keys});setDirty('cfg',false);toast('保存しました');loadAll()}catch(e){toast('保存失敗: '+e.message,true)}}
+
+// ---- 文書 ----
+function renderDoc(){
+  const d=D.docs;const row=(key,label,editUrl,viewUrl)=>{const x=d[key];return `<div class="box"><b>${label}</b> ${x?`<span class="badge b-ok">あり</span> ${x.length} 文字　更新 ${esc(x.updated_at||'-')} ${esc(x.updated_by||'')}`:'<span class="badge b-gray">なし</span>'}
+    <span style="float:right"><a class="btn sm sky" href="${editUrl}">📝 編集</a> ${viewUrl?`<a class="btn sm gray" href="${viewUrl}">👁 表示</a>`:''}</span></div>`};
+  const base='/app_share/doc/'+encodeURIComponent(APP)+'/';
+  document.getElementById('doc-body').innerHTML=
+    row('manual','📖 ユーザーズマニュアル',base+'manual/edit','/app_share/manual/'+encodeURIComponent(APP))+
+    row('spec','📋 技術仕様書（叙述部分）',base+'spec/edit','/app_share/spec/'+encodeURIComponent(APP))+
+    row('note','🗒 管理ノート（admin専用）',base+'note/edit',null)+
+    (d.spec_backup?`<div class="hint">spec_backup（種まき前の旧仕様書）が残っています（${d.spec_backup.length} 文字，${esc(d.spec_backup.updated_at||'')}）．不要になったら DB で削除してください．</div>`:'');
+}
+
+// ---- 版 ----
+function renderVer(){
+  document.getElementById('ver-body').innerHTML=`<div class="box">現在の版 <code>${esc(D.version_id||'未確定')}</code>　確定 ${esc(D.version_confirmed_at||'-')}　${esc(D.version_confirmed_by||'')}</div>
+  <div class="box">GitHub commit <code>${esc(D.git_commit||'-')}</code>　${esc(D.git_committed_at||'')}</div>
+  <div class="hint">版確定は「ソース・仕様書・マニュアルが揃った」と判断した時点で押します．エクスポートやファイル変更では版は変わりません．</div>`;
+}
+async function confirmVersion(){if(!confirm('版を確定します．ソース・技術仕様書・マニュアルの整合を確認済みですか？'))return;try{const r=await POST(API+'/version/confirm',{});toast('版を確定しました: '+r.version_id);loadAll()}catch(e){toast(e.message,true)}}
+
+// ---- GitHub（6b） ----
+async function gitStatus(){
+  try{const r=await GET('/app_share/api/git/status');const el=document.getElementById('git-body');
+    if(!r.ok){el.innerHTML=`<span class="badge b-bad">関所なし</span> ${esc(r.error||'')}（${esc(r.repo||'')}）`;return}
+    el.innerHTML=`関所 <code>${esc(r.repo)}</code>　ブランチ <b>${esc(r.branch)}</b>　origin ${esc(r.remote)}<br>HEAD ${esc(r.head||'-')}<br>未 push のコミット <b>${r.ahead==null?'?':r.ahead}</b> 件${r.unpushed.length?'<pre class="sql">'+esc(r.unpushed.join('\n'))+'</pre>':''}${r.dirty_count?`　関所の作業ツリーに未コミットの変更 ${r.dirty_count} 件（他アプリ分を含む．このアプリの commit には影響しない）`:''}　トークン ${r.token_configured?'<span class="badge b-ok">設定済み</span>':'<span class="badge b-warn">なし（push は手動）</span>'}`;
+  }catch(e){document.getElementById('git-body').textContent='関所の状態: '+e.message}
+}
+function gitDiffHtml(d){
+  let h=`<div class="box">${d.needs_commit?'<span class="badge b-warn">要commit</span> 変更 '+esc(d.last_change||''):'<span class="badge b-ok">関所と一致</span>'}　同一 ${d.same_count} 件`;
+  if(d.changed.length)h+=`<div style="font-size:.8rem;margin-top:4px">変更（${d.changed.length}）: ${d.changed.map(esc).join(', ')}</div>`;
+  if(d.added.length)h+=`<div style="font-size:.8rem;margin-top:4px">関所に無い（${d.added.length}）: ${d.added.map(esc).join(', ')}</div>`;
+  if(d.deleted.length)h+=`<div style="font-size:.8rem;margin-top:4px;color:#991b1b">稼働側で消えている（${d.deleted.length}，commit で git rm）: ${d.deleted.map(esc).join(', ')}</div>`;
+  if(d.outside&&d.outside.length)h+=`<div style="font-size:.8rem;margin-top:4px;color:#64748b">関所にあるが写しの対象外（残す）: ${d.outside.map(esc).join(', ')}</div>`;
+  if(d.kernel_extra&&d.kernel_extra.length)h+=`<div style="font-size:.8rem;margin-top:4px;color:#64748b">一緒に写すカーネル側: ${d.kernel_extra.map(esc).join(', ')}</div>`;
+  return h+'</div>';
+}
+async function gitDiff(){try{const r=await GET('/app_share/api/git/app/'+encodeURIComponent(APP)+'/diff');document.getElementById('git-out').innerHTML='<h3>稼働ツリーと関所の差</h3>'+gitDiffHtml(r.diff)}catch(e){toast(e.message,true)}}
+async function gitCommit(){
+  try{const r=await GET('/app_share/api/git/app/'+encodeURIComponent(APP)+'/diff');const d=r.diff;
+    if(!d.needs_commit&&!(d.kernel_extra&&d.kernel_extra.length)){toast('関所と一致しています');document.getElementById('git-out').innerHTML=gitDiffHtml(d);return}
+    const msg=APP+' '+(D.version_id||'未確定');
+    if(!confirm(`関所へ写して commit します．\n\nメッセージ: ${msg}\n変更 ${d.changed.length} / 新規 ${d.added.length} / 削除 ${d.deleted.length}\n\n（push はしません）`))return;
+    const c=await POST('/app_share/api/git/app/'+encodeURIComponent(APP)+'/commit',{});
+    let h='<h3>commit の結果</h3>';
+    if(c.committed)h+=`<div class="box"><span class="badge b-ok">commit 済み</span> <code>${esc(c.short)}</code> ${esc(c.committed_at)}<br>${esc(c.title)}${c.body?'<pre class="sql">'+esc(c.body)+'</pre>':''}<div style="font-size:.8rem;margin-top:4px">${c.staged.map(esc).join('<br>')}</div></div>`;
+    else h+=`<div class="box"><span class="badge ${c.error?'b-bad':'b-gray'}">${esc(c.error||c.message||'')}</span></div>`;
+    h+='<details><summary>実行したコマンド</summary>'+c.steps.map(s=>`<pre class="sql">$ ${esc(s.cmd)}\n${esc(s.out||'')}${s.rc?'\n(exit '+s.rc+')':''}</pre>`).join('')+'</details>';
+    document.getElementById('git-out').innerHTML=h;toast(c.committed?'commit しました':(c.error||c.message),!!c.error);gitStatus();loadAll();
+  }catch(e){toast(e.message,true)}
+}
+async function gitPush(){
+  try{const s=await GET('/app_share/api/git/status');
+    if(!s.ok){toast(s.error,true);return}
+    if(!s.ahead){toast('未 push のコミットはありません');return}
+    if(!confirm(`GitHub（origin/${s.branch}）へ push します．\n\n${s.unpushed.join('\n')}\n\nよろしいですか？`))return;
+    const r=await POST('/app_share/api/git/push',{});
+    let h='<h3>push の結果</h3>';
+    if(r.pushed)h+=`<div class="box"><span class="badge b-ok">push 済み</span> origin/${esc(r.branch)}　残り ${r.ahead} 件<pre class="sql">${esc(r.output||'')}</pre></div>`;
+    else h+=`<div class="box"><span class="badge b-bad">${esc(r.error||'')}</span>${r.manual?'<pre class="sql">'+esc(r.manual)+'</pre>':''}${r.output?'<pre class="sql">'+esc(r.output)+'</pre>':''}</div>`;
+    document.getElementById('git-out').innerHTML=h;toast(r.pushed?'push しました':r.error,!r.pushed);gitStatus();
+  }catch(e){toast(e.message,true)}
+}
+
+// ---- 不具合 ----
+function renderIss(){
+  const all=document.getElementById('iss-showall').checked;
+  const list=D.issues.filter(i=>all||i.status==='open');
+  document.getElementById('iss-list').innerHTML=list.length?list.map(i=>`<div class="iss ${i.status}">
+    <div class="t">${i.status==='open'?'🐞':i.status==='fixed'?'✅':'⛔'} ${esc(i.title)}</div>
+    <div class="m">#${i.id}　登録 ${esc(i.reported_at||'')}${i.fixed_at?'　直った '+esc(i.fixed_at)+'（版 '+esc(i.fixed_version_id||'-')+'）':''}</div>
+    ${i.detail?`<div style="font-size:.82rem;white-space:pre-wrap;margin-top:4px">${esc(i.detail)}</div>`:''}
+    <div class="row" style="margin-top:6px">
+      ${i.status==='open'?`<button class="btn sm green" onclick="issSet(${i.id},'fixed')">✅ 直った</button><button class="btn sm gray" onclick="issSet(${i.id},'wontfix')">⛔ 直さない</button>`:`<button class="btn sm amber" onclick="issSet(${i.id},'open')">再オープン</button>`}
+      <button class="btn sm gray" onclick="issEdit(${i.id})">✏ 詳細を編集</button>
+      <button class="btn sm red" onclick="issDel(${i.id})">🗑</button></div>
+    <div id="iss-edit-${i.id}"></div></div>`).join(''):'<div class="hint">登録された不具合はありません．</div>';
+  const open=D.issues.filter(i=>i.status==='open').length;const c=document.getElementById('c-iss');c.textContent=open;c.className='cnt'+(open?' bad':'');
+}
+document.getElementById('iss-showall').addEventListener('change',renderIss);
+async function issAdd(){const t=document.getElementById('iss-title').value.trim();if(!t){toast('件名を入れてください',true);return}
+  try{await POST(API+'/issues/add',{title:t,detail:document.getElementById('iss-detail').value});document.getElementById('iss-title').value='';document.getElementById('iss-detail').value='';toast('登録しました');loadAll()}catch(e){toast(e.message,true)}}
+async function issSet(id,st){try{await POST(API+'/issues/'+id,{status:st});loadAll()}catch(e){toast(e.message,true)}}
+async function issDel(id){if(!confirm('#'+id+' を削除します'))return;try{await POST(API+'/issues/'+id+'/delete',{});loadAll()}catch(e){toast(e.message,true)}}
+function issEdit(id){const i=D.issues.find(x=>x.id===id);const el=document.getElementById('iss-edit-'+id);
+  el.innerHTML=`<input type="text" id="ie-t-${id}" value="${esc(i.title)}"><textarea id="ie-d-${id}" rows="4">${esc(i.detail||'')}</textarea><div class="row" style="margin-top:4px"><button class="btn sm green" onclick="issSave(${id})">💾 保存</button><button class="btn sm gray" onclick="renderIss()">取消</button></div>`}
+async function issSave(id){try{await POST(API+'/issues/'+id,{title:document.getElementById('ie-t-'+id).value,detail:document.getElementById('ie-d-'+id).value});loadAll()}catch(e){toast(e.message,true)}}
+
+// ---- 初期化 ----
+loadAll().then(()=>{const h=location.hash.replace('#','');const b=document.querySelector(`.tab[data-p="${h}"]`);if(b)b.click()});
+</script>
+</body>
+</html>
