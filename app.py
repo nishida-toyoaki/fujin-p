@@ -46,93 +46,24 @@ def create_app():
     # Mail初期化
     mail.init_app(app)
 
-    # FUJIN-P のBlueprint
+    # ---- kernel の Blueprint（app.py が固定で登録する）----
+    #   auth / profile / admin / guest / app_share の5つだけ．
+    #   アプリはすべて正本（fujinp/app_registry.json）から登録する．
     from auth import auth_bp
     from profile import profile_bp
 
     from fujinp.admin import admin_bp
     from fujinp.admin.guest import guest_bp
-    from fujinp.table_cycle import table_cycle_bp
-    from fujinp.table_master import table_master_bp
-    from fujinp.sql_saver import sql_saver_bp
-    from fujinp.slack_minutes import slack_minutes_bp
-    from fujinp.fukko import fukko_bp
-
-    from fujinp.migration_assistant import migration_assistant
-    from fujinp.table_share import table_share_bp
-    from fujinp.user_migration import user_migration_bp
-    from fujinp.migrate_fujinp_scions import migrate_fujinp_scions_bp
-    from fujinp.my_md_notes import my_md_notes_bp
-
-    from fujinp.user_groups import user_groups_bp
-    from fujinp.colrep import colrep_bp
-    from fujinp.colrep import colrep_public_bp
-    from fujinp.colrep.scripts.excel_helper import excel_helper_bp
-    from fujinp.table_post import table_post_bp
 
     from fujinp.app_share import app_share_bp
-    from fujinp.official_data_archive import official_data_archive_bp
-    from fujinp.data_center import data_center_bp
-    from fujinp.index_review import index_review_bp
-    from fujinp.stats.stats import stats_bp
 
-    from fujinp.kataribe import kataribe_bp
-    from fujinp.awami import our_meeting_bp
-    from fujinp.document_archive import document_archive_bp
-    from fujinp.free_hand_curve.routes import free_hand_curve_bp
-    from fujinp.ts_solvers.routes import ts_solvers_bp
-    from fujinp.solar_gl import solar_gl_bp
-    from fujinp.sorakara import sorakara_bp
-    from fujinp.lookout import lookout_bp
-    from fujinp.block_breaker import block_breaker_bp
-    from fujinp.window_shopping import window_shopping_bp
-    from fujinp.tag_chase import tag_chase_bp
-
-    from fujinp.strm import strm_bp
-
-    app.register_blueprint(auth_bp)   ## ここはauthに関係するところなのでこのまま
+    app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp, url_prefix='/user')
 
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(guest_bp, url_prefix='/guest')
-    app.register_blueprint(table_cycle_bp, url_prefix='/table_cycle')
-    app.register_blueprint(table_master_bp)
-    app.register_blueprint(sql_saver_bp)
-    app.register_blueprint(slack_minutes_bp)
-    app.register_blueprint(fukko_bp)
-
-    app.register_blueprint(migration_assistant, url_prefix='/migration_assistant')
-    app.register_blueprint(table_share_bp)
-    app.register_blueprint(user_migration_bp)
-    app.register_blueprint(migrate_fujinp_scions_bp)
-    app.register_blueprint(my_md_notes_bp)
-
-    app.register_blueprint(user_groups_bp, url_prefix='/user_groups')
-    app.register_blueprint(colrep_bp, url_prefix='/colrep')
-    app.register_blueprint(colrep_public_bp, url_prefix='/colrep_public')
-    app.register_blueprint(table_post_bp)
 
     app.register_blueprint(app_share_bp)
-    app.register_blueprint(official_data_archive_bp)
-    app.register_blueprint(data_center_bp)
-    app.register_blueprint(index_review_bp)
-    app.register_blueprint(stats_bp, url_prefix='/stats')
-
-    app.register_blueprint(kataribe_bp)
-    app.register_blueprint(our_meeting_bp)
-    app.register_blueprint(document_archive_bp, url_prefix='/document_archive')
-    app.register_blueprint(free_hand_curve_bp, url_prefix='/free_hand_curve')
-    app.register_blueprint(ts_solvers_bp, url_prefix='/ts_solvers')
-    app.register_blueprint(solar_gl_bp)
-    app.register_blueprint(sorakara_bp)
-    app.register_blueprint(lookout_bp)
-    app.register_blueprint(block_breaker_bp)
-
-    app.register_blueprint(window_shopping_bp)
-    app.register_blueprint(tag_chase_bp)
-
-    app.register_blueprint(strm_bp)
-
 
     # ログ設定
     if not app.debug:
@@ -147,6 +78,12 @@ def create_app():
         app.logger.addHandler(handler)
         app.logger.setLevel(logging.INFO)
         app.logger.info('FUJIN-P startup')
+
+    # ---- アプリの Blueprint は正本（fujinp/app_registry.json）から登録する ----
+    #   正本はアプシャの「発行」で書き出される．app.py にアプリを追記する運用は終了．
+    #   1アプリの失敗はログに残して続行し，サイト全体は止めない．
+    from fujinp.registry import register_blueprints
+    register_blueprints(app)
 
     @app.template_filter('format_date')
     def format_date_filter(value, format='%Y-%m-%d'):
@@ -165,4 +102,3 @@ google = oauth.google
 def index():
     from flask import redirect, url_for
     return redirect(url_for('auth.login'))
-

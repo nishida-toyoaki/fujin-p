@@ -1,0 +1,1255 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-08-25 11:45:26",
+  "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
+  "apps": [
+    {
+      "app_name": "_platform",
+      "display_name": "FUJIN-P プラットフォーム",
+      "icon": "🧩",
+      "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
+      "sort_order": 0.0,
+      "kind": "kernel",
+      "enabled": true,
+      "blueprints": [],
+      "launchers": [],
+      "version_id": null,
+      "version_confirmed_at": null
+    },
+    {
+      "app_name": "admin",
+      "display_name": "アカウント管理",
+      "icon": "📦",
+      "description": "ユーザアカウントの登録，更新，削除など（管理者専用）",
+      "sort_order": 10.0,
+      "kind": "kernel",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "admin_bp",
+          "name": "admin",
+          "module": "fujinp.admin",
+          "url_prefix": "/admin"
+        },
+        {
+          "attr": "guest_bp",
+          "name": "guest",
+          "module": "fujinp.admin.guest",
+          "url_prefix": "/guest"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "👥",
+          "label": "ユーザ管理",
+          "section": "system",
+          "endpoint": "admin.unified_dashboard",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 10,
+          "description": "アカウントの管理",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.133449-5b05a7",
+      "version_confirmed_at": "2026-07-31 13:34:49"
+    },
+    {
+      "app_name": "table_cycle",
+      "display_name": "テーブル サイクル",
+      "icon": "🔄",
+      "description": "MySQLデータベースのテーブルデータとExcelファイル（.xlsx）を相互に変換・同期するための管理ツール。",
+      "sort_order": 20.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "table_cycle_bp",
+          "name": "table_cycle",
+          "module": "fujinp.table_cycle",
+          "url_prefix": "/table_cycle"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🔃",
+          "label": "テーブルサイクル",
+          "section": "system",
+          "endpoint": "table_cycle.table_cycle_dashboard",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 20,
+          "description": "SQLファイル⇔.xlsxファイル",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.130621-05e507",
+      "version_confirmed_at": "2026-07-31 13:06:21"
+    },
+    {
+      "app_name": "table_master",
+      "display_name": "テーブルマスター",
+      "icon": "🗂️",
+      "description": "データベーステーブルの閲覧・編集・管理システム",
+      "sort_order": 30.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "table_master_bp",
+          "name": "table_master",
+          "module": "fujinp.table_master",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🗂️️",
+          "label": "テーブルマスター",
+          "section": "system",
+          "endpoint": "table_master.dashboard",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 30,
+          "description": "SQLテーブルの管理",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.133950-0df1eb",
+      "version_confirmed_at": "2026-07-31 13:39:50"
+    },
+    {
+      "app_name": "sql_saver",
+      "display_name": "SQL Saver",
+      "icon": "💾",
+      "description": "データベースを丸っとzipに保存・復元（管理者専用）",
+      "sort_order": 35.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "sql_saver_bp",
+          "name": "sql_saver",
+          "module": "fujinp.sql_saver",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "💾",
+          "label": "SQL Saver",
+          "section": "system",
+          "endpoint": "sql_saver.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 40,
+          "description": "プラットフォーム DB の簡易バックアップと復元",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.134922-69dca2",
+      "version_confirmed_at": "2026-07-31 13:49:22"
+    },
+    {
+      "app_name": "strm",
+      "display_name": "時空資源管理",
+      "icon": "📦",
+      "description": "部屋や公用車のような時空資源の予約・使用状況閲覧",
+      "sort_order": 37.5,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "strm_bp",
+          "name": "strm",
+          "module": "fujinp.strm",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📅",
+          "label": "時空資源管理（デモ用）",
+          "section": "system",
+          "endpoint": "strm.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 50,
+          "description": "会議室・公用車の予約管理",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140501-f92cbd",
+      "version_confirmed_at": "2026-07-31 14:05:01"
+    },
+    {
+      "app_name": "slack_minutes",
+      "display_name": "すらくみ",
+      "icon": "📦",
+      "description": "自分が参加しているSlackチャンネルからの情報取得",
+      "sort_order": 40.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "slack_minutes_bp",
+          "name": "slack_minutes",
+          "module": "fujinp.slack_minutes",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "💬",
+          "label": "すらくみ（Slack議事録）",
+          "section": "system",
+          "endpoint": "slack_minutes.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 60,
+          "description": "Slackチャンネルのメッセージを取得・保存して閲覧",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140505-a7f859",
+      "version_confirmed_at": "2026-07-31 14:05:05"
+    },
+    {
+      "app_name": "fukko",
+      "display_name": "ふっこ",
+      "icon": "🐣",
+      "description": "Claude APIへの接続",
+      "sort_order": 42.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "fukko_bp",
+          "name": "fukko",
+          "module": "fujinp.fukko",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🐣",
+          "label": "ふっこ",
+          "section": "system",
+          "endpoint": "fukko.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 70,
+          "description": "Claude API接続デモ（チャット・全ログ記録）",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140509-e899a2",
+      "version_confirmed_at": "2026-07-31 14:05:09"
+    },
+    {
+      "app_name": "migration_assistant",
+      "display_name": "まいあし",
+      "icon": "👣",
+      "description": "教材（コース）と進捗管理を通じて、FUJIN-P 機能モジュールの移行・構築プロセスを師弟制度で支援するWebアプリ",
+      "sort_order": 45.3,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "migration_assistant",
+          "name": "migration_assistant",
+          "module": "fujinp.migration_assistant",
+          "url_prefix": "/migration_assistant"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "👣",
+          "label": "まいあし",
+          "section": "sommelier",
+          "endpoint": "migration_assistant.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 80,
+          "description": "FUJIN-Pマイグレーション支援",
+          "extra_class": "clickable",
+          "require_groups": [],
+          "require_categories": []
+        },
+        {
+          "icon": "👣",
+          "label": "まいあし",
+          "section": "admin_support",
+          "endpoint": "migration_assistant.index",
+          "dashboards": [
+            "guest"
+          ],
+          "sort_order": 80,
+          "description": "FUJIN-Pマイグレーション支援",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140512-a36e4e",
+      "version_confirmed_at": "2026-07-31 14:05:12"
+    },
+    {
+      "app_name": "table_share",
+      "display_name": "テーシャ",
+      "icon": "🔗",
+      "description": "FUJIN-P拠点間でMySQLテーブルのスナップショットを公開し、APIキー認証を介して取得・手動同期するための相互連携アプリケーション。",
+      "sort_order": 49.5,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "table_share_bp",
+          "name": "table_share",
+          "module": "fujinp.table_share",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🔗️",
+          "label": "テーシャ",
+          "section": "sommelier",
+          "endpoint": "table_share.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 90,
+          "description": "SQLテーブルの共有",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140516-5bc285",
+      "version_confirmed_at": "2026-07-31 14:05:16"
+    },
+    {
+      "app_name": "user_migration",
+      "display_name": "ゆーまい",
+      "icon": "🛳️",
+      "description": "FUJIN-Pプラットフォーム上の複数サイト間でユーザ情報を安全に移行（マイグレーション）するシステムです。",
+      "sort_order": 60.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "user_migration_bp",
+          "name": "user_migration",
+          "module": "fujinp.user_migration",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🛳️",
+          "label": "ゆーまい",
+          "section": "sommelier",
+          "endpoint": "user_migration.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 100,
+          "description": "ユーザのマイグレーション",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140521-262bfe",
+      "version_confirmed_at": "2026-07-31 14:05:21"
+    },
+    {
+      "app_name": "migrate_fujinp_scions",
+      "display_name": "さいまる",
+      "icon": "📦",
+      "description": "fujinpサイトのまるごとマイグレーション",
+      "sort_order": 70.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "migrate_fujinp_scions_bp",
+          "name": "migrate_fujinp_scions",
+          "module": "fujinp.migrate_fujinp_scions",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🛳️",
+          "label": "さいまる",
+          "section": "sommelier",
+          "endpoint": "migrate_fujinp_scions.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 110,
+          "description": "サイオン丸ごとマイグレーション",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        },
+        {
+          "icon": "🛳️",
+          "label": "さいまる",
+          "section": "internal",
+          "endpoint": "migrate_fujinp_scions.index",
+          "dashboards": [
+            "guest"
+          ],
+          "sort_order": 140,
+          "description": "サイオン丸ごとマイグレーション",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140524-e84ca5",
+      "version_confirmed_at": "2026-07-31 14:05:24"
+    },
+    {
+      "app_name": "my_md_notes",
+      "display_name": "マイノート",
+      "icon": "🗒",
+      "description": "Markdownノートをフォルダ階層で管理し、非公開・公開・特定ユーザー共有（閲覧/編集権限）で共有できるノート管理Webアプリ",
+      "sort_order": 80.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "my_md_notes_bp",
+          "name": "my_md_notes",
+          "module": "fujinp.my_md_notes",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🗒️",
+          "label": "マイノート",
+          "section": "sommelier",
+          "endpoint": "my_md_notes.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 120,
+          "description": "MDによる手軽なノート",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260824.143515-edf982",
+      "version_confirmed_at": "2026-08-24 14:35:15"
+    },
+    {
+      "app_name": "user_groups",
+      "display_name": "まいぐる",
+      "icon": "👥",
+      "description": "ユーザーをグループに分類・管理するためのWebアプリケーション。グループの階層構造（サブグループ）、メンバーの有効期間管理、権限委譲（総管理者・グローバル管理者・グループ管理者）に対応。",
+      "sort_order": 90.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "user_groups_bp",
+          "name": "user_groups",
+          "module": "fujinp.user_groups",
+          "url_prefix": "/user_groups"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "👥",
+          "label": "まいぐる",
+          "section": "admin_support",
+          "endpoint": "user_groups.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 130,
+          "description": "ユーザによるグループ管理",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140531-c9c597",
+      "version_confirmed_at": "2026-07-31 14:05:31"
+    },
+    {
+      "app_name": "colrep",
+      "display_name": "コレポ",
+      "icon": "📝",
+      "description": "複数人で原稿部品を分担入力し、責任者がComposerで統合して完成原稿を作成するコラボ型原稿作成Webアプリ",
+      "sort_order": 100.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "colrep_bp",
+          "name": "colrep",
+          "module": "fujinp.colrep",
+          "url_prefix": "/colrep"
+        },
+        {
+          "attr": "colrep_public_bp",
+          "name": "colrep_public",
+          "module": "fujinp.colrep",
+          "url_prefix": "/colrep_public"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🏀",
+          "label": "コレポ管理",
+          "section": "admin_support",
+          "endpoint": "colrep.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 140,
+          "description": "プロジェクトの作成・管理",
+          "extra_class": "",
+          "require_groups": [
+            "コレポ管理者"
+          ],
+          "require_categories": []
+        },
+        {
+          "icon": "🏀",
+          "label": "コレポ執筆",
+          "section": "guest",
+          "endpoint": "colrep.worker_dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 230,
+          "description": "協調的レポート制作",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260824.150317-6eb81a",
+      "version_confirmed_at": "2026-08-24 15:03:17"
+    },
+    {
+      "app_name": "table_post",
+      "display_name": "テーブルポスト",
+      "icon": "📮",
+      "description": "SQLテーブル更新依頼とバックアップ付き組み込み",
+      "sort_order": 110.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "table_post_bp",
+          "name": "table_post",
+          "module": "fujinp.table_post",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📮",
+          "label": "テーブルポスト",
+          "section": "admin_support",
+          "endpoint": "table_post.table_post_dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 150,
+          "description": "テーブル更新の申請・適用",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140538-425cf9",
+      "version_confirmed_at": "2026-07-31 14:05:38"
+    },
+    {
+      "app_name": "app_share",
+      "display_name": "アプシャ",
+      "icon": "📦",
+      "description": "FUJIN-Pアプリケーションを他のFUJIN-Pサイト間で共有・配布・インストールするためのパッケージ管理システム。",
+      "sort_order": 140.0,
+      "kind": "kernel",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "app_share_bp",
+          "name": "app_share",
+          "module": "fujinp.app_share",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📦️",
+          "label": "アプシャ",
+          "section": "internal",
+          "endpoint": "app_share.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 160,
+          "description": "FUJIN-Pアプリの共有",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140543-a7a266",
+      "version_confirmed_at": "2026-07-31 14:05:43"
+    },
+    {
+      "app_name": "official_data_archive",
+      "display_name": "公式データ集",
+      "icon": "📚",
+      "description": "公式データの閲覧とダウンロード",
+      "sort_order": 150.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "official_data_archive_bp",
+          "name": "official_data_archive",
+          "module": "fujinp.official_data_archive",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📚",
+          "label": "公式データ集(DRAFT)",
+          "section": "internal",
+          "endpoint": "official_data_archive.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 170,
+          "description": "公式データの閲覧とダウンロード",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140547-6c525a",
+      "version_confirmed_at": "2026-07-31 14:05:47"
+    },
+    {
+      "app_name": "data_center",
+      "display_name": "データセンター",
+      "icon": "📊",
+      "description": "テーブル内容から生成される時系列指標の編集・閲覧アプリです．",
+      "sort_order": 160.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "data_center_bp",
+          "name": "data_center",
+          "module": "fujinp.data_center",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📊",
+          "label": "データセンター",
+          "section": "internal",
+          "endpoint": "data_center.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 180,
+          "description": "収集データからストーリーラインを作り、インタラクティブに公開する",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140549-104341",
+      "version_confirmed_at": "2026-07-31 14:05:49"
+    },
+    {
+      "app_name": "index_review",
+      "display_name": "時系列指標ビジュアル",
+      "icon": "📦",
+      "description": "テーブルから時系列指標を表示するためのアプリです．",
+      "sort_order": 190.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "index_review_bp",
+          "name": "index_review",
+          "module": "fujinp.index_review",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📈",
+          "label": "時系列指標ビジュアル",
+          "section": "internal",
+          "endpoint": "index_review.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 190,
+          "description": "SQLテーブル内容をグラフで可視化",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140555-c2ef51",
+      "version_confirmed_at": "2026-07-31 14:05:55"
+    },
+    {
+      "app_name": "stats",
+      "display_name": "スタッツ",
+      "icon": "📊",
+      "description": "FUJIN-Pシステムの利用状況をリアルタイムおよび時系列で可視化するダッシュボードです。システム全体の利用動向と個人の利用パターンを振り返ることができます",
+      "sort_order": 200.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "stats_bp",
+          "name": "stats",
+          "module": "fujinp.stats.stats",
+          "url_prefix": "/stats"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📊",
+          "label": "スタッツ",
+          "section": "internal",
+          "endpoint": "stats.stat_main",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 200,
+          "description": "利用状況の表示",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140558-e11295",
+      "version_confirmed_at": "2026-07-31 14:05:58"
+    },
+    {
+      "app_name": "awami",
+      "display_name": "あわみ",
+      "icon": "📦",
+      "description": "あわならとミーティングの相乗効果",
+      "sort_order": 210.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "our_meeting_bp",
+          "name": "our_meeting",
+          "module": "fujinp.awami",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🕸",
+          "label": "あわみ",
+          "section": "guest",
+          "endpoint": "our_meeting.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 220,
+          "description": "語りのネットとミーティングの支援",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140601-231f06",
+      "version_confirmed_at": "2026-07-31 14:06:01"
+    },
+    {
+      "app_name": "document_archive",
+      "display_name": "文書アーカイブ",
+      "icon": "🏛",
+      "description": "HTML文書を保存・閲覧・検索できる文書アーカイブ。公開範囲（全体/自分のみ/グループ限定）を設定して、閲覧権限に応じた共有ができる。",
+      "sort_order": 220.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "document_archive_bp",
+          "name": "document_archive",
+          "module": "fujinp.document_archive",
+          "url_prefix": "/document_archive"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🏛️",
+          "label": "文書アーカイブ",
+          "section": "guest",
+          "endpoint": "document_archive.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 240,
+          "description": "文書アーカイブの閲覧と管理",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140606-85aae3",
+      "version_confirmed_at": "2026-07-31 14:06:06"
+    },
+    {
+      "app_name": "free_hand_curve",
+      "display_name": "フリーハンド曲線",
+      "icon": "📦",
+      "description": "曲線の長さと囲まれた面積を算出するデモ",
+      "sort_order": 230.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "free_hand_curve_bp",
+          "name": "free_hand_curve",
+          "module": "fujinp.free_hand_curve.routes",
+          "url_prefix": "/free_hand_curve"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "➿",
+          "label": "フリーハンド曲線",
+          "section": "guest",
+          "endpoint": "free_hand_curve.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 250,
+          "description": "休息時のおたのしみ",
+          "extra_class": "clickable",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140608-94bfc0",
+      "version_confirmed_at": "2026-07-31 14:06:08"
+    },
+    {
+      "app_name": "ts_solvers",
+      "display_name": "巡回セールスマンソルバー",
+      "icon": "📦",
+      "description": "巡回セールスマン問題のソルバー",
+      "sort_order": 240.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "ts_solvers_bp",
+          "name": "ts_solvers",
+          "module": "fujinp.ts_solvers.routes",
+          "url_prefix": "/ts_solvers"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "😮‍💨",
+          "label": "巡回セールスマン問題ソルバー",
+          "section": "guest",
+          "endpoint": "ts_solvers.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 260,
+          "description": "NP困難問題に挑戦！",
+          "extra_class": "clickable",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140611-ab6e47",
+      "version_confirmed_at": "2026-07-31 14:06:11"
+    },
+    {
+      "app_name": "solar_gl",
+      "display_name": "太陽系3Dシミュレータ",
+      "icon": "📦",
+      "description": "太陽系の簡単なシミュレーター",
+      "sort_order": 290.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "solar_gl_bp",
+          "name": "solar_gl",
+          "module": "fujinp.solar_gl",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🪐",
+          "label": "太陽系3Dシミュレータ",
+          "section": "guest",
+          "endpoint": "solar_gl.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 270,
+          "description": "太陽と8惑星の公転を3D表示・時間制御",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140616-474f74",
+      "version_confirmed_at": "2026-07-31 14:06:16"
+    },
+    {
+      "app_name": "sorakara",
+      "display_name": "そらから",
+      "icon": "📦",
+      "description": "福知山近郊のフライトシミュレーター",
+      "sort_order": 300.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "sorakara_bp",
+          "name": "sorakara",
+          "module": "fujinp.sorakara",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🛩️",
+          "label": "そらから",
+          "section": "guest",
+          "endpoint": "sorakara.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 280,
+          "description": "上空フライトシーン（福知山周辺・地理院標高データ）",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140619-628144",
+      "version_confirmed_at": "2026-07-31 14:06:19"
+    },
+    {
+      "app_name": "window_shopping",
+      "display_name": "ウィンドウショッピング",
+      "icon": "📦",
+      "description": "簡単なシミュレータ",
+      "sort_order": 310.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "window_shopping_bp",
+          "name": "window_shopping",
+          "module": "fujinp.window_shopping",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🛍️",
+          "label": "ウィンドウショッピング3D",
+          "section": "guest",
+          "endpoint": "window_shopping.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 300,
+          "description": "棒人形が広場を歩き回り、置いた店のショーウィンドウを見て回る3Dアニメーション",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140623-88fa23",
+      "version_confirmed_at": "2026-07-31 14:06:23"
+    },
+    {
+      "app_name": "tag_chase",
+      "display_name": "鬼ごっこ",
+      "icon": "📦",
+      "description": "簡単なシミュレータ",
+      "sort_order": 320.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "tag_chase_bp",
+          "name": "tag_chase",
+          "module": "fujinp.tag_chase",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "👹",
+          "label": "鬼ごっこ3D",
+          "section": "guest",
+          "endpoint": "tag_chase.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 310,
+          "description": "鬼がブロックの陰に隠れながら追手から逃げる3Dシミュレーションゲーム",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140627-1f8eaa",
+      "version_confirmed_at": "2026-07-31 14:06:27"
+    },
+    {
+      "app_name": "block_breaker",
+      "display_name": "ブロック崩し",
+      "icon": "📦",
+      "description": "簡単なアーケードゲーム",
+      "sort_order": 330.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "block_breaker_bp",
+          "name": "block_breaker",
+          "module": "fujinp.block_breaker",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🧱",
+          "label": "ブロック崩し",
+          "section": "guest",
+          "endpoint": "block_breaker.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 320,
+          "description": "ブロック崩しゲーム（ハイスコアランキング付き）",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260731.140630-64c32c",
+      "version_confirmed_at": "2026-07-31 14:06:30"
+    },
+    {
+      "app_name": "image_archiver",
+      "display_name": "いまくら",
+      "icon": "📦",
+      "description": "",
+      "sort_order": 340.0,
+      "kind": "app",
+      "enabled": false,
+      "blueprints": [],
+      "launchers": [],
+      "version_id": null,
+      "version_confirmed_at": null
+    },
+    {
+      "app_name": "lookout",
+      "display_name": "みはらし",
+      "icon": "🔭",
+      "description": "地図上の地点から見た周囲の山岳パノラマ",
+      "sort_order": 350.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "lookout_bp",
+          "name": "lookout",
+          "module": "fujinp.lookout",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🔭",
+          "label": "みはらし",
+          "section": "guest",
+          "endpoint": "lookout.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 290,
+          "description": "クリック地点からの360度地形パノラマ",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260816.004034-d9f501",
+      "version_confirmed_at": "2026-08-16 00:40:34"
+    },
+    {
+      "app_name": "kataribe",
+      "display_name": "かたりべ",
+      "icon": "📦",
+      "description": "タイル（HTML断片）の出入りでプレゼンを組み立てるページレス・スライドエディタ兼プレイヤー。タイル生成（HTML編集）とレイアウト・表示制御の二モードで編集し、作品JSONの取り込み／書き出しで外部とやりとりする。",
+      "sort_order": 360.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "kataribe_bp",
+          "name": "kataribe",
+          "module": "fujinp.kataribe",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🗣",
+          "label": "かたりべ",
+          "section": "guest",
+          "endpoint": "kataribe.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 210,
+          "description": "語りとブロックでつくるプレゼン編集・再生",
+          "extra_class": "",
+          "require_groups": [],
+          "require_categories": []
+        }
+      ],
+      "version_id": "v20260824.143537-c84eec",
+      "version_confirmed_at": "2026-08-24 14:35:37"
+    }
+  ],
+  "sections": [
+    {
+      "key": "system",
+      "title": "⚙️ システム管理",
+      "css_class": "admin-function",
+      "sort_order": 10.0,
+      "show_admin": true,
+      "show_guest": false,
+      "require_groups": [],
+      "require_categories": []
+    },
+    {
+      "key": "sommelier",
+      "title": "🧑‍🍳 FUJIN-Pソムリエ用アプリ",
+      "css_class": "sommelier",
+      "sort_order": 20.0,
+      "show_admin": true,
+      "show_guest": true,
+      "require_groups": [
+        "FUJIN-Pソムリエ"
+      ],
+      "require_categories": []
+    },
+    {
+      "key": "admin_support",
+      "title": "👨‍✈️ 管理支援",
+      "css_class": "admin-support",
+      "sort_order": 30.0,
+      "show_admin": true,
+      "show_guest": true,
+      "require_groups": [],
+      "require_categories": []
+    },
+    {
+      "key": "internal",
+      "title": "🏫 機関内向け",
+      "css_class": "highlight",
+      "sort_order": 40.0,
+      "show_admin": true,
+      "show_guest": true,
+      "require_groups": [],
+      "require_categories": [
+        "regular",
+        "admin"
+      ]
+    },
+    {
+      "key": "guest",
+      "title": "📌 ゲスト向け",
+      "css_class": "open-sky",
+      "sort_order": 50.0,
+      "show_admin": true,
+      "show_guest": true,
+      "require_groups": [],
+      "require_categories": []
+    }
+  ]
+}
