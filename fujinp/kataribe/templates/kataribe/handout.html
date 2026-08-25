@@ -46,13 +46,18 @@
         .cell {
             position:relative; overflow:hidden; min-height:0;
             border:0.3mm solid #c3ccd1; border-radius:2mm; background:#eef2f3;
+            display:flex; align-items:center; justify-content:center;
         }
         .cell .tag {
             position:absolute; right:1.2mm; top:1.2mm; z-index:5;
             font-size:7.5pt; color:#5a6a74; background:rgba(255,255,255,.85);
             border:0.2mm solid #c3ccd1; border-radius:2mm; padding:0.3mm 1.6mm;
         }
-        .snapwrap { position:absolute; left:0; top:0; transform-origin:top left; }
+        /* スナップショットは zoom で縮小する（transform:scale は印刷時に，縮小前の高さで
+           ページ分割されるため，用紙の下側にある画像入りセルの中身が次ページ側に送られて消える） */
+        .snapwrap { position:relative; flex:0 0 auto; width:1100px; }
+        /* zoom 非対応ブラウザ向けの旧方式（transform:scale） */
+        body.no-zoom .snapwrap { position:absolute; left:0; top:0; transform-origin:top left; }
         @media print {
             body { background:#fff; }
             .toolbar { display:none; }
@@ -64,6 +69,15 @@
         .snap.ktb-player { display:block; width:1100px; height:auto; overflow:visible; }
         .snap .ktb-stage { flex:none; overflow:visible; height:auto; }
         .snap .ktb-fit { transform:none !important; }
+        /* vh 依存を断つ：画面と印刷で viewport 高が違うと縦寸が変わるので，仮想高 700px 相当の固定値にする */
+        .snap .k-img { max-height:364px; }
+        .snap .k-img.sm { max-height:154px; } .snap .k-img.md { max-height:252px; } .snap .k-img.lg { max-height:476px; }
+        .snap .k-img.full { max-height:none; }
+        .snap .k-frame, .snap .k-video { height:420px; }
+        .snap .k-frame.sm, .snap .k-video.sm { height:210px; }
+        .snap .k-frame.md, .snap .k-video.md { height:315px; }
+        .snap .k-frame.lg, .snap .k-video.lg { height:525px; }
+        .snap .k-frame.full, .snap .k-video.full { height:602px; }
     </style>
 </head>
 <body>
@@ -250,18 +264,25 @@
         }
 
         // 各セルに合わせてスナップショットを縮小・中央寄せする
+        // zoom はレイアウト上の箱そのものを縮めるので，印刷時のページ分割も縮小後の寸法で行われる．
+        const USE_ZOOM = ('zoom' in document.documentElement.style);
+        if (!USE_ZOOM) document.body.classList.add('no-zoom');
         function layoutAll(){
             $('.cell').each(function(){
                 var cell = this, wrap = cell.querySelector('.snapwrap');
                 if (!wrap) return;
-                wrap.style.transform = 'none';
                 wrap.style.width = BASE_W + 'px';
+                if (USE_ZOOM) wrap.style.zoom = '1'; else wrap.style.transform = 'none';
                 var cw = cell.clientWidth, ch = cell.clientHeight;
                 var nh = wrap.scrollHeight || 1;
                 var s = Math.min(cw / BASE_W, ch / nh);
-                wrap.style.transform = 'scale(' + s.toFixed(4) + ')';
-                wrap.style.left = Math.max(0, (cw - BASE_W * s) / 2).toFixed(1) + 'px';
-                wrap.style.top = Math.max(0, (ch - nh * s) / 2).toFixed(1) + 'px';
+                if (USE_ZOOM){
+                    wrap.style.zoom = s.toFixed(4);           // 中央寄せは .cell の flex に任せる
+                } else {
+                    wrap.style.transform = 'scale(' + s.toFixed(4) + ')';
+                    wrap.style.left = Math.max(0, (cw - BASE_W * s) / 2).toFixed(1) + 'px';
+                    wrap.style.top = Math.max(0, (ch - nh * s) / 2).toFixed(1) + 'px';
+                }
             });
         }
         var relayoutTimer = null;
