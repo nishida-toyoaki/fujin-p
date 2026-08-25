@@ -177,8 +177,8 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
     <div id="ver-body"></div>
     <div class="row" style="margin-top:10px">
       <button class="btn green" onclick="confirmVersion()">🏷 版確定</button>
-      <a class="btn sky" href="{{ url_for('app_share.export_app_package', app_name=app_name) }}">📦 エクスポート</a>
-      <a class="btn amber" href="{{ url_for('app_share.import_package_page', app_name=app_name) }}">📥 取り込み（パッケージ）</a>
+      <a class="btn sky" href="{{ url_for('app_share.package_export', app_name=app_name) }}">📦 エクスポート</a>
+      <a class="btn amber" href="{{ url_for('app_share.package_import_page', app=app_name) }}">📥 取り込み（パッケージ）</a>
     </div>
     <h3>GitHub（関所 → GitHub）</h3>
     <div id="git-body" class="hint">関所の状態を確認中…</div>

@@ -630,6 +630,8 @@ def _parse_indexes(ddl):
 def _norm(d):
     s = re.sub(r'\s+', ' ', d or '').strip()
     s = re.sub(r'\bCHARACTER SET (\w+)\s+(?=COLLATE \1_)', '', s, flags=re.I)
+    # 整数型の表示幅（MariaDB や MySQL 5.7 は int(11) と出す．MySQL 8 は int）
+    s = re.sub(r'\b((?:tiny|small|medium|big)?int)\(\d+\)', r'\1', s, flags=re.I)
     return s.lower()
 
 
@@ -1140,13 +1142,6 @@ def api_version_confirm(app_name):
                        SET version_id=%s, version_confirmed_at=%s, version_confirmed_by=%s
                        WHERE app_name=%s""", (version_id, now, by, app_name))
         conn.commit()
-    if os.path.isdir(_app_path(app_name)):
-        try:
-            with open(os.path.join(_app_path(app_name), 'version.json'), 'w', encoding='utf-8') as f:
-                json.dump({'version_id': version_id, 'confirmed_at': _fmt(now), 'confirmed_by': by},
-                          f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            current_app.logger.warning('version.json 書き込み失敗 %s: %s', app_name, e)
     return _ok(version_id=version_id, confirmed_at=_fmt(now), confirmed_by=by)
 
 

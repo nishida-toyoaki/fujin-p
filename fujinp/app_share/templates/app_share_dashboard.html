@@ -52,6 +52,8 @@
         .info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:15px;margin:15px 0}
         .warning-box{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:15px;margin:15px 0}
         .success-box{background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:15px;margin:15px 0}
+        .error-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin:8px 0}
+        .badge-gray{background:#e5e7eb;color:#374151}
         .danger-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:15px;margin:15px 0;color:#991b1b}
         .gc-list{max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:8px 0;font-size:.84rem;font-family:monospace;background:#f9fafb}
         .gc-list .gc-db{font-weight:700;color:#334155;margin-top:6px}
@@ -183,21 +185,18 @@
         <h2>📂 登録済みアプリ
             <span style="float:right;display:inline-flex;gap:8px">
                 {% if is_admin %}
-                <button class="btn-import" onclick="openAppImport()">📦 新規アプリ取り込み</button>
+                <button class="btn-import" onclick="location.href='{{ url_for('app_share.package_import_page') }}'">📦 新規アプリ取り込み</button>
                 <button class="success" onclick="publishRegistry(false)" title="正本（DB）を fujinp/app_registry.json に写す">📢 発行</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.sections_page') }}'" title="ダッシュボードの区画">🗂 区画</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.api_diag_site') }}'" title="Claude向けのサイト診断JSON">🩺 サイト診断</button>
                 <button class="secondary" id="btn-push" onclick="gitPushAll()" title="関所の未 push コミットを GitHub へ">🚀 push</button>
                 {% endif %}
                 <button class="secondary" onclick="startExport('{{ url_for('app_share.export_kernel_package') }}','カーネル')">⚙ カーネルエクスポート</button>
-                <button class="primary" onclick="startExport('{{ url_for('app_share.export_site_overview') }}','全アプリパッケージ')">⬇ 全アプリパッケージエクスポート</button>
+                <button class="primary" onclick="startExport('{{ url_for('app_share.package_export_all') }}','全アプリパッケージ')">⬇ 全アプリパッケージエクスポート</button>
             </span>
         </h2>
         {% if is_admin %}
         <p style="margin-bottom:15px;color:#666">📖マニュアル・📋仕様書の閲覧，🛠管理で正本（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）を編集，📢発行で app_registry.json に反映．⚙で表示情報，↑↓で並べ替え，＋で新規登録．</p>
-        <div id="migrate-bar" style="display:none;margin-bottom:15px">
-            <div class="warning-box">⚠️ レジストリが空です。<button class="primary" onclick="doMigrate()" style="margin-left:12px">📥 既存アプリを一括取り込み</button></div>
-        </div>
         {% else %}
         <p style="margin-bottom:15px;color:#666">📖マニュアル・📋仕様書を閲覧できます。</p>
         {% endif %}
@@ -206,48 +205,23 @@
     </div>
     {% if is_admin %}
     <div id="admin-tab" class="tab-content">
-        <h2>📥 全アプリパッケージからのアプリインポート</h2>
-        <div class="info-box">エクスポート機能「⬇ 全アプリパッケージエクスポート」で出力したJSONを選択してください。<br>
-        ・<strong>パッケージ入り</strong>（各アプリのソース一式を含む）JSONなら、アプリを選んで<strong>個別アプリ取り込み</strong>を一括実行します。<br>
-        ・<strong>説明のみ</strong>（軽量版）JSONなら、レジストリ・マニュアル・仕様書だけを更新します。</div>
-        <div class="form-group"><label>JSONファイル:</label><input type="file" id="imp-file" accept=".json,application/json"></div>
-        <div id="imp-meta" class="success-box" style="display:none"></div>
-
-        <!-- ① 必須テーブルのスキーマ宣言（共通コードが使うテーブル） -->
-        <div id="imp-core" style="display:none">
-            <h3>① 必須テーブルのスキーマ宣言</h3>
-            <div class="info-box" style="margin-top:0">共通コード（admin.py / auth.py 等）が使う必須テーブルです。<strong>アプリ取り込みの前に</strong>「実行」でこのサイトに宣言してください（<code>CREATE TABLE IF NOT EXISTS</code>。既存テーブルは変更しません）。</div>
-            <div id="imp-core-list" class="gc-list"></div>
-            <div style="margin-top:6px">
-                <button class="primary" id="imp-core-go" onclick="doImportCore()">🗄 スキーマ宣言を実行</button>
-                <button class="secondary btn-sm" onclick="copyEl('imp-core-sql',this)">📋 SQLをコピー</button>
-                <textarea id="imp-core-sql" readonly style="display:none"></textarea>
+        <h2>📥 全アプリパッケージからの取り込み</h2>
+        <div class="info-box">「⬇ 全アプリパッケージエクスポート」で出力した JSON（fujinp_apps_overview）を選ぶと，含まれるアプリの一覧と新旧が出ます．取り込むアプリにチェックして「取り込む」．各アプリは 📥 取り込み画面と同じ手順（退避 → 配置 → 正本 → 文書 → 台帳 → テーブル → 不具合 → 発行）で順に処理されます．</div>
+        <div class="form-group"><label>JSONファイル:</label><input type="file" id="ov-file" accept=".json,application/json"></div>
+        <div id="ov-meta" class="success-box" style="display:none"></div>
+        <div id="ov-wrap" style="display:none">
+            <p style="font-size:.83rem;color:#666;margin-bottom:8px">既定は「新規」と「更新あり」にチェック．
+                <button class="secondary btn-sm" style="margin-left:8px" onclick="ovSelect('all')">全選択</button>
+                <button class="secondary btn-sm" onclick="ovSelect('none')">全解除</button>
+                <button class="secondary btn-sm" onclick="ovSelect('updated')">新規・更新のみ</button>
+                <span id="ov-count" style="margin-left:10px"></span></p>
+            <table id="ov-table"><thead><tr><th style="width:36px"></th><th>アプリ</th><th>パッケージの版</th><th>このサイトの版</th><th>状態</th><th></th></tr></thead><tbody></tbody></table>
+            <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <label style="font-size:.82rem"><input type="checkbox" id="ov-tables" checked> テーブルの宣言・改訂を適用する（足すだけ）</label>
+                <button class="success" onclick="ovApply()">📥 選択したアプリを取り込む</button>
             </div>
-            <div id="imp-core-result" style="margin-top:8px"></div>
         </div>
-
-        <!-- 軽量（説明のみ）JSON: 従来の一覧 -->
-        <div id="imp-listwrap" style="display:none">
-            <h3>📦 含まれるアプリ</h3>
-            <table id="imp-table"><thead><tr><th>アプリ</th><th>インポート側の更新日時</th><th>ローカルの更新日時</th><th>状態</th></tr></thead><tbody></tbody></table>
-            <div id="imp-count" style="margin-top:8px"></div>
-        </div>
-
-        <!-- パッケージ入りJSON: 選択して一括取り込み -->
-        <div id="imp-batchwrap" style="display:none">
-            <h3>② 取り込むアプリを選択</h3>
-            <p style="font-size:.83rem;color:#666;margin-bottom:8px">デフォルトは<strong>受け入れ側に既にディレクトリがあるアプリ</strong>にチェック（オプトイン）。必要に応じて切り替えてください。<button class="secondary btn-sm" style="margin-left:8px" onclick="batchSelect('all')">全選択</button> <button class="secondary btn-sm" onclick="batchSelect('none')">全解除</button> <button class="secondary btn-sm" onclick="batchSelect('updated')">新規・更新のみ</button></p>
-            <table id="imp-batch-table"><thead><tr><th style="width:36px"></th><th>アプリ</th><th>パッケージ</th><th>受け入れ側</th><th>バージョン</th></tr></thead><tbody></tbody></table>
-            <div id="imp-batch-count" style="margin-top:8px"></div>
-        </div>
-
-        <div id="imp-result" style="display:none"></div>
-
-        <div style="margin-top:16px;text-align:right">
-            <button class="danger" id="imp-all" style="display:none" onclick="doImport('all')">⬆ 全部上書き</button>
-            <button class="success" id="imp-newer" style="display:none" onclick="doImport('newer')">⬆ 新しいものだけ上書き</button>
-            <button class="success" id="imp-batch-go" style="display:none" onclick="doBatchImport()">📥 選択アプリを取り込む</button>
-        </div>
+        <div id="ov-result" style="display:none;margin-top:12px"></div>
     </div>
     {% endif %}
 </div>
@@ -290,58 +264,6 @@
     </div>
 </div>
 {% endif %}
-{% if is_admin %}
-<div id="appimport-modal" class="modal-overlay">
-    <div class="modal" style="max-width:600px">
-        <div class="modal-header"><h2>📦 新規アプリ取り込み</h2><button class="modal-close" onclick="closeAppImport()">&times;</button></div>
-        <div class="modal-body">
-            <div class="info-box">アプリ単位のエクスポートパッケージ（fujinp_app_package）を取り込みます。パッケージJSONを選ぶとアプリ名を自動判定します。まだレジストリに無い新規アプリでも取り込めます。次の画面で検証してから実行します。</div>
-            <div class="form-group"><label>① パッケージJSONから自動判定（推奨）:</label><input type="file" id="ai-file" accept=".json,application/json"></div>
-            <div id="ai-detected" class="success-box" style="display:none"></div>
-            <div class="form-group"><label>② またはアプリ名（ディレクトリ名）を直接入力:</label><input type="text" id="ai-name" placeholder="例: app_share"></div>
-        </div>
-        <div class="modal-footer">
-            <button class="success" id="ai-go" onclick="goAppImport()">📥 取り込み画面を開く</button>
-            <button class="secondary" onclick="closeAppImport()">キャンセル</button>
-        </div>
-    </div>
-</div>
-<div id="gc-modal" class="modal-overlay">
-    <div class="modal" style="max-width:900px">
-        <div class="modal-header"><h2>🗑 ガーベージコレクション</h2><button class="modal-close" onclick="closeGC()">&times;</button></div>
-        <div class="modal-body">
-            <div class="danger-box">⚠️ <strong>破壊的操作です。</strong>未登録アプリの<strong>ディレクトリ削除</strong>と、参照されないSQLテーブルの<strong>DROP</strong>を行います（元に戻せません）。まず「プレビュー」で対象を確認し、問題なければ確認欄に <code>DELETE</code> と入力して実行してください。保護対象: <code>app_share</code> 本体・templates・static・各バックアップ、テーブル <code>users</code> / <code>app_share_registry</code> / <code>app_share_documents</code>。</div>
-            <button class="primary" id="gc-preview-btn" onclick="runGCPreview()">🔍 プレビュー（削除対象を確認）</button>
-            <div id="gc-progress" style="display:none;margin-top:10px">
-                <div style="font-size:.85rem;color:#334155" id="gc-progress-label">準備中...</div>
-                <div style="background:#e5e7eb;border-radius:6px;height:12px;overflow:hidden;margin-top:4px"><div id="gc-progress-bar" style="height:100%;width:0%;background:#6366f1;transition:width .15s"></div></div>
-            </div>
-            <div id="gc-warn" class="danger-box" style="display:none;margin-top:12px">⚠️ 削除するには、下の入力欄に <code>DELETE</code> と入力して「🗑 実行」を押してください（元に戻せません）。</div>
-            <div id="gc-preview-area" style="display:none;margin-top:12px"></div>
-            <div id="gc-result" style="display:none;margin-top:12px"></div>
-        </div>
-        <div class="modal-footer">
-            <span id="gc-confirm-label" style="display:none;font-size:.82rem;color:#991b1b;font-weight:700;margin-right:auto">実行するには「DELETE」と入力 →</span>
-            <input type="text" id="gc-confirm" class="gc-confirm" placeholder="DELETE" autocomplete="off" oninput="gcConfirmChanged()" style="display:none">
-            <button class="danger" id="gc-exec-btn" disabled onclick="runGCExecute()" style="display:none">🗑 実行（削除する）</button>
-            <button class="secondary" id="gc-download" style="display:none" onclick="downloadGCReport()">⬇ レポートをダウンロード</button>
-            <button class="secondary" onclick="closeGC()">閉じる</button>
-        </div>
-    </div>
-</div>
-<div id="mgmt-modal" class="modal-overlay">
-    <div class="modal" style="max-width:1000px">
-        <div class="modal-header"><h2>🛠 アプリ管理 - <span id="mg-app"></span></h2><button class="modal-close" onclick="closeMgmt()">&times;</button></div>
-        <div class="modal-body">
-            <div id="mg-body"><p style="color:#9ca3af">読み込み中...</p></div>
-        </div>
-        <div class="modal-footer">
-            <button class="primary" onclick="runDiag()">🔄 再診断</button>
-            <button class="secondary" onclick="closeMgmt()">閉じる</button>
-        </div>
-    </div>
-</div>
-{% endif %}
 <div id="manual-modal" class="modal-overlay">
     <div class="modal">
         <div class="modal-header"><h2>📖 <span id="man-title">ユーザマニュアル</span></h2><button class="modal-close" onclick="closeManual()">&times;</button></div>
@@ -357,49 +279,13 @@
         </div>
     </div>
 </div>
-<div id="spec-modal" class="modal-overlay">
-    <div class="modal">
-        <div class="modal-header"><h2>📋 技術仕様書 - <span id="spec-app-name"></span></h2><button class="modal-close" onclick="closeSpec()">&times;</button></div>
-        <div class="modal-body">
-            {% if is_admin %}
-            <div class="m-toolbar">
-                <span class="mlbl">モード:</span>
-                <button class="secondary act" id="btn-m-view" onclick="specMode('view')">👁 閲覧</button>
-                <button class="secondary" id="btn-m-edit" onclick="specMode('edit')">📝 フィールド編集</button>
-                <button class="secondary" id="btn-m-json" onclick="specMode('json')">{ } JSON</button>
-            </div>
-            {% endif %}
-            <div id="sm-view" class="mc active"><div id="sv-gn"></div><div id="sv-fields"></div></div>
-            {% if is_admin %}
-            <div id="sm-edit" class="mc">
-                <div class="gn-edit"><h4>📝 全体の備考</h4><textarea id="gn-ta" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:5px;font-family:monospace;font-size:.85rem" rows="3"></textarea></div>
-                <div id="se-fields"></div>
-            </div>
-            <div id="sm-json" class="mc">
-                <div class="jhelp"><h4>💡 使い方</h4><p>生成AIの出力JSONを貼り付けて保存。</p></div>
-                <div class="jt">
-                    <button class="primary" onclick="jLoad()">📥 読込</button><button class="warning" onclick="jSync()">📝→{} 生成</button>
-                    <button class="primary" onclick="jFmt()">🔧 整形</button><button class="primary" onclick="jVal()">✅ 検証</button><button class="primary" onclick="jCopy()">📋 コピー</button>
-                </div>
-                <textarea id="json-editor" spellcheck="false" placeholder="JSONをここに..."></textarea>
-                <div class="jli"><span id="j-cur">行:1, 列:1</span><span style="margin-left:20px" id="j-sz">0字</span></div>
-                <div id="j-st" class="js info" style="display:none"></div>
-            </div>
-            {% endif %}
-        </div>
-        <div class="modal-footer" id="sf-view"><button class="secondary" onclick="closeSpec()">閉じる</button></div>
-        {% if is_admin %}
-        <div class="modal-footer" id="sf-edit" style="display:none"><button class="success" onclick="specSaveFields()">💾 保存</button><button class="secondary" onclick="specMode('view')">キャンセル</button></div>
-        <div class="modal-footer" id="sf-json" style="display:none"><button class="success" onclick="jSave()">💾 JSON保存</button><button class="secondary" onclick="specMode('view')">キャンセル</button></div>
-        {% endif %}
-    </div>
-</div>
 <script>
+
 const IS_ADMIN = {{ is_admin|tojson }};
 marked.setOptions({breaks:true,gfm:true});
 function showResult(m,e){const $r=$('#result');$r.text(m).removeClass('success error').addClass(e?'error':'success').show();setTimeout(()=>$r.fadeOut(),5000)}
 function esc(t){return t?t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
-$('.tab').click(function(){const id=$(this).data('tab');$('.tab').removeClass('active');$(this).addClass('active');$('.tab-content').removeClass('active');$(`#${id}-tab`).addClass('active');if(id==='admin'&&typeof openImport==='function')openImport()});
+$('.tab').click(function(){const id=$(this).data('tab');$('.tab').removeClass('active');$(this).addClass('active');$('.tab-content').removeClass('active');$(`#${id}-tab`).addClass('active')});
 // ========== ローカルアプリ ==========
 function loadLocalApps(){
     $.ajax({url:'/app_share/get_registry_apps',success(r){
@@ -432,6 +318,7 @@ function loadLocalApps(){
                     <button class="btn-manual" onclick="openManual('${a.app_name}')">📖 マニュアル</button>
                     <button class="btn-spec" onclick="location.href='/app_share/spec/'+encodeURIComponent('${a.app_name}')" title="正本と仕様書メモから組み立てた技術仕様書">📋 仕様書</button>
                     <button class="btn-export" onclick="exportApp('${a.app_name}')" title="アプリ一式をJSONパッケージでダウンロード">📦 エクスポート</button>
+                    ${IS_ADMIN?`<button class="btn-import" onclick="location.href='/app_share/package/import?app='+encodeURIComponent('${a.app_name}')" title="パッケージで差し替え（検証→適用→発行）">📥 取り込み</button>`:''}
                     ${IS_ADMIN?`<button class="btn-mgmt" onclick="location.href='/app_share/app/'+encodeURIComponent('${a.app_name}')" title="正本の管理（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）">🛠 管理</button>`:''}
                     <span class="card-badges" data-app="${a.app_name}"></span>
                 </div>
@@ -439,7 +326,6 @@ function loadLocalApps(){
         });
         if(IS_ADMIN){
             $l.append('<div class="add-card" onclick="openAdd()"><div class="plus">＋</div><span>新規アプリ登録</span></div>');
-            $('#migrate-bar').toggle(r.apps.length===0);
             loadSummary();
         }
     }});
@@ -457,7 +343,10 @@ function loadSummary(){
             else if(s.running===false)b+='<span class="badge badge-danger" title="正本にあるが起動中に未登録（発行＋Reload が必要）">未起動</span> ';
             const g=s.git;
             if(g&&!g.error){
-                if(g.needs_commit)b+=`<span class="badge badge-warning" title="変更 ${g.changed} / 新規 ${g.added} / 削除 ${g.deleted}" style="cursor:pointer" onclick="location.href='/app_share/app/${name}#ver'">🔶 要commit ${esc(g.last_change||'')}</span> `;
+                if(g.needs_commit){
+                    const onlyDel=(g.changed+g.added===0&&g.deleted>0);
+                    b+=`<span class="badge badge-warning" title="変更 ${g.changed} / 新規 ${g.added} / 削除 ${g.deleted}" style="cursor:pointer" onclick="location.href='/app_share/app/${name}#ver'">${onlyDel?'🔶 関所の整理（削除 '+g.deleted+'）':'🔶 要commit '+esc(g.last_change||'')}</span> `;
+                }
                 else b+='<span class="badge badge-success" title="稼働ツリーと関所が一致">✔ 関所と一致</span> ';
             }
             $(`.card-badges[data-app="${name}"]`).html(b);
@@ -497,72 +386,16 @@ function publishRegistry(withReload){
         error(x){showResult('発行失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}});
 }
 
-// ========== バージョン確定（admin専用・エクスポートとは独立） ==========
-function confirmVersion(name){
-    if(!confirm(name+' のバージョンを確定します。\n\nソースコード・技術仕様書・ユーザマニュアルの整合性を確認済みですか？\n確定すると新しいバージョン番号が刻まれます。\n（確定するまでは、エクスポートを何回行っても同じバージョン番号のままです）'))return;
-    $.ajax({url:'/app_share/confirm_version/'+encodeURIComponent(name),method:'POST',contentType:'application/json',
-        success(d){
-            if(d.success){showResult('🏷 バージョンを確定しました: '+d.version_id,false);loadLocalApps();}
-            else showResult('確定に失敗: '+(d.error||''),true);
-        },
-        error(x){showResult('確定に失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}
-    });
-}
-
 // ========== アプリ単位エクスポート（全ログインユーザー） ==========
 function exportApp(name){
     showResult('📦 パッケージを生成しています...',false);
-    location.href='/app_share/export_app_package/'+encodeURIComponent(name);
+    location.href='/app_share/package/export/'+encodeURIComponent(name);
 }
 
 // 見出しのエクスポートボタン（生成に時間がかかるので待ち表示を出す）
 function startExport(url,label){
     showResult('📦 '+label+'を生成しています…（ダウンロードが始まるまでお待ちください）',false);
     location.href=url;
-}
-
-// ========== アプリ単位パッケージ取り込み（admin専用・専用ダッシュボード） ==========
-function importApp(name){
-    location.href='/app_share/import_package/'+encodeURIComponent(name);
-}
-
-// 新規アプリ取り込み（ローカルアプリタブのボタンから。カードが無い新規アプリでも開始できる入口）
-let aiPkg=null;
-function openAppImport(){aiPkg=null;$('#ai-file').val('');$('#ai-name').val('');$('#ai-detected').hide();$('#ai-go').prop('disabled',false).text('📥 取り込み画面を開く');$('#appimport-modal').addClass('active')}
-function closeAppImport(){$('#appimport-modal').removeClass('active')}
-$('#appimport-modal').click(function(e){if(e.target===this)closeAppImport()});
-$('#ai-file').change(function(){
-    const f=this.files[0];if(!f){aiPkg=null;return}
-    const rd=new FileReader();
-    rd.onload=function(ev){
-        let d;
-        try{d=JSON.parse(ev.target.result)}catch(x){aiPkg=null;showResult('JSON解析に失敗: '+x.message,true);return}
-        if(d.export_type!=='fujinp_app_package'){aiPkg=null;showResult('アプリ単位のパッケージではありません（export_type: '+(d.export_type||'なし')+'）',true);return}
-        if(!d.app_name){aiPkg=null;showResult('パッケージに app_name がありません',true);return}
-        aiPkg=d;
-        $('#ai-name').val(d.app_name);
-        $('#ai-detected').html(`✅ 検出: <strong>${esc(d.icon||'')} ${esc(d.display_name||d.app_name)}</strong>（${esc(d.app_name)}） v${esc(d.updated_at||'日時なし')}<br>このまま「取り込み画面を開く」を押すと、次の画面で再アップロード不要です。`).show();
-    };
-    rd.readAsText(f,'utf-8');
-});
-function goAppImport(){
-    const name=$('#ai-name').val().trim();
-    if(!name){alert('アプリ名を入力するか、パッケージJSONを選択してください');return}
-    if(!/^[A-Za-z0-9_]+$/.test(name)){alert('アプリ名（ディレクトリ名）は英数字とアンダースコアのみです');return}
-    // ファイルから読み込んだパッケージがあれば、サーバにステージングしてトークンで受け渡す
-    // （取り込み画面での再アップロードを省略）
-    if(aiPkg&&aiPkg.app_name===name){
-        $('#ai-go').prop('disabled',true).text('⏳ 準備中...');
-        $.ajax({url:'/app_share/stage_package',method:'POST',contentType:'application/json',
-            data:JSON.stringify(aiPkg),
-            success(r){
-                if(r.success&&r.token){location.href='/app_share/import_package/'+encodeURIComponent(name)+'?token='+encodeURIComponent(r.token)}
-                else{showResult('準備に失敗しました（再アップロード方式で続行）: '+(r.error||''),true);location.href='/app_share/import_package/'+encodeURIComponent(name)}
-            },
-            error(){location.href='/app_share/import_package/'+encodeURIComponent(name)}});
-    }else{
-        location.href='/app_share/import_package/'+encodeURIComponent(name);
-    }
 }
 
 // ========== admin専用: 並べ替え・削除・登録・編集 ==========
@@ -574,17 +407,11 @@ function moveApp(id,dir,e){
 }
 function delApp(id,name,e){
     e.stopPropagation();
-    if(!confirm(`「${name}」をレジストリから削除しますか？\n（ファイルは残ります）`))return;
-    $.ajax({url:`/app_share/registry/delete/${id}`,method:'DELETE',
+    const appName=$(`.app-card[data-id="${id}"]`).data('name');
+    if(!confirm(`「${name}」をレジストリから削除しますか？\n（文書・台帳・不具合も消えます．ファイルは残ります．削除後は📢発行してください）`))return;
+    $.ajax({url:'/app_share/api/app/'+encodeURIComponent(appName)+'/delete',method:'POST',contentType:'application/json',data:'{}',
         success(r){if(r.success){showResult(r.message,false);loadLocalApps()}else showResult('エラー: '+r.error,true)},
         error(){showResult('削除エラー',true)}});
-}
-function doMigrate(){
-    if(!confirm('既存アプリをレジストリに一括登録しますか？'))return;
-    $('#loading').show();
-    $.ajax({url:'/app_share/registry/migrate',method:'POST',
-        success(r){if(r.success){showResult(r.message,false);loadLocalApps()}else showResult('エラー: '+r.error,true)},
-        error(){showResult('エラー',true)},complete(){$('#loading').hide()}});
 }
 function openAdd(){$('#add-name,#add-display,#add-desc').val('');$('#add-icon').val('📦');$('#add-modal').addClass('active')}
 function closeAdd(){$('#add-modal').removeClass('active')}
@@ -657,595 +484,70 @@ function copyManualUrl(){if(!manApp)return;const u=location.origin+'/app_share/m
     else prompt('このURLをコピーしてください',u)}
 $('#manual-modal').click(function(e){if(e.target===this)closeManual()});
 
-// ========== 技術仕様書モーダル ==========
-let specApp=null,specInfo=null,specOrig=null,specCurMode='view',jDirty=false,eDirty=false;
-const FL={'display_name':'表示名','description':'説明（短）','url':'URL','blueprint_name':'Blueprint名','overview':'概要（詳細）','directory_structure':'ディレクトリ構造','python_files':'Pythonファイル','template_files':'テンプレートファイル','endpoints':'エンドポイント','mysql_schema':'MySQLスキーマ','sql_tables_description':'SQLテーブル説明','libraries':'依存ライブラリ','migration_guide':'マイグレーションガイド','config_notes':'config.py 設定メモ'};
-const FO=['display_name','description','url','blueprint_name','overview','directory_structure','python_files','template_files','endpoints','mysql_schema','sql_tables_description','libraries','migration_guide','config_notes'];
-const FR={'display_name':1,'description':2,'url':1,'blueprint_name':1,'overview':8,'directory_structure':10,'python_files':5,'template_files':5,'endpoints':10,'mysql_schema':15,'sql_tables_description':8,'libraries':5,'migration_guide':12,'config_notes':6};
 
-function openSpec(name){
-    specApp=name;jDirty=false;eDirty=false;
-    $('#spec-app-name').text(name);$('#loading').show();
-    if(IS_ADMIN){$('#json-editor').val('').removeClass('jv ji');$('#j-st').hide()}
-    $.ajax({url:`/app_share/get_app_info/${name}`,
-        success(r){if(r.success){specInfo=r.app_info;specOrig=JSON.stringify(r.app_info);if(IS_ADMIN)specMode('view');else renderSV(specInfo);$('#spec-modal').addClass('active')}else showResult('エラー: '+r.error,true)},
-        error(){showResult('情報取得エラー',true)},complete(){$('#loading').hide()}});
-}
-function closeSpec(){
-    if(IS_ADMIN&&((specCurMode==='edit'&&eDirty)||(specCurMode==='json'&&jDirty))){if(!confirm('未保存の変更があります。閉じますか？'))return}
-    $('#spec-modal').removeClass('active');specApp=null;specInfo=null;
-}
-$('#spec-modal').click(function(e){if(e.target===this)closeSpec()});
-
-function specMode(m){
-    if(!IS_ADMIN)return;
-    if(specCurMode==='edit'&&eDirty&&m!=='edit'&&!confirm('変更が未保存です。破棄しますか？'))return;
-    if(specCurMode==='json'&&jDirty&&m!=='json'&&!confirm('変更が未保存です。破棄しますか？'))return;
-    specCurMode=m;
-    $('#btn-m-view,#btn-m-edit,#btn-m-json').removeClass('act');$(`#btn-m-${m}`).addClass('act');
-    $('.mc').removeClass('active');$(`#sm-${m}`).addClass('active');
-    $('#sf-view,#sf-edit,#sf-json').hide();$(`#sf-${m}`).show();
-    if(m==='view')renderSV(specInfo);
-    else if(m==='edit'){eDirty=false;renderSE(specInfo)}
-    else if(m==='json'){jDirty=false;const e=document.getElementById('json-editor');if(!e.value.trim())e.value=JSON.stringify(specInfo,null,2);jUpd()}
-}
-
-function renderSV(info){
-    const n=info.general_notes||'';
-    n.trim()?$('#sv-gn').html(`<div class="gn-view">${esc(n)}</div>`).show():$('#sv-gn').empty().hide();
-    const $c=$('#sv-fields').empty(),f=info.fields||{};
-    FO.forEach(k=>{if(!f[k])return;const d=f[k],lb=FL[k]||k,v=(d.value||'').trim(),nt=(d.note||'').trim();
-        const $s=$('<div class="vs">');$s.append(`<div class="vs-h">${esc(lb)}</div>`);
-        if(v){let h;
-            if(['mysql_schema','config_notes'].includes(k))h=`<pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;overflow-x:auto;font-size:.82rem;margin:0">${esc(v)}</pre>`;
-            else if(k==='directory_structure')h=`<pre style="background:#f8fafc;color:#334155;padding:12px;border-radius:6px;overflow-x:auto;font-size:.82rem;margin:0;border:1px solid #e2e8f0">${esc(v)}</pre>`;
-            else h=`<div class="md-r">${marked.parse(v)}</div>`;
-            $s.append(`<div class="vs-b">${h}</div>`)
-        }else $s.append('<div class="vs-b empty">（未入力）</div>');
-        if(nt)$s.append(`<div class="vn">📌 ${esc(nt)}</div>`);$c.append($s)});
-}
-
-function renderSE(info){
-    $('#gn-ta').val(info.general_notes||'');const $c=$('#se-fields').empty(),f=info.fields||{};
-    FO.forEach(k=>{if(!f[k])return;const d=f[k],lb=FL[k]||k,rows=FR[k]||5,h=d.hint||'';
-        $c.append(`<div class="ef" data-field="${k}"><div class="ef-h"><span>${esc(lb)}</span>${h?'<button class="htgl" onclick="$(this).closest(\'.ef\').find(\'.hbox\').toggle()">💡</button>':''}</div>
-        <div class="ef-b">${h?`<div class="hbox">${esc(h)}</div>`:''}<textarea class="fv" data-key="${k}" rows="${rows}">${esc(d.value||'')}</textarea>
-        <div class="nlbl">📌 備考:</div><textarea class="fn" data-key="${k}" rows="2">${esc(d.note||'')}</textarea></div></div>`)});
-}
-$(document).on('input','#sm-edit textarea',function(){eDirty=true});
-
-function specCollect(){
-    const ai={general_notes:$('#gn-ta').val(),fields:{}};
-    $('.ef').each(function(){const k=$(this).data('field');ai.fields[k]={value:$(this).find('.fv').val(),note:$(this).find('.fn').val(),hint:specInfo.fields[k]?.hint||''}});return ai;
-}
-function specSaveFields(){
-    if(!specApp||!IS_ADMIN)return;const ai=specCollect();$('#loading').show();
-    $.ajax({url:`/app_share/save_app_info/${specApp}`,method:'POST',contentType:'application/json',data:JSON.stringify({app_info:ai}),
-        success(r){if(r.success){showResult(r.message,false);specOrig=JSON.stringify(ai);specInfo=ai;eDirty=false;$('#json-editor').val('');jDirty=false;specMode('view')}else showResult('エラー: '+r.error,true)},
-        error(){showResult('保存エラー',true)},complete(){$('#loading').hide()}});
-}
-
-// === JSON編集（admin専用） ===
-function jLoad(){if(!specApp||!IS_ADMIN)return;$('#loading').show();$.ajax({url:`/app_share/get_app_info_json/${specApp}`,success(r){if(r.success){$('#json-editor').val(r.json_text);jDirty=false;jUpd();jSt('info','読込完了')}else jSt('invalid','エラー: '+r.error)},error(){jSt('invalid','読込エラー')},complete(){$('#loading').hide()}})}
-function jSync(){$('#json-editor').val(JSON.stringify(specInfo,null,2));jDirty=false;jUpd();jSt('info','JSON生成しました')}
-function jFmt(){const e=document.getElementById('json-editor'),t=e.value.trim();if(!t)return;try{e.value=JSON.stringify(JSON.parse(t),null,2);jUpd();jSt('valid','整形完了')}catch(x){jSt('invalid','失敗: '+x.message)}}
-function jVal(){const t=$('#json-editor').val().trim();if(!t){jSt('invalid','空です');return}$.ajax({url:'/app_share/validate_json',method:'POST',contentType:'application/json',data:JSON.stringify({json_text:t}),success(r){if(r.valid){$('#json-editor').removeClass('ji').addClass('jv');jSt('valid','✅ '+r.message)}else{$('#json-editor').removeClass('jv').addClass('ji');jSt('invalid','❌ '+r.error)}}})}
-function jCopy(){const e=document.getElementById('json-editor');if(!e.value.trim()){jSt('invalid','テキストなし');return}navigator.clipboard.writeText(e.value).then(()=>jSt('info','📋 コピーしました')).catch(()=>{e.select();document.execCommand('copy');jSt('info','📋 コピーしました')})}
-function jSave(){
-    if(!specApp||!IS_ADMIN)return;const t=$('#json-editor').val().trim();
-    if(!t){jSt('invalid','テキストなし');return}try{JSON.parse(t)}catch(e){jSt('invalid','JSON構文エラー: '+e.message);return}
-    $('#loading').show();
-    $.ajax({url:`/app_share/save_app_info_json/${specApp}`,method:'POST',contentType:'application/json',data:JSON.stringify({json_text:t}),
-        success(r){if(r.success){showResult(r.message,false);jSt('valid','💾 保存しました');jDirty=false;
-            $.ajax({url:`/app_share/get_app_info/${specApp}`,success(r2){if(r2.success){specInfo=r2.app_info;specOrig=JSON.stringify(r2.app_info)}}});
-            setTimeout(()=>specMode('view'),800)}else jSt('invalid','エラー: '+r.error)},
-        error(xhr){jSt('invalid',xhr.responseJSON?xhr.responseJSON.error:'保存エラー')},complete(){$('#loading').hide()}});
-}
-function jSt(t,m){const $s=$('#j-st');$s.removeClass('valid invalid info').addClass(t).text(m).show();if(t!=='invalid')setTimeout(()=>$s.fadeOut(),4000)}
-function jUpd(){const e=document.getElementById('json-editor');if(!e)return;const t=e.value;$('#j-sz').text(t.length+'字');if(t.trim()){try{JSON.parse(t);e.classList.remove('ji');e.classList.add('jv')}catch{e.classList.remove('jv');e.classList.add('ji')}}else{e.classList.remove('jv','ji')}}
-$(document).on('input','#json-editor',function(){jDirty=true;jUpd()});
-$(document).on('click keyup','#json-editor',function(){const t=this.value.substring(0,this.selectionStart),l=t.split('\n');$('#j-cur').text(`行:${l.length}, 列:${l[l.length-1].length+1}`)});
-$(document).on('keydown','#json-editor',function(e){if(e.key==='Tab'){e.preventDefault();const s=this.selectionStart;this.value=this.value.substring(0,s)+'  '+this.value.substring(this.selectionEnd);this.selectionStart=this.selectionEnd=s+2;jDirty=true}});
-
-// ========== JSONインポート（admin専用・管理タブ） ==========
-let impData=null;
-const IMP_BADGE={new:'<span class="badge badge-info">🆕 新規</span>',newer:'<span class="badge badge-warning">⬆ 更新あり</span>',same:'<span class="badge badge-success">変更なし</span>',older:'<span class="badge badge-danger">ローカルが新しい</span>',unknown:'<span class="badge" style="background:#e5e7eb;color:#374151">日時なし</span>'};
-let impHasPackages=false, impCore=[];
-// 管理タブを開くたびに入力状態を初期化する（モーダルを廃し、タブに直接埋め込んだため）
-function openImport(){
-    impData=null;impHasPackages=false;impCore=[];$('#imp-file').val('');
-    $('#imp-meta,#imp-listwrap,#imp-batchwrap,#imp-result,#imp-core').hide();
-    $('#imp-table tbody, #imp-batch-table tbody').empty();$('#imp-result').empty();$('#imp-count,#imp-batch-count').empty();
-    $('#imp-core-list,#imp-core-result').empty();$('#imp-core-go').prop('disabled',false);
-    $('#imp-all,#imp-newer,#imp-batch-go').hide().prop('disabled',true);
-}
-$('#imp-file').change(function(){
+// ========== 全アプリパッケージからの取り込み（管理タブ・v3） ==========
+let OV=null, OVROWS=[];
+const ST_BADGE={new:'<span class="badge badge-info">🆕 新規</span>',newer:'<span class="badge badge-warning">⬆ 更新あり</span>',same:'<span class="badge badge-success">同じ</span>',older:'<span class="badge badge-danger">こちらが新しい</span>',unknown:'<span class="badge badge-gray">比較不能</span>'};
+$('#ov-file').on('change',function(){
     const f=this.files[0];if(!f)return;
     const rd=new FileReader();
     rd.onload=function(ev){
-        let d;
-        try{d=JSON.parse(ev.target.result)}catch(x){showResult('JSONの解析に失敗: '+x.message,true);return}
-        if(!Array.isArray(d.apps)){showResult('apps 配列が見つかりません（エクスポート形式のJSONを指定してください）',true);return}
-        if(d.export_type&&d.export_type!=='fujinp_apps_overview'){showResult('エクスポート形式が異なります: '+d.export_type,true);return}
-        impData=d;
-        impHasPackages=d.apps.some(a=>a&&a.package);
-        impCore=Array.isArray(d.core_schemas)?d.core_schemas:[];
-        $('#imp-meta').html(`✅ <strong>${esc(d.site_name||'(サイト名なし)')}</strong> のエクスポート ／ 生成: ${esc(d.generated_at||'不明')} ／ ${d.apps.length}アプリ ／ ${impHasPackages?'📦 パッケージ入り（個別取り込み可）':'説明のみ（軽量）'}`).show();
-        $('#imp-result').hide().empty();
-        renderCoreSchemas();
-        if(impHasPackages){
-            $('#imp-listwrap,#imp-all,#imp-newer').hide();
-            refreshBatchPreview();
-        }else{
-            $('#imp-batchwrap,#imp-batch-go').hide();
-            $('#imp-all,#imp-newer').show();
-            refreshImpPreview();
-        }
+        try{OV=JSON.parse(ev.target.result)}catch(e){showResult('JSON として読めません',true);return}
+        $.ajax({url:'/app_share/package/site/check',method:'POST',contentType:'application/json',data:JSON.stringify(OV),
+            success(r){if(!r.success){showResult(r.error,true);return}OVROWS=r.apps;renderOv(r)},
+            error(x){showResult('検証失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}});
     };
     rd.readAsText(f,'utf-8');
 });
-// --- ① 必須テーブルのスキーマ宣言 ---
-function renderCoreSchemas(){
-    const cs=(impCore||[]).filter(x=>x&&x.create_sql);
-    if(!cs.length){$('#imp-core').hide();return}
-    $('#imp-core-list').html(cs.map(x=>`🗄 <code>${esc(x.database||'default')}</code> . <code>${esc(x.table)}</code>`).join('<br>'));
-    $('#imp-core-sql').val(cs.map(x=>x.create_sql.replace(/^\s*CREATE\s+TABLE\s+/i,'CREATE TABLE IF NOT EXISTS ').replace(/;?\s*$/,';')).join('\n\n'));
-    $('#imp-core-result').empty();$('#imp-core-go').prop('disabled',false);
-    $('#imp-core').show();
-}
-function doImportCore(){
-    const cs=(impCore||[]).filter(x=>x&&x.create_sql);
-    if(!cs.length)return;
-    if(!confirm(`必須テーブル ${cs.length}件を CREATE TABLE IF NOT EXISTS で宣言します。よろしいですか？`))return;
-    $('#loading').show();$('#imp-core-go').prop('disabled',true);
-    $.ajax({url:'/app_share/import_core_schema',method:'POST',contentType:'application/json',
-        data:JSON.stringify({schemas:cs}),
-        success(r){
-            if(!r.success){showResult('エラー: '+r.error,true);$('#imp-core-go').prop('disabled',false);return}
-            showResult(r.message,false);
-            let h=`<div class="success-box" style="margin:0"><strong>✅ ${esc(r.message)}</strong><ul class="plain" style="margin:6px 0 0 1.2em">`;
-            (r.results||[]).forEach(x=>{
-                const ic=x.status==='created'?'🆕':(x.status==='exists'?'✓':'❌');
-                h+=`<li>${ic} ${esc(x.database||'')} . ${esc(x.table)}${x.error?' - '+esc(x.error):''}</li>`;
-            });
-            h+='</ul></div>';
-            $('#imp-core-result').html(h);
-        },
-        error(xhr){showResult('スキーマ宣言エラー: '+(xhr.responseJSON?.error||xhr.statusText),true);$('#imp-core-go').prop('disabled',false)},
-        complete(){$('#loading').hide()}});
-}
-
-function refreshImpPreview(){
-    if(!impData)return;$('#loading').show();
-    $.ajax({url:'/app_share/import_preview',method:'POST',contentType:'application/json',
-        data:JSON.stringify({apps:impData.apps.map(a=>({app_name:a.app_name,updated_at:a.updated_at||null}))}),
-        success(r){
-            if(!r.success){showResult('エラー: '+r.error,true);return}
-            const $t=$('#imp-table tbody').empty();
-            const byName={};impData.apps.forEach(a=>{byName[a.app_name]=a});
-            let updCount=0;
-            r.results.forEach(x=>{
-                if(x.status==='new'||x.status==='newer')updCount++;
-                const a=byName[x.app_name]||{};
-                $t.append(`<tr><td>${a.icon||'📦'} ${esc(a.display_name||x.app_name)}<div style="font-size:.75rem;color:#999">${esc(x.app_name)}</div></td><td>${x.import_updated_at||'-'}</td><td>${x.local_updated_at||'-'}</td><td>${IMP_BADGE[x.status]||x.status}</td></tr>`);
-            });
-            $('#imp-listwrap').show();
-            $('#imp-count').html(`<div class="info-box" style="margin:0">🆕/⬆ 新規・更新あり: <strong>${updCount}件</strong>（「新しいものだけ上書き」の対象）</div>`);
-            $('#imp-all,#imp-newer').prop('disabled',false);
-        },
-        error(){showResult('比較エラー',true)},complete(){$('#loading').hide()}});
-}
-function doImport(mode){
-    if(!impData)return;
-    const label=mode==='all'?'全アプリを上書き':'新しいものだけ上書き';
-    if(!confirm(`${label}を実行しますか？\nレジストリ・仕様書・マニュアルが更新されます。`))return;
-    $('#loading').show();
-    $.ajax({url:'/app_share/import_apps',method:'POST',contentType:'application/json',
-        data:JSON.stringify({mode:mode,apps:impData.apps}),
-        success(r){
-            if(!r.success){showResult('エラー: '+r.error,true);return}
-            showResult(r.message,false);
-            let h=`<div class="success-box"><strong>✅ ${esc(r.message)}</strong><ul style="margin:8px 0 0 1.2em">`;
-            r.results.forEach(x=>{
-                const ic=x.action==='imported'?'✅':(x.action==='skipped'?'⏭':'❌');
-                h+=`<li>${ic} ${esc(x.app_name)} - ${esc(x.reason||x.action)}</li>`;
-            });
-            h+='</ul></div>';
-            $('#imp-result').html(h).show();
-            loadLocalApps();refreshImpPreview();
-        },
-        error(xhr){showResult('インポートエラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},complete(){$('#loading').hide()}});
-}
-
-// ---- パッケージ入りJSON: 選択して個別アプリ取り込みを一括実行 ----
-const BATCH_VBADGE={new:'<span class="badge badge-info">🆕 新規</span>',newer:'<span class="badge badge-warning">⬆ 更新あり</span>',same:'<span class="badge badge-success">変更なし</span>',older:'<span class="badge badge-danger">ローカルが新しい</span>',unknown:'<span class="badge" style="background:#e5e7eb;color:#374151">日時なし</span>'};
-function refreshBatchPreview(){
-    if(!impData)return;$('#loading').show();
-    $.ajax({url:'/app_share/import_site_preview',method:'POST',contentType:'application/json',
-        data:JSON.stringify({apps:impData.apps.map(a=>({app_name:a.app_name,updated_at:a.updated_at||null,has_package:!!a.package}))}),
-        success(r){
-            if(!r.success){showResult('エラー: '+r.error,true);return}
-            const byName={};impData.apps.forEach(a=>{byName[a.app_name]=a});
-            const $t=$('#imp-batch-table tbody').empty();
-            r.results.forEach(x=>{
-                const a=byName[x.app_name]||{};
-                const dis=x.has_package?'':'disabled title="このアプリにはパッケージが含まれていません"';
-                const chk=(x.default_selected)?'checked':'';
-                $t.append(`<tr>
-                    <td><input type="checkbox" class="imp-chk" value="${esc(x.app_name)}" ${chk} ${dis}></td>
-                    <td>${a.icon||'📦'} ${esc(a.display_name||x.app_name)}<div style="font-size:.75rem;color:#999">${esc(x.app_name)}</div></td>
-                    <td>${x.has_package?'<span class="badge badge-success">あり</span>':'<span class="badge badge-gray">なし</span>'}</td>
-                    <td>${x.local_dir_exists?'<span class="badge badge-info">既存</span>':'<span class="badge" style="background:#e5e7eb;color:#374151">新規</span>'}</td>
-                    <td>${BATCH_VBADGE[x.version_status]||esc(x.version_status)}</td>
-                </tr>`);
-            });
-            $('#imp-batchwrap,#imp-batch-go').show();
-            $('#imp-batch-go').prop('disabled',false);
-            updateBatchCount();
-        },
-        error(){showResult('比較エラー',true)},complete(){$('#loading').hide()}});
-}
-function batchSelect(which){
-    if(which==='all')$('.imp-chk:not(:disabled)').prop('checked',true);
-    else if(which==='none')$('.imp-chk').prop('checked',false);
-    else if(which==='updated'){
-        $('.imp-chk').each(function(){
-            const st=$(this).closest('tr').find('td:last .badge').text();
-            $(this).prop('checked',!$(this).prop('disabled')&&(st.indexOf('新規')>=0||st.indexOf('更新')>=0));
-        });
-    }
-    updateBatchCount();
-}
-$(document).on('change','.imp-chk',updateBatchCount);
-function updateBatchCount(){
-    const n=$('.imp-chk:checked').length;
-    $('#imp-batch-count').html(`<div class="info-box" style="margin:0">選択中: <strong>${n}件</strong>。実行すると各アプリで個別取り込み（事前バックアップ→ファイル置換→説明/マニュアル/仕様書更新）が走ります。SQL・pip・ランチャは実行後に案内表示します（自動実行しません）。</div>`);
-    $('#imp-batch-go').prop('disabled',n===0);
-}
-function doBatchImport(){
-    const names=$('.imp-chk:checked').map(function(){return $(this).val()}).get();
-    if(!names.length){alert('取り込むアプリを選択してください');return}
-    const byName={};impData.apps.forEach(a=>{byName[a.app_name]=a});
-    const packages=names.map(n=>byName[n]&&byName[n].package).filter(Boolean);
-    if(!packages.length){showResult('選択アプリにパッケージが見つかりません',true);return}
-    if(!confirm(`${packages.length}件のアプリを取り込みます。\n各アプリのファイルが置き換えられ（事前バックアップあり）、説明・マニュアル・仕様書が更新されます。よろしいですか？`))return;
-    $('#loading').show();
-    $.ajax({url:'/app_share/import_site_apply',method:'POST',contentType:'application/json',
-        data:JSON.stringify({packages:packages}),
-        success(r){
-            if(!r.success){showResult('エラー: '+r.error,true);return}
-            showResult(r.message,false);
-            $('#imp-result').html(renderBatchResults(r)).show();
-            loadLocalApps();refreshBatchPreview();
-        },
-        error(xhr){showResult('取り込みエラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},complete(){$('#loading').hide()}});
-}
-let _copyId=0;
-function copyEl(id,btn){const el=document.getElementById(id);if(!el)return;const t=el.value!==undefined?el.value:el.textContent;
-    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{$(btn).text('✅ コピー済み');setTimeout(()=>$(btn).text('📋 コピー'),2000)}).catch(()=>{el.select&&el.select();document.execCommand('copy')})}
-function renderBatchResults(r){
-    let h=`<div class="success-box"><strong>✅ ${esc(r.message)}</strong></div>`;
-    (r.results||[]).forEach(x=>{
-        if(!x.ok){h+=`<div class="warning-box">❌ <strong>${esc(x.app_name)}</strong> - ${esc(x.error||'失敗')}</div>`;return}
-        h+=`<div class="vs"><div class="vs-h">✅ ${esc(x.display_name||x.app_name)} <span style="font-weight:400;color:#666">（${esc(x.app_name)}）${x.written}ファイル置換${x.backup?' / backup: '+esc(x.backup):''}</span></div><div class="vs-b">`;
-        (x.file_errors||[]).forEach(e=>{h+=`<div style="color:#991b1b;font-size:.82rem">⚠ ${esc(e)}</div>`});
-        const g=x.guidance||{};
-        if(g.sql){const id='cg-sql-'+(_copyId++);h+=`<div style="margin-top:6px"><strong>🗄 実行するSQL</strong><textarea id="${id}" readonly style="width:100%;min-height:70px;font-family:monospace;font-size:.8rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(g.sql)}</textarea><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`;}
-        if(g.pip){const id='cg-pip-'+(_copyId++);h+=`<div style="margin-top:6px"><strong>📚 未インストールのライブラリ</strong><textarea id="${id}" readonly style="width:100%;min-height:40px;font-family:monospace;font-size:.8rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(g.pip)}</textarea><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`;}
-        (g.launchers||[]).forEach(l=>{const id='cg-ln-'+(_copyId++);h+=`<div style="margin-top:6px"><strong>🔗 ランチャ（${esc(l.source||'')} → ダッシュボードに貼付）</strong><textarea id="${id}" readonly style="width:100%;min-height:60px;font-family:monospace;font-size:.8rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(l.snippet)}</textarea><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`;});
-        if(g.blueprint){const id='cg-bp-'+(_copyId++);h+=`<div style="margin-top:6px"><strong>🧩 app.py へ追加するBlueprint登録</strong>（新規アプリの場合）<textarea id="${id}" readonly style="width:100%;min-height:60px;font-family:monospace;font-size:.8rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(g.blueprint)}</textarea><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`;}
-        if(!g.sql&&!g.pip&&!(g.launchers||[]).length&&!g.blueprint)h+='<div style="font-size:.83rem;color:#065f46">追加のSQL・ライブラリ・ランチャ・Blueprint作業はありません。</div>';
-        h+='</div></div>';
+function renderOv(r){
+    $('#ov-meta').html(`出所: ${esc(r.site.site_name||'-')}　${esc(r.site.generated_at||'')}　${esc(r.site.generated_by||'')}　アプリ ${OVROWS.length} 件`).show();
+    const $tb=$('#ov-table tbody').empty();
+    OVROWS.forEach((a,i)=>{
+        const chk=(a.status==='new'||a.status==='newer');
+        $tb.append(`<tr><td><input type="checkbox" class="ov-chk" data-i="${i}" ${chk?'checked':''}></td>
+            <td>${esc(a.icon)} <b>${esc(a.display_name)}</b><br><code>${esc(a.app_name)}</code>${a.dir_exists?'':' <span class="badge badge-gray">ディレクトリなし</span>'}</td>
+            <td><code>${esc(a.package_version||'未確定')}</code><br><span style="font-size:.75rem;color:#64748b">${esc(a.package_updated_at||'')}</span></td>
+            <td><code>${esc(a.local_version||'未登録')}</code><br><span style="font-size:.75rem;color:#64748b">${esc(a.local_updated_at||'')}</span></td>
+            <td>${ST_BADGE[a.status]||esc(a.status)}</td>
+            <td><a href="#" onclick="ovOne(${i});return false" style="font-size:.8rem">個別に検証</a></td></tr>`);
     });
-    h+='<div class="warning-box">🔄 取り込み後は <strong>Webアプリのリロード</strong>が必要です。上のSQL・pip・ランチャは自動実行されません。新規アプリは app.py への Blueprint 登録も別途必要です。</div>';
-    return h;
+    $('#ov-wrap').show();$('#ov-result').hide();ovCount();
+    $('.ov-chk').on('change',ovCount);
 }
+function ovSelect(which){$('.ov-chk').each(function(){const a=OVROWS[+$(this).data('i')];$(this).prop('checked',which==='all'?true:which==='none'?false:(a.status==='new'||a.status==='newer'))});ovCount()}
+function ovCount(){$('#ov-count').text('選択 '+$('.ov-chk:checked').length+' 件')}
+function ovOne(i){
+    // 個別の取り込み画面で検証する（1アプリ分のパッケージを一時的にセッションストレージへ）
+    const pkg=OV.apps.find(p=>p.app_name===OVROWS[i].app_name);
+    try{sessionStorage.setItem('apsha_pkg',JSON.stringify(pkg));location.href='/app_share/package/import?app='+encodeURIComponent(pkg.app_name)+'&from=session'}
+    catch(e){showResult('パッケージが大きすぎます．個別に📦エクスポート→📥取り込みで．',true)}
+}
+async function ovApply(){
+    const sel=$('.ov-chk:checked').map(function(){return +$(this).data('i')}).get();
+    if(!sel.length){showResult('取り込むアプリを選んでください',true);return}
+    if(!confirm(`${sel.length} 件を順に取り込みます（ファイル配置・正本・文書・台帳・テーブル・不具合・発行）．\n既存ディレクトリは import_backups に退避されます．\nよろしいですか？`))return;
+    const applyTables=$('#ov-tables').is(':checked');
+    let h='';let needReload=false;
+    $('#ov-result').html('<p>⏳ 取り込み中…</p>').show();
+    for(const i of sel){
+        const a=OVROWS[i];const pkg=OV.apps.find(p=>p.app_name===a.app_name);
+        try{
+            const r=await fetch('/app_share/package/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,options:{apply_tables:applyTables}})});
+            const j=await r.json();
+            if(j.success){const x=j.result;needReload=needReload||x.need_reload;
+                h+=`<div class="success-box" style="margin-bottom:6px">✅ ${esc(a.display_name)}（${esc(a.app_name)}）ファイル ${x.files.written} 件，テーブル ${x.tables_executed.length} 文，不具合 ${x.issues_added} 件${x.files.errors.length?'　<span style="color:#991b1b">'+x.files.errors.map(esc).join(', ')+'</span>':''}</div>`;}
+            else h+=`<div class="error-box" style="margin-bottom:6px">❌ ${esc(a.app_name)}: ${esc(j.error||'')}</div>`;
+        }catch(e){h+=`<div class="error-box" style="margin-bottom:6px">❌ ${esc(a.app_name)}: ${esc(e.message)}</div>`}
+        $('#ov-result').html(h);
+    }
+    if(needReload)h+='<div class="warning-box">🔄 Reload が必要です（コードの置き換え，または Blueprint の追加）． <button class="primary btn-sm" onclick="reloadSite()">Reload</button></div>';
+    $('#ov-result').html(h);loadLocalApps();
+}
+function reloadSite(){$.ajax({url:'/app_share/api/reload',method:'POST',contentType:'application/json',data:'{}',success(r){showResult(r.reloaded?'Reload を要求しました（数秒〜十数秒お待ちください）':'Reload の要求に失敗（Web タブから手動で）',!r.reloaded)}})}
 
-
-// ========== ガーベージコレクション（admin専用・破壊的） ==========
-// UI入口は当面設けない（破壊的操作のため）。エンドポイント（/app_share/gc_*）と
-// 以下のコードは温存してあり、openGC() を呼ぶボタンを管理タブに追加すれば復活する。
-let gcToken=null, gcReport=null;
-function gcHideConfirm(){$('#gc-warn,#gc-confirm-label,#gc-confirm,#gc-exec-btn').hide()}
-function gcShowConfirm(){$('#gc-warn').show();$('#gc-confirm-label,#gc-exec-btn').css('display','inline-block');$('#gc-confirm').css('display','inline-block')}
-function openGC(){
-    gcToken=null;gcReport=null;
-    $('#gc-preview-area,#gc-result').hide().empty();$('#gc-progress').hide();
-    gcHideConfirm();
-    $('#gc-confirm').val('');$('#gc-exec-btn').prop('disabled',true);
-    $('#gc-download').hide();$('#gc-preview-btn').prop('disabled',false);
-    $('#gc-modal').addClass('active');
-}
-function closeGC(){$('#gc-modal').removeClass('active')}
-$('#gc-modal').click(function(e){if(e.target===this)closeGC()});
-function gcSetProgress(done,total,label){
-    const pct=total?Math.round(done/total*100):0;
-    $('#gc-progress-bar').css('width',pct+'%');
-    $('#gc-progress-label').text(`解析中… ${done}/${total}`+(label?'（'+label+'）':''));
-}
-function runGCPreview(){
-    gcToken=null;gcReport=null;
-    $('#gc-result').hide().empty();$('#gc-preview-area').hide().empty();$('#gc-download').hide();
-    gcHideConfirm();
-    $('#gc-preview-btn').prop('disabled',true);
-    $('#gc-progress').show();gcSetProgress(0,1,'準備中');
-    $.ajax({url:'/app_share/gc_preview_init',method:'POST',contentType:'application/json',data:'{}',
-        success(r){
-            if(!r.success){gcPreviewFail(r.error);return}
-            const token=r.token,total=r.total;
-            gcSetProgress(0,total,'開始');
-            gcStep(token,0,total);
-        },
-        error(xhr){gcPreviewFail(xhr.responseJSON?.error||xhr.statusText)}});
-}
-function gcStep(token,index,total){
-    if(index>=total){gcFinish(token);return}
-    $.ajax({url:'/app_share/gc_preview_step',method:'POST',contentType:'application/json',
-        data:JSON.stringify({token:token,index:index}),
-        success(r){
-            if(!r.success){gcPreviewFail(r.error);return}
-            gcSetProgress(r.processed,r.total,r.label);
-            gcStep(token,index+1,total);
-        },
-        error(xhr){gcPreviewFail(xhr.responseJSON?.error||xhr.statusText)}});
-}
-function gcFinish(token){
-    $('#gc-progress-label').text('集計中…');
-    $.ajax({url:'/app_share/gc_preview_finish',method:'POST',contentType:'application/json',
-        data:JSON.stringify({token:token}),
-        success(r){
-            $('#gc-progress').hide();$('#gc-preview-btn').prop('disabled',false);
-            if(!r.success){gcPreviewFail(r.error);return}
-            gcToken=r.token;
-            gcRenderPreview(r);
-        },
-        error(xhr){gcPreviewFail(xhr.responseJSON?.error||xhr.statusText)}});
-}
-function gcPreviewFail(msg){
-    $('#gc-progress').hide();$('#gc-preview-btn').prop('disabled',false);
-    showResult('プレビューエラー: '+msg,true);
-}
-function gcRenderPreview(r){
-    let h=`<div class="info-box" style="margin:0 0 10px">対象ベース: <code>${esc(r.details.base_dir)}</code><br>削除ディレクトリ: <strong>${r.dir_count}件</strong> ／ DROPするテーブル: <strong>${r.table_count}件</strong></div>`;
-    // 残す方の app.py Blueprint 登録（主役）
-    if(r.details.blueprint_keep){
-        h+=`<h3>🧩 削除後の app.py Blueprint登録（この内容で置き換え）</h3>
-            <div style="font-size:.8rem;color:#64748b;margin-bottom:4px">生き残るアプリ全部の登録です。app.py の該当ブロックをこれで置き換えてください（fujinp配下以外＝auth等の行はそのまま残す）。</div>
-            <textarea id="gc-bpkeep" readonly style="width:100%;min-height:180px;font-family:monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(r.details.blueprint_keep)}</textarea>
-            <div><button class="secondary btn-sm" onclick="copyEl('gc-bpkeep',this)">📋 コピー</button></div>`;
-    }
-    // dirs
-    h+='<h3>📁 削除するディレクトリ（未登録アプリ）</h3>';
-    if(r.plan.dirs.length){h+='<div class="gc-list">'+r.plan.dirs.map(d=>'🗑 '+esc(d)).join('<br>')+'</div>';}
-    else{h+='<p class="muted" style="color:#065f46">削除対象のディレクトリはありません。</p>';}
-    // tables per db
-    h+='<h3>🗄 DROPするテーブル</h3>';
-    let anyTbl=false;
-    (r.details.databases||[]).forEach(db=>{
-        h+=`<div class="gc-list"><div class="gc-db">DB: ${esc(db.database)}${db.error?' <span style="color:#991b1b">（接続エラー: '+esc(db.error)+'）</span>':''}</div>`;
-        const drop=db.tables_to_drop||[];
-        if(drop.length){anyTbl=true;h+=drop.map(t=>'🗑 '+esc(t)).join('<br>');}
-        else if(!db.error){h+='<span style="color:#065f46">DROP対象なし</span>';}
-        h+='</div>';
-    });
-    if(!anyTbl){h+='<p class="muted" style="color:#065f46">DROP対象のテーブルはありません。</p>';}
-    // blueprint unregister（外す方・折りたたみ）
-    if(r.details.blueprint_unregister){
-        h+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:.85rem;color:#64748b">🧩 参考: 削除するアプリの登録（外す行）</summary>
-            <textarea id="gc-bp" readonly style="width:100%;min-height:70px;font-family:monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px;margin-top:6px">${esc(r.details.blueprint_unregister)}</textarea>
-            <div><button class="secondary btn-sm" onclick="copyEl('gc-bp',this)">📋 コピー</button></div></details>`;
-    }
-    // kept summary
-    h+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:.85rem;color:#64748b">保持されるもの（参考）</summary>
-        <div style="font-size:.82rem;color:#475569;margin-top:6px">登録アプリ: ${(r.details.registered_apps||[]).map(esc).join(', ')||'なし'}<br>
-        保護ディレクトリ・非アプリのディレクトリ: ${(r.details.kept_dirs||[]).concat(r.details.non_app_dirs_skipped||[]).map(esc).join(', ')||'なし'}<br>
-        <span style="color:#64748b">${esc(r.details.match_note||'')}</span></div></details>`;
-    $('#gc-preview-area').html(h).show();
-    $('#gc-confirm').val('');$('#gc-exec-btn').prop('disabled',true);
-    if(r.dir_count+r.table_count>0){gcShowConfirm();}
-    else{gcHideConfirm();showResult('削除対象はありませんでした。',false);}
-}
-function gcConfirmChanged(){
-    $('#gc-exec-btn').prop('disabled', $('#gc-confirm').val()!=='DELETE' || !gcToken);
-}
-function runGCExecute(){
-    if(!gcToken||$('#gc-confirm').val()!=='DELETE')return;
-    if(!confirm('本当に削除しますか？この操作は元に戻せません。'))return;
-    $('#loading').show();
-    $.ajax({url:'/app_share/gc_execute',method:'POST',contentType:'application/json',
-        data:JSON.stringify({token:gcToken,confirm:'DELETE'}),
-        success(r){
-            if(!r.success){
-                showResult('実行エラー: '+r.error,true);
-                if(r.changed){gcHideConfirm();$('#gc-preview-area').hide();$('#gc-confirm').val('');}
-                return;
-            }
-            gcReport=r;
-            let h=`<div class="success-box"><strong>✅ 完了</strong> — ディレクトリ ${r.deleted_dir_count}件削除 ／ テーブル ${r.dropped_table_count}件DROP（${esc(r.generated_at)}）</div>`;
-            h+='<h3>🗑 削除したディレクトリ</h3>';
-            h+=r.deleted_dirs.length?('<div class="gc-list">'+r.deleted_dirs.map(esc).join('<br>')+'</div>'):'<p class="muted">なし</p>';
-            h+='<h3>🗑 DROPしたテーブル</h3>';
-            h+=r.dropped_tables.length?('<div class="gc-list">'+r.dropped_tables.map(t=>esc(t.database)+' . '+esc(t.table)).join('<br>')+'</div>'):'<p class="muted">なし</p>';
-            if(r.blueprint_keep){h+=`<h3>🧩 削除後の app.py Blueprint登録（この内容で置き換え）</h3><div style="font-size:.8rem;color:#64748b;margin-bottom:4px">生き残るアプリ全部の登録です。app.py の該当ブロックをこれで置き換えてリロードしてください（auth等の fujinp配下以外の行は残す）。</div><textarea id="gc-bpk2" readonly style="width:100%;min-height:180px;font-family:monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px">${esc(r.blueprint_keep)}</textarea><div><button class="secondary btn-sm" onclick="copyEl('gc-bpk2',this)">📋 コピー</button></div>`;}
-            if(r.blueprint_unregister){h+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:.85rem;color:#64748b">🧩 参考: 削除したアプリの登録（外す行）</summary><textarea id="gc-bp2" readonly style="width:100%;min-height:70px;font-family:monospace;font-size:.82rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px;margin-top:6px">${esc(r.blueprint_unregister)}</textarea><div><button class="secondary btn-sm" onclick="copyEl('gc-bp2',this)">📋 コピー</button></div></details>`;}
-            const errs=(r.dir_errors||[]).concat([]);
-            if((r.dir_errors||[]).length||(r.table_errors||[]).length){
-                h+='<h3 style="color:#991b1b">⚠ エラー・スキップ</h3><div class="gc-list">';
-                (r.dir_errors||[]).forEach(e=>{h+='📁 '+esc(e.name)+': '+esc(e.error)+'<br>'});
-                (r.table_errors||[]).forEach(e=>{h+='🗄 '+esc(e.database||'')+(e.table?'.'+esc(e.table):'')+': '+esc(e.error)+'<br>'});
-                h+='</div>';
-            }
-            $('#gc-result').html(h).show();
-            gcHideConfirm();
-            $('#gc-download').show();
-            loadLocalApps();
-            showResult('ガーベージコレクションを実行しました。',false);
-        },
-        error(xhr){showResult('実行エラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},
-        complete(){$('#loading').hide()}});
-}
-function downloadGCReport(){
-    if(!gcReport)return;
-    const blob=new Blob([JSON.stringify(gcReport,null,2)],{type:'application/json'});
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='gc_report_'+(gcReport.generated_at||'').replace(/[^0-9]/g,'')+'.json';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-}
-
-// ========== アプリ管理（診断・管理ノート、admin専用） ==========
-let mgApp=null, mgDiag=null, _mgId=0;
-function openMgmt(name){mgApp=name;$('#mg-app').text(name);$('#mg-body').html('<p style="color:#9ca3af">診断中...</p>');$('#mgmt-modal').addClass('active');runDiag();}
-function closeMgmt(){$('#mgmt-modal').removeClass('active');mgApp=null;mgDiag=null}
-$('#mgmt-modal').click(function(e){if(e.target===this)closeMgmt()});
-function mgOK(b,ok,ng){return b?('<span class="badge badge-success">✅ '+(ok||'あり')+'</span>'):('<span class="badge badge-danger">❌ '+(ng||'なし')+'</span>')}
-function mgBox(title,inner,status){return `<div class="vs"><div class="vs-h" style="display:flex;justify-content:space-between;align-items:center"><span>${title}</span><span>${status||''}</span></div><div class="vs-b">${inner}</div></div>`}
-function mgSql(id,text,rows){return `<textarea id="${id}" readonly style="width:100%;min-height:${rows||70}px;font-family:monospace;font-size:.8rem;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:8px;margin-top:4px">${esc(text)}</textarea>`}
-function runDiag(){
-    if(!mgApp)return;$('#loading').show();
-    $.ajax({url:'/app_share/app_diagnosis/'+encodeURIComponent(mgApp),
-        success(r){
-            if(!r.success){showResult('診断エラー: '+r.error,true);return}
-            mgDiag=r.diagnosis;renderDiag(r.diagnosis);
-        },
-        error(xhr){showResult('診断エラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},
-        complete(){$('#loading').hide()}});
-}
-function renderDiag(d){
-    let h='';
-    // 📦 ファイル構成
-    const f=d.files||{};
-    h+=mgBox('📦 ファイル構成',
-        `ディレクトリ ${mgOK(f.dir_exists)}　__init__.py ${mgOK(f.has_init)}　routes.py ${mgOK(f.has_routes)}　templates ${mgOK(f.has_templates)}　app_info ${mgOK(f.has_app_info)}`,
-        (f.dir_exists&&f.has_init)?'<span class="badge badge-success">OK</span>':'<span class="badge badge-danger">要確認</span>');
-    // 🗂 レジストリ
-    const g=d.registry||{};
-    h+=mgBox('🗂 レジストリ（カード表示）',
-        g.registered?`登録済み: ${esc(g.icon||'')} ${esc(g.display_name||'')}　<span style="font-size:.8rem;color:#64748b">版: ${esc(g.updated_at||'-')}　ID: <code>${esc(g.version_id||'-')}</code></span>`
-            :`未登録です。 <button class="primary btn-sm" onclick="mgRegAdd()">＋ レジストリに登録</button>`,
-        mgOK(g.registered,'登録済み','未登録'));
-    // 🧩 Blueprint
-    const b=d.blueprint||{};
-    let bph='';
-    if(!b.defined){bph='<span style="font-size:.85rem;color:#991b1b">Blueprint 定義が見つかりません（__init__.py / routes.py を確認してください）。</span>';}
-    else{
-        bph=b.registered_in_app_py
-            ?'<div style="color:#065f46;font-size:.85rem">app.py に登録済みです。</div>'
-            :'<div style="color:#991b1b;font-size:.85rem">app.py に未登録の可能性があります。以下を app.py に追記してリロードしてください。</div>';
-        if(b.snippet){const id='mg-bp-'+(_mgId++);bph+=mgSql(id,b.snippet)+`<div style="margin-top:4px"><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`}
-    }
-    h+=mgBox('🧩 Blueprint登録（app.py）',bph,
-        b.defined?mgOK(b.registered_in_app_py,'登録済み','未登録?'):'<span class="badge badge-gray">不明</span>');
-    // 🔗 ランチャ
-    let lh='',lfound=false;
-    (d.launchers||[]).forEach(l=>{
-        lh+=`<div style="margin-bottom:6px"><strong style="font-size:.85rem">${esc(l.source)}</strong>: ${l.found?'<span class="badge badge-success">✅ あり</span>':'<span class="badge badge-warning">なし</span>'}`;
-        if(l.found&&l.snippet){lfound=true;const id='mg-ln-'+(_mgId++);lh+=mgSql(id,l.snippet,60)+`<div style="margin-top:4px"><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`}
-        lh+='</div>';
-    });
-    h+=mgBox('🔗 ランチャ（ダッシュボード掲載）',lh||'<span style="color:#64748b;font-size:.85rem">情報なし</span>',
-        lfound?'<span class="badge badge-success">OK</span>':'<span class="badge badge-warning">未設置?</span>');
-    // 🗄 SQLテーブル
-    // 1テーブル = ヘッダ1行（名前・バッジ・ボタン・確認結果を左から並べる）＋ SQL。
-    // テーブル間は破線（---）で仕切る。
-    let th='',tmiss=0;
-    const tbls=d.tables||[];
-    if(!tbls.length)th='<span style="color:#64748b;font-size:.85rem">スキーマ情報（app_info.json の mysql_schema / schema.sql）が見つかりません。</span>';
-    const mgRow=(inner)=>`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inner}</div>`;
-    const mgHr='<hr style="border:none;border-top:1px dashed #cbd5e1;margin:12px 0">';
-    tbls.forEach((t,i)=>{
-        if(i>0)th+=mgHr;
-        const id='mg-tb-'+i;
-        const nm=`<code style="font-weight:700">${esc(t.table)}</code>`;
-        if(t.status==='missing'){
-            tmiss++;
-            th+=mgRow(`${nm} <span class="badge badge-danger">❌ 未作成</span>
-                <button class="primary btn-sm" onclick="copyEl('${id}',this)">📋 コピーしてMySQLコンソールで実行</button>
-                <button class="success btn-sm" onclick="mgTblCheck(${i},'${id}')">✅ 実行後確認</button>
-                <span id="${id}-st"></span>`)+mgSql(id,t.create_sql||'');
-        }else if(t.status==='diff'&&t.alter_sql){
-            th+=mgRow(`${nm} <span class="badge badge-warning">⚠ カラム不足</span>
-                <button class="primary btn-sm" onclick="copyEl('${id}',this)">📋 コピーしてMySQLコンソールで実行</button>
-                <button class="success btn-sm" onclick="mgTblCheck(${i},'${id}')">✅ 実行後確認</button>
-                <span id="${id}-st"></span>`)+mgSql(id,t.alter_sql,50);
-        }else if(t.status==='same'||t.status==='diff'){
-            th+=mgRow(`${nm} <span class="badge badge-success">✅ 作成済み</span>${t.database?' <span style="font-size:.75rem;color:#64748b">('+esc(t.database)+')</span>':''}${(t.status==='diff')?' <span style="font-size:.75rem;color:#92400e">※定義差あり（追加不要）</span>':''}`);
-        }else{
-            th+=mgRow(`${nm} <span class="badge badge-gray">${esc(t.status)}</span>`);
-        }
-    });
-    h+=mgBox('🗄 SQLテーブル（技術仕様書のスキーマと照合）',th,
-        tbls.length?(tmiss?`<span class="badge badge-danger">未作成 ${tmiss}件</span>`:'<span class="badge badge-success">OK</span>'):'<span class="badge badge-gray">-</span>');
-    // 📚 ライブラリ
-    const libs=d.libraries||[];const miss=libs.filter(x=>!x.installed);
-    let ph=libs.length?libs.map(x=>`<code>${esc(x.name)}</code> ${x.installed?'✅':'❌'}`).join('　'):'<span style="color:#64748b;font-size:.85rem">サードパーティ依存なし</span>';
-    if(miss.length){const id='mg-pip-'+(_mgId++);ph+=mgSql(id,'pip install --user '+miss.map(x=>x.pip_name).join(' '),40)+`<div style="margin-top:4px"><button class="secondary btn-sm" onclick="copyEl('${id}',this)">📋 コピー</button></div>`}
-    h+=mgBox('📚 ライブラリ',ph,
-        miss.length?`<span class="badge badge-danger">未検出 ${miss.length}件</span>`:'<span class="badge badge-success">OK</span>');
-    // 📖 ドキュメント
-    // 技術仕様書＝アプリ内の app_info.json（📋 仕様書ボタンで編集）。has_app_info を見る。
-    // dc.spec は doc_type='spec' の「仕様書メモ」で別物。あれば併記する。
-    const dc=d.docs||{};
-    const hasSpec=!!(d.files&&d.files.has_app_info);
-    let docLine=`マニュアル ${mgOK(dc.manual&&dc.manual.exists)}　技術仕様書 ${mgOK(hasSpec)}　管理ノート ${mgOK(dc.note&&dc.note.exists)}`;
-    if(dc.spec&&dc.spec.exists) docLine+=`　仕様書メモ ${mgOK(true)}`;
-    h+=mgBox('📖 ドキュメント',docLine,'');
-    // 🗒 管理ノート
-    const note=dc.note||{};
-    let nh='';
-    if(note.exists&&note.content){
-        nh+=`<div class="md-r" style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;padding:12px;background:#fff">${marked.parse(note.content)}</div>
-            <div style="font-size:.75rem;color:#64748b;margin-top:4px">最終更新: ${esc(note.updated_at||'-')}</div>`;
-    }else{
-        nh+='<div style="color:#9ca3af;font-size:.85rem">まだノートがありません。下から追記するか、エディタで作成してください。</div>';
-    }
-    nh+=`<div style="margin-top:8px">
-        <textarea id="mg-note-quick" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem" placeholder="ここに書いて「追記」→ 日付見出し（## YYYY-MM-DD HH:MM）つきでノート末尾に追加されます"></textarea>
-        <div style="margin-top:4px">
-            <button class="success btn-sm" onclick="mgNoteAppend()">➕ 日付つきで追記</button>
-            <button class="primary btn-sm" onclick="location.href='/app_share/doc/'+encodeURIComponent(mgApp)+'/note/edit'">📝 エディタで編集（Markdown）</button>
-        </div></div>`;
-    h+=mgBox('🗒 管理ノート（admin専用）',nh,
-        note.exists?'<span class="badge badge-success">あり</span>':'<span class="badge badge-gray">なし</span>');
-    h+=`<div style="font-size:.72rem;color:#94a3b8;text-align:right">診断: ${esc(d.generated_at||'')}</div>`;
-    $('#mg-body').html(h);
-}
-function mgRegAdd(){
-    if(!mgApp)return;
-    $.ajax({url:'/app_share/registry/add',method:'POST',contentType:'application/json',
-        data:JSON.stringify({app_name:mgApp,display_name:mgApp,icon:'📦',description:''}),
-        success(r){if(r.success){showResult(r.message,false);loadLocalApps();runDiag();}else showResult('エラー: '+r.error,true)},
-        error(){showResult('登録エラー',true)}});
-}
-function mgTblCheck(i,stPrefix){
-    const t=(mgDiag&&mgDiag.tables||[])[i];if(!t)return;
-    $('#loading').show();
-    $.ajax({url:'/app_share/import_table_check',method:'POST',contentType:'application/json',
-        data:JSON.stringify({table:t.table,create_sql:t.create_sql||''}),
-        success(r){
-            const $st=$('#'+stPrefix+'-st');
-            if(r.success&&r.resolved)$st.html('<span class="badge badge-success">✅ 確認済み・完了</span>');
-            else if(r.success&&r.status==='missing')$st.html('<span class="badge badge-danger">確認できません（未作成）</span>');
-            else if(r.success)$st.html('<span class="badge badge-warning">確認できません（不足カラム: '+(r.added_columns||[]).map(a=>esc(a.name)).join(', ')+'）</span>');
-            else $st.html('<span class="badge badge-danger">確認エラー</span>');
-        },
-        error(){showResult('確認エラー',true)},complete(){$('#loading').hide()}});
-}
-function mgNoteAppend(){
-    const t=$('#mg-note-quick').val().trim();
-    if(!t){alert('追記する内容を入力してください');return}
-    $('#loading').show();
-    $.ajax({url:'/app_share/app_note_append/'+encodeURIComponent(mgApp),method:'POST',contentType:'application/json',
-        data:JSON.stringify({text:t}),
-        success(r){if(r.success){showResult('ノートに追記しました',false);runDiag();}else showResult('エラー: '+r.error,true)},
-        error(xhr){showResult('追記エラー: '+(xhr.responseJSON?.error||xhr.statusText),true)},
-        complete(){$('#loading').hide()}});
-}
 
 // ========== 初期化 ==========
-$(document).ready(function(){
-    loadLocalApps();
-});
+$(document).ready(function(){ loadLocalApps(); });
 </script>
 
 </body>

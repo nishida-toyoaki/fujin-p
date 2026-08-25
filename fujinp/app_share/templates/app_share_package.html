@@ -1,0 +1,158 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📥 パッケージの取り込み - アプシャ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1200px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.header h1{font-size:1.3rem;color:#333}
+.hdr-btns{float:right;display:flex;gap:8px}
+a.btn,button.btn{display:inline-block;padding:7px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#6366f1}
+.btn.gray{background:#64748b}.btn.green{background:#10b981}.btn.amber{background:#f59e0b}.btn.sm{padding:4px 9px;font-size:.75rem}
+.btn:disabled{opacity:.5;cursor:default}
+.panel{background:#fff;padding:20px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:12px}
+.panel h2{font-size:1.05rem;color:#333;margin-bottom:8px}
+.panel h3{font-size:.92rem;color:#4338ca;margin:14px 0 6px}
+.hint{font-size:.8rem;color:#64748b;line-height:1.5;margin-bottom:8px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600;white-space:nowrap}
+.b-ok{background:#d1fae5;color:#065f46}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}.b-gray{background:#e5e7eb;color:#374151}.b-info{background:#e0e7ff;color:#3730a3}
+.box{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fafafa;font-size:.85rem}
+pre.sql{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:.76rem;overflow-x:auto;white-space:pre-wrap;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin:6px 0}
+th,td{border:1px solid #e5e7eb;padding:4px 7px;text-align:left;vertical-align:top}
+th{background:#f3f4f6;white-space:nowrap}
+code{font-family:Consolas,Monaco,monospace;font-size:.85em;background:#f1f5f9;padding:1px 4px;border-radius:3px}
+.toast{position:fixed;top:14px;right:14px;padding:10px 16px;border-radius:8px;color:#fff;background:#10b981;opacity:0;transition:.3s;z-index:100;pointer-events:none;max-width:60vw}
+.toast.show{opacity:1}.toast.err{background:#ef4444}
+input[type=file]{font-size:.85rem}
+details summary{cursor:pointer;font-size:.82rem;color:#4338ca}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a></div>
+    <h1>📥 パッケージの取り込み {% if app_name %}<span style="font-weight:400;color:#666;font-size:.95rem">対象: <code>{{ app_name }}</code></span>{% endif %}</h1>
+    <div class="hint" style="margin-top:4px">新規アプリの導入も既存アプリの差し替えも同じ手順です．ファイルを選ぶ → 検証結果を確認 → 適用．適用後は自動で発行され，必要なら Reload を促します．</div>
+  </div>
+
+  <div class="panel">
+    <h2>1. パッケージ JSON を選ぶ</h2>
+    <input type="file" id="file" accept=".json,application/json">
+    <span id="file-info" class="hint" style="margin-left:10px"></span>
+  </div>
+
+  <div class="panel" id="check-panel" style="display:none">
+    <h2>2. 検証結果</h2>
+    <div id="check-body"></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.82rem"><input type="checkbox" id="opt-tables" checked> テーブルの宣言・改訂を適用する（足すだけ）</label>
+      <button class="btn green" id="btn-apply" onclick="apply()">⚙ 適用</button>
+    </div>
+  </div>
+
+  <div class="panel" id="result-panel" style="display:none">
+    <h2>3. 結果</h2>
+    <div id="result-body"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TARGET = {{ app_name|tojson }};
+let PKG=null, CHECK=null;
+function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('err',!!err);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),err?6000:2500)}
+async function POST(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();if(!j.success)throw new Error(j.error||('HTTP '+r.status));return j}
+function badge(ok,yes,no,warn){return ok?`<span class="badge b-ok">${yes}</span>`:`<span class="badge ${warn?'b-warn':'b-bad'}">${no}</span>`}
+
+// 管理タブ（全アプリパッケージ）から「個別に検証」で来た場合は sessionStorage から受け取る
+(function(){
+  try{
+    if(new URLSearchParams(location.search).get('from')==='session'){
+      const t=sessionStorage.getItem('apsha_pkg');sessionStorage.removeItem('apsha_pkg');
+      if(t){PKG=JSON.parse(t);document.getElementById('file-info').textContent='（全アプリパッケージから）';
+        POST('/app_share/package/check',PKG).then(r=>{CHECK=r.result;renderCheck()}).catch(e=>toast('検証失敗: '+e.message,true));}
+    }
+  }catch(e){}
+})();
+document.getElementById('file').addEventListener('change',function(){
+  const f=this.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=async ev=>{
+    try{PKG=JSON.parse(ev.target.result)}catch(e){toast('JSON として読めません',true);return}
+    document.getElementById('file-info').textContent=`${f.name}（${(f.size/1024).toFixed(0)} KB）`;
+    if(TARGET&&PKG.app_name!==TARGET){toast(`対象 ${TARGET} とパッケージ ${PKG.app_name} が一致しません`,true);return}
+    try{const r=await POST('/app_share/package/check',PKG);CHECK=r.result;renderCheck();}
+    catch(e){toast('検証失敗: '+e.message,true)}
+  };
+  rd.readAsText(f,'utf-8');
+});
+
+function renderCheck(){
+  const c=CHECK;let h='';
+  const id=c.identity,v=c.version;
+  h+=`<div class="box"><b>${esc(PKG.icon||'')} ${esc(PKG.display_name||id.app_name)}</b> <code>${esc(id.app_name)}</code>　
+    ${id.exists_registry?'<span class="badge b-info">既存アプリの差し替え</span>':'<span class="badge b-warn">新規アプリ</span>'}
+    ${id.dir_exists?'ディレクトリあり':'ディレクトリなし（新規作成）'}　形式 v${esc(id.format_version)}${c.converted_from_v2?' <span class="badge b-warn">旧形式を読み替え（起動は推定・ランチャは空）</span>':''}<br>
+    出所: ${esc(c.site.site_name||'-')} ${esc(c.site.generated_at||'')} ${esc(c.site.generated_by||'')}</div>`;
+  h+=`<div class="box">版: パッケージ <code>${esc(v.package||'未確定')}</code>（${esc(v.package_updated_at||'-')}） ／ このサイト <code>${esc(v.local||'未確定')}</code>（${esc(v.local_updated_at||'-')}）　
+    ${v.status==='newer'?'<span class="badge b-ok">パッケージが新しい</span>':v.status==='older'?'<span class="badge b-warn">パッケージが古い</span>':v.status==='same'?'<span class="badge b-gray">同じ</span>':'<span class="badge b-gray">比較不能</span>'}</div>`;
+  const fc=c.files.counts;
+  h+=`<h3>ファイル</h3><div class="box">新規 ${fc.new} ／ 変更 ${fc.changed} ／ 同一 ${fc.same} ／ 除外 ${fc.skipped}${c.files.local_only.length?`<br><span style="color:#64748b">このサイトにだけあるファイル（残る）: ${c.files.local_only.map(esc).join(', ')}</span>`:''}
+    <details><summary>内訳</summary>${c.files.details.map(d=>`<div style="font-size:.78rem">${d.status==='new'?'🆕':d.status==='changed'?'✏':d.status==='same'?'＝':'⏭'} ${esc(d.path)}${d.reason?' ('+esc(d.reason)+')':''}</div>`).join('')}</details></div>`;
+  const r=c.registry;
+  h+=`<h3>起動・ランチャ</h3><div class="box">kind ${esc(r.kind)}　Blueprint: ${r.blueprints.length?r.blueprints.map(b=>`<code>${esc(b.module)}.${esc(b.attr)}</code>${b.name?' ('+esc(b.name)+') ':''}${b.registered?'<span class="badge b-ok">起動中</span>':'<span class="badge b-warn">未起動→適用後に Reload</span>'}`).join('　'):'<span class="badge b-gray">なし</span>'}<br>
+    ランチャ: ${r.launchers.length?r.launchers.map(l=>`${esc(l.icon||'')}${esc(l.label)}（${esc(l.section)}／${(l.dashboards||[]).join(',')}）`).join('　'):'<span class="badge b-gray">なし（適用後に管理画面で設定）</span>'}</div>`;
+  h+='<h3>テーブル</h3>';
+  if(!c.tables.length)h+='<div class="box"><span class="badge b-gray">台帳なし</span></div>';
+  c.tables.forEach(t=>{
+    h+=`<div class="box"><code>${esc(t.table_name)}</code> <span style="color:#64748b">${esc(t.db_target)}</span> ${t.in_ledger?'':'<span class="badge b-info">台帳に新規</span>'} `;
+    if(t.status==='missing')h+='<span class="badge b-bad">未作成 → CREATE</span><pre class="sql">'+esc(t.create_sql)+'</pre>';
+    else if(t.status==='same')h+='<span class="badge b-ok">一致</span>';
+    else if(t.status==='diff'){h+='<span class="badge b-warn">差あり</span>';if(t.alter_sqls.length)h+='<pre class="sql">'+esc(t.alter_sqls.join('\n'))+'</pre>';
+      if(t.changed_columns&&t.changed_columns.length)h+='<div style="color:#92400e">定義が違う列（手で判断）: '+t.changed_columns.map(x=>esc(x.name)).join(', ')+'</div>';}
+    else h+=`<span class="badge b-gray">${esc(t.status)}</span> ${esc(t.error||'')}`;
+    h+='</div>';
+  });
+  const miss=r.libraries.filter(x=>!x.installed&&x.kind==='pip');
+  h+=`<h3>ライブラリ</h3><div class="box">${r.libraries.length?r.libraries.map(x=>`<code>${esc(x.import)}</code> ${x.installed?'✅':'❌'}`).join('　'):'<span class="badge b-gray">目録なし</span>'}${miss.length?'<pre class="sql">pip install --user '+esc(miss.map(x=>x.name).join(' '))+'</pre>':''}</div>`;
+  h+=`<h3>定数（config.py）</h3><div class="box">${r.config_keys.length?r.config_keys.map(k=>`<code>${esc(k.name)}</code> ${!k.exists?'<span class="badge b-bad">無い</span>':k.placeholder?'<span class="badge b-warn">&lt;YOUR_…&gt;</span>':'<span class="badge b-ok">設定済み</span>'}`).join('　'):'<span class="badge b-gray">目録なし</span>'}</div>`;
+  h+=`<h3>文書・不具合</h3><div class="box">${Object.keys(c.documents).length?Object.entries(c.documents).map(([k,d])=>`${k==='manual'?'📖 マニュアル':'📋 仕様書'} ${d.length} 文字（${esc(d.updated_at||'-')}）`).join('　'):'文書なし'}<br>
+    不具合(open): ${c.issues.length?c.issues.map(i=>`${esc(i.title)}${i.duplicate?' <span class="badge b-gray">既にあり</span>':''}`).join('／'):'なし'}</div>`;
+  document.getElementById('check-body').innerHTML=h;
+  document.getElementById('check-panel').style.display='block';
+  document.getElementById('result-panel').style.display='none';
+}
+
+async function apply(){
+  if(!PKG||!CHECK)return;
+  const id=CHECK.identity;
+  if(!confirm(`${id.exists_registry?'既存アプリを差し替え':'新規アプリを導入'}します：${id.app_name}\n\nファイル ${CHECK.files.counts.new+CHECK.files.counts.changed} 件を配置し，正本・文書・台帳・不具合を更新し，発行します．\n既存ディレクトリは import_backups に退避されます．\nよろしいですか？`))return;
+  document.getElementById('btn-apply').disabled=true;
+  try{
+    const r=await POST('/app_share/package/apply',{package:PKG,options:{apply_tables:document.getElementById('opt-tables').checked}});
+    const x=r.result;let h='';
+    h+=`<div class="box"><span class="badge b-ok">適用完了</span> ファイル ${x.files.written} 件配置（除外 ${x.files.skipped}）${x.files.backup?'　退避: '+esc(x.files.backup):''}${x.files.errors.length?'<div style="color:#991b1b">'+x.files.errors.map(esc).join('<br>')+'</div>':''}</div>`;
+    h+=`<div class="box">正本・文書・台帳を更新．不具合 ${x.issues_added} 件を追加．${x.published?'<span class="badge b-ok">発行済み</span>':''}</div>`;
+    if(x.tables_executed.length)h+='<div class="box">テーブル:'+x.tables_executed.map(t=>`<div>${t.ok?'✅':'❌'} <code>${esc(t.table_name)}</code>${t.error?' '+esc(t.error):''}<pre class="sql">${esc(t.sql)}</pre></div>`).join('')+'</div>';
+    if(x.need_reload)h+=`<div class="box" style="border-color:#f59e0b"><span class="badge b-warn">Reload が必要</span> ${x.not_running.length?'未起動の Blueprint: '+x.not_running.map(esc).join(', ')+'．':'コードを置き換えたので'}再起動して反映します． <button class="btn amber" onclick="reloadSite()">🔄 Reload</button></div>`;
+    h+=`<div style="margin-top:8px"><a class="btn" href="/app_share/app/${encodeURIComponent(x.app_name)}">🛠 管理画面へ</a> <a class="btn gray" href="/app_share/">📦 アプシャへ</a></div>`;
+    document.getElementById('result-body').innerHTML=h;document.getElementById('result-panel').style.display='block';
+    toast('適用しました');
+  }catch(e){toast('適用失敗: '+e.message,true);document.getElementById('btn-apply').disabled=false}
+}
+async function reloadSite(){try{const r=await POST('/app_share/api/reload',{});toast(r.reloaded?'Reload を要求しました（数秒〜十数秒お待ちください）':'Reload の要求に失敗（Web タブから手動で）',!r.reloaded)}catch(e){toast(e.message,true)}}
+</script>
+</body>
+</html>
