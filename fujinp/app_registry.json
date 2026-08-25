@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "generated_at": "2026-08-25 11:45:26",
+  "generated_at": "2026-08-25 15:10:13",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -1108,19 +1108,6 @@
       ],
       "version_id": "v20260731.140630-64c32c",
       "version_confirmed_at": "2026-07-31 14:06:30"
-    },
-    {
-      "app_name": "image_archiver",
-      "display_name": "いまくら",
-      "icon": "📦",
-      "description": "",
-      "sort_order": 340.0,
-      "kind": "app",
-      "enabled": false,
-      "blueprints": [],
-      "launchers": [],
-      "version_id": null,
-      "version_confirmed_at": null
     },
     {
       "app_name": "lookout",
