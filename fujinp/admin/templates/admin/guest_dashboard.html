@@ -140,142 +140,20 @@
         </div>
 
 
-        {# ── ソムリエ向け（feature_code 判定）── #}
-        {% if 'FUJIN-Pソムリエ' in user_group_names %}
-        <!-- FUJIN-Pソムリエ用アプリケーション -->
-        <h3 class="section-separator">🧑‍🍳 FUJIN-Pソムリエ用アプリ</h3>
+        {# ── アプリのランチャ（正本 fujinp/app_registry.json から描画）──
+           区画・カード・表示条件はアプシャの管理画面で編集し，「発行」で反映する．
+           この部分は手で編集しない． #}
+        {% for sec in launcher_sections %}
+        <h3 class="section-separator">{{ sec.title }}</h3>
         <div class="apps-grid">
-
-
-            <a href="{{ url_for('table_share.dashboard') }}" class="app-card sommelier">
-                <div class="app-title"><span class="app-icon">🔗️</span><h3>テーシャ</h3></div>
-                <p>SQLテーブルの共有</p>
+            {% for c in sec.cards %}
+            <a href="{{ c.href }}" class="app-card {{ sec.css_class }}{% if c.extra_class %} {{ c.extra_class }}{% endif %}">
+                <div class="app-title"><span class="app-icon">{{ c.icon }}</span><h3>{{ c.label }}</h3></div>
+                <p>{{ c.description }}</p>
             </a>
-            <a href="{{ url_for('user_migration.dashboard') }}" class="app-card sommelier">
-                <div class="app-title"><span class="app-icon">🛳️</span><h3>ゆーまい</h3></div>
-                <p>ユーザのマイグレーション</p>
-            </a>
-            <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="app-card sommelier">
-                <div class="app-title"><span class="app-icon">🛳️</span><h3>さいまる</h3></div>
-                <p>サイオン丸ごとマイグレーション</p>
-            </a>
-            <a href="{{ url_for('my_md_notes.index') }}" class="app-card sommelier">
-                <div class="app-title"><span class="app-icon">🗒️</span><h3>マイノート</h3></div>
-                <p>MDによる手軽なノート</p>
-            </a>
+            {% endfor %}
         </div>
-        {% endif %}
-        <!-- 管理支援アプリケーション -->
-        <h3 class="section-separator">👨‍✈️ 管理支援</h3>
-        <div class="apps-grid">
-            <a href="{{ url_for('user_groups.index') }}" class="app-card admin-support">
-                <div class="app-title"><span class="app-icon">👥</span><h3>まいぐる</h3></div>
-                <p>ユーザによるグループ管理</p>
-            </a>
-
-            {%if 'コレポ管理者' in user_group_names %}
-            <a href="{{ url_for('colrep.index') }}" class="app-card admin-support">
-                <div class="app-title"><span class="app-icon">🏀</span><h3>コレポ管理</h3></div>
-                <p>プロジェクトの作成・管理</p>
-            </a>
-            {% endif %}
-
-            <a href="{{ url_for('table_post.table_post_dashboard') }}" class="app-card admin-support">
-                <div class="app-title"><span class="app-icon">📮</span><h3>テーブルポスト</h3></div>
-                <p>テーブル更新の申請・適用</p>
-            </a>
-            <a href="{{ url_for('migration_assistant.index') }}" class="app-card admin-support">
-                <div class="app-title"><span class="app-icon">👣</span><h3>まいあし</h3></div>
-                <p>FUJIN-Pマイグレーション支援</p>
-            </a>
-        </div>
-
-
-        <!-- 機関内向け -->
-        {% if user_category in ('regular', 'admin') %}
-        <h3 class="section-separator">🏫 機関内向け</h3>
-        <div class="apps-grid">
-            <a href="{{ url_for('app_share.dashboard') }}" class="app-card highlight">
-                <div class="app-title"><span class="app-icon">📦️</span><h3>アプシャ</h3></div>
-                <p>FUJIN-Pアプリの共有</p>
-            </a>
-
-            <a href="{{ url_for('official_data_archive.index') }}" class="app-card highlight">
-              <div class="app-title"><span class="app-icon">📚</span><h3>公式データ集(DRAFT)</h3></div>
-              <p>公式データの閲覧とダウンロード</p>
-            </a>
-            <a href="{{ url_for('data_center.index') }}" class="app-card highlight">
-                <div class="app-title"><span class="app-icon">📊</span><h3>データセンター</h3></div>
-                <p>収集データからストーリーラインを作り、インタラクティブに公開する</p>
-            </a>
-            <a href="{{ url_for('index_review.index') }}" class="app-card highlight">
-                <div class="app-title"><span class="app-icon">📈</span><h3>時系列指標ビジュアル</h3></div>
-                <p>SQLテーブル内容をグラフで可視化</p>
-            </a>
-            <a href="{{ url_for('stats.stat_main') }}" class="app-card highlight">
-                <div class="app-title"><span class="app-icon">📊</span><h3>スタッツ</h3></div>
-                <p>利用状況の表示</p>
-            </a>
-            <a href="{{ url_for('migrate_fujinp_scions.index') }}" class="app-card highlight">
-                <div class="app-title"><span class="app-icon">🛳️</span><h3>さいまる</h3></div>
-                <p>サイオン丸ごとマイグレーション</p>
-            </a>
-        </div>
-        {% endif %}
-
-        <h3 class="section-separator">📌 ゲスト向け</h3>
-        <div class="apps-grid">
-            <a href="{{ url_for('kataribe.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🗣</span><h3>かたりべ</h3></div>
-                <p>タイルの出入りでプレゼンを組み立てる編集・上映アプリ</p>
-            </a>
-            <a href="{{ url_for('our_meeting.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🕸</span><h3>あわみ</h3></div>
-                <p>語りのネットとミーティングの支援</p>
-            </a>
-            <a href="{{ url_for('colrep.worker_dashboard') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🏀</span><h3>コレポ執筆</h3></div>
-                <p>協調的レポート制作</p>
-            </a>
-            <a href="{{ url_for('document_archive.dashboard') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🏛️</span><h3>文書アーカイブ</h3></div>
-                <p>文書アーカイブの閲覧と管理</p>
-            </a>
-            <a href="{{ url_for('free_hand_curve.index') }}" class="app-card open-sky clickable">
-                <div class="app-title"><span class="app-icon">➿</span><h3>フリーハンド曲線</h3></div>
-                <p>休息時のおたのしみ</p>
-            </a>
-            <a href="{{ url_for('ts_solvers.index') }}" class="app-card open-sky clickable">
-                <div class="app-title"><span class="app-icon">&#128558;&#8205;&#128168;</span><h3>巡回セールスマン問題ソルバー</h3></div>
-                <p>NP困難問題に挑戦！</p>
-            </a>
-            <a href="{{ url_for('solar_gl.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🪐</span><h3>太陽系3Dシミュレータ</h3></div>
-                <p>太陽と8惑星の公転を3D表示・時間制御</p>
-            </a>
-            <a href="{{ url_for('sorakara.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🛩️</span><h3>そらから</h3></div>
-                <p>上空フライトシーン（福知山周辺・地理院標高データ）</p>
-            </a>
-            <a href="{{ url_for('lookout.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🔭</span><h3>みはらし</h3></div>
-                <p>クリック地点からの360度地形パノラマ</p>
-            </a>
-            <a href="{{ url_for('window_shopping.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🛍️</span><h3>ウィンドウショッピング3D</h3></div>
-                <p>棒人形が広場を歩き回り、置いた店のショーウィンドウを見て回る3Dアニメーション</p>
-            </a>
-            <a href="{{ url_for('tag_chase.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">👹</span><h3>鬼ごっこ3D</h3></div>
-                <p>鬼がブロックの陰に隠れながら追手から逃げる3Dシミュレーションゲーム</p>
-            </a>
-            <a href="{{ url_for('block_breaker.index') }}" class="app-card open-sky">
-                <div class="app-title"><span class="app-icon">🧱</span><h3>ブロック崩し</h3></div>
-                <p>ブロック崩しゲーム（ハイスコアランキング付き）</p>
-            </a>
-
-        </div>
-
+        {% endfor %}
     </div>
 </body>
 </html>

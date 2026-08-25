@@ -103,11 +103,17 @@ def dashboard():
     # テンプレート側で in 演算子で判定する。
     user_group_names = get_user_group_names(user_id)
 
+    # アプリのランチャは正本（fujinp/app_registry.json）から組み立てる．
+    # 区画・カードの表示条件（require_groups / require_categories）はここで評価される．
+    from fujinp.registry import launcher_sections
+    sections = launcher_sections('guest', user_category, user_group_names)
+
     return render_template('admin/guest_dashboard.html',
                             user_name=user_name,
                             # features=features,
                             # feature_codes=feature_codes,
                             user_group_names=user_group_names,
+                            launcher_sections=sections,
                             site_url=Config.BASE_URL,
                             user_category=user_category)
 

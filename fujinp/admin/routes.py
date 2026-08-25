@@ -63,11 +63,15 @@ def dashboard():
     ※フィーチャー機能は廃止。features は空リストを渡す（DBは参照しない）。
     ※ログイン後・「FUJIN-Pダッシュボードに戻る」の遷移先はここ。"""
     statistics = get_registration_statistics()
+    # アプリのランチャは正本（fujinp/app_registry.json）から組み立てる．
+    # 管理者ダッシュボードでは表示条件（グループ・カテゴリ）を評価しない．
+    from fujinp.registry import launcher_sections
     return render_template('admin/admin_dashboard.html',
                         user_name=session.get('user_name'),
                         user_email=session.get('user_email'),
                         site_url=Config.BASE_URL,
                         statistics=statistics,
+                        launcher_sections=launcher_sections('admin', 'admin', []),
                         features=[])
 
 @admin_bp.route('/users')
