@@ -220,4 +220,4 @@ __marimo__/
 # FUJIN-P
 config.py
 fujinp/sql_saver/sql_saver_work/
-!dist/
+!dist/fujinp/*/import_backups/
