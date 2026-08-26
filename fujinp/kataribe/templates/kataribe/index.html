@@ -205,6 +205,7 @@
                     <button id="btnLoadIn" class="ghost">📂 作品JSONを取り込む</button>
                     <button id="btnExport" class="ghost">⬇ 作品JSONを書き出す</button>
                     <button id="btnExportHtml" class="ghost">🎞 プレゼンHTML</button>
+                    <button id="btnPlayUrl" class="ghost" title="再生専用ページ（ログイン済みなら誰でも見られる）のURLを表示・コピー">🔗 このコンテンツのURL</button>
                     <button id="btnJson" class="ghost">{ } JSON</button>
                     <button id="btnDelete" class="danger">🗑 削除</button>
                 </div>
@@ -273,6 +274,22 @@
             <div class="modal-btns">
                 <button class="ghost" id="btnInCancel">閉じる</button>
                 <button id="btnInAsSpec">取り込む</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- コンテンツURLモーダル -->
+    <div class="modal-bg" id="urlModal">
+        <div class="modal" style="width:min(640px,94vw);">
+            <h3>🔗 このコンテンツのURL</h3>
+            <div class="toolbar" style="margin-bottom:6px;">
+                <input type="text" id="urlText" readonly style="flex:1; font-family:ui-monospace,Consolas,monospace; font-size:13px;">
+            </div>
+            <div class="hint">再生専用ページのURLです．このサイトにログインしている人なら誰でも開けます（編集はできません）．</div>
+            <div class="modal-btns">
+                <button class="ghost" id="btnUrlClose">閉じる</button>
+                <button class="ghost" id="btnUrlOpen">▶ 開く</button>
+                <button id="btnUrlCopy">📋 コピー</button>
             </div>
         </div>
     </div>
@@ -1445,6 +1462,29 @@ js +
         $('#btnSaveAs').on('click', saveAs);
         $('#btnExport').on('click', exportSpec);
         $('#btnExportHtml').on('click', exportHtml);
+        // ── 再生専用ページのURL（保存済みの作品のみ） ──
+        function playUrl() { return location.origin + API.play + presId; }
+        function copyText(text) {
+            if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+            return new Promise((res, rej) => {                    // 旧ブラウザ／非HTTPS向けの退避
+                const $t = $('#urlText'); $t[0].focus(); $t[0].select();
+                try { document.execCommand('copy') ? res() : rej(new Error('copy failed')); }
+                catch (e) { rej(e); }
+            });
+        }
+        $('#btnPlayUrl').on('click', () => {
+            if (!presId) return showResult('URLは保存済みの作品で使えます．先に保存してください', true);
+            $('#urlText').val(playUrl());
+            $('#urlModal').css('display', 'flex');
+            $('#urlText')[0].select();
+        });
+        $('#btnUrlClose').on('click', () => { $('#urlModal').hide(); });
+        $('#btnUrlOpen').on('click', () => { window.open(playUrl(), '_blank'); });
+        $('#btnUrlCopy').on('click', () => {
+            copyText(playUrl())
+                .then(() => showResult('URLをコピーしました：' + playUrl(), false))
+                .catch(() => showResult('コピーできませんでした．欄の文字列を選択してコピーしてください', true));
+        });
         $('#btnLoadIn').on('click', () => {
             $('#inText').val('');
             $('#inFile').val('');
