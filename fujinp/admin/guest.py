@@ -105,21 +105,6 @@ def dashboard():
 
 # ── 既存ルート（変更なし）────────────────────────────────────────────────
 
-@guest_bp.route('/launch/toi_no_mori')
-@login_required
-def launch_toi_no_mori():
-    user_id = session.get('user_id')
-    with get_db_cursor() as (cursor, conn):
-        cursor.execute("""
-            SELECT 1 FROM user_features uf
-            JOIN features f ON uf.feature_id = f.id
-            WHERE uf.user_id = %s AND f.feature_code = 'test_user' AND f.is_active = TRUE
-        """, (user_id,))
-        if not cursor.fetchone():
-            flash('このアプリにアクセスする権限がありません', 'error')
-            return redirect(url_for('guest.dashboard'))
-    return redirect('/welcome')
-
 
 @guest_bp.route('/go/<app_id>')
 def go(app_id):
