@@ -29,6 +29,8 @@ import os
 import re
 import uuid
 import html
+import json
+import base64
 from functools import wraps
 from urllib.parse import urlparse, quote
 from werkzeug.utils import secure_filename
@@ -85,6 +87,15 @@ SHARE_LABELS = {
 }
 
 JST = pytz.timezone('Asia/Tokyo')
+
+# コンテンツ移行（JSONエクスポート／インポート）
+#   サイト間でノート本体・本文・公開範囲・許可グループ・添付ファイルを移すための形式。
+#   users.id や user_groups.id はサイトごとに異なるので、所有者は email、
+#   許可グループは name で持ち運び、取り込み先で引き当てる。
+EXPORT_TYPE = 'fujinp_my_md_notes_content'
+EXPORT_FORMAT_VERSION = 1
+DT_FORMAT = '%Y-%m-%d %H:%M:%S'
+IMPORT_MODES = ('skip', 'overwrite', 'add')
 
 # HTMLダウンロード（download_html）が生成する文書のスタイル。
 # 閲覧画面（view_note.html）の .content-area 用CSSと同じ規則を持たせ、
@@ -296,6 +307,18 @@ def same_origin_required(view):
     def wrapper(*args, **kwargs):
         if not origin_ok():
             return jsonify({'success': False, 'error': '不正な要求元です'}), 403
+        return view(*args, **kwargs)
+    return wrapper
+
+
+def admin_only(view):
+    """管理者（session の user_category == 'admin'）だけに許すルート用のガード。
+    それ以外はフラッシュして一覧へ戻す。@login_required の内側で使う。"""
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if session.get('user_category') != 'admin':
+            flash('この操作は管理者のみ実行できます。', 'error')
+            return redirect(url_for('my_md_notes.index'))
         return view(*args, **kwargs)
     return wrapper
 
@@ -1104,6 +1127,388 @@ def delete_note(note_id):
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+
+
+# =============================================================================
+# コンテンツ移行（JSONエクスポート／インポート。管理者のみ）
+# =============================================================================
+
+ATTACHMENT_REF_RE = re.compile(re.escape(UPLOAD_URL_PREFIX) + r'/([A-Za-z0-9._-]+)')
+
+
+def dt_to_str(value):
+    """DATETIME(JST) を移行用の文字列（秒まで）にする"""
+    if not value:
+        return ''
+    if isinstance(value, str):
+        return value[:19]
+    try:
+        return value.strftime(DT_FORMAT)
+    except AttributeError:
+        return str(value)[:19]
+
+
+def str_to_dt(value, default):
+    """移行用の日時文字列を datetime に戻す。不正・空欄は default"""
+    if not value:
+        return default
+    for fmt in (DT_FORMAT, '%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            return datetime.strptime(str(value)[:19], fmt)
+        except ValueError:
+            continue
+    return default
+
+
+def find_attachment_names(contents):
+    """本文群から /static/mdimgs/ 配下のファイル名を集める（重複除去・出現順）"""
+    seen = []
+    for text in contents:
+        for m in ATTACHMENT_REF_RE.finditer(text or ''):
+            name = m.group(1)
+            if name not in seen:
+                seen.append(name)
+    return seen
+
+
+def safe_attachment_name(name):
+    """添付ファイル名として受け入れてよいか（パス要素なし・許可拡張子）"""
+    if not name or name != secure_filename(name):
+        return False
+    return allowed_file(name)
+
+
+@my_md_notes_bp.route('/export_json')
+@login_required
+@admin_only
+def export_json():
+    """全ノートをJSONにエクスポートする（管理者のみ）。
+
+    含めるもの：ノート本体（名前・公開範囲・序列・作成／更新日時）、本文、
+    所有者（email／full_name）、許可グループ（name）、
+    attachments=1 のとき本文が参照する添付ファイル（base64）。
+    """
+    include_attachments = request.args.get('attachments', '1') != '0'
+    site_url = request.host_url.rstrip('/')
+
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT ns.id, ns.オーナーID, ns.名前, ns.共有キー, ns.序列,
+                   ns.作成日時, ns.更新日時, nc.内容,
+                   u.email AS owner_email, u.full_name AS owner_name
+            FROM my_md_notes_notes ns
+            LEFT JOIN my_md_notes_contents nc ON ns.id = nc.ノートID
+            LEFT JOIN users u ON ns.オーナーID = u.id
+            ORDER BY ns.id
+        """)
+        rows = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT ag.ノートID, ag.group_id, g.name
+            FROM my_md_notes_access_groups ag
+            LEFT JOIN user_groups g ON ag.group_id = g.id
+            ORDER BY ag.ノートID, ag.group_id
+        """)
+        groups_by_note = {}
+        for r in cursor.fetchall():
+            groups_by_note.setdefault(r['ノートID'], []).append(
+                {'source_id': r['group_id'], 'name': r['name'] or ''})
+
+        cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (session['user_id'],))
+        me = cursor.fetchone() or {}
+
+        notes = []
+        for r in rows:
+            notes.append({
+                'source_id': r['id'],
+                '名前': r['名前'],
+                '共有キー': r['共有キー'],
+                '序列': r['序列'],
+                '作成日時': dt_to_str(r['作成日時']),
+                '更新日時': dt_to_str(r['更新日時']),
+                'owner': {
+                    'source_id': r['オーナーID'],
+                    'email': r['owner_email'] or '',
+                    'full_name': r['owner_name'] or '',
+                },
+                'access_groups': groups_by_note.get(r['id'], []),
+                '内容': r['内容'] or '',
+            })
+
+        attachments = []
+        missing = []
+        if include_attachments:
+            for name in find_attachment_names(n['内容'] for n in notes):
+                path = os.path.join(UPLOAD_FOLDER, name)
+                if not safe_attachment_name(name) or not os.path.isfile(path):
+                    missing.append(name)
+                    continue
+                with open(path, 'rb') as f:
+                    data = f.read()
+                attachments.append({
+                    'filename': name,
+                    'size': len(data),
+                    'data_base64': base64.b64encode(data).decode('ascii'),
+                })
+
+        payload = {
+            'export_type': EXPORT_TYPE,
+            'format_version': EXPORT_FORMAT_VERSION,
+            'app_name': 'my_md_notes',
+            'site_url': site_url,
+            'exported_at': get_jst_now().strftime(DT_FORMAT),
+            'exported_by': {'email': me.get('email', ''), 'full_name': me.get('full_name', '')},
+            'note_count': len(notes),
+            'attachment_count': len(attachments),
+            'attachments_missing': missing,
+            'notes': notes,
+            'attachments': attachments,
+        }
+
+        body = json.dumps(payload, ensure_ascii=False, indent=1)
+        stamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
+        download_name = f'my_md_notes_content_{stamp}.json'
+        response = Response(body, mimetype='application/json; charset=utf-8')
+        response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
+        return response
+    except mysql.connector.Error as err:
+        flash(f'データベースエラーが発生しました: {err}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@my_md_notes_bp.route('/import_json', methods=['POST'])
+@login_required
+@admin_only
+def import_json():
+    """export_json 形式のJSONからノートを取り込む（管理者のみ）。
+
+    フォーム項目：
+      file          - JSONファイル
+      mode          - skip      : 同じ所有者・同名のノートがあれば取り込まない（既定・再実行しても増えない）
+                      overwrite : 同じ所有者・同名のノートがあれば本文などを上書きする
+                      add       : 既存を気にせず常に新規追加する
+      rewrite_urls  - '1' のとき、本文中の添付URLのホストを移行元(site_url)から当サイトへ書き換える
+      attachments   - '1' のとき、同梱の添付ファイルを当サイトの mdimgs/ に復元する（同名があれば残す）
+
+    引き当て規則：
+      所有者   - email で users を引く。見つからなければ実行した管理者を所有者にする
+      グループ - name で user_groups を引く。1つも引けなかった group／domestic_group は private に落とす
+    DBへの反映は1トランザクションで、途中で失敗したら何も残さない。
+    """
+    if not origin_ok():
+        flash('不正な要求元です。', 'error')
+        return redirect(url_for('my_md_notes.index'))
+
+    file = request.files.get('file')
+    if not file or file.filename == '':
+        flash('JSONファイルが選択されていません。', 'error')
+        return redirect(url_for('my_md_notes.index'))
+
+    mode = request.form.get('mode', 'skip')
+    if mode not in IMPORT_MODES:
+        mode = 'skip'
+    rewrite_urls = request.form.get('rewrite_urls') == '1'
+    restore_attachments = request.form.get('attachments') == '1'
+
+    try:
+        payload = json.loads(file.read().decode('utf-8'))
+    except (UnicodeDecodeError, ValueError) as e:
+        flash(f'JSONを読み取れませんでした: {e}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+
+    if not isinstance(payload, dict) or payload.get('export_type') != EXPORT_TYPE:
+        flash('マイノートのエクスポート形式ではありません（export_type が一致しません）。', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    if payload.get('format_version', 0) > EXPORT_FORMAT_VERSION:
+        flash('このファイルはより新しい形式です。アプリを更新してから取り込んでください。', 'error')
+        return redirect(url_for('my_md_notes.index'))
+
+    notes = payload.get('notes') or []
+    src_site_url = (payload.get('site_url') or '').rstrip('/')
+    dst_site_url = request.host_url.rstrip('/')
+    me_id = session['user_id']
+
+    counts = {'added': 0, 'overwritten': 0, 'skipped': 0}
+    owner_fallback = []     # (ノート名, email)
+    group_downgraded = []   # ノート名
+    group_partial = []      # (ノート名, [未一致グループ名])
+
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 引き当て表
+        cursor.execute("SELECT id, email FROM users WHERE deleted_at IS NULL")
+        user_by_email = {r['email']: r['id'] for r in cursor.fetchall() if r['email']}
+        cursor.execute("SELECT id, name FROM user_groups")
+        group_by_name = {r['name']: r['id'] for r in cursor.fetchall() if r['name']}
+
+        now = get_jst_now()
+
+        for n in notes:
+            if not isinstance(n, dict):
+                continue
+            name = (n.get('名前') or '').strip() or '無題'
+            owner = n.get('owner') or {}
+            email = owner.get('email') or ''
+            owner_id = user_by_email.get(email)
+            owner_missing = owner_id is None
+            if owner_missing:
+                owner_id = me_id
+
+            share_key = normalize_share_key(n.get('共有キー'), 'private')
+            group_ids = []
+            unmatched = []
+            downgraded = False
+            if share_key in ('group', 'domestic_group'):
+                for g in n.get('access_groups') or []:
+                    gname = (g or {}).get('name') or ''
+                    gid = group_by_name.get(gname)
+                    if gid is not None and gid not in group_ids:
+                        group_ids.append(gid)
+                    else:
+                        unmatched.append(gname or '(名称なし)')
+                if not group_ids:
+                    share_key = 'private'
+                    downgraded = True
+
+            sequence = to_int(n.get('序列'), 0)
+            created_at = str_to_dt(n.get('作成日時'), now)
+            updated_at = str_to_dt(n.get('更新日時'), created_at)
+            content = n.get('内容') or ''
+            if rewrite_urls and src_site_url and src_site_url != dst_site_url:
+                content = content.replace(src_site_url + UPLOAD_URL_PREFIX + '/',
+                                          dst_site_url + UPLOAD_URL_PREFIX + '/')
+
+            existing_id = None
+            if mode in ('skip', 'overwrite'):
+                cursor.execute("""
+                    SELECT id FROM my_md_notes_notes
+                    WHERE オーナーID = %s AND 名前 = %s
+                    ORDER BY id LIMIT 1
+                """, (owner_id, name))
+                row = cursor.fetchone()
+                existing_id = row['id'] if row else None
+
+            if existing_id is not None and mode == 'skip':
+                counts['skipped'] += 1
+                continue
+
+            # ここから先は実際に書き込むノート。引き当ての結果を報告用に記録する
+            if owner_missing:
+                owner_fallback.append((name, email))
+            if downgraded:
+                group_downgraded.append(name)
+            elif unmatched:
+                group_partial.append((name, unmatched))
+
+            if existing_id is not None and mode == 'overwrite':
+                note_id = existing_id
+                cursor.execute("""
+                    UPDATE my_md_notes_notes
+                    SET 共有キー = %s, 序列 = %s, 作成日時 = %s, 更新日時 = %s
+                    WHERE id = %s
+                """, (share_key, sequence, created_at, updated_at, note_id))
+                cursor.execute("""
+                    UPDATE my_md_notes_contents
+                    SET 内容 = %s, 作成日時 = %s, 更新日時 = %s
+                    WHERE ノートID = %s
+                """, (content, created_at, updated_at, note_id))
+                if cursor.rowcount == 0:
+                    cursor.execute("""
+                        INSERT INTO my_md_notes_contents (ノートID, 内容, 作成日時, 更新日時)
+                        VALUES (%s, %s, %s, %s)
+                    """, (note_id, content, created_at, updated_at))
+                cursor.execute("DELETE FROM my_md_notes_access_groups WHERE ノートID = %s", (note_id,))
+                counts['overwritten'] += 1
+            else:
+                cursor.execute("""
+                    INSERT INTO my_md_notes_notes (オーナーID, 名前, 共有キー, 序列, 作成日時, 更新日時)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (owner_id, name, share_key, sequence, created_at, updated_at))
+                note_id = cursor.lastrowid
+                cursor.execute("""
+                    INSERT INTO my_md_notes_contents (ノートID, 内容, 作成日時, 更新日時)
+                    VALUES (%s, %s, %s, %s)
+                """, (note_id, content, created_at, updated_at))
+                counts['added'] += 1
+
+            for gid in group_ids:
+                cursor.execute("""
+                    INSERT INTO my_md_notes_access_groups (ノートID, group_id) VALUES (%s, %s)
+                """, (note_id, gid))
+
+        conn.commit()
+    except Exception as err:
+        conn.rollback()
+        flash(f'取り込み中にエラーが発生したため、何も反映していません: {err}', 'error')
+        return redirect(url_for('my_md_notes.index'))
+    finally:
+        cursor.close()
+        conn.close()
+
+    # 添付ファイルの復元（DB反映後。既存の同名ファイルは残す）
+    att_restored = 0
+    att_kept = 0
+    att_rejected = []
+    if restore_attachments:
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        for a in payload.get('attachments') or []:
+            fname = (a or {}).get('filename') or ''
+            if not safe_attachment_name(fname):
+                att_rejected.append(fname or '(名称なし)')
+                continue
+            path = os.path.join(UPLOAD_FOLDER, fname)
+            if os.path.exists(path):
+                att_kept += 1
+                continue
+            try:
+                data = base64.b64decode(a.get('data_base64') or '')
+            except (ValueError, TypeError):
+                att_rejected.append(fname)
+                continue
+            ext = fname.rsplit('.', 1)[1].lower()
+            if ext == 'svg':
+                if not svg_head_ok(data[:2048]):
+                    att_rejected.append(fname)
+                    continue
+                data = _sanitize_svg(data)
+            elif not magic_ok(data[:8], ext):
+                att_rejected.append(fname)
+                continue
+            with open(path, 'wb') as f:
+                f.write(data)
+            att_restored += 1
+
+    # 結果報告
+    lines = [f'JSONの取り込みが完了しました（対象 {len(notes)} 件）。',
+             f'追加 {counts["added"]} 件、上書き {counts["overwritten"]} 件、'
+             f'スキップ {counts["skipped"]} 件。']
+    if restore_attachments:
+        lines.append(f'添付ファイル：復元 {att_restored} 件、既存のため温存 {att_kept} 件。')
+        if att_rejected:
+            lines.append('添付ファイルのうち不正なため復元しなかったもの：' + '、'.join(att_rejected[:10])
+                         + ('…' if len(att_rejected) > 10 else ''))
+    if rewrite_urls and src_site_url and src_site_url != dst_site_url:
+        lines.append(f'本文中の添付URLのホストを {src_site_url} → {dst_site_url} に書き換えました。')
+    if owner_fallback:
+        shown = '、'.join(f'「{n}」({e or "email不明"})' for n, e in owner_fallback[:10])
+        lines.append(f'所有者が当サイトに見つからないため実行者を所有者にしたノート {len(owner_fallback)} 件：'
+                     + shown + ('…' if len(owner_fallback) > 10 else ''))
+    if group_downgraded:
+        lines.append(f'許可グループが1つも引き当てられず非公開にしたノート {len(group_downgraded)} 件：'
+                     + '、'.join(f'「{n}」' for n in group_downgraded[:10])
+                     + ('…' if len(group_downgraded) > 10 else ''))
+    if group_partial:
+        shown = '、'.join(f'「{n}」({"/".join(g)})' for n, g in group_partial[:10])
+        lines.append(f'一部の許可グループが引き当てられなかったノート {len(group_partial)} 件：' + shown
+                     + ('…' if len(group_partial) > 10 else ''))
+    flash('\n'.join(lines), 'success')
+    return redirect(url_for('my_md_notes.index'))
 
 
 @my_md_notes_bp.route('/search')
