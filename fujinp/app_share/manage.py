@@ -38,6 +38,7 @@ API（すべて admin．routes.py の before_request が既定で admin 必須�
   GET  /app_share/api/app/<app_name>/blueprints/detect   ツリーから Blueprint 定義を検出
   POST /app_share/api/app/<app_name>/launchers           ランチャの保存
   GET  /app_share/api/app/<app_name>/launchers/check     endpoint の解決確認
+  GET  /app_share/api/user_groups                        まいぐるのグループ名一覧（使用区分の選択肢）★2026-08-27
   GET  /app_share/api/app/<app_name>/tables/candidates   DB のテーブル一覧（帰属つき）
   POST /app_share/api/app/<app_name>/tables/add          台帳へ追加（DDL を実物から取込）
   POST /app_share/api/app/<app_name>/tables/remove       台帳から外す
@@ -470,17 +471,35 @@ def api_bp_save(app_name):
 @app_share_bp.route('/api/app/<app_name>/launchers', methods=['POST'])
 @login_required
 def api_launchers_save(app_name):
+    """ランチャの保存．★2026-08-27 使用コントローラー：
+    visibility（使用区分）・groups（グループ名）・params（url_for の引数 'k=v&k=v'）を持ち，
+    require_groups / require_categories は廃止．dashboards は配置（admin/guest）だけを表す．"""
     if not _valid_app(app_name):
         return _err('アプリ名が不正です')
     d = request.get_json(silent=True) or {}
     items = []
     for i, c in enumerate(d.get('launchers') or []):
         ep = (c.get('endpoint') or '').strip()
-        if not ep or not re.match(r'^[\w]+\.[\w]+$', ep):
-            return _err(f'endpoint は "blueprint名.関数名" の形です: {ep!r}')
+        # 'static' だけは Blueprint なしを許す（静的ファイルを開くカード．params に filename=…）
+        if not ep or not (re.match(r'^[\w]+\.[\w]+$', ep) or ep == 'static'):
+            return _err(f'endpoint は "blueprint名.関数名" の形です（静的ファイルは static）: {ep!r}')
         dashboards = [x for x in (c.get('dashboards') or []) if x in ('admin', 'guest')]
-        if not dashboards:
-            return _err(f'カード「{c.get("label")}」の表示先（admin／guest）を1つ以上選んでください')
+        vis = (c.get('visibility') or 'private').strip()
+        if vis not in _reg.VISIBILITY_KEYS:
+            return _err(f'カード「{c.get("label")}」の使用区分が不正です: {vis!r}')
+        if not dashboards and vis != 'open':
+            return _err(f'カード「{c.get("label")}」の配置（admin／guest）を1つ以上選んでください'
+                        f'（配置なしでよいのは「公開（ログイン不要）」だけです）')
+        groups = [g.strip() for g in (c.get('groups') or []) if g and g.strip()]
+        if vis in ('group', 'domestic_group') and not groups:
+            return _err(f'カード「{c.get("label")}」はグループを1つ以上選んでください')
+        if vis not in ('group', 'domestic_group'):
+            groups = []
+        params = (c.get('params') or '').strip()
+        if params and not re.match(r'^[\w]+=[^&]*(&[\w]+=[^&]*)*$', params):
+            return _err(f'カード「{c.get("label")}」の params は k=v&k=v の形です: {params!r}')
+        if ep == 'static' and 'filename=' not in params:
+            return _err(f'カード「{c.get("label")}」は static なので params に filename=… が必要です')
         try:
             so = int(c.get('sort_order') if c.get('sort_order') not in (None, '') else (i + 1) * 10)
         except (TypeError, ValueError):
@@ -489,12 +508,13 @@ def api_launchers_save(app_name):
             'dashboards': dashboards,
             'section': (c.get('section') or 'guest').strip(),
             'endpoint': ep,
+            'params': params,
             'label': (c.get('label') or '').strip(),
             'icon': (c.get('icon') or '').strip(),
             'description': (c.get('description') or '').strip(),
             'sort_order': so,
-            'require_groups': [g.strip() for g in (c.get('require_groups') or []) if g and g.strip()],
-            'require_categories': [g.strip() for g in (c.get('require_categories') or []) if g and g.strip()],
+            'visibility': vis,
+            'groups': groups,
             'extra_class': (c.get('extra_class') or '').strip(),
         })
     with _db() as (cur, conn):
@@ -503,6 +523,21 @@ def api_launchers_save(app_name):
         _touch(cur, app_name)
         conn.commit()
     return _ok(launchers=items)
+
+
+@app_share_bp.route('/api/user_groups')
+@login_required
+def api_user_groups():
+    """まいぐるのグループ名一覧（使用区分 group / domestic_group の選択肢）"""
+    try:
+        with _db() as (cur, conn):
+            cur.execute("SELECT id, name FROM user_groups ORDER BY name")
+            rows = cur.fetchall()
+    except Exception as e:
+        return _ok(groups=[], note=f'user_groups を読めません: {e}')
+    return _ok(groups=[{'id': r['id'], 'name': r['name']} for r in rows],
+               visibility_keys=list(_reg.VISIBILITY_KEYS),
+               visibility_labels=_reg.VISIBILITY_LABELS)
 
 
 @app_share_bp.route('/api/app/<app_name>/launchers/check')
@@ -515,7 +550,7 @@ def api_launchers_check(app_name):
     out = []
     for c in _jload((row or {}).get('launchers'), []):
         try:
-            href = url_for(c['endpoint'])
+            href = url_for(c['endpoint'], **_reg._parse_params(c.get('params')))
             out.append({'endpoint': c['endpoint'], 'ok': True, 'href': href})
         except Exception as e:
             out.append({'endpoint': c.get('endpoint'), 'ok': False, 'error': str(e)})
@@ -547,19 +582,17 @@ def api_sections_save():
             if not re.match(r'^[a-z0-9_]+$', key):
                 return _err(f'section_key は英小文字・数字・_ のみ: {key!r}')
             keep.append(key)
+            # ★2026-08-27 区画側の表示条件は廃止（見出し・色・順だけ）．
+            #   列は互換のため残し，常に「制限なし」で書く
             cur.execute("""INSERT INTO app_share_sections
                 (section_key, title, css_class, sort_order, show_admin, show_guest,
                  require_groups, require_categories)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,1,1,'[]','[]')
                 ON DUPLICATE KEY UPDATE title=VALUES(title), css_class=VALUES(css_class),
-                    sort_order=VALUES(sort_order), show_admin=VALUES(show_admin),
-                    show_guest=VALUES(show_guest), require_groups=VALUES(require_groups),
-                    require_categories=VALUES(require_categories)""",
+                    sort_order=VALUES(sort_order), show_admin=1, show_guest=1,
+                    require_groups='[]', require_categories='[]'""",
                 (key, (s.get('title') or key).strip(), (s.get('css_class') or '').strip(),
-                 float(s.get('sort_order') or 0), 1 if s.get('show_admin', True) else 0,
-                 1 if s.get('show_guest', True) else 0,
-                 _jdump([g for g in (s.get('require_groups') or []) if g]),
-                 _jdump([g for g in (s.get('require_categories') or []) if g])))
+                 float(s.get('sort_order') or 0)))
         if keep:
             fmt = ','.join(['%s'] * len(keep))
             cur.execute(f"DELETE FROM app_share_sections WHERE section_key NOT IN ({fmt})", tuple(keep))
@@ -1327,8 +1360,10 @@ def _diag_app(cur, app_name):
     launch = []
     for c in _jload(row.get('launchers'), []):
         try:
-            launch.append({'endpoint': c['endpoint'], 'ok': True, 'href': url_for(c['endpoint']),
-                           'section': c.get('section'), 'dashboards': c.get('dashboards')})
+            launch.append({'endpoint': c['endpoint'], 'ok': True,
+                           'href': url_for(c['endpoint'], **_reg._parse_params(c.get('params'))),
+                           'section': c.get('section'), 'dashboards': c.get('dashboards'),
+                           'visibility': c.get('visibility'), 'groups': c.get('groups')})
         except Exception as e:
             launch.append({'endpoint': c.get('endpoint'), 'ok': False, 'error': str(e)})
     d = {

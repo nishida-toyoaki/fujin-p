@@ -399,7 +399,9 @@ def _apply_registry(cur, app_name, pkg, user_id):
                 description=pkg.get('description') or '',
                 kind=reg.get('kind') if reg.get('kind') in ('app', 'kernel') else 'app',
                 blueprints=_m._jdump(reg.get('blueprints') or []),
-                launchers=_m._jdump(reg.get('launchers') or []),
+                # ★2026-08-27 旧形式（require_*）のカードは使用区分に読み替えて取り込む
+                launchers=_m._jdump([_reg.normalize_launcher(c) for c in (reg.get('launchers') or [])
+                                     if isinstance(c, dict)]),
                 libraries=_m._jdump(reg.get('libraries') or []),
                 config_keys=_m._jdump(reg.get('config_keys') or []),
                 version_id=pkg.get('version_id'),

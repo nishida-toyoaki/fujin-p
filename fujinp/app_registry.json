@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-02 14:02:00",
+  "generated_at": "2026-09-02 15:41:48",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -636,7 +636,7 @@
       "app_name": "app_share",
       "display_name": "アプシャ",
       "icon": "📦",
-      "description": "FUJIN-Pアプリケーションを他のFUJIN-Pサイト間で共有・配布・インストールするためのパッケージ管理システム。",
+      "description": "FUJIN-Pアプリの正本を管理するカーネルアプリ。起動・ランチャ・テーブル台帳・ライブラリと定数の目録・文書・版をDBに持ち、発行でサイトに反映する。パッケージの輸出入とGitHubへのcommit/pushも行う。",
       "sort_order": 140.0,
       "kind": "kernel",
       "enabled": true,
@@ -662,12 +662,12 @@
           ],
           "sort_order": 160,
           "visibility": "domestic",
-          "description": "FUJIN-Pアプリの共有",
+          "description": "アプリの正本管理・発行・パッケージ輸出入",
           "extra_class": ""
         }
       ],
-      "version_id": "v20260731.140543-a7a266",
-      "version_confirmed_at": "2026-07-31 14:05:43"
+      "version_id": "v20260902.154139-f870c5",
+      "version_confirmed_at": "2026-09-02 15:41:39"
     },
     {
       "app_name": "official_data_archive",

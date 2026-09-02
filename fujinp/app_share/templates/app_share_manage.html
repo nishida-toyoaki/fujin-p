@@ -120,8 +120,9 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
   <!-- ランチャ -->
   <div class="panel" id="p-ln">
     <h2>ランチャ（ダッシュボードのカード）</h2>
-    <div class="hint">1アプリが複数のカードを持てます．表示条件（グループ・カテゴリ）はゲストダッシュボードだけで評価されます．区画側の条件は <a href="{{ url_for('app_share.sections_page') }}">区画の編集</a> で．</div>
-    <table class="g"><thead><tr><th>admin</th><th>guest</th><th>区画</th><th>endpoint</th><th>ラベル</th><th>アイコン</th><th>説明</th><th>順</th><th>要グループ</th><th>要カテゴリ</th><th>class</th><th></th></tr></thead><tbody id="ln-rows"></tbody></table>
+    <div class="hint">1アプリが複数のカードを持てます．<b>admin／guest</b> はどのダッシュボードに置くかの配置，<b>使用区分</b> は誰に見せるか（使用コントローラー・減算方式＝表示だけを制御し，アプリ側の認可には関与しない）．
+      admin ダッシュボードでは区分を評価しません．「公開（ログイン不要）」はログイン画面にも並びます．params は url_for の引数（例 doc_id=8）．区画は置き場所の見出しだけです（<a href="{{ url_for('app_share.sections_page') }}">区画の編集</a>）．</div>
+    <table class="g"><thead><tr><th>admin</th><th>guest</th><th>区画</th><th>endpoint</th><th>params</th><th>ラベル</th><th>アイコン</th><th>説明</th><th>順</th><th>使用区分</th><th>グループ</th><th>class</th><th></th></tr></thead><tbody id="ln-rows"></tbody></table>
     <div class="row"><button class="btn sm gray" onclick="lnAdd()">＋ カードを足す</button>
       <button class="btn sm sky" onclick="lnCheck()">🔗 endpoint 確認</button>
       <button class="btn green" onclick="saveLn()">💾 保存</button> <span class="dirty" id="ln-dirty"></span></div>
@@ -210,6 +211,9 @@ const APP = {{ app_name|tojson }};
 const API = '/app_share/api/app/' + encodeURIComponent(APP);
 let D = null;          // サーバから取った app データ
 let SECTIONS = [];
+let GROUPS = [];            // まいぐるのグループ名
+let VIS_KEYS = ['private','public','domestic','group','domestic_group','open'];
+let VIS_LABELS = {private:'非公開（admin のみ）',public:'ゲストにも',domestic:'構成員だけ',group:'グループ',domestic_group:'構成員＋グループ',open:'公開（ログイン不要）'};
 let dirty = {bp:false, ln:false, lib:false, cfg:false};
 
 function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -232,6 +236,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
 async function loadAll(){
   try{
     const s=await GET('/app_share/api/sections');SECTIONS=s.sections;
+    try{const g=await GET('/app_share/api/user_groups');GROUPS=g.groups||[];if(g.visibility_keys)VIS_KEYS=g.visibility_keys;if(g.visibility_labels)VIS_LABELS=g.visibility_labels}catch(e){GROUPS=[]}
     const r=await GET(API);D=r.app;
     renderAll();pubStatus();
   }catch(e){toast('読み込み失敗: '+e.message,true)}
@@ -299,29 +304,39 @@ async function saveBp(){try{const r=await POST(API+'/blueprints',{blueprints:D.b
 
 // ---- ランチャ ----
 function secOptions(sel){return SECTIONS.map(s=>`<option value="${esc(s.section_key)}" ${s.section_key===sel?'selected':''}>${esc(s.title)}</option>`).join('')}
+function visOptions(sel){return VIS_KEYS.map(k=>`<option value="${k}" ${k===sel?'selected':''}>${esc(VIS_LABELS[k]||k)}</option>`).join('')}
+function groupOptions(c){
+  const cur=c.groups||[];const all=[...GROUPS.map(g=>g.name)];cur.forEach(n=>{if(!all.includes(n))all.push(n)});
+  if(!all.length)return '<option value="" disabled>（まいぐるにグループがありません）</option>';
+  return all.map(n=>`<option value="${esc(n)}" ${cur.includes(n)?'selected':''}>${esc(n)}</option>`).join('')}
+function needsGroups(v){return v==='group'||v==='domestic_group'}
 function renderLn(){
   const tb=document.getElementById('ln-rows');tb.innerHTML='';
-  D.launchers.forEach((c,i)=>{tb.insertAdjacentHTML('beforeend',`<tr>
+  D.launchers.forEach((c,i)=>{
+    if(!c.visibility)c.visibility='private';if(!c.groups)c.groups=[];if(c.params==null)c.params='';
+    tb.insertAdjacentHTML('beforeend',`<tr>
     <td class="n"><input type="checkbox" data-k="admin" data-i="${i}" ${c.dashboards.includes('admin')?'checked':''}></td>
     <td class="n"><input type="checkbox" data-k="guest" data-i="${i}" ${c.dashboards.includes('guest')?'checked':''}></td>
     <td><select data-k="section" data-i="${i}">${secOptions(c.section)}</select></td>
     <td><input type="text" data-k="endpoint" data-i="${i}" value="${esc(c.endpoint)}"></td>
+    <td style="width:90px"><input type="text" data-k="params" data-i="${i}" value="${esc(c.params)}" placeholder="k=v"></td>
     <td><input type="text" data-k="label" data-i="${i}" value="${esc(c.label)}"></td>
     <td style="width:60px"><input type="text" data-k="icon" data-i="${i}" value="${esc(c.icon)}"></td>
     <td><input type="text" data-k="description" data-i="${i}" value="${esc(c.description)}"></td>
     <td style="width:60px"><input type="number" data-k="sort_order" data-i="${i}" value="${esc(c.sort_order)}"></td>
-    <td><input type="text" data-k="require_groups" data-i="${i}" value="${esc((c.require_groups||[]).join(','))}" placeholder="カンマ区切り"></td>
-    <td><input type="text" data-k="require_categories" data-i="${i}" value="${esc((c.require_categories||[]).join(','))}" placeholder="regular,admin"></td>
+    <td><select data-k="visibility" data-i="${i}">${visOptions(c.visibility)}</select></td>
+    <td><select multiple size="3" data-k="groups" data-i="${i}" ${needsGroups(c.visibility)?'':'disabled'} title="Ctrl／⌘ を押しながら複数選択">${groupOptions(c)}</select></td>
     <td style="width:80px"><input type="text" data-k="extra_class" data-i="${i}" value="${esc(c.extra_class||'')}"></td>
     <td class="n"><button class="btn sm red" onclick="lnDel(${i})">✕</button></td></tr>`)});
   tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{
     const c=D.launchers[+el.dataset.i],k=el.dataset.k;
     if(k==='admin'||k==='guest'){c.dashboards=c.dashboards.filter(x=>x!==k);if(el.checked)c.dashboards.push(k)}
-    else if(k==='require_groups'||k==='require_categories')c[k]=el.value.split(',').map(s=>s.trim()).filter(Boolean);
+    else if(k==='groups')c.groups=[...el.selectedOptions].map(o=>o.value).filter(Boolean);
+    else if(k==='visibility'){c.visibility=el.value;const g=el.closest('tr').querySelector('select[data-k=groups]');g.disabled=!needsGroups(c.visibility)}
     else c[k]=el.value;setDirty('ln',true)}));
   document.getElementById('c-ln').textContent=D.launchers.length;
 }
-function lnAdd(){D.launchers.push({dashboards:['admin','guest'],section:SECTIONS.length?SECTIONS[SECTIONS.length-1].section_key:'guest',endpoint:(D.blueprints[0]&&D.blueprints[0].name?D.blueprints[0].name:APP)+'.index',label:D.display_name,icon:D.icon,description:D.description,sort_order:(D.launchers.length+1)*10,require_groups:[],require_categories:[],extra_class:''});setDirty('ln',true);renderLn()}
+function lnAdd(){D.launchers.push({dashboards:['admin','guest'],section:SECTIONS.length?SECTIONS[SECTIONS.length-1].section_key:'guest',endpoint:(D.blueprints[0]&&D.blueprints[0].name?D.blueprints[0].name:APP)+'.index',params:'',label:D.display_name,icon:D.icon,description:D.description,sort_order:(D.launchers.length+1)*10,visibility:'private',groups:[],extra_class:''});setDirty('ln',true);renderLn()}
 function lnDel(i){D.launchers.splice(i,1);setDirty('ln',true);renderLn()}
 async function lnCheck(){try{const r=await GET(API+'/launchers/check');document.getElementById('ln-check').innerHTML='<h3>endpoint の解決（保存済みの内容）</h3>'+r.results.map(x=>`<div class="row"><code>${esc(x.endpoint)}</code> ${x.ok?badge(true,'OK → '+esc(x.href)):badge(false,'','解決できない: '+esc(x.error))}</div>`).join('')}catch(e){toast(e.message,true)}}
 async function saveLn(){try{await POST(API+'/launchers',{launchers:D.launchers});setDirty('ln',false);toast('保存しました（発行で反映）');loadAll()}catch(e){toast('保存失敗: '+e.message,true)}}
