@@ -1,0 +1,355 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>#{{ ch.name }} - すらくみ（Slack議事録） - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+            background: #f4f6f9; color: #333; font-size: 14px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+        .header {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            background: #fff; border-radius: 10px; padding: 14px 20px;
+            margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        }
+        .header h1 { font-size: 1.25rem; }
+        .header .sub { color: #888; font-size: .85rem; }
+        .btn-return {
+            display: inline-block; padding: 6px 14px; background: #e74c3c;
+            border-radius: 20px; color: #fff; text-decoration: none;
+            font-size: .82em; font-weight: 700; white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+        }
+        .btn-return:hover { background: #c0392b; }
+        .btn-back {
+            display: inline-block; padding: 6px 14px; background: #e0e7ff;
+            border-radius: 20px; color: #3730a3; text-decoration: none;
+            font-size: .82em; font-weight: 700; white-space: nowrap;
+        }
+        .btn-back:hover { background: #c7d2fe; }
+        .admin-badge {
+            display: inline-block; background: #dc2626; color: #fff;
+            font-size: .75rem; font-weight: 700; border-radius: 12px;
+            padding: 3px 12px; white-space: nowrap; margin-left: auto;
+        }
+
+        .meta {
+            background: #fff; border-radius: 10px; padding: 12px 20px;
+            margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            font-size: .88rem; line-height: 1.7; color: #555;
+        }
+        .meta b { color: #333; }
+
+        .toolbar {
+            display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+            background: #fff; border-radius: 10px; padding: 10px 14px;
+            margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        }
+        .toolbar input[type=text], .toolbar select {
+            padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;
+            font-size: .88rem;
+        }
+        .toolbar input[type=text] { flex: 1; min-width: 180px; }
+        .tb-btn {
+            padding: 6px 12px; border-radius: 6px; cursor: pointer;
+            font-size: .85rem; border: 1px solid #c7d2fe;
+            background: #eef2ff; color: #3730a3; text-decoration: none;
+            white-space: nowrap;
+        }
+        .tb-btn:hover { background: #e0e7ff; }
+        .tb-btn.green { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+        .tb-btn.green:hover { background: #dcfce7; }
+        .tb-count { color: #888; font-size: .82rem; white-space: nowrap; }
+
+        /* 目録 */
+        .catalog {
+            background: #fff; border-radius: 10px; padding: 8px 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 118px 120px 1fr auto;
+            gap: 10px; align-items: baseline;
+            padding: 8px 16px; border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+        }
+        .row:hover { background: #f8faff; }
+        .row.open { background: #eef2ff; }
+        .row .r-time { color: #666; font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .row .r-sender { font-weight: 600; color: #444; font-size: .85rem;
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row .r-sum { color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row .r-badges { display: flex; gap: 6px; font-size: .75rem; white-space: nowrap; color: #666; }
+        .row .r-badges span {
+            border: 1px solid #e5e7eb; border-radius: 10px; padding: 0 7px; background: #f9fafb;
+        }
+        .row .r-badges .rep { border-color: #c7d2fe; background: #eef2ff; color: #3730a3; }
+        .row .r-badges .fil { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+        .row.hidden { display: none; }
+        .r-date-sep {
+            padding: 6px 16px; background: #f4f6f9; color: #666; font-size: .78rem;
+            font-weight: 600; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0;
+        }
+        .r-date-sep.hidden { display: none; }
+        @media (max-width: 720px) {
+            .row { grid-template-columns: 1fr auto; }
+            .row .r-sender { grid-column: 1; }
+            .row .r-sum { grid-column: 1 / span 2; white-space: normal; }
+        }
+
+        /* 展開部（スレッド） */
+        .thread { display: none; padding: 6px 16px 14px 16px; background: #fbfbff; border-bottom: 1px solid #e5e7eb; }
+        .thread.open { display: block; }
+        .msg {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+            padding: 10px 14px; margin-top: 8px;
+        }
+        .msg.reply { margin-left: 28px; border-left: 3px solid #c7d2fe; background: #f8f8ff; }
+        .msg .m-meta { display: flex; gap: 10px; font-size: .76rem; color: #888; margin-bottom: 6px; align-items: center; }
+        .msg .m-meta .m-sender { font-weight: 700; color: #444; }
+        .msg .m-meta .m-ts { margin-left: auto; color: #bbb; font-size: .7rem; }
+        .msg .m-meta .m-ts a { color: #bbb; text-decoration: none; }
+        .msg .m-meta .m-ts a:hover { color: #4f46e5; }
+        .md { line-height: 1.7; word-break: break-word; }
+        .md p { margin: 0 0 .6em 0; }
+        .md p:last-child { margin-bottom: 0; }
+        .md ul, .md ol { margin: 0 0 .6em 1.6em; }
+        .md blockquote { border-left: 3px solid #d1d5db; color: #666; padding-left: 10px; margin: .4em 0; }
+        .md pre { background: #1f2937; color: #f3f4f6; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: .5em 0; font-size: .85rem; }
+        .md code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: .88em; }
+        .md pre code { background: none; padding: 0; }
+        .md img { max-width: 100%; height: auto; display: block; margin: .4em 0; border-radius: 6px; border: 1px solid #e5e7eb; }
+        .md a { color: #4f46e5; }
+        .md table { border-collapse: collapse; margin: .5em 0; }
+        .md th, .md td { border: 1px solid #d1d5db; padding: 4px 8px; }
+        .md h1, .md h2, .md h3, .md h4 { margin: .4em 0; }
+        .thread .t-tools { text-align: right; margin-top: 6px; }
+        .thread .t-tools button {
+            font-size: .75rem; padding: 3px 10px; border: 1px solid #d1d5db;
+            background: #fff; border-radius: 6px; cursor: pointer; color: #555;
+        }
+        .thread .t-tools button:hover { background: #f3f4f6; }
+        .mdsrc { display: none; white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace;
+                 font-size: .8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+
+        .empty-note { color: #aaa; font-size: .9rem; text-align: center; padding: 30px 0; }
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid #c7d2fe; border-top-color: #4f46e5;
+            border-radius: 50%; animation: spin .6s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #toast {
+            display: none; position: fixed; bottom: 20px; right: 20px;
+            background: #1f2937; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: .85rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <a href="{{ url_for('slack_minutes.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <a href="{{ url_for('slack_minutes.index') }}" class="btn-back">← すらくみ</a>
+        <h1>{% if ch.is_private %}🔒{% else %}#{% endif %}{{ ch.name }}</h1>
+        <span class="sub">Slack アーカイブ</span>
+        {% if is_admin %}<span class="admin-badge">🛡 admin専用</span>{% endif %}
+    </div>
+
+    <div class="meta">
+        {% if ch.purpose %}<div><b>目的：</b>{{ ch.purpose }}</div>{% endif %}
+        {% if ch.topic %}<div><b>トピック：</b>{{ ch.topic }}</div>{% endif %}
+        <div id="meta-stats"><span class="spinner"></span>読み込み中…</div>
+        {% if ch.last_archived_at %}<div><b>完全アーカイブ最終取得：</b>{{ ch.last_archived_at }}</div>{% endif %}
+    </div>
+
+    <div class="toolbar">
+        <input type="text" id="q" placeholder="本文・返信・送信者で絞り込み…">
+        <select id="sender"><option value="">送信者：すべて</option></select>
+        <select id="month"><option value="">月：すべて</option></select>
+        <span class="tb-count" id="count"></span>
+        <button class="tb-btn" id="expand-all">すべて開く</button>
+        <button class="tb-btn" id="collapse-all">すべて閉じる</button>
+        <a class="tb-btn green" href="{{ url_for('slack_minutes.export_md', channel_id=ch.channel_id) }}">📝 Markdown出力</a>
+    </div>
+
+    <div class="catalog" id="catalog">
+        <div class="empty-note"><span class="spinner"></span>読み込み中…</div>
+    </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const CHANNEL_ID = {{ ch.channel_id|tojson }};
+const THREAD_URL = {{ url_for('slack_minutes.api_thread', channel_id=ch.channel_id, ts='__TS__')|tojson }};
+const CATALOG_URL = {{ url_for('slack_minutes.api_catalog', channel_id=ch.channel_id)|tojson }};
+
+let items = [];
+const threadCache = {};   // ts → messages
+
+function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+function toast(msg) {
+    $('#toast').text(msg).fadeIn(150);
+    setTimeout(() => $('#toast').fadeOut(300), 2500);
+}
+
+// ── 目録読み込み ─────────────────────────
+function loadCatalog() {
+    $.getJSON(CATALOG_URL, function(resp) {
+        if (!resp.success) { $('#catalog').html('<div class="empty-note">読み込みに失敗しました</div>'); return; }
+        items = resp.items;
+        $('#meta-stats').html(
+            `<b>メッセージ：</b>${resp.total} 件（返信 ${resp.reply_total} 件）` +
+            (items.length ? `　<b>期間：</b>${items[0].posted_at} 〜 ${items[items.length-1].posted_at}` : ''));
+        // 送信者・月のセレクタ
+        resp.senders.forEach(s => $('#sender').append(`<option value="${esc(s)}">${esc(s)}</option>`));
+        const months = [...new Set(items.map(i => i.date.slice(0, 7)))];
+        months.forEach(m => $('#month').append(`<option value="${m}">${m}</option>`));
+        renderCatalog();
+        // URL のハッシュ（#ts=…）があればそこを開く
+        const m = location.hash.match(/^#ts=([\d.]+)/);
+        if (m) openThread(m[1], true);
+    });
+}
+
+function renderCatalog() {
+    const $c = $('#catalog');
+    if (!items.length) { $c.html('<div class="empty-note">メッセージがありません</div>'); return; }
+    $c.empty();
+    let lastDate = null;
+    items.forEach(it => {
+        if (it.date !== lastDate) {
+            $c.append(`<div class="r-date-sep" data-date="${it.date}">${it.date}</div>`);
+            lastDate = it.date;
+        }
+        const badges = [];
+        if (it.replies) badges.push(`<span class="rep">💬 ${it.replies}</span>`);
+        if (it.files)   badges.push(`<span class="fil">📎 ${it.files}</span>`);
+        if (it.reactions) badges.push(`<span title="${esc(it.reactions)}">${esc(it.reactions.replace(/（[^）]*）/g, ''))}</span>`);
+        if (it.edited) badges.push(`<span>編集済</span>`);
+        $c.append(`
+          <div class="row" data-ts="${it.ts}" data-date="${it.date}" data-sender="${esc(it.sender)}">
+            <span class="r-time">${it.posted_at.slice(5)}</span>
+            <span class="r-sender">${esc(it.sender)}</span>
+            <span class="r-sum">${esc(it.summary) || '<i style="color:#aaa">（本文なし）</i>'}</span>
+            <span class="r-badges">${badges.join('')}</span>
+          </div>
+          <div class="thread" data-ts="${it.ts}"></div>`);
+    });
+    applyFilter();
+}
+
+// ── 絞り込み ─────────────────────────────
+function applyFilter() {
+    const q = ($('#q').val() || '').trim().toLowerCase();
+    const sender = $('#sender').val();
+    const month = $('#month').val();
+    let shown = 0;
+    const visibleDates = new Set();
+    items.forEach(it => {
+        let ok = true;
+        if (q && !(it.plain.toLowerCase().includes(q) || it.sender.toLowerCase().includes(q)
+                   || it.repliers.some(r => r.toLowerCase().includes(q)))) ok = false;
+        if (sender && it.sender !== sender && !it.repliers.includes(sender)) ok = false;
+        if (month && !it.date.startsWith(month)) ok = false;
+        const $row = $(`.row[data-ts="${it.ts}"]`);
+        $row.toggleClass('hidden', !ok);
+        if (!ok) $(`.thread[data-ts="${it.ts}"]`).removeClass('open');
+        if (ok) { shown++; visibleDates.add(it.date); }
+    });
+    $('.r-date-sep').each(function() {
+        $(this).toggleClass('hidden', !visibleDates.has($(this).data('date')));
+    });
+    $('#count').text(`${shown} / ${items.length} 件`);
+}
+$('#q').on('input', applyFilter);
+$('#sender, #month').on('change', applyFilter);
+
+// ── スレッド展開 ─────────────────────────
+function renderThread($t, msgs) {
+    $t.empty();
+    msgs.forEach(m => {
+        const anchor = location.pathname + '#ts=' + m.ts;
+        $t.append(`
+          <div class="msg${m.is_reply ? ' reply' : ''}">
+            <div class="m-meta">
+              <span class="m-sender">${esc(m.sender)}</span>
+              <span>${m.posted_at}</span>
+              ${m.is_reply ? '<span>↳ 返信</span>' : ''}
+              ${m.edited ? '<span>（編集済み）</span>' : ''}
+              <span class="m-ts"><a href="${anchor}" title="このメッセージへのリンク">🔗</a></span>
+            </div>
+            <div class="md">${m.html}</div>
+            <div class="mdsrc">${esc(m.md)}</div>
+          </div>`);
+    });
+    $t.append(`<div class="t-tools">
+        <button class="show-src">Markdownソース</button>
+        <button class="copy-md">MDをコピー</button></div>`);
+    $t.find('.show-src').on('click', function(e) {
+        e.stopPropagation(); $t.find('.mdsrc').toggle();
+    });
+    $t.find('.copy-md').on('click', function(e) {
+        e.stopPropagation();
+        const md = msgs.map(m =>
+            (m.is_reply ? '> ' : '') + `**${m.sender}**　${m.posted_at}\n\n` +
+            (m.is_reply ? m.md.split('\n').map(l => '> ' + l).join('\n') : m.md)).join('\n\n');
+        navigator.clipboard.writeText(md).then(() => toast('Markdown をコピーしました'));
+    });
+}
+
+function openThread(ts, scroll) {
+    const $row = $(`.row[data-ts="${ts}"]`);
+    const $t = $(`.thread[data-ts="${ts}"]`);
+    if (!$t.length) return;
+    $row.addClass('open'); $t.addClass('open');
+    if (scroll) $('html, body').animate({ scrollTop: $row.offset().top - 60 }, 200);
+    if (threadCache[ts]) { if (!$t.children().length) renderThread($t, threadCache[ts]); return Promise.resolve(); }
+    $t.html('<div class="empty-note" style="padding:10px"><span class="spinner"></span>読み込み中…</div>');
+    return $.getJSON(THREAD_URL.replace('__TS__', ts)).then(resp => {
+        if (!resp.success) { $t.html('<div class="empty-note">読み込み失敗</div>'); return; }
+        threadCache[ts] = resp.messages;
+        renderThread($t, resp.messages);
+    }).catch(() => $t.html('<div class="empty-note">通信エラー</div>'));
+}
+
+function closeThread(ts) {
+    $(`.row[data-ts="${ts}"]`).removeClass('open');
+    $(`.thread[data-ts="${ts}"]`).removeClass('open');
+}
+
+$('#catalog').on('click', '.row', function() {
+    const ts = $(this).data('ts');
+    if ($(this).hasClass('open')) closeThread(ts); else openThread(ts, false);
+});
+
+$('#expand-all').on('click', async function() {
+    const list = items.filter(it => !$(`.row[data-ts="${it.ts}"]`).hasClass('hidden'));
+    const $btn = $(this).prop('disabled', true);
+    let i = 0;
+    async function worker() {
+        while (i < list.length) { const it = list[i++]; await openThread(it.ts, false); }
+    }
+    await Promise.all([worker(), worker(), worker()]);   // 3 並列
+    $btn.prop('disabled', false);
+});
+$('#collapse-all').on('click', function() { items.forEach(it => closeThread(it.ts)); });
+
+$(function() { loadCatalog(); });
+</script>
+</body>
+</html>

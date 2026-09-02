@@ -28,7 +28,16 @@ slack_minutes - Slack チャンネル議事録取得アプリ
 依存：
   - Config.SLACK_BOT_TOKEN（notifiers.py と共用）
   - 追加Slackスコープ：channels:read / channels:history /
-                       groups:read / groups:history / users:read
+                       groups:read / groups:history / users:read /
+                       files:read（★v2.0 添付ファイル取得用）
+  - サブモジュール mrkdwn.py（Slack mrkdwn → Markdown 復元）★v2.0
+
+v2.0（2026-08-27）：完全アーカイブ化．全メッセージ上書き同期・スレッド返信・
+リアクション・添付ファイル実体の保存，Markdown 復元，チャンネル閲覧画面（目録）．
+v2.1（2026-08-27）：閲覧の開放．admin 以外には公開アーカイブの一覧だけを表示し，
+チャンネルごとの公開範囲（slack_minutes_channels.visibility）で閲覧を制御する．
+v2.2（2026-08-27）：公開範囲をマイノート／コレポと同じ5区分（非公開・ゲストにも・
+構成員だけ・グループ・構成員＋グループ）にし，まいぐるのグループを指定できるようにした．
 """
 from flask import Blueprint
 

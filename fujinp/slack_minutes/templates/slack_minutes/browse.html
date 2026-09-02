@@ -1,0 +1,115 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>すらくみ（Slack議事録）アーカイブ - FUJIN-P</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+            background: #f4f6f9; color: #333; font-size: 14px;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .header {
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            background: #fff; border-radius: 10px; padding: 16px 20px;
+            margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        }
+        .header h1 { font-size: 1.3rem; }
+        .btn-return {
+            display: inline-block; padding: 6px 14px; background: #e74c3c;
+            border-radius: 20px; color: #fff; text-decoration: none;
+            font-size: .82em; font-weight: 700; white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+        }
+        .btn-return:hover { background: #c0392b; }
+        .ws-notice {
+            background: #eef2ff; border: 1px solid #c7d2fe; color: #3730a3;
+            border-radius: 8px; padding: 10px 16px; margin-bottom: 14px;
+            font-size: 0.9rem; line-height: 1.6;
+        }
+        .card {
+            background: #fff; border-radius: 10px; padding: 18px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        }
+        .card h2 {
+            font-size: 1rem; margin-bottom: 14px; color: #444;
+            border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;
+        }
+        .arch-list { display: flex; flex-direction: column; gap: 10px; }
+        .arch-item {
+            border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px;
+            display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center;
+        }
+        .arch-item:hover { background: #f8faff; }
+        .arch-item .ai-name { font-weight: 700; font-size: 1rem; }
+        .arch-item .ai-name a { color: #1f2937; text-decoration: none; }
+        .arch-item .ai-name a:hover { color: #4f46e5; }
+        .arch-item .ai-purpose { color: #555; font-size: .85rem; grid-column: 1; }
+        .arch-item .ai-meta { color: #888; font-size: .78rem; grid-column: 1; }
+        .arch-item .ai-btns { grid-row: 1 / span 3; display: flex; gap: 6px; }
+        .arch-item .ai-btns a {
+            padding: 6px 12px; border-radius: 6px; font-size: .85rem; text-decoration: none;
+            border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; white-space: nowrap;
+        }
+        .arch-item .ai-btns a.md { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+        .arch-item .ai-btns a:hover { filter: brightness(.96); }
+        .empty-note { color: #aaa; font-size: 0.9rem; text-align: center; padding: 30px 0; }
+        .privacy-note {
+            background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+            border-radius: 8px; padding: 8px 12px; margin-top: 14px;
+            font-size: 0.8rem; line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <a href="{{ url_for('slack_minutes.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+        <h1>💬 すらくみ（Slack議事録）</h1>
+    </div>
+
+    <div class="ws-notice">
+        📚 Slack チャンネルのアーカイブです．チャンネルを開くと目録（メッセージ一覧）が表示され，
+        行を開くとスレッド全体を読めます．Markdown での一括ダウンロードもできます．
+    </div>
+
+    <div class="card">
+        <h2>📚 アーカイブ済みチャンネル</h2>
+        <div class="arch-list">
+        {% if not channels %}
+            <div class="empty-note">公開されているアーカイブはまだありません</div>
+        {% endif %}
+        {% for c in channels %}
+            <div class="arch-item">
+                <div class="ai-name">
+                    <a href="{{ c.url }}">{% if c.is_private %}🔒{% else %}#{% endif %}{{ c.name }}</a>
+                </div>
+                <div class="ai-btns">
+                    <a href="{{ c.url }}">📖 閲覧</a>
+                    <a class="md" href="{{ c.export_url }}">📝 MD</a>
+                </div>
+                {% if c.purpose %}<div class="ai-purpose">{{ c.purpose }}</div>{% endif %}
+                <div class="ai-meta">
+                    {{ c.first_at }} 〜 {{ c.last_at }}　メッセージ {{ c.parents }} 件・返信 {{ c.replies }} 件{% if c.files_total %}・添付 {{ c.files_done }} 件{% endif %}
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+        <div class="privacy-note">
+            🔐 <b>プライバシーにご配慮ください</b>：
+            チャンネルの内容を読むことは自由ですが，その内容をチャンネルの外に持ち出さないでください．
+        </div>
+    </div>
+</div>
+</body>
+</html>

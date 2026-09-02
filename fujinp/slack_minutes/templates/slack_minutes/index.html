@@ -263,6 +263,87 @@
         #fetch-btn:hover:not(:disabled) { background: #4338ca; }
         #fetch-btn:disabled { opacity: .5; cursor: default; }
 
+        /* ★v2.0 完全アーカイブ取得 */
+        .archive-box {
+            margin-top: 14px; padding-top: 12px; border-top: 1px dashed #d1d5db;
+        }
+        .archive-box .ab-note { font-size: .78rem; color: #666; line-height: 1.6; margin-bottom: 8px; }
+        #archive-btn {
+            width: 100%; padding: 10px; background: #059669; color: #fff;
+            border: none; border-radius: 8px; cursor: pointer;
+            font-size: 0.95rem; font-weight: 600;
+        }
+        #archive-btn:hover:not(:disabled) { background: #047857; }
+        #archive-btn:disabled { opacity: .5; cursor: default; }
+        .progress { display: none; margin-top: 10px; font-size: .82rem; color: #444; }
+        .progress .bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+        .progress .bar i { display: block; height: 100%; width: 0; background: #059669; transition: width .3s; }
+        .progress .pg-counts { color: #888; font-size: .76rem; }
+
+        /* ★v2.0 アーカイブ済みチャンネル一覧 */
+        .arch-list { display: flex; flex-direction: column; gap: 8px; }
+        .arch-item {
+            border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px;
+            display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center;
+        }
+        .arch-item .ai-name { font-weight: 700; font-size: .95rem; }
+        .arch-item .ai-name a { color: #1f2937; text-decoration: none; }
+        .arch-item .ai-name a:hover { color: #4f46e5; }
+        .arch-item .ai-meta { color: #888; font-size: .78rem; grid-column: 1; }
+        .arch-item .ai-btns { grid-row: 1 / span 2; display: flex; gap: 6px; }
+        .arch-item .ai-btns a {
+            padding: 5px 12px; border-radius: 6px; font-size: .82rem; text-decoration: none;
+            border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; white-space: nowrap;
+        }
+        .arch-item .ai-btns a.md { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+        .arch-item .ai-btns a:hover { filter: brightness(.96); }
+        .badge-mode { background: #e0e7ff; color: #3730a3; }
+        .arch-item .ai-vis { font-size: .78rem; grid-column: 1; display: flex; gap: 8px; align-items: center; }
+        .arch-item .ai-vis .vis-badge { border-radius: 10px; padding: 1px 8px; font-weight: 600; }
+        .vis-private        { color: #991b1b; background: #fee2e2; }
+        .vis-public         { color: #065f46; background: #d1fae5; }
+        .vis-domestic       { color: #1e40af; background: #dbeafe; }
+        .vis-group          { color: #6b21a8; background: #f3e8ff; }
+        .vis-domestic_group { color: #6b21a8; background: #ede9fe; }
+        .arch-item .ai-vis .vis-groups { color: #666; }
+
+        /* ★v2.2 公開範囲モーダル */
+        .modal-bg {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35);
+            z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-bg.open { display: flex; }
+        .modal {
+            background: #fff; border-radius: 10px; padding: 20px 22px; width: 560px;
+            max-width: 95vw; max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 8px 30px rgba(0,0,0,.25);
+        }
+        .modal h3 { font-size: 1.05rem; margin-bottom: 12px; }
+        .share-option { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; cursor: pointer; }
+        .share-option:hover { background: #f8faff; }
+        .share-option.selected { border-color: #4f46e5; background: #eef2ff; }
+        .share-option label { cursor: pointer; font-weight: 600; }
+        .share-option .sd { color: #666; font-size: .8rem; margin-left: 22px; }
+        #group-list { display: none; margin: 8px 0 4px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; max-height: 220px; overflow-y: auto; }
+        #group-list h4 { font-size: .85rem; color: #444; margin-bottom: 6px; }
+        #group-list label { display: block; padding: 3px 0; font-size: .88rem; }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+        .modal-btns button { padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: .9rem; border: 1px solid #d1d5db; background: #fff; }
+        .modal-btns button.primary { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+        .modal-btns button.primary:hover { background: #4338ca; }
+        .arch-item .ai-vis button {
+            font-size: .75rem; padding: 2px 8px; border: 1px solid #d1d5db; background: #fff;
+            border-radius: 6px; cursor: pointer; color: #555;
+        }
+        .arch-item .ai-vis button:hover { background: #f3f4f6; }
+        .arch-item .ai-btns { grid-row: 1 / span 3; }
+        .badge-arch { background: #d1fae5; color: #065f46; }
+        .session-item .si-resume {
+            color: #065f46; font-size: 0.8rem; cursor: pointer; padding: 2px 8px;
+            border: 1px solid #6ee7b7; border-radius: 4px; margin-right: 4px;
+        }
+        .session-item .si-resume:hover { background: #d1fae5; }
+
         /* ★v1.2 プライバシー注意 */
         .privacy-note {
             background: #fffbeb;
@@ -445,7 +526,23 @@
                 <span style="color:#aaa">（空 = 全件）</span>
             </div>
 
-            <button id="fetch-btn" disabled>取得して保存</button>
+            <button id="fetch-btn" disabled>差分取得（本文のみ・新規だけ保存）</button>
+
+            <!-- ★v2.0 完全アーカイブ取得 -->
+            <div class="archive-box">
+                <div class="ab-note">
+                    📦 <b>完全アーカイブ取得</b>：チャンネルの全メッセージを上書き同期し，
+                    スレッド返信・リアクション・添付ファイル（実体）を取り込みます．
+                    何度実行しても重複しません．途中で止まっても「取得履歴」の
+                    <b>再開</b>から続きを実行できます．
+                </div>
+                <button id="archive-btn" disabled>📦 完全アーカイブ取得</button>
+                <div class="progress" id="archive-progress">
+                    <div id="pg-msg"><span class="spinner"></span>開始…</div>
+                    <div class="bar"><i id="pg-bar"></i></div>
+                    <div class="pg-counts" id="pg-counts"></div>
+                </div>
+            </div>
 
             <!-- ★v1.2 プライバシー注意 -->
             <div class="privacy-note">
@@ -455,8 +552,16 @@
             </div>
         </div>
 
-        <!-- ── 右：取得履歴 + メッセージ ── -->
+        <!-- ── 右：アーカイブ一覧 + 取得履歴 + メッセージ ── -->
         <div>
+            <!-- ★v2.0 アーカイブ済みチャンネル -->
+            <div class="card" style="margin-bottom:16px">
+                <h2>📚 アーカイブ済みチャンネル</h2>
+                <div class="arch-list" id="arch-list">
+                    <div class="empty-note">読み込み中…</div>
+                </div>
+            </div>
+
             <div class="card" style="margin-bottom:16px">
                 <h2>🗂 取得履歴</h2>
                 <div class="session-list" id="session-list">
@@ -473,6 +578,41 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- ★v2.2 公開範囲モーダル（admin のみ） -->
+<div class="modal-bg" id="access-modal">
+    <div class="modal">
+        <h3>🔗 公開範囲の設定：<span id="access-ch-name"></span></h3>
+        <div class="share-option" data-key="private">
+            <label><input type="radio" name="visibility" value="private"> 🔒 非公開</label>
+            <div class="sd">admin だけが閲覧できます</div>
+        </div>
+        <div class="share-option" data-key="public">
+            <label><input type="radio" name="visibility" value="public"> 🌐 ゲストにも</label>
+            <div class="sd">ログイン済みの全ユーザ（ゲストを含む）が閲覧できます</div>
+        </div>
+        <div class="share-option" data-key="domestic">
+            <label><input type="radio" name="visibility" value="domestic"> 🏢 構成員だけ</label>
+            <div class="sd">ログイン済みの構成員だけが閲覧できます</div>
+        </div>
+        <div class="share-option" data-key="group">
+            <label><input type="radio" name="visibility" value="group"> 👥 グループ</label>
+            <div class="sd">指定グループの所属者だけが閲覧できます</div>
+        </div>
+        <div class="share-option" data-key="domestic_group">
+            <label><input type="radio" name="visibility" value="domestic_group"> 🏢＋👥 構成員＋グループ</label>
+            <div class="sd">構成員と指定グループの所属者が閲覧できます</div>
+        </div>
+        <div id="group-list">
+            <h4>許可するグループを選択（チェックしたグループの所属者に公開）</h4>
+            <div id="group-list-items"></div>
+        </div>
+        <div class="modal-btns">
+            <button id="access-cancel">キャンセル</button>
+            <button id="access-save" class="primary">保存</button>
+        </div>
     </div>
 </div>
 
@@ -522,17 +662,20 @@ function updateMemberState() {
     if (!selectedChannel) {
         $('#invite-guide').hide();
         $('#fetch-btn').prop('disabled', true);
+        $('#archive-btn').prop('disabled', true);
         return;
     }
     if (selectedChannel.is_member) {
         $('#invite-guide').hide();
         $('#probe-status').text('');
         $('#fetch-btn').prop('disabled', false);
+        $('#archive-btn').prop('disabled', archiveRunning);
     } else {
         $('#guide-ch-name').text('#' + selectedChannel.name);
         $('#probe-status').text('');
         $('#invite-guide').show();
         $('#fetch-btn').prop('disabled', true);
+        $('#archive-btn').prop('disabled', true);
     }
 }
 
@@ -660,16 +803,17 @@ $('#fetch-btn').on('click', function() {
             oldest_ts:    oldestTs
         }),
         success: function(resp) {
-            $btn.html('取得して保存').prop('disabled', false);
+            $btn.html('差分取得（本文のみ・新規だけ保存）').prop('disabled', false);
             if (!resp.success) { showResult(resp.error, true); return; }
             showResult(
                 `取得完了：${resp.fetched}件取得 / ${resp.saved}件新規保存 / ${resp.skipped}件スキップ`,
                 false
             );
             loadSessions();
+            loadArchives();
         },
         error: function() {
-            $btn.html('取得して保存').prop('disabled', false);
+            $btn.html('差分取得（本文のみ・新規だけ保存）').prop('disabled', false);
             showResult('通信エラー', true);
         }
     });
@@ -694,22 +838,30 @@ function loadSessions() {
                     <div class="si-top">
                       <span class="si-ch">#${s.channel_name}</span>
                       <span>
+                        ${modeBadge(s)}
                         ${statusBadge(s.status)}
-                        <span class="si-del" data-sid="${s.id}">削除</span>
+                        ${(s.mode === 'archive' && s.status !== 'done')
+                            ? `<span class="si-resume" data-sid="${s.id}">再開</span>` : ''}
+                        <span class="si-del" data-sid="${s.id}">記録を削除</span>
                       </span>
                     </div>
                     <div class="si-meta">
                       ${s.fetched_at}
-                      ${s.saved_count != null ? `新規${s.saved_count}件保存` : ''}
+                      ${sessionSummary(s)}
                     </div>
                   </div>`);
                 $item.on('click', function(e) {
-                    if ($(e.target).hasClass('si-del')) return;
+                    if ($(e.target).hasClass('si-del') || $(e.target).hasClass('si-resume')) return;
                     loadMessages(s.id, s.channel_name);
+                });
+                $item.find('.si-resume').on('click', function(e) {
+                    e.stopPropagation();
+                    if (archiveRunning) { showResult('別の完全アーカイブ取得が実行中です', true); return; }
+                    runArchiveSteps(s.id, s.channel_name);
                 });
                 $item.find('.si-del').on('click', function(e) {
                     e.stopPropagation();
-                    if (!confirm(`セッション（#${s.channel_name} / ${s.fetched_at}）を削除しますか？\nメッセージも全削除されます。`)) return;
+                    if (!confirm(`取得記録（#${s.channel_name} / ${s.fetched_at}）を削除しますか？\n保存済みのメッセージは削除されません（チャンネルのアーカイブに残ります）。`)) return;
                     deleteSession(s.id);
                 });
                 $list.append($item);
@@ -735,12 +887,214 @@ function deleteSession(sid) {
     });
 }
 
+// ── ★v2.0 セッションの種別表示 ───────────
+function modeBadge(s) {
+    return s.mode === 'archive'
+        ? '<span class="badge badge-arch">完全</span>'
+        : '<span class="badge badge-mode">差分</span>';
+}
+function sessionSummary(s) {
+    if (s.mode === 'archive') {
+        const parts = [];
+        if (s.saved_count != null)   parts.push(`新規${s.saved_count}`);
+        if (s.updated_count != null) parts.push(`再同期${s.updated_count}`);
+        if (s.reply_count != null)   parts.push(`返信${s.reply_count}`);
+        if (s.file_count != null)    parts.push(`添付${s.file_count}`);
+        const ph = {history:'履歴', threads:'スレッド', files:'添付', done:''}[s.phase] || '';
+        return parts.join('・') + (s.status !== 'done' && ph ? `（${ph}の段階で停止）` : '');
+    }
+    return s.saved_count != null ? `新規${s.saved_count}件保存` : '';
+}
+
+// ── ★v2.0 完全アーカイブ取得（start → step 繰り返し）──
+let archiveRunning = false;
+const ARCHIVE_START_URL = '{{ url_for("slack_minutes.api_archive_start") }}';
+const ARCHIVE_STEP_URL  = '{{ url_for("slack_minutes.api_archive_step", sid=0) }}';
+
+function setProgress(p) {
+    $('#archive-progress').show();
+    $('#pg-msg').html('<span class="spinner"></span>' + $('<span>').text(p.message).html());
+    let pct = 0;
+    if (p.phase === 'history') pct = 10;
+    else if (p.phase === 'threads') pct = 30 + (p.threads_total ? 40 * p.thread_idx / p.threads_total : 40);
+    else if (p.phase === 'files') pct = 70 + (p.file_total ? 28 * p.file_done / p.file_total : 28);
+    else if (p.phase === 'done') pct = 100;
+    $('#pg-bar').css('width', pct + '%');
+    const c = p.counts || {};
+    $('#pg-counts').text(
+        `取得${c.fetched||0}件 / 新規${c.saved||0} / 再同期${c.updated||0} / 返信${c.replies||0} / スキップ${c.skipped||0}`);
+}
+
+function runArchiveSteps(sid, chName) {
+    archiveRunning = true;
+    $('#archive-btn').prop('disabled', true).html('<span class="spinner"></span>取得中…');
+    $('#archive-progress').show();
+    const step = () => {
+        $.ajax({
+            url: ARCHIVE_STEP_URL.replace(/0$/, String(sid)),
+            method: 'POST', contentType: 'application/json', data: '{}',
+            success: function(resp) {
+                if (!resp.success) { finish(false, resp.error); return; }
+                setProgress(resp);
+                if (resp.done) { finish(true); return; }
+                const wait = resp.wait ? resp.wait * 1000 : 300;
+                if (resp.wait) $('#pg-msg').html(`<span class="spinner"></span>Slack の制限により ${resp.wait} 秒待機…`);
+                setTimeout(step, wait);
+            },
+            error: function() { finish(false, '通信エラー（「取得履歴」の再開から続行できます）'); }
+        });
+    };
+    const finish = (ok, err) => {
+        archiveRunning = false;
+        $('#archive-btn').html('📦 完全アーカイブ取得');
+        updateMemberState();
+        if (ok) {
+            $('#pg-msg').text('✅ 完了：#' + chName);
+            showResult(`完全アーカイブ取得が完了しました：#${chName}`, false);
+        } else {
+            $('#pg-msg').text('⚠ 中断：' + err);
+            showResult(err, true);
+        }
+        loadSessions();
+        loadArchives();
+    };
+    step();
+}
+
+$('#archive-btn').on('click', function() {
+    if (!selectedChannel || !selectedChannel.is_member) return;
+    if (archiveRunning) return;
+    if (!confirm(`#${selectedChannel.name} の完全アーカイブ取得を開始しますか？\n（全メッセージ・スレッド返信・リアクション・添付ファイルを取り込みます）`)) return;
+    archiveRunning = true;
+    $(this).prop('disabled', true).html('<span class="spinner"></span>開始…');
+    $.ajax({
+        url: ARCHIVE_START_URL, method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ channel_id: selectedChannel.id, channel_name: selectedChannel.name }),
+        success: function(resp) {
+            if (!resp.success) {
+                archiveRunning = false; updateMemberState();
+                $('#archive-btn').html('📦 完全アーカイブ取得');
+                showResult(resp.error, true); return;
+            }
+            setProgress(resp);
+            loadSessions();
+            runArchiveSteps(resp.session_id, selectedChannel.name);
+        },
+        error: function() {
+            archiveRunning = false; updateMemberState();
+            $('#archive-btn').html('📦 完全アーカイブ取得');
+            showResult('通信エラー', true);
+        }
+    });
+});
+
+// ── ★v2.0 アーカイブ済みチャンネル一覧 ──────
+const EXPORT_URL_TPL  = '{{ url_for("slack_minutes.export_md", channel_id="__CID__") }}';
+
+function loadArchives() {
+    $.getJSON('{{ url_for("slack_minutes.api_archives") }}', function(resp) {
+        const $l = $('#arch-list');
+        if (!resp.success || !resp.channels.length) {
+            $l.html('<div class="empty-note">アーカイブ済みのチャンネルはまだありません</div>');
+            return;
+        }
+        $l.empty();
+        resp.channels.forEach(c => {
+            const files = c.files_total ? `・添付 ${c.files_done}/${c.files_total}` : '';
+            const arch = c.last_archived_at ? `完全アーカイブ ${c.last_archived_at}` : '差分取得のみ（完全アーカイブ未実施）';
+            $l.append(`
+              <div class="arch-item">
+                <div class="ai-name"><a href="${c.url}">${c.is_private ? '🔒' : '#'}${$('<span>').text(c.name).html()}</a></div>
+                <div class="ai-btns">
+                  <a href="${c.url}">📖 閲覧</a>
+                  <a class="md" href="${EXPORT_URL_TPL.replace('__CID__', c.channel_id)}">📝 MD</a>
+                </div>
+                <div class="ai-meta">
+                  ${c.first_at} 〜 ${c.last_at}　メッセージ ${c.parents} 件・返信 ${c.replies} 件${files}<br>
+                  ${arch}
+                </div>
+                <div class="ai-vis">
+                  <span>公開範囲：</span>
+                  <span class="vis-badge vis-${c.visibility}">${$('<span>').text(c.visibility_label).html()}</span>
+                  ${c.group_ids && c.group_ids.length ? `<span class="vis-groups">グループ ${c.group_ids.length} 件</span>` : ''}
+                  <button class="vis-edit" data-cid="${c.channel_id}" data-name="${$('<span>').text(c.name).html()}">⚙ 設定</button>
+                </div>
+              </div>`);
+        });
+        $l.find('.vis-edit').on('click', function() {
+            openAccessModal($(this).data('cid'), $(this).data('name'));
+        });
+    });
+}
+
+// ── ★v2.2 公開範囲モーダル ──────────────
+const ACCESS_URL_TPL = '{{ url_for("slack_minutes.api_get_access", channel_id="__CID__") }}';
+let accessCid = null;
+
+function openAccessModal(cid, name) {
+    accessCid = cid;
+    $('#access-ch-name').text('#' + name);
+    $('#group-list-items').empty();
+    $('.share-option').removeClass('selected');
+    $('input[name=visibility]').prop('checked', false);
+    $('#group-list').hide();
+    $('#access-modal').addClass('open');
+    $.getJSON(ACCESS_URL_TPL.replace('__CID__', cid), function(resp) {
+        if (!resp.success) { showResult(resp.error, true); closeAccessModal(); return; }
+        $(`input[name=visibility][value="${resp.visibility}"]`).prop('checked', true);
+        $(`.share-option[data-key="${resp.visibility}"]`).addClass('selected');
+        const $g = $('#group-list-items');
+        if (!resp.all_groups.length) {
+            $g.append('<div style="color:#aaa;font-size:.85rem">まいぐるにグループが登録されていません</div>');
+        }
+        resp.all_groups.forEach(g => {
+            const checked = resp.group_ids.includes(g.id) ? 'checked' : '';
+            $g.append(`<label><input type="checkbox" name="group_ids" value="${g.id}" ${checked}> ${$('<span>').text(g.name).html()}</label>`);
+        });
+        updateGroupListVisibility();
+    }).fail(() => { showResult('通信エラー', true); closeAccessModal(); });
+}
+function closeAccessModal() { $('#access-modal').removeClass('open'); accessCid = null; }
+function updateGroupListVisibility() {
+    const v = $('input[name=visibility]:checked').val();
+    $('#group-list').toggle(v === 'group' || v === 'domestic_group');
+}
+$('.share-option').on('click', function() {
+    $('.share-option').removeClass('selected');
+    $(this).addClass('selected');
+    $(this).find('input[name=visibility]').prop('checked', true);
+    updateGroupListVisibility();
+});
+$('#access-cancel').on('click', closeAccessModal);
+// モーダルは「キャンセル」「保存」でだけ閉じる（背景クリック・Esc では閉じない）
+$('#access-save').on('click', function() {
+    if (!accessCid) return;
+    const vis = $('input[name=visibility]:checked').val();
+    if (!vis) { showResult('公開範囲を選んでください', true); return; }
+    const gids = $('input[name=group_ids]:checked').map(function() { return parseInt(this.value, 10); }).get();
+    if ((vis === 'group' || vis === 'domestic_group') && !gids.length) {
+        showResult('グループを1つ以上選んでください', true); return;
+    }
+    $.ajax({
+        url: ACCESS_URL_TPL.replace('__CID__', accessCid),
+        method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ visibility: vis, group_ids: gids }),
+        success: function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            showResult(`公開範囲を「${resp.label}」にしました`, false);
+            closeAccessModal();
+            loadArchives();
+        },
+        error: function() { showResult('通信エラー', true); }
+    });
+});
+
 // ── メッセージ表示 ───────────────────────
 function loadMessages(sid, chName) {
     currentSessionId = sid;
     $('.session-item').removeClass('active');
     $(`.session-item[data-sid="${sid}"]`).addClass('active');
-    $('#msg-title').text(`#${chName} のメッセージ`);
+    $('#msg-title').text(`#${chName} のメッセージ（この取得で初めて保存された分）`);
     $('#msg-card').show();
     $('#msg-list').html('<div class="empty-note"><span class="spinner"></span>読み込み中…</div>');
 
@@ -802,6 +1156,7 @@ $('#export-btn').on('click', function() {
 // ── 初期化 ──────────────────────────────
 $(function() {
     loadSessions();
+    loadArchives();        // ★v2.0
     loadWorkspaceInfo();   // ★v1.2
 
     // delete URL を動的に組み立てるための補助
