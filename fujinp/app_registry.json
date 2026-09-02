@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-02 17:18:22",
+  "generated_at": "2026-09-02 17:20:14",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -13,8 +13,8 @@
       "enabled": true,
       "blueprints": [],
       "launchers": [],
-      "version_id": null,
-      "version_confirmed_at": null
+      "version_id": "v20260902.172000-da39a3",
+      "version_confirmed_at": "2026-09-02 17:20:01"
     },
     {
       "app_name": "admin",
