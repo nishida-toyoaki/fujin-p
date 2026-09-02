@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-02 15:41:48",
+  "generated_at": "2026-09-02 16:55:27",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -20,7 +20,7 @@
       "app_name": "admin",
       "display_name": "アカウント管理",
       "icon": "📦",
-      "description": "ユーザアカウントの登録，更新，削除など（管理者専用）",
+      "description": "ユーザアカウントの登録・更新・削除と登録申請の審査（管理者専用）。管理者ダッシュボードとゲストダッシュボードも持ち、カードは正本から描く。",
       "sort_order": 10.0,
       "kind": "kernel",
       "enabled": true,
@@ -55,8 +55,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260731.133449-5b05a7",
-      "version_confirmed_at": "2026-07-31 13:34:49"
+      "version_id": "v20260902.165222-0ea41a",
+      "version_confirmed_at": "2026-09-02 16:52:22"
     },
     {
       "app_name": "table_cycle",

@@ -29,25 +29,10 @@ from datetime import datetime, timezone, timedelta
 guest_bp = Blueprint('guest', __name__, template_folder='templates')
 
 
-# ── ゲスト公開アプリの定義（ログイン不要） ───────────────────────────────
-GUEST_APPS = {
-    'ts_solvers': {
-        'label': '巡回セールスマン問題ソルバー',
-        'url_func': 'ts_solvers.index',
-    },
-    'free_hand_curve': {
-        'label': 'フリーハンド曲線',
-        'url_func': 'free_hand_curve.index',
-    },
-    'tag_chase': {
-        'label': '鬼ごっこ3D',
-        'url_func': 'tag_chase.index',
-    },
-    'sorakara': {
-        'label': 'そらから',
-        'url_func': 'sorakara.index',
-    }
-}
+# ── ゲスト公開アプリ（ログイン不要） ─────────────────────────────────────
+# ★2026-08-27 固定の一覧（GUEST_APPS）を廃止．正本のランチャで使用区分が
+#   「公開（ログイン不要）」のカードを fujinp.registry.public_cards() から得る．
+#   ログイン画面（login.html）も同じ一覧を描く．/go/<app_name> はアクセス記録用．
 
 
 # ── グループ取得ヘルパー ──────────────────────────────────────────────────
@@ -138,9 +123,12 @@ def launch_toi_no_mori():
 
 @guest_bp.route('/go/<app_id>')
 def go(app_id):
-    if app_id not in GUEST_APPS:
+    """ログイン不要の公開アプリへ（アクセス記録付き）．app_id はアプリ名"""
+    from fujinp.registry import find_public_card
+    card = find_public_card(app_id)
+    if not card:
         abort(404)
-    app_info      = GUEST_APPS[app_id]
+    app_info      = {'label': card['label'], 'href': card['href']}
     ip            = request.remote_addr
     forwarded_for = request.headers.get('X-Forwarded-For', '-')
     ua            = request.headers.get('User-Agent', '-')
@@ -151,4 +139,4 @@ def go(app_id):
         'GUEST_ACCESS app_id=%s app_label="%s" ip=%s forwarded_for=%s ua="%s" referer="%s" lang=%s screen=%s',
         app_id, app_info['label'], ip, forwarded_for, ua, referer, lang, screen
     )
-    return redirect(url_for(app_info['url_func']))
+    return redirect(app_info['href'])

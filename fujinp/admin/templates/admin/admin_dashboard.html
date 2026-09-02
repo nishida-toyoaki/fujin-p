@@ -163,6 +163,12 @@
             display: inline-block; background: rgba(255,255,255,0.3);
             padding: 3px 8px; border-radius: 10px; font-size: 0.65rem; margin-top: 4px;
         }
+        /* ★2026-08-27 使用区分（使用コントローラー）の表示 */
+        .vis-badge {
+            display: block; text-align: center; margin-top: 3px;
+            font-size: 0.5rem; color: rgba(255,255,255,0.9); opacity: .85;
+        }
+        .app-card:not(.admin-function):not(.sommelier):not(.admin-support):not(.highlight):not(.open-sky) .vis-badge { color: #666; }
     </style>
 </head>
 <body>
@@ -212,6 +218,7 @@
             <a href="{{ c.href }}" class="app-card {{ sec.css_class }}{% if c.extra_class %} {{ c.extra_class }}{% endif %}">
                 <div class="app-title"><span class="app-icon">{{ c.icon }}</span><h3>{{ c.label }}</h3></div>
                 <p>{{ c.description }}</p>
+                <span class="vis-badge" title="使用区分（アプシャのランチャで変更）">{{ c.visibility_icon }} {{ c.visibility_label }}{% if c.groups %}：{{ c.groups|join('・') }}{% endif %}</span>
             </a>
             {% endfor %}
         </div>
