@@ -1,6 +1,6 @@
 {
-  "format_version": 1,
-  "generated_at": "2026-08-26 13:59:02",
+  "format_version": 2,
+  "generated_at": "2026-09-02 12:49:05",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -42,16 +42,17 @@
         {
           "icon": "👥",
           "label": "ユーザ管理",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "admin.unified_dashboard",
           "dashboards": [
             "admin"
           ],
           "sort_order": 10,
+          "visibility": "private",
           "description": "アカウントの管理",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.133449-5b05a7",
@@ -77,16 +78,17 @@
         {
           "icon": "🔃",
           "label": "テーブルサイクル",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "table_cycle.table_cycle_dashboard",
           "dashboards": [
             "admin"
           ],
           "sort_order": 20,
+          "visibility": "private",
           "description": "SQLファイル⇔.xlsxファイル",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.130621-05e507",
@@ -112,16 +114,17 @@
         {
           "icon": "🗂️️",
           "label": "テーブルマスター",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "table_master.dashboard",
           "dashboards": [
             "admin"
           ],
           "sort_order": 30,
+          "visibility": "private",
           "description": "SQLテーブルの管理",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.133950-0df1eb",
@@ -147,16 +150,17 @@
         {
           "icon": "💾",
           "label": "SQL Saver",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "sql_saver.index",
           "dashboards": [
             "admin"
           ],
           "sort_order": 40,
+          "visibility": "private",
           "description": "プラットフォーム DB の簡易バックアップと復元",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.134922-69dca2",
@@ -182,16 +186,17 @@
         {
           "icon": "📅",
           "label": "時空資源管理（デモ用）",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "strm.index",
           "dashboards": [
             "admin"
           ],
           "sort_order": 50,
+          "visibility": "private",
           "description": "会議室・公用車の予約管理",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140501-f92cbd",
@@ -199,9 +204,9 @@
     },
     {
       "app_name": "slack_minutes",
-      "display_name": "すらくみ",
-      "icon": "📦",
-      "description": "自分が参加しているSlackチャンネルからの情報取得",
+      "display_name": "すらくみ（Slack議事録）",
+      "icon": "💬",
+      "description": "Slackチャンネルのメッセージ・スレッド・リアクション・添付を完全アーカイブし，公開範囲つきで閲覧・Markdown出力する",
       "sort_order": 40.0,
       "kind": "app",
       "enabled": true,
@@ -217,20 +222,22 @@
         {
           "icon": "💬",
           "label": "すらくみ（Slack議事録）",
-          "section": "system",
+          "groups": [],
+          "params": "",
+          "section": "internal",
           "endpoint": "slack_minutes.index",
           "dashboards": [
-            "admin"
+            "admin",
+            "guest"
           ],
           "sort_order": 60,
-          "description": "Slackチャンネルのメッセージを取得・保存して閲覧",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "visibility": "domestic",
+          "description": "Slackチャンネルのアーカイブを取得・保存・閲覧",
+          "extra_class": ""
         }
       ],
-      "version_id": "v20260731.140505-a7f859",
-      "version_confirmed_at": "2026-07-31 14:05:05"
+      "version_id": null,
+      "version_confirmed_at": null
     },
     {
       "app_name": "fukko",
@@ -252,16 +259,17 @@
         {
           "icon": "🐣",
           "label": "ふっこ",
+          "groups": [],
+          "params": "",
           "section": "system",
           "endpoint": "fukko.index",
           "dashboards": [
             "admin"
           ],
           "sort_order": 70,
+          "visibility": "private",
           "description": "Claude API接続デモ（チャット・全ログ記録）",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140509-e899a2",
@@ -287,30 +295,32 @@
         {
           "icon": "👣",
           "label": "まいあし",
+          "groups": [],
+          "params": "",
           "section": "sommelier",
           "endpoint": "migration_assistant.index",
           "dashboards": [
             "admin"
           ],
           "sort_order": 80,
+          "visibility": "private",
           "description": "FUJIN-Pマイグレーション支援",
-          "extra_class": "clickable",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": "clickable"
         },
         {
           "icon": "👣",
           "label": "まいあし",
+          "groups": [],
+          "params": "",
           "section": "admin_support",
           "endpoint": "migration_assistant.index",
           "dashboards": [
             "guest"
           ],
           "sort_order": 80,
+          "visibility": "public",
           "description": "FUJIN-Pマイグレーション支援",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140512-a36e4e",
@@ -336,6 +346,10 @@
         {
           "icon": "🔗️",
           "label": "テーシャ",
+          "groups": [
+            "FUJIN-Pソムリエ"
+          ],
+          "params": "",
           "section": "sommelier",
           "endpoint": "table_share.dashboard",
           "dashboards": [
@@ -343,10 +357,9 @@
             "guest"
           ],
           "sort_order": 90,
+          "visibility": "group",
           "description": "SQLテーブルの共有",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140516-5bc285",
@@ -372,6 +385,10 @@
         {
           "icon": "🛳️",
           "label": "ゆーまい",
+          "groups": [
+            "FUJIN-Pソムリエ"
+          ],
+          "params": "",
           "section": "sommelier",
           "endpoint": "user_migration.dashboard",
           "dashboards": [
@@ -379,10 +396,9 @@
             "guest"
           ],
           "sort_order": 100,
+          "visibility": "group",
           "description": "ユーザのマイグレーション",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140521-262bfe",
@@ -408,6 +424,10 @@
         {
           "icon": "🛳️",
           "label": "さいまる",
+          "groups": [
+            "FUJIN-Pソムリエ"
+          ],
+          "params": "",
           "section": "sommelier",
           "endpoint": "migrate_fujinp_scions.index",
           "dashboards": [
@@ -415,24 +435,24 @@
             "guest"
           ],
           "sort_order": 110,
+          "visibility": "group",
           "description": "サイオン丸ごとマイグレーション",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         },
         {
           "icon": "🛳️",
           "label": "さいまる",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "migrate_fujinp_scions.index",
           "dashboards": [
             "guest"
           ],
           "sort_order": 140,
+          "visibility": "domestic",
           "description": "サイオン丸ごとマイグレーション",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140524-e84ca5",
@@ -458,6 +478,10 @@
         {
           "icon": "🗒️",
           "label": "マイノート",
+          "groups": [
+            "FUJIN-Pソムリエ"
+          ],
+          "params": "",
           "section": "sommelier",
           "endpoint": "my_md_notes.index",
           "dashboards": [
@@ -465,10 +489,9 @@
             "guest"
           ],
           "sort_order": 120,
+          "visibility": "group",
           "description": "MDによる手軽なノート",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260824.143515-edf982",
@@ -494,6 +517,8 @@
         {
           "icon": "👥",
           "label": "まいぐる",
+          "groups": [],
+          "params": "",
           "section": "admin_support",
           "endpoint": "user_groups.index",
           "dashboards": [
@@ -501,10 +526,9 @@
             "guest"
           ],
           "sort_order": 130,
+          "visibility": "public",
           "description": "ユーザによるグループ管理",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140531-c9c597",
@@ -536,6 +560,10 @@
         {
           "icon": "🏀",
           "label": "コレポ管理",
+          "groups": [
+            "コレポ管理者"
+          ],
+          "params": "",
           "section": "admin_support",
           "endpoint": "colrep.index",
           "dashboards": [
@@ -543,16 +571,15 @@
             "guest"
           ],
           "sort_order": 140,
+          "visibility": "group",
           "description": "プロジェクトの作成・管理",
-          "extra_class": "",
-          "require_groups": [
-            "コレポ管理者"
-          ],
-          "require_categories": []
+          "extra_class": ""
         },
         {
           "icon": "🏀",
           "label": "コレポ執筆",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "colrep.worker_dashboard",
           "dashboards": [
@@ -560,10 +587,9 @@
             "guest"
           ],
           "sort_order": 230,
+          "visibility": "public",
           "description": "協調的レポート制作",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260824.150317-6eb81a",
@@ -589,6 +615,8 @@
         {
           "icon": "📮",
           "label": "テーブルポスト",
+          "groups": [],
+          "params": "",
           "section": "admin_support",
           "endpoint": "table_post.table_post_dashboard",
           "dashboards": [
@@ -596,10 +624,9 @@
             "guest"
           ],
           "sort_order": 150,
+          "visibility": "public",
           "description": "テーブル更新の申請・適用",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140538-425cf9",
@@ -625,6 +652,8 @@
         {
           "icon": "📦️",
           "label": "アプシャ",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "app_share.dashboard",
           "dashboards": [
@@ -632,10 +661,9 @@
             "guest"
           ],
           "sort_order": 160,
+          "visibility": "domestic",
           "description": "FUJIN-Pアプリの共有",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140543-a7a266",
@@ -661,6 +689,8 @@
         {
           "icon": "📚",
           "label": "公式データ集(DRAFT)",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "official_data_archive.index",
           "dashboards": [
@@ -668,10 +698,9 @@
             "guest"
           ],
           "sort_order": 170,
+          "visibility": "domestic",
           "description": "公式データの閲覧とダウンロード",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140547-6c525a",
@@ -697,6 +726,8 @@
         {
           "icon": "📊",
           "label": "データセンター",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "data_center.index",
           "dashboards": [
@@ -704,10 +735,9 @@
             "guest"
           ],
           "sort_order": 180,
+          "visibility": "domestic",
           "description": "収集データからストーリーラインを作り、インタラクティブに公開する",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140549-104341",
@@ -733,6 +763,8 @@
         {
           "icon": "📈",
           "label": "時系列指標ビジュアル",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "index_review.index",
           "dashboards": [
@@ -740,10 +772,9 @@
             "guest"
           ],
           "sort_order": 190,
+          "visibility": "domestic",
           "description": "SQLテーブル内容をグラフで可視化",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140555-c2ef51",
@@ -769,6 +800,8 @@
         {
           "icon": "📊",
           "label": "スタッツ",
+          "groups": [],
+          "params": "",
           "section": "internal",
           "endpoint": "stats.stat_main",
           "dashboards": [
@@ -776,10 +809,9 @@
             "guest"
           ],
           "sort_order": 200,
+          "visibility": "domestic",
           "description": "利用状況の表示",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140558-e11295",
@@ -805,6 +837,8 @@
         {
           "icon": "🕸",
           "label": "あわみ",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "our_meeting.index",
           "dashboards": [
@@ -812,10 +846,9 @@
             "guest"
           ],
           "sort_order": 220,
+          "visibility": "public",
           "description": "語りのネットとミーティングの支援",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140601-231f06",
@@ -841,6 +874,8 @@
         {
           "icon": "🏛️",
           "label": "文書アーカイブ",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "document_archive.dashboard",
           "dashboards": [
@@ -848,10 +883,9 @@
             "guest"
           ],
           "sort_order": 240,
+          "visibility": "open",
           "description": "文書アーカイブの閲覧と管理",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140606-85aae3",
@@ -877,6 +911,8 @@
         {
           "icon": "➿",
           "label": "フリーハンド曲線",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "free_hand_curve.index",
           "dashboards": [
@@ -884,10 +920,9 @@
             "guest"
           ],
           "sort_order": 250,
+          "visibility": "open",
           "description": "休息時のおたのしみ",
-          "extra_class": "clickable",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": "clickable"
         }
       ],
       "version_id": "v20260731.140608-94bfc0",
@@ -913,6 +948,8 @@
         {
           "icon": "😮‍💨",
           "label": "巡回セールスマン問題ソルバー",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "ts_solvers.index",
           "dashboards": [
@@ -920,10 +957,9 @@
             "guest"
           ],
           "sort_order": 260,
+          "visibility": "open",
           "description": "NP困難問題に挑戦！",
-          "extra_class": "clickable",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": "clickable"
         }
       ],
       "version_id": "v20260731.140611-ab6e47",
@@ -949,6 +985,8 @@
         {
           "icon": "🪐",
           "label": "太陽系3Dシミュレータ",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "solar_gl.index",
           "dashboards": [
@@ -956,10 +994,9 @@
             "guest"
           ],
           "sort_order": 270,
+          "visibility": "public",
           "description": "太陽と8惑星の公転を3D表示・時間制御",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140616-474f74",
@@ -985,6 +1022,8 @@
         {
           "icon": "🛩️",
           "label": "そらから",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "sorakara.index",
           "dashboards": [
@@ -992,10 +1031,9 @@
             "guest"
           ],
           "sort_order": 280,
+          "visibility": "public",
           "description": "上空フライトシーン（福知山周辺・地理院標高データ）",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140619-628144",
@@ -1021,6 +1059,8 @@
         {
           "icon": "🛍️",
           "label": "ウィンドウショッピング3D",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "window_shopping.index",
           "dashboards": [
@@ -1028,10 +1068,9 @@
             "guest"
           ],
           "sort_order": 300,
+          "visibility": "public",
           "description": "棒人形が広場を歩き回り、置いた店のショーウィンドウを見て回る3Dアニメーション",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140623-88fa23",
@@ -1057,6 +1096,8 @@
         {
           "icon": "👹",
           "label": "鬼ごっこ3D",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "tag_chase.index",
           "dashboards": [
@@ -1064,10 +1105,9 @@
             "guest"
           ],
           "sort_order": 310,
+          "visibility": "public",
           "description": "鬼がブロックの陰に隠れながら追手から逃げる3Dシミュレーションゲーム",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140627-1f8eaa",
@@ -1093,6 +1133,8 @@
         {
           "icon": "🧱",
           "label": "ブロック崩し",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "block_breaker.index",
           "dashboards": [
@@ -1100,10 +1142,9 @@
             "guest"
           ],
           "sort_order": 320,
+          "visibility": "public",
           "description": "ブロック崩しゲーム（ハイスコアランキング付き）",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260731.140630-64c32c",
@@ -1129,6 +1170,8 @@
         {
           "icon": "🔭",
           "label": "みはらし",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "lookout.index",
           "dashboards": [
@@ -1136,10 +1179,9 @@
             "guest"
           ],
           "sort_order": 290,
+          "visibility": "public",
           "description": "クリック地点からの360度地形パノラマ",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "extra_class": ""
         }
       ],
       "version_id": "v20260816.004034-d9f501",
@@ -1149,7 +1191,7 @@
       "app_name": "kataribe",
       "display_name": "かたりべ",
       "icon": "🗣",
-      "description": "タイル（HTML断片）の出入りでプレゼンを組み立てるページレス・スライドエディタ兼プレイヤー。タイル生成（HTML編集）とレイアウト・表示制御の二モードで編集し、作品JSONの取り込み／書き出しで外部とやりとりする。",
+      "description": "行・段・箱・部品の命令を積んでプレゼンを組み立てるページレス・スライドエディタ兼プレイヤー。部品はHTML断片で、第何歩で登場するかを指定して段階表示する。作品JSONの取り込み／書き出しで外部とやりとりする。",
       "sort_order": 360.0,
       "kind": "app",
       "enabled": true,
@@ -1165,6 +1207,8 @@
         {
           "icon": "🗣",
           "label": "かたりべ",
+          "groups": [],
+          "params": "",
           "section": "guest",
           "endpoint": "kataribe.index",
           "dashboards": [
@@ -1172,14 +1216,50 @@
             "guest"
           ],
           "sort_order": 210,
-          "description": "タイルの出入りでつくるプレゼン編集・再生",
-          "extra_class": "",
-          "require_groups": [],
-          "require_categories": []
+          "visibility": "public",
+          "description": "部品を積み上げてつくるプレゼン編集・上映",
+          "extra_class": ""
         }
       ],
-      "version_id": "v20260826.play-url",
-      "version_confirmed_at": "2026-08-26 14:30:00"
+      "version_id": "v20260902.124507-d970bb",
+      "version_confirmed_at": "2026-09-02 12:45:08"
+    },
+    {
+      "app_name": "fujin_forum",
+      "display_name": "えふえふ",
+      "icon": "💬",
+      "description": "ミニSlack型のフォーラム．MD記事の投稿・返信・リアクション，添付のアクセス制御，すらくみ取込，チャンネルのJSON入出力",
+      "sort_order": 370.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "fujin_forum_bp",
+          "name": "fujin_forum",
+          "module": "fujinp.fujin_forum",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "💬",
+          "label": "えふえふ",
+          "groups": [],
+          "params": "",
+          "section": "guest",
+          "endpoint": "fujin_forum.index",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 25,
+          "visibility": "private",
+          "description": "フォーラム：MD記事の投稿・返信・リアクション",
+          "extra_class": ""
+        }
+      ],
+      "version_id": null,
+      "version_confirmed_at": null
     }
   ],
   "sections": [
@@ -1189,7 +1269,7 @@
       "css_class": "admin-function",
       "sort_order": 10.0,
       "show_admin": true,
-      "show_guest": false,
+      "show_guest": true,
       "require_groups": [],
       "require_categories": []
     },
@@ -1200,9 +1280,7 @@
       "sort_order": 20.0,
       "show_admin": true,
       "show_guest": true,
-      "require_groups": [
-        "FUJIN-Pソムリエ"
-      ],
+      "require_groups": [],
       "require_categories": []
     },
     {
@@ -1223,10 +1301,7 @@
       "show_admin": true,
       "show_guest": true,
       "require_groups": [],
-      "require_categories": [
-        "regular",
-        "admin"
-      ]
+      "require_categories": []
     },
     {
       "key": "guest",

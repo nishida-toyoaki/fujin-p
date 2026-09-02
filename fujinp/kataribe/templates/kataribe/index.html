@@ -23,6 +23,8 @@
             display:flex; align-items:center; gap:18px;
         }
         .header h1 { font-size:19px; font-weight:700; letter-spacing:.04em; }
+        .headtitle { font-size:15px; color:#cfe8e3; white-space:nowrap; }
+        .headtitle .dirty { color:#f7c948; margin-left:4px; }
         .back-btn {
             color:#d9f3ef; text-decoration:none; font-size:13px;
             border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:5px 14px;
@@ -36,9 +38,12 @@
 
         .layout { display:flex; gap:14px; padding:14px 22px 22px; align-items:stretch; }
         .pane-editor { flex:0 0 46%; max-width:46%; display:flex; flex-direction:column; gap:12px; }
-        .pane-player { flex:1; min-width:0; }
-        #player { height:calc(100vh - 120px); border-radius:12px; overflow:hidden;
+        .pane-player { flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; }
+        #player { height:auto; aspect-ratio:16 / 10; max-height:calc(100vh - 140px); min-height:340px;
+                  border-radius:12px; overflow:hidden;
                   box-shadow:0 6px 18px rgba(28,39,51,.14); }
+        .pane-player .hint { margin:0; }
+        .pane-player .pres-list { max-height:34vh; }
         #player .ktb-player { height:100%; }
 
         .box {
@@ -74,12 +79,19 @@
         .pres-item a { color:#0b6c60; text-decoration:none; cursor:pointer; flex:1; }
         .pres-item a:hover { text-decoration:underline; }
         .pres-item .date { color:#5a6a74; font-size:12px; }
+        .pres-item .presdel {
+            font:inherit; font-size:11.5px; padding:3px 9px; border-radius:7px; cursor:pointer;
+            background:#c0392b; color:#fff; border:1px solid #a93226; white-space:nowrap;
+        }
+        .pres-item .presdel:hover { background:#a93226; }
 
         body.fullview .pane-editor,
         body.fullview #result { display:none !important; }
         body.fullview .layout { padding:0; }
         body.fullview .header { display:none; }
-        body.fullview #player { height:100vh; border-radius:0; box-shadow:none; }
+        body.fullview #player { height:100vh; aspect-ratio:auto; max-height:none; min-height:0;
+                                border-radius:0; box-shadow:none; }
+        body.fullview .pane-player .box { display:none; }
         body.fullview .pane-player .hint { display:none; }
         #btnBack {
             display:none; position:fixed; right:14px; top:12px; z-index:120;
@@ -89,6 +101,12 @@
         body.fullview #btnBack { display:block; }
         #btnBack:hover { border-color:#10b5a0; color:#fff; }
         .tabs { display:flex; gap:6px; }
+        .subtabs { display:flex; gap:6px; margin-bottom:8px; }
+        .stab { font:inherit; font-size:12.5px; cursor:pointer; border-radius:8px;
+                background:#dfe7e9; color:#41525b; border:1px solid #c6d0d5; padding:4px 12px; }
+        .stab.active { background:#fff; color:#0b6c60; font-weight:700; border-color:#10b5a0; }
+        .scenewrap { margin-top:8px; max-height:38vh; overflow-y:auto;
+                     border:1px solid #e2e8ea; border-radius:8px; }
         .tab {
             font:inherit; font-size:13px; cursor:pointer; border-radius:10px 10px 0 0;
             background:#dfe7e9; color:#41525b; border:1px solid #c6d0d5; border-bottom:none; padding:7px 16px;
@@ -96,7 +114,7 @@
         .tab.active { background:#fff; color:#0b6c60; font-weight:700; }
         .panebody { flex:1; overflow-y:auto; background:#fff; border-radius:0 12px 12px 12px;
                     box-shadow:0 2px 8px rgba(28,39,51,.08); padding:12px 14px; }
-        .tilelist { display:flex; flex-direction:column; gap:4px; max-height:190px; overflow-y:auto;
+        .tilelist { display:flex; flex-direction:column; gap:4px; max-height:clamp(190px, 30vh, 340px); overflow-y:auto;
                     border:1px solid #e2e8ea; border-radius:8px; padding:5px; background:#fafcfc; }
         .tilerow { display:flex; align-items:center; gap:6px; padding:4px 7px; border-radius:6px;
                    cursor:pointer; font-size:13px; border:1px solid transparent; }
@@ -104,6 +122,18 @@
         .tilerow.sel { background:#d9f3ef; border-color:#10b5a0; }
         .tilerow .nm { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .tilerow .meta { font-size:11px; color:#5a6a74; white-space:nowrap; }
+        /* 命令の一覧（行→段→箱の入れ子を字下げで見せる） */
+        .oprow { display:flex; align-items:center; gap:6px; padding:4px 7px; border-radius:6px;
+                 border:1px solid transparent; cursor:pointer; font-size:13px; }
+        .oprow:hover { background:#eef7f6; }
+        .oprow.sel { background:#d9f3ef; border-color:#10b5a0; }
+        .oprow .op { font-size:10.5px; color:#fff; background:#8b98a1; border-radius:4px;
+                     padding:1px 6px; flex:0 0 auto; letter-spacing:.04em; }
+        .oprow .op.row { background:#1f3f7a; } .oprow .op.col { background:#2f7fd6; }
+        .oprow .op.box { background:#8a63d2; } .oprow .op.part { background:#10b5a0; }
+        .oprow .op.end, .oprow .op.br { background:#b9c3c9; }
+        .oprow .nm { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .oprow .st { font-size:11px; color:#5a6a74; white-space:nowrap; }
         .tile { border:1px solid #e2e8ea; border-radius:10px; padding:9px 10px; margin-bottom:10px; background:#fafcfc; }
         .tile.active { border-color:#10b5a0; box-shadow:0 0 0 2px rgba(16,181,160,.18); }
         .fieldrow { display:flex; gap:8px; align-items:center; margin:6px 0; font-size:12.5px; color:#41525b; }
@@ -125,7 +155,8 @@
         table.layout input[type=number] { width:52px; }
         table.layout input[type=text] { width:100%; }
         table.scenes { width:100%; border-collapse:collapse; font-size:13px; }
-        table.scenes th { text-align:left; font-size:11.5px; color:#5a6a74; font-weight:400; padding:3px 4px; }
+        table.scenes th { text-align:left; font-size:11.5px; color:#5a6a74; font-weight:400; padding:3px 4px;
+                          position:sticky; top:0; background:#fff; z-index:1; }
         table.scenes td { padding:4px; border-top:1px solid #eef2f3; vertical-align:middle; }
         table.scenes tr.cur td { background:#eef7f6; }
         table.scenes .kind { white-space:nowrap; color:#0b6c60; font-weight:700; font-size:12px; }
@@ -176,6 +207,7 @@
     <div class="header">
         <a href="{{ url_for('kataribe.return_to_fujin') }}" class="back-btn" id="btnHome">🏠 FUJINダッシュボードに戻る</a>
         <h1>🗣 かたりべ — タイルで組むプレゼン</h1>
+        <span class="headtitle" id="headTitle"></span>
         <button id="btnFull" class="ghost" style="margin-left:auto;">⛶ 全コンテンツ表示</button>
     </div>
     <div id="result"></div>
@@ -184,16 +216,51 @@
     <div class="layout">
         <!-- ── 左：エディタ ── -->
         <div class="pane-editor">
-            <div class="box">
-                <h2>プレゼン一覧</h2>
-                <div class="pres-list" id="presList"></div>
-                <div class="toolbar" style="margin-top:8px;">
-                    <button id="btnNew" class="ghost">＋ 新規</button>
-                    <button id="btnSample" class="ghost">サンプル読み込み</button>
+            <div class="tabs">
+                <button class="tab active" data-tab="tiles">🧱 組み立て（手続き）</button>
+                <button class="tab" data-tab="layout">🧩 見せ方・確認</button>
+            </div>
+
+            <div class="panebody" id="paneTiles"></div>
+            <div class="panebody" id="paneLayout" style="display:none;"></div>
+
+            <div class="box" id="sceneBox">
+                <h2>シーンの設定</h2>
+                <div class="subtabs">
+                    <button class="stab active" data-stab="edit">✏ このシーンの編集</button>
+                    <button class="stab" data-stab="list">🗂 シーン一覧</button>
                 </div>
+                <div id="sceneEdit">
+                <div class="toolbar" style="margin-bottom:6px;">
+                    <select id="sceneSel" style="flex:1;"></select>
+                    <button id="btnScenePrev" class="mini ghost">◀</button>
+                    <button id="btnSceneNext" class="mini ghost">▶</button>
+                    <button id="btnAddBefore" class="mini ghost" title="このシーンの直前に新しいシーンを挿入">＋前に</button>
+                    <button id="btnAddAfter" class="mini ghost" title="このシーンの直後に新しいシーンを挿入">＋後に</button>
+                    <button id="btnDupScene" class="mini ghost" title="このシーンを中身ごと複製し，直後に入れます">＋後に複製</button>
+                    <button id="btnSceneUp" class="mini ghost">▲</button>
+                    <button id="btnSceneDown" class="mini ghost">▼</button>
+                    <button id="btnSceneDel" class="mini danger" title="いま編集中のシーンを削除します">🗑 シーン削除</button>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="sceneTitle" placeholder="シーンの題名" style="flex:1;">
+                    <select id="sceneKind" style="flex:0 0 130px;">
+                        <option value="body">本文</option>
+                        <option value="cover">表紙</option>
+                        <option value="end">エンドノート</option>
+                    </select>
+                    <select id="sceneTheme" style="flex:0 0 110px;">
+                        <option value="light">明色</option>
+                        <option value="dark">ダーク</option>
+                        <option value="cover">表紙</option>
+                    </select>
+                </div>
+                </div>
+                <div id="paneScenes" style="display:none;"></div>
             </div>
 
             <div class="box">
+                <h2>プレゼンの設定</h2>
                 <div class="toolbar" style="margin-bottom:8px;">
                     <input type="text" id="presTitle" placeholder="プレゼンの題名" style="flex:1;">
                 </div>
@@ -207,7 +274,6 @@
                     <button id="btnExportHtml" class="ghost">🎞 プレゼンHTML</button>
                     <button id="btnPlayUrl" class="ghost" title="再生専用ページ（ログイン済みなら誰でも見られる）のURLを表示・コピー">🔗 このコンテンツのURL</button>
                     <button id="btnJson" class="ghost">{ } JSON</button>
-                    <button id="btnDelete" class="danger">🗑 削除</button>
                 </div>
                 <div id="jsonWrap" style="display:none; margin-top:8px;">
                     <textarea id="jsonArea" spellcheck="false"></textarea>
@@ -217,49 +283,20 @@
                     </div>
                 </div>
             </div>
-
-            <div class="box" id="sceneBox">
-                <div class="toolbar" style="margin-bottom:6px;">
-                    <select id="sceneSel" style="flex:1;"></select>
-                    <button id="btnScenePrev" class="mini ghost">◀</button>
-                    <button id="btnSceneNext" class="mini ghost">▶</button>
-                    <button id="btnAddBefore" class="mini ghost" title="このシーンの直前に新しいシーンを挿入">＋前に</button>
-                    <button id="btnAddAfter" class="mini ghost" title="このシーンの直後に新しいシーンを挿入">＋後に</button>
-                    <button id="btnSceneUp" class="mini ghost">▲</button>
-                    <button id="btnSceneDown" class="mini ghost">▼</button>
-                    <button id="btnSceneDel" class="mini danger">✕</button>
-                </div>
-                <div class="toolbar">
-                    <input type="text" id="sceneTitle" placeholder="シーンの題名" style="flex:1;">
-                    <input type="text" id="sceneSub" placeholder="英字サブタイトル（任意）" style="flex:1;">
-                    <select id="sceneKind" style="flex:0 0 130px;">
-                        <option value="body">本文</option>
-                        <option value="cover">表紙</option>
-                        <option value="end">エンドノート</option>
-                    </select>
-                    <select id="sceneTheme" style="flex:0 0 110px;">
-                        <option value="light">明色</option>
-                        <option value="dark">ダーク</option>
-                        <option value="cover">表紙</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="tabs">
-                <button class="tab active" data-tab="tiles">🧱 タイル編集（HTML）</button>
-                <button class="tab" data-tab="layout">🧩 レイアウト・表示</button>
-                <button class="tab" data-tab="scenes">🗂 シーン一覧</button>
-            </div>
-
-            <div class="panebody" id="paneTiles"></div>
-            <div class="panebody" id="paneLayout" style="display:none;"></div>
-            <div class="panebody" id="paneScenes" style="display:none;"></div>
         </div>
 
         <!-- ── 右：プレビュー ── -->
         <div class="pane-player">
             <div id="player"></div>
             <p class="hint">編集はプレビューに自動反映されます（現在のシーン・ステップは保たれます）．</p>
+            <div class="box">
+                <h2>プレゼン一覧</h2>
+                <div class="pres-list" id="presList"></div>
+                <div class="toolbar" style="margin-top:8px;">
+                    <button id="btnNew" class="ghost">＋ 新規</button>
+                    <button id="btnSample" class="ghost">サンプル読み込み</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -301,8 +338,8 @@
             <p class="hint" id="leaveMsg" style="margin-bottom:12px;"></p>
             <div class="modal-btns">
                 <button class="ghost" id="btnLeaveCancel">このまま編集を続ける</button>
-                <button class="danger" id="btnLeaveDiscard">保存せずに移動</button>
-                <button id="btnLeaveSave">保存して移動</button>
+                <button class="danger" id="btnLeaveDiscard">保存せずに続行</button>
+                <button id="btnLeaveSave">保存して続行</button>
             </div>
         </div>
     </div>
@@ -414,15 +451,16 @@
         // ── エディタ（二モード：タイル編集／レイアウト・表示） ──
         let curScene = 0;
         let curTab = 'tiles';
+        let sceneTab = 'edit';
 
         const TILE_TEMPLATE =
             '<div class="k-card">\n  <h4>見出し</h4>\n  <p>本文をここに書きます．</p>\n</div>';
 
         function scene() {
-            if (!spec.scenes.length) spec.scenes.push({ title:'', subtitle:'', theme:'light', tiles:[] });
+            if (!spec.scenes.length) spec.scenes.push({ title:'', subtitle:'', theme:'light', steps:[] });
             if (curScene >= spec.scenes.length) curScene = spec.scenes.length - 1;
             const sc = spec.scenes[curScene];
-            if (!sc.tiles) sc.tiles = [];
+            if (!Array.isArray(sc.steps)) sc.steps = [];
             if (!sc.kind) sc.kind = 'body';
             return sc;
         }
@@ -440,13 +478,70 @@
             return 'シーン' + no;
         }
 
-        function maxIn(sc) {
-            return sc.tiles.reduce((m, t) => Math.max(m, t.in || 1), 0);
+        // ── 手続き（命令の並び）を扱う道具 ──
+        //   {op:'row'} 行を追加／{op:'col',w,align} 段を追加／{op:'box',cls} 箱を開く
+        //   {op:'end'} 箱を閉じる／{op:'part',html,at,flow} 部品を置く／{op:'br'} 改行
+        //   at は「第何歩で出るか」．0 は最初から出ている部品．
+        const OPS = {
+            row:  { badge:'行',   name:'行を追加' },
+            col:  { badge:'段',   name:'段を追加' },
+            box:  { badge:'箱',   name:'箱を開く' },
+            end:  { badge:'閉',   name:'箱を閉じる' },
+            part: { badge:'部品', name:'部品' },
+            br:   { badge:'改',   name:'改行（横並びを打ち切る）' }
+        };
+        const BOX_CLASSES = ['k-card', 'k-card violet', 'k-card rose', 'k-card green',
+                             'k-card navy', 'k-card blue', 'k-card orange', 'k-card yellow',
+                             'k-card skyblue', 'k-card gray', ''];
+
+        function cmds(sc) { if (!Array.isArray(sc.steps)) sc.steps = []; return sc.steps; }
+        function opOf(c) { return (c && c.op) || 'part'; }
+        function isPartCmd(c) { return opOf(c) === 'part'; }
+        function partCount(sc) { return (sc.steps || []).filter(isPartCmd).length; }
+        function progSteps(sc) { return cmds(sc).reduce((m, c) => isPartCmd(c) ? Math.max(m, c.at || 0) : m, 0); }
+        function partLabel(c, i) {
+            if (c.name) return c.name;
+            const m = String(c.html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            return m ? m.slice(0, 26) : ('部品' + (i + 1));
         }
-        function tileLabel(t, i) {
-            if (t.name) return t.name;
-            const m = String(t.html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-            return m ? m.slice(0, 18) : ('タイル' + (i + 1));
+        // 直前の部品の歩数（無ければ0）
+        function prevAt(sc, idx) {
+            const list = cmds(sc);
+            for (let i = Math.min(idx, list.length - 1); i >= 0; i--) {
+                if (isPartCmd(list[i])) return list[i].at || 0;
+            }
+            return 0;
+        }
+        // 字下げの深さ（行→段→箱の入れ子を目で追えるようにする）
+        function depths(sc) {
+            let box = 0;
+            return cmds(sc).map(c => {
+                const op = opOf(c);
+                if (op === 'row') { box = 0; return 0; }
+                if (op === 'col') { box = 0; return 1; }
+                if (op === 'box') { const v = 2 + box; box++; return v; }
+                if (op === 'end') { if (box) box--; return 2 + box; }
+                return 2 + box;
+            });
+        }
+        // 使われていない歩数を詰める（0＝最初から，はそのまま）
+        function compactAt(sc) {
+            const used = [...new Set(cmds(sc).filter(isPartCmd).map(c => c.at || 0).filter(v => v > 0))]
+                         .sort((a, b) => a - b);
+            const map = new Map();
+            used.forEach((v, i) => map.set(v, i + 1));
+            cmds(sc).forEach(c => { if (isPartCmd(c)) c.at = (c.at || 0) === 0 ? 0 : (map.get(c.at) || 1); });
+        }
+        // 一覧の並び順で 1,2,3… に振り直す（同じ歩数のまとまりは保つ）
+        function renumber(sc) {
+            let last = null, n = 0;
+            cmds(sc).forEach(c => {
+                if (!isPartCmd(c)) return;
+                const at = (typeof c.at === 'number') ? c.at : 1;
+                if (at === 0) { c.at = 0; last = 0; return; }
+                if (last !== null && at === last) { c.at = n || 1; return; }
+                n++; last = at; c.at = n;
+            });
         }
 
         function renderEditor() {
@@ -458,118 +553,240 @@
             spec.scenes.forEach((s, i) => {
                 $sel.append($('<option>').attr('value', i)
                     .text(sceneLabel(i) + '：' + (s.title || '（無題）')
-                          + '　［' + ((s.tiles || s.blocks || []).length) + '］'));
+                          + '　［' + partCount(s) + '］'));
             });
             $sel.val(curScene);
             $('#sceneTitle').val(sc.title || '');
-            $('#sceneSub').val(sc.subtitle || '');
             $('#sceneTheme').val(sc.theme || 'light');
             $('#sceneKind').val(sc.kind || 'body');
 
-            if (curTab === 'tiles') renderTilePane(sc);
-            else if (curTab === 'layout') renderLayoutPane(sc);
-            else renderScenePane();
+            if (curTab === 'tiles') renderProgPane(sc);
+            else renderShowPane(sc);
+            // 「このシーンの編集」タブの間は，選んだシーン＝いま開いているシーン．
+            // 「シーン一覧」タブの間は，チェックしたシーンが選んだシーン．
+            if (sceneTab === 'edit') scenePick = spec.scenes.map((_, k) => k === curScene);
+            if (sceneTab === 'list') renderScenePane();
         }
 
         // ── モード1：タイル編集（一覧から1枚を選んで編集） ──
-        let curTile = 0;
+        let curCmd = 0;
+        let progScroll = 0;   // 命令一覧のスクロール位置（描き直しをまたいで保つ）
 
-        function renderTilePane(sc) {
+        function renderProgPane(sc) {
             const $p = $('#paneTiles').empty();
+            const list = cmds(sc);
+            if (curCmd >= list.length) curCmd = Math.max(0, list.length - 1);
 
-            if (sc.blocks && sc.blocks.length && !sc.tiles.length) {
-                $p.append($('<div class="hint" style="margin-bottom:8px;">')
-                    .text('このシーンは旧形式（ブロック）です．タイルに変換すると編集できます．'))
-                  .append($('<button class="ghost">🔁 このシーンをタイルに変換</button>')
-                    .on('click', () => { convertScene(sc); curTile = 0; renderEditor(); refreshPreview(true); commit('convert'); }));
-                return;
-            }
-            if (curTile >= sc.tiles.length) curTile = Math.max(0, sc.tiles.length - 1);
-
-            // 一覧
+            // ── 命令の一覧 ──
             const $list = $('<div class="tilelist">');
-            if (!sc.tiles.length) {
-                $list.append($('<div class="hint">').text('タイルがありません．下の「＋ タイルを追加」から始めてください．'));
+            if (!list.length) {
+                $list.append($('<div class="hint">').text(
+                    'まだ何もありません．「＋ 部品」から始めてください．横に並べたくなったら「＋ 段」，' +
+                    '一つの枠の中に積みたくなったら「＋ 箱」を足します．'));
             }
-            sc.tiles.forEach((t, i) => {
-                const $r = $('<div class="tilerow">').toggleClass('sel', i === curTile)
-                    .on('click', () => { curTile = i; renderTilePane(sc); KtbPlayer.setStep(t.in || 1); });
-                $r.append($('<span class="meta">').text('#' + (i + 1)));
-                $r.append($('<span class="nm">').text(tileLabel(t, i)));
-                $r.append($('<span class="meta">')
-                    .text('行' + (t.row || 1) + '・幅' + (t.span || 1) + '・入' + (t.in || 1)
-                          + (t.out ? '/出' + t.out : '')));
+            const dep = depths(sc);
+            list.forEach((c, i) => {
+                const op = opOf(c);
+                const $r = $('<div class="oprow">').toggleClass('sel', i === curCmd)
+                    .on('click', () => {
+                        curCmd = i;
+                        renderProgPane(sc);
+                        if (isPartCmd(c)) KtbPlayer.setStep(c.at || 0);
+                    });
+                if (dep[i]) $r.append($('<span>').css({ width: (dep[i] * 14) + 'px', flex: '0 0 auto' }));
+                $r.append($('<span class="op ' + op + '">').text(OPS[op] ? OPS[op].badge : op));
+                let nm;
+                if (op === 'part') nm = partLabel(c, i);
+                else if (op === 'col') nm = '幅' + (c.w || 1) + ({ middle:'・中央そろえ', bottom:'・下そろえ' }[c.align] || '');
+                else if (op === 'box') nm = c.cls || '（枠なし）';
+                else if (op === 'row') nm = ({ left:'左そろえ', center:'中央そろえ', right:'右そろえ' })[c.align] || '';
+                else nm = OPS[op] ? OPS[op].name : op;
+                $r.append($('<span class="nm">').text(nm));
+                if (op === 'part') {
+                    $r.append($('<span class="st">').text(
+                        (c.at ? ('第' + c.at + '歩') : '最初から') + (c.flow === 'inline' ? '・横' : '')));
+                }
                 $list.append($r);
             });
             $p.append($list);
+            // スクロール位置は描き直しをまたいで保つ．選んだ命令が見えている間は動かさない
+            // （クリックはハイライトだけ）．見えない位置にあるときだけ上端へ寄せる
+            const lst = $list[0];
+            lst.scrollTop = progScroll;
+            const selRow = $list.children('.oprow.sel')[0];
+            if (selRow) {
+                const lr = lst.getBoundingClientRect();
+                const rr = selRow.getBoundingClientRect();
+                if (rr.top < lr.top || rr.bottom > lr.bottom) lst.scrollTop += rr.top - lr.top - 6;
+            }
+            progScroll = lst.scrollTop;
+            $list.on('scroll', function(){ progScroll = this.scrollTop; });
 
-            $p.append($('<div class="toolbar" style="margin:8px 0;">')
-                .append($('<button class="ghost">＋ タイルを追加</button>').on('click', () => addTile(sc)))
-                .append($('<button class="ghost">⧉ 複製</button>').prop('disabled', !sc.tiles.length)
-                    .on('click', () => dupTile(sc, curTile)))
-                .append($('<button class="ghost">▲</button>').prop('disabled', curTile === 0 || !sc.tiles.length)
-                    .on('click', () => { moveTile(sc, curTile, -1); curTile--; renderTilePane(sc); commit('tile'); }))
-                .append($('<button class="ghost">▼</button>').prop('disabled', curTile >= sc.tiles.length - 1)
-                    .on('click', () => { moveTile(sc, curTile, 1); curTile++; renderTilePane(sc); commit('tile'); }))
-                .append($('<button class="danger">🗑 削除</button>').prop('disabled', !sc.tiles.length)
+            // ── 追加（選んだ命令のすぐ下に入る） ──
+            const addAfter = (cmd, label) => {
+                cmds(sc).splice(curCmd + (list.length ? 1 : 0), 0, cmd);
+                curCmd = curCmd + (list.length ? 1 : 0);
+                renderProgPane(sc); refreshPreview(true); commit('prog');
+                if (label) showResult(label + 'を足しました（選んだ命令のすぐ下に入ります）', false);
+            };
+            $p.append($('<div class="toolbar" style="margin:8px 0 4px;">')
+                .append($('<button class="ghost">＋ 部品</button>')
+                    .on('click', () => addPart(sc)))
+                .append($('<button class="ghost" title="ここから新しい行を始めます">＋ 行</button>')
+                    .on('click', () => addAfter({ op:'row' }, '行')))
+                .append($('<button class="ghost" title="行の中に段（カラム）を作ります．幅は比で決めます">＋ 段</button>')
+                    .on('click', () => addAfter({ op:'col', w:1 }, '段')))
+                .append($('<button class="ghost" title="カードの枠を開きます．以降の部品はこの中に積まれます">＋ 箱</button>')
+                    .on('click', () => addAfter({ op:'box', cls:'k-card' }, '箱')))
+                .append($('<button class="ghost">箱を閉じる</button>')
+                    .on('click', () => addAfter({ op:'end' }, '箱の閉じ')))
+                .append($('<button class="ghost" title="横並びを打ち切って次の行に送ります">改行</button>')
+                    .on('click', () => addAfter({ op:'br' }, '改行'))));
+
+            $p.append($('<div class="toolbar" style="margin:0 0 8px;">')
+                .append($('<button class="ghost">⧉ 複製</button>').prop('disabled', !list.length)
+                    .on('click', () => dupCmd(sc, curCmd)))
+                .append($('<button class="ghost">▲</button>').prop('disabled', curCmd === 0 || !list.length)
+                    .on('click', () => { moveCmd(sc, curCmd, -1); curCmd--; renderProgPane(sc); refreshPreview(true); commit('prog'); }))
+                .append($('<button class="ghost">▼</button>').prop('disabled', curCmd >= list.length - 1)
+                    .on('click', () => { moveCmd(sc, curCmd, 1); curCmd++; renderProgPane(sc); refreshPreview(true); commit('prog'); }))
+                .append($('<button class="danger">🗑 このステップ削除</button>').prop('disabled', !list.length)
                     .on('click', () => {
-                        sc.tiles.splice(curTile, 1);
-                        const gaps = compactSteps(sc);          // 空きステップができたら詰める
-                        if (gaps) showResult('タイルを削除し，ステップ番号を詰めました（空のステップ' + gaps + '個を解消）', false);
-                        if (curTile >= sc.tiles.length) curTile = Math.max(0, sc.tiles.length - 1);
-                        renderTilePane(sc); refreshPreview(true); commit('tile');
+                        list.splice(curCmd, 1);
+                        compactAt(sc);
+                        if (curCmd >= list.length) curCmd = Math.max(0, list.length - 1);
+                        renderProgPane(sc); refreshPreview(true); commit('prog');
+                    }))
+                .append($('<button class="ghost" title="一覧の順に第1歩から振り直します">⇅ 歩を振り直す</button>')
+                    .prop('disabled', !list.length)
+                    .on('click', () => {
+                        renumber(sc);
+                        renderProgPane(sc); refreshFull(); commit('prog');
+                        showResult('部品の歩数を一覧の順に振り直しました', false);
                     }))
                 .append($('<button class="ghost">📐 部品の書き方</button>').on('click', showKit)));
 
-            if (!sc.tiles.length) return;
+            if (!list.length) return;
 
-            // 選択したタイルだけを編集する
-            const t = sc.tiles[curTile];
+            // ── 選んだ命令を編集する ──
+            const c = list[curCmd];
+            const op = opOf(c);
             const $t = $('<div class="tile active">');
             $t.append($('<div class="tile-head">')
-                .append($('<span class="tno">').text('編集中 #' + (curTile + 1)))
-                .append($('<input type="text" placeholder="タイル名（任意）">')
-                    .val(t.name || '').css('flex', '1')
-                    .on('input', function(){ t.name = this.value; commit('text'); })
-                    .on('change', () => renderTilePane(sc))));
+                .append($('<span class="tno">').text('編集中 #' + (curCmd + 1) + '　' + (OPS[op] ? OPS[op].name : op))));
 
-            const $fr = $('<div class="fieldrow">');
-            [['行', 'row', 1], ['幅', 'span', 1], ['入', 'in', 1]].forEach(([lab, key, min]) => {
-                $fr.append($('<span>').text(lab));
-                $fr.append($('<input type="number">').attr('min', min).val(t[key] || 1)
-                    .on('input', function(){ t[key] = parseInt(this.value) || min; schedulePreview(); commit('num'); }));
-            });
-            $fr.append($('<span>').text('出'));
-            $fr.append($('<input type="number" min="2" placeholder="—">')
-                .val(t.out == null ? '' : t.out)
-                .on('input', function(){ t.out = this.value === '' ? null : (parseInt(this.value) || null); schedulePreview(); commit('num'); }));
-            $fr.append($('<button class="mini ghost" title="入の速い順にタイルを並べ替え，番号の欠番をなくします">⇅ 自動整列</button>')
-                .on('click', () => autoArrange(sc)));
-            $t.append($fr);
+            if (op === 'row') {
+                const $al = $('<select style="flex:0 0 220px;">')
+                    .append($('<option value="">いっぱいに広げる（既定）</option>'))
+                    .append($('<option value="left">左そろえ</option>'))
+                    .append($('<option value="center">中央そろえ</option>'))
+                    .append($('<option value="right">右そろえ</option>'))
+                    .val(c.align || '')
+                    .on('change', function(){
+                        if (this.value) c.align = this.value; else delete c.align;
+                        renderProgPane(sc); refreshPreview(true); commit('prog');
+                    });
+                $t.append($('<div class="toolbar" style="margin-bottom:6px;">')
+                    .append($('<span>').text('この行の配置')).append($al));
+                $t.append($('<div class="hint">').text(
+                    'ここから新しい行が始まります．行は上から順に積まれます．そろえを選ぶと，段は中身の幅になり，' +
+                    '行の中で左／中央／右に寄ります．既定は幅の比で行いっぱいに広げます．'));
+            } else if (op === 'br') {
+                $t.append($('<div class="hint">').text('横並びをここで打ち切ります．次の部品は下の行に置かれます．'));
+            } else if (op === 'end') {
+                $t.append($('<div class="hint">').text('直前に開いた箱を閉じます．以降の部品は箱の外に置かれます．'));
+            } else if (op === 'col') {
+                const $fr = $('<div class="fieldrow">');
+                $fr.append($('<span>').text('幅（比）'));
+                $fr.append($('<input type="number" min="1" max="12">').val(c.w || 1)
+                    .on('input', function(){ c.w = parseInt(this.value) || 1; schedulePreview(); commit('num'); })
+                    .on('change', () => renderProgPane(sc)));
+                $fr.append($('<span>').text('縦の位置'));
+                $fr.append($('<select>')
+                    .append($('<option value="">上そろえ</option>'))
+                    .append($('<option value="middle">中央そろえ</option>'))
+                    .append($('<option value="bottom">下そろえ</option>'))
+                    .val((c.align === 'middle' || c.align === 'bottom') ? c.align : '')
+                    .on('change', function(){
+                        if (this.value) c.align = this.value; else delete c.align;
+                        renderProgPane(sc); schedulePreview(); commit('num');
+                    }));
+                $t.append($fr);
+                $t.append($('<div class="hint">').text('同じ行の段は横に並びます．幅は行の中での比です（1と2なら1対2）．縦の位置は，行の高さに対して段の中身をどこに置くかで，隣の段のほうが背が高いときに効きます．'));
+            } else if (op === 'box') {
+                const $fr = $('<div class="fieldrow">');
+                $fr.append($('<span>').text('枠'));
+                const $sel = $('<select>');
+                BOX_CLASSES.forEach(v => $sel.append($('<option>').attr('value', v).text(v || '（枠なし）')));
+                if (BOX_CLASSES.indexOf(c.cls || '') < 0) $sel.append($('<option>').attr('value', c.cls).text(c.cls));
+                $sel.val(c.cls || '').on('change', function(){
+                    c.cls = this.value;
+                    renderProgPane(sc); refreshPreview(true); commit('text');
+                });
+                $fr.append($sel);
+                $t.append($fr);
+                $t.append($('<div class="hint">').text('以降の部品はこの箱の中に上から積まれます．「箱を閉じる」で外に戻ります．'));
+            } else {
+                // 部品
+                $t.find('.tile-head').append($('<input type="text" placeholder="部品の名前（任意）">')
+                    .val(c.name || '').css('flex', '1')
+                    .on('input', function(){ c.name = this.value; commit('text'); })
+                    .on('change', () => renderProgPane(sc)));
 
-            const $ta = $('<textarea class="html" spellcheck="false" placeholder="タイルのHTML">')
-                .val(t.html || '')
-                .on('input', function(){ t.html = this.value; schedulePreview(); commit('text'); });
-            $ta.css('height', '210px');
-            $t.append($ta);
+                const $fr = $('<div class="fieldrow">');
+                $fr.append($('<span>').text('第'));
+                $fr.append($('<input type="number" min="0">').val(c.at == null ? 1 : c.at)
+                    .on('input', function(){
+                        c.at = Math.max(0, parseInt(this.value) || 0);
+                        schedulePreview(); commit('num');
+                    })
+                    .on('change', () => renderProgPane(sc)));
+                $fr.append($('<span>').text('歩で出す'));
+                $fr.append($('<button class="mini ghost" title="直前の部品と同じ歩で出します">前と同時</button>')
+                    .on('click', () => {
+                        c.at = prevAt(sc, curCmd - 1);
+                        compactAt(sc); renderProgPane(sc); refreshFull(); commit('num');
+                    }));
+                $fr.append($('<button class="mini ghost" title="送らなくても最初から見えている部品にします">最初から</button>')
+                    .on('click', () => {
+                        c.at = 0;
+                        compactAt(sc); renderProgPane(sc); refreshFull(); commit('num');
+                    }));
+                $fr.append($('<label style="display:flex;gap:4px;align-items:center;">')
+                    .append($('<input type="checkbox">').prop('checked', c.flow === 'inline')
+                        .on('change', function(){
+                            if (this.checked) c.flow = 'inline'; else delete c.flow;
+                            renderProgPane(sc); refreshPreview(true); commit('num');
+                        }))
+                    .append($('<span>').text('横に並べる')));
+                $t.append($fr);
 
-            $t.append($('<div class="toolbar" style="margin-top:6px;">')
-                .append($('<button class="ghost" title="このサイト内（/kataribe/img/）に置き，ログイン者だけが見られます">🖼 画像UP（サイトローカル）</button>')
-                    .on('click', () => $('#imgFile').val('').trigger('click')))
-                .append($('<button class="ghost" title="~/static/mdimgs/ に置き，フルURLで誰でも参照できます．書き出したHTMLを他所で動かしても読めます">🌐 画像/動画UP（public）</button>')
-                    .on('click', () => $('#imgFilePub').val('').trigger('click')))
-                .append($('<button class="ghost">🗂 アップ済み画像</button>').on('click', showImages))
-                .append($('<button class="ghost">🎆 HTMLを埋め込む</button>')
-                    .on('click', () => $('#embedFile').val('').trigger('click')))
-                .append($('<span class="hint">').text('幅'))
-                .append($('<input type="number" id="imgWidth" min="5" max="100" step="5">')
-                    .val(imgWidth).css('width', '64px')
-                    .on('input', function(){ imgWidth = Math.max(5, Math.min(100, parseInt(this.value) || 60)); }))
-                .append($('<span class="hint">').text('%　PNG / JPG / SVG（8MBまで）')));
+                const $ta = $('<textarea class="html" spellcheck="false" placeholder="部品のHTML">')
+                    .val(c.html || '')
+                    .on('input', function(){ c.html = this.value; schedulePreview(); commit('text'); });
+                $ta.css('height', '200px');
+                $t.append($ta);
 
+                $t.append($('<div class="toolbar" style="margin-top:6px;">')
+                    .append($('<button class="ghost" title="このサイト内（/kataribe/img/）に置き，ログイン者だけが見られます">🖼 画像UP（サイトローカル）</button>')
+                        .on('click', () => $('#imgFile').val('').trigger('click')))
+                    .append($('<button class="ghost" title="~/static/mdimgs/ に置き，フルURLで誰でも参照できます．書き出したHTMLを他所で動かしても読めます">🌐 画像/動画UP（public）</button>')
+                        .on('click', () => $('#imgFilePub').val('').trigger('click')))
+                    .append($('<button class="ghost">🗂 アップ済み画像</button>').on('click', showImages))
+                    .append($('<button class="ghost">🎆 HTMLを埋め込む</button>')
+                        .on('click', () => $('#embedFile').val('').trigger('click')))
+                    .append($('<span class="hint">').text('幅'))
+                    .append($('<input type="number" id="imgWidth" min="5" max="100" step="5">')
+                        .val(imgWidth).css('width', '64px')
+                        .on('input', function(){ imgWidth = Math.max(5, Math.min(100, parseInt(this.value) || 60)); }))
+                    .append($('<span class="hint">').text('%　PNG / JPG / SVG（8MBまで）')));
+
+                $p.append($t);
+                currentTextarea = $ta[0];
+                return;
+            }
             $p.append($t);
-
-            currentTextarea = $ta[0];
+            currentTextarea = null;
         }
 
         // ── 画像の挿入 ──
@@ -677,67 +894,56 @@
             });
         }
 
-        function addTile(sc, html) {
-            const nextRow = sc.tiles.length ? Math.max(...sc.tiles.map(t => t.row || 1)) + 1 : 1;
-            sc.tiles.push({
-                name: '', html: html || TILE_TEMPLATE,
-                row: nextRow, span: 1, in: maxIn(sc) + 1, out: null, narration: ''
-            });
-            curTile = sc.tiles.length - 1;
-            renderTilePane(sc); refreshPreview(true); commit('tile');
+        // 部品を選んだ命令の下に足す。歩数は直前の部品の次にし，以降の部品を1つずつ後ろへずらす。
+        function addPart(sc, html) {
+            const list = cmds(sc);
+            const at = prevAt(sc, curCmd) + 1;
+            list.forEach(c => { if (isPartCmd(c) && (c.at || 0) >= at) c.at = (c.at || 0) + 1; });
+            const pos = list.length ? curCmd + 1 : 0;
+            list.splice(pos, 0, { op:'part', name:'', html: html || TILE_TEMPLATE, at: at });
+            curCmd = pos;
+            renderProgPane(sc); refreshPreview(true); commit('prog');
         }
-        function dupTile(sc, i) {
-            const s = sc.tiles[i];
-            if (!s) return;
-            const c = JSON.parse(JSON.stringify(s));
-            c.in = maxIn(sc) + 1;
-            if (s.name) c.name = s.name + ' の複製';
-            sc.tiles.splice(i + 1, 0, c);
-            curTile = i + 1;
-            renderTilePane(sc); refreshPreview(true); commit('tile');
-            showResult('同じスタイルのタイルを複製しました（同じ行に並びます）', false);
+        function dupCmd(sc, i) {
+            const list = cmds(sc);
+            const src = list[i];
+            if (!src) return;
+            const c = JSON.parse(JSON.stringify(src));
+            if (isPartCmd(c)) {
+                c.at = progSteps(sc) + 1;
+                if (src.name) c.name = src.name + ' の複製';
+            }
+            list.splice(i + 1, 0, c);
+            curCmd = i + 1;
+            renderProgPane(sc); refreshPreview(true); commit('prog');
+            showResult('複製しました（同じ書き方の部品を続けて置けます）', false);
         }
-        // 使われていないステップ番号を詰めて 1,2,3… に振り直す（空きステップは無音の間になるため）
-        function compactSteps(sc) {
-            const tiles = sc.tiles || [];
-            if (!tiles.length) return 0;
-            const used = new Set();
-            tiles.forEach(t => {
-                used.add(t.in || 1);
-                if (t.out != null) used.add(t.out);
-            });
-            const sorted = [...used].sort((a, b) => a - b);
-            const before = sorted[sorted.length - 1];           // 詰める前の総ステップ数
-            const map = new Map();
-            sorted.forEach((v, i) => map.set(v, i + 1));
-            tiles.forEach(t => {
-                t.in = map.get(t.in || 1) || 1;
-                if (t.out != null) t.out = map.get(t.out) || null;
-            });
-            return before - sorted.length;                      // 解消した空きステップの数
+        function moveCmd(sc, i, d) {
+            const list = cmds(sc);
+            const c = list.splice(i, 1)[0];
+            list.splice(i + d, 0, c);
         }
 
-        // 入の速い順にタイルを並べ替え，番号の欠番を詰める（同番はそのまま並ぶ：1,2,2,3）
-        function autoArrange(sc) {
-            const tiles = sc.tiles || [];
-            if (!tiles.length) return;
-            const keep = tiles[curTile];                 // 選択中のタイルを見失わないよう控える
-            const before = tiles.map(t => t.in || 1).join(',');
-            const gaps = compactSteps(sc);
-            // 入の昇順（同番は元の並び順を保つ安定ソート）
-            tiles.map((t, i) => ({ t: t, i: i }))
-                 .sort((a, b) => (a.t.in - b.t.in) || (a.i - b.i))
-                 .forEach((rec, k) => { tiles[k] = rec.t; });
-            curTile = Math.max(0, tiles.indexOf(keep));
-            renderTilePane(sc); refreshFull(); commit('arrange');
-            const after = tiles.map(t => t.in || 1).join(',');
-            showResult('自動整列しました（入 ' + before + ' → ' + after +
-                       (gaps ? '／空のステップ' + gaps + '個を解消' : '') + '）', false);
+        // 書かれていない歩数を実際の番号で埋める（エディタは絶対番号で扱う）
+        function fillAt(sc) {
+            let n = 0;
+            cmds(sc).forEach(c => {
+                if (!isPartCmd(c)) return;
+                n = (typeof c.at === 'number' && c.at >= 0) ? c.at : n + 1;
+                c.at = n;
+            });
         }
-
-        function moveTile(sc, i, d) {
-            const t = sc.tiles.splice(i, 1)[0];
-            sc.tiles.splice(i + d, 0, t);
+        // 旧形式（行・幅・入／ブロック）を手続きに移す
+        function migrateSpec(sp) {
+            let n = 0;
+            (sp.scenes || []).forEach(sc => {
+                if (Array.isArray(sc.steps) && sc.steps.length) { fillAt(sc); delete sc.tiles; return; }
+                if (sc.blocks && sc.blocks.length && !(sc.tiles || []).length) convertScene(sc);
+                if ((sc.tiles || []).length) { sc.steps = KtbPlayer.toProgram(sc); n++; }
+                else if (!Array.isArray(sc.steps)) sc.steps = [];
+                delete sc.tiles;
+            });
+            return n;
         }
 
         // 旧形式（blocks）をタイルに変換する
@@ -759,58 +965,56 @@
         }
 
         // ── モード2：レイアウト・表示 ──
-        function renderLayoutPane(sc) {
+        function renderShowPane(sc) {
             const $p = $('#paneLayout').empty();
-            if (!sc.tiles.length) {
-                $p.append($('<div class="hint">').text('タイルがありません．「🧱 タイル編集」で追加してください．'));
-                return;
-            }
-            const $tbl = $('<table class="layout">');
-            $tbl.append($('<tr><th>#</th><th>タイル</th><th>行</th><th>幅</th><th>入</th><th>出</th><th></th></tr>'));
-            sc.tiles.forEach((t, i) => {
-                const $r = $('<tr>');
-                $r.append($('<td>').text(i + 1));
-                $r.append($('<td>').append($('<input type="text">')
-                    .val(t.name || '').attr('placeholder', tileLabel(t, i))
-                    .on('input', function(){ t.name = this.value; commit('text'); })));
-                $r.append($('<td>').append($('<input type="number" min="1">')
-                    .val(t.row || 1)
-                    .on('input', function(){ t.row = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
-                $r.append($('<td>').append($('<input type="number" min="1" max="6">')
-                    .val(t.span || 1)
-                    .on('input', function(){ t.span = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
-                $r.append($('<td>').append($('<input type="number" min="1">')
-                    .val(t.in || 1)
-                    .on('input', function(){ t.in = parseInt(this.value) || 1; schedulePreview(); commit('num'); })));
-                $r.append($('<td>').append($('<input type="number" min="2" placeholder="—">')
-                    .val(t.out == null ? '' : t.out)
-                    .on('input', function(){ t.out = this.value === '' ? null : (parseInt(this.value) || null); schedulePreview(); commit('num'); })));
-                $r.append($('<td>').append($('<button class="mini ghost">▲</button>').prop('disabled', i === 0)
-                        .on('click', () => { moveTile(sc, i, -1); renderEditor(); refreshFull(); commit('tile'); }))
-                    .append($('<button class="mini ghost">▼</button>').prop('disabled', i === sc.tiles.length - 1)
-                        .on('click', () => { moveTile(sc, i, 1); renderEditor(); refreshFull(); commit('tile'); })));
-                $tbl.append($r);
-            });
-            $p.append($tbl);
-            $p.append($('<div class="hint" style="margin-top:8px;">')
-                .text('同じ「行」のタイルは横に並びます．「幅」は行内での比率．「入」で現れ，「出」で消えます（空欄なら残る）．'));
 
-            // ステップ確認スライダ
-            const total = sc.tiles.reduce((m, t) => Math.max(m, t.in || 1, t.out || 0), 0);
+            const $fr = $('<div class="fieldrow">');
+            $fr.append($('<span>').text('詰め方'));
+            $fr.append($('<select>')
+                .append($('<option value="">中央そろえ（画面の真ん中に置く）</option>'))
+                .append($('<option value="top">上そろえ（上から積む）</option>'))
+                .val(sc.align === 'top' ? 'top' : '')
+                .on('change', function(){
+                    if (this.value) sc.align = 'top'; else delete sc.align;
+                    refreshFull(); commit('num');
+                }));
+            $p.append($fr);
+            $p.append($('<div class="hint">').text(
+                'シーン全体は画面の大きさに合わせて自動で拡大縮小されます．' +
+                '短いシーンは中央そろえのほうが収まりがよく，積み上がる見せ方をしたいときは上そろえにします．'));
+
+            const total = progSteps(sc);
             const $row = $('<div class="steprow">');
-            const $lab = $('<span>').text('ステップ 0 / ' + total);
+            const $lab = $('<span>').text('第 0 歩 / ' + total);
             const $rng = $('<input type="range" min="0">').attr('max', total).val(0)
                 .on('input', function(){
-                    $lab.text('ステップ ' + this.value + ' / ' + total);
+                    $lab.text('第 ' + this.value + ' 歩 / ' + total);
                     KtbPlayer.setStep(parseInt(this.value));
                 });
-            $row.append($('<span>').text('表示確認：')).append($rng).append($lab);
+            $row.append($('<span>').text('送りの確認：')).append($rng).append($lab);
             $p.append($row);
+
+            const $tbl = $('<table class="layout" style="margin-top:10px;">');
+            $tbl.append($('<tr><th>歩</th><th>そこで出るもの</th></tr>'));
+            for (let k = 0; k <= total; k++) {
+                const names = cmds(sc).filter(c => isPartCmd(c) && (c.at || 0) === k)
+                                      .map((c, i) => partLabel(c, i));
+                if (!names.length) continue;
+                $tbl.append($('<tr>')
+                    .append($('<td>').text(k === 0 ? '最初から' : ('第' + k + '歩')))
+                    .append($('<td>').text(names.join('　／　'))));
+            }
+            $p.append($tbl);
         }
 
         function showKit() {
             const kit = [
-                '【タイルの書き方】タイルはHTML断片です．次のクラスを使うと体裁が揃います．',
+                '【組み立て方】シーンは命令の並びです．「部品」を上から積み，横に並べたいときは「段」を',
+                '足して幅の比を決めます．一つの枠の中に順に出したいときは「箱」を開いて，その中に部品を',
+                '積み，「箱を閉じる」で外に戻ります．部品の「第◯歩」で出る順番が決まり，0 は最初から',
+                '見えている部品です．同じ歩数を書けば同時に出ます．',
+                '',
+                '【部品の書き方】部品はHTML断片です．次のクラスを使うと体裁が揃います．',
                 '',
                 '<div class="k-title">大見出し</div>（明朝・特大）',
                 '<div class="k-sub">English Subtitle</div>',
@@ -855,7 +1059,7 @@
         }
 
         function sceneSteps(sc) {
-            if ((sc.kind || 'body') !== 'body') return 0;
+            if (Array.isArray(sc.steps) && sc.steps.length) return progSteps(sc);
             const items = (sc.tiles && sc.tiles.length) ? sc.tiles : (sc.blocks || []);
             return items.reduce((m, t) => Math.max(m, t.in || 1, t.out || 0), 0);
         }
@@ -867,22 +1071,24 @@
             const $tbl = $('<table class="scenes">');
             $tbl.append($('<tr>')
                 .append($('<th>').append($('<input type="checkbox" id="pickAll">')
-                    .on('change', function(){ scenePick = scenePick.map(() => this.checked); renderScenePane(); })))
+                    .on('change', function(){ scenePick = scenePick.map(() => this.checked); paintPickState(); })))
+                .append($('<th class="num">').text('#'))
                 .append($('<th>').text('種別'))
                 .append($('<th>').text('題名'))
-                .append($('<th class="num">').text('タイル'))
-                .append($('<th class="num">').text('ステップ'))
+                .append($('<th class="num">').text('部品'))
+                .append($('<th class="num">').text('歩'))
                 .append($('<th>').text('')));
 
             spec.scenes.forEach((sc, i) => {
                 const $r = $('<tr>').toggleClass('cur', i === curScene);
                 $r.append($('<td>').append($('<input type="checkbox">').prop('checked', !!scenePick[i])
-                    .on('change', function(){ scenePick[i] = this.checked; renderScenePane(); })));
+                    .on('change', function(){ scenePick[i] = this.checked; paintPickState(); })));
+                $r.append($('<td class="num">').text(i + 1));
                 $r.append($('<td class="kind">').text(sceneLabel(i)));
                 $r.append($('<td>').append($('<input type="text" class="ttl" placeholder="（無題）">')
                     .val(sc.title || '')
                     .on('input', function(){ sc.title = this.value; schedulePreview(); commit('text'); })));
-                $r.append($('<td class="num">').text((sc.tiles || sc.blocks || []).length));
+                $r.append($('<td class="num">').text(partCount(sc) || (sc.tiles || sc.blocks || []).length));
                 $r.append($('<td class="num">').text(sceneSteps(sc) || '—'));
                 $r.append($('<td>')
                     .append($('<button class="mini ghost" title="このシーンへ移動（複数選択時は一番若い番号へ）">→</button>')
@@ -893,11 +1099,10 @@
                         .on('click', () => moveScene(i, 1))));
                 $tbl.append($r);
             });
-            $p.append($tbl);
 
             const picked = scenePick.filter(Boolean).length;
-            $p.append($('<div class="toolbar" style="margin-top:10px;">')
-                .append($('<button class="ghost">⬇ 選んだシーンを書き出す</button>')
+            $p.append($('<div class="toolbar" style="margin:0 0 4px;">')
+                .append($('<button class="ghost pick-dep">⬇ 選んだシーンを書き出す</button>')
                     .prop('disabled', !picked)
                     .on('click', exportScenes))
                 .append($('<button class="ghost">📂 シーンを取り込む</button>')
@@ -906,24 +1111,50 @@
                         $('#sceneInWhere').text(sceneLabel(curScene) + '「' + (spec.scenes[curScene].title || '無題') + '」');
                         $('#sceneInModal').css('display', 'flex');
                     }))
-                .append($('<button class="danger">🗑 選んだシーンを削除</button>')
+                .append($('<button class="danger pick-dep">🗑 選んだシーンを削除</button>')
                     .prop('disabled', !picked)
                     .on('click', deletePickedScenes))
-                .append($('<button class="ghost">☐ 選択解除</button>')
+                .append($('<button class="ghost pick-dep">☐ 選択解除</button>')
                     .prop('disabled', !picked)
-                    .on('click', () => { scenePick = []; renderScenePane(); }))
+                    .on('click', () => { scenePick = []; paintPickState(); }))
                 .append($('<button class="ghost" title="全シーンをM×Nで並べたA4縦の一覧を開き，印刷でPDFにします">🖨 一覧PDF</button>')
                     .on('click', () => {
                         if (!presId) return showResult('一覧PDFは保存済みの作品で使えます．先に保存してください', true);
                         if (isDirty()) showResult('未保存の変更は一覧PDFに反映されません（保存してから開き直してください）', true);
                         window.open(API.handout + presId, '_blank');
                     }))
-                .append($('<span class="hint">').text(picked ? picked + '件を選択中' : 'チェックでシーンを選びます（書き出し・削除・まとめて移動）')));
+                .append($('<span class="hint" id="pickHint">').text(pickHintText(picked))));
+            const $no = $('<input type="number" id="jumpNo" min="1" max="' + spec.scenes.length + '" style="width:64px;" title="表の左端の＃番号">');
+            if (jumpNoVal) $no.val(jumpNoVal);
+            $no.on('input', function(){ jumpNoVal = this.value; });
+            $p.append($('<div class="toolbar" style="margin-top:6px;">')
+                .append($('<span>').text('⇒ 遠くへ移動：＃'))
+                .append($no)
+                .append($('<button class="mini ghost">この番号の前へ</button>').on('click', () => moveSceneTo(false)))
+                .append($('<button class="mini ghost">この番号の後へ</button>').on('click', () => moveSceneTo(true)))
+                .append($('<span class="hint">').text('チェックしたシーンを，＃番号の直前／直後へまとめて運びます')));
             $p.append($('<div class="hint" style="margin-top:6px;">')
                 .text('「→」でそのシーンへ移動します（複数選択中は一番若い番号へ）．▲▼は選択中のシーンをまとめて動かします．書き出したJSONは，別の作品に取り込めます（いま選ばれているシーンの前後に挿入）．'));
+            const $wrap = $('<div class="scenewrap">').append($tbl);
+            $p.append($wrap);
+            $wrap[0].scrollTop = sceneScroll;
+            $wrap.on('scroll', function(){ sceneScroll = this.scrollTop; });
         }
 
         // 選択中のシーン番号（昇順）
+        // チェックの変更は表を作り直さず，チェック数に依存する部分だけをその場で書き換える
+        let sceneScroll = 0;
+        function pickHintText(picked) {
+            return picked ? picked + '件を選択中' : 'チェックでシーンを選びます（書き出し・削除・まとめて移動）';
+        }
+        function paintPickState() {
+            syncPick();
+            const picked = scenePick.filter(Boolean).length;
+            $('#paneScenes table.scenes td input[type=checkbox]').each((k, el) => { el.checked = !!scenePick[k]; });
+            $('#pickAll').prop('checked', spec.scenes.length > 0 && picked === spec.scenes.length);
+            $('#paneScenes .pick-dep').prop('disabled', !picked);
+            $('#pickHint').text(pickHintText(picked));
+        }
         function pickedIdx() {
             syncPick();
             return scenePick.map((v, i) => v ? i : -1).filter(i => i >= 0);
@@ -956,6 +1187,29 @@
             renderEditor(); refreshFull(); commit('scene');
         }
 
+        // ＃番号の直前／直後へまとめて移動する（チェックが無ければいまのシーンだけ）
+        let jumpNoVal = '';
+        function moveSceneTo(after) {
+            const group = pickedIdx();
+            if (!group.length) return showResult('移動するシーンをチェックで選んでください', true);
+            const n = spec.scenes.length;
+            const t = parseInt(jumpNoVal, 10);
+            if (isNaN(t) || t < 1 || t > n) return showResult('移動先の＃番号（1〜' + n + '）を入れてください', true);
+            const ti = t - 1;
+            if (group.includes(ti)) return showResult('移動先＃' + t + ' が動かすシーン自身に含まれています', true);
+            const curSc = spec.scenes[curScene];
+            const target = spec.scenes[ti];
+            const moving = group.map(k => spec.scenes[k]);
+            const rest = spec.scenes.filter(sc => !moving.includes(sc));
+            const pos = rest.indexOf(target) + (after ? 1 : 0);
+            rest.splice(pos, 0, ...moving);
+            spec.scenes = rest;
+            curScene = Math.max(0, spec.scenes.indexOf(curSc));
+            scenePick = spec.scenes.map(sc => moving.includes(sc));   // チェックは移動先まで追随
+            renderEditor(); refreshFull(); commit('scene');
+            showResult('＃' + t + ' の' + (after ? '直後' : '直前') + 'へ移動しました', false);
+        }
+
         // 選んだシーンをまとめて削除
         function deletePickedScenes() {
             const pk = pickedIdx();
@@ -968,7 +1222,7 @@
             scenePick = [];
             const ci = spec.scenes.indexOf(curSc);
             curScene = ci >= 0 ? ci : Math.min(pk[0], spec.scenes.length - 1);
-            curTile = 0;
+            curCmd = 0;
             renderEditor(); refreshFull(); commit('scene');
             showResult(pk.length + '件のシーンを削除しました', false);
         }
@@ -1009,9 +1263,15 @@
                 subtitle: String(sc.subtitle || ''),
                 kind: ['body', 'cover', 'end'].includes(sc.kind) ? sc.kind : 'body',
                 theme: ['light', 'dark', 'cover'].includes(sc.theme) ? sc.theme : 'light',
+                align: sc.align === 'top' ? 'top' : undefined,
+                steps: Array.isArray(sc.steps) ? sc.steps : [],
                 tiles: Array.isArray(sc.tiles) ? sc.tiles : [],
                 blocks: Array.isArray(sc.blocks) && !(sc.tiles || []).length ? sc.blocks : undefined
-            })).map(sc => { if (!sc.blocks) delete sc.blocks; return sc; });
+            })).map(sc => {
+                if (!sc.blocks) delete sc.blocks;
+                if (!sc.align) delete sc.align;
+                return sc;
+            });
         }
 
         function importScenes(after) {
@@ -1021,10 +1281,11 @@
             } catch (e) {
                 return showResult('シーンJSONとして読めませんでした: ' + e.message, true);
             }
+            migrateSpec({ scenes: arr });          // 旧形式で書かれていれば手続きに移す
             const pos = after ? curScene + 1 : curScene;
             spec.scenes.splice(pos, 0, ...arr);
             scenePick = [];
-            curScene = pos; curTile = 0;
+            curScene = pos; curCmd = 0;
             $('#sceneInModal').hide();
             renderEditor(); refreshFull(); commit('scene');
             showResult(arr.length + '件のシーンを取り込みました（' + sceneLabel(pos) + ' から）', false);
@@ -1033,7 +1294,7 @@
         // ── シーン操作 ──
         function gotoScene(i) {
             curScene = Math.max(0, Math.min(spec.scenes.length - 1, i));
-            curTile = 0;
+            curCmd = 0;
             renderEditor();
             KtbPlayer.goScene(curScene);
             KtbPlayer.showAll();          // そのシーンが全部表示された状態を映す
@@ -1054,8 +1315,10 @@
                 }
                 resp.presentations.forEach(p => {
                     const $i = $('<div class="pres-item">');
-                    $i.append($('<a>').text(p.title).on('click', () => openPres(p.id)));
+                    $i.append($('<a>').text(p.title).on('click', () => guardUnsaved(() => openPres(p.id))));
                     $i.append($('<span class="date">').text(p.updated_at));
+                    $i.append($('<button class="presdel" title="このプレゼンそのものを削除します（元に戻せません）">🗑 プレゼン削除</button>')
+                        .on('click', () => deletePres(p)));
                     $l.append($i);
                 });
             });
@@ -1067,10 +1330,12 @@
                 presId = resp.presentation.id;
                 spec = resp.presentation.spec;
                 spec.title = resp.presentation.title;
-                curScene = 0;
+                const moved = migrateSpec(spec);
+                curScene = 0; curCmd = 0;
                 renderEditor(); refreshPreview(false); syncJson();
                 markSaved(); resetHistory();
-                showResult('「' + spec.title + '」を開きました', false);
+                showResult('「' + spec.title + '」を開きました'
+                    + (moved ? '（旧形式の' + moved + 'シーンを手続きに移しました．保存するまでDBは変わりません）' : ''), false);
             });
         }
 
@@ -1104,7 +1369,7 @@
         }
         function markSaved() { savedSnapshot = snapshot(); paintSaveButton(); }
         function hasContent() {
-            return (spec.scenes || []).some(sc => (sc.tiles || sc.blocks || []).length)
+            return (spec.scenes || []).some(sc => (sc.steps || sc.tiles || sc.blocks || []).length)
                    || ($('#presTitle').val() || '').trim() !== '';
         }
         function isDirty() {
@@ -1144,8 +1409,8 @@
             spec = o.s;
             $('#presTitle').val(o.t || '');
             if (curScene >= spec.scenes.length) curScene = Math.max(0, spec.scenes.length - 1);
-            const tiles = (spec.scenes[curScene] || {}).tiles || [];
-            if (curTile >= tiles.length) curTile = Math.max(0, tiles.length - 1);
+            const list = (spec.scenes[curScene] || {}).steps || [];
+            if (curCmd >= list.length) curCmd = Math.max(0, list.length - 1);
             renderEditor(); refreshFull(); syncJson();
             restoring = false;
             lastTag = ''; lastAt = 0;
@@ -1171,6 +1436,16 @@
             const dirty = isDirty();
             $('#btnSave').prop('disabled', !dirty)
                 .attr('title', dirty ? '未保存の変更を保存します' : '変更はありません');
+            paintHeadTitle(dirty);
+        }
+        // 画面上部に編集中のプレゼン名（25文字まで）と未保存の印を出す
+        function paintHeadTitle(dirty) {
+            const full = ($('#presTitle').val() || spec.title || '無題のプレゼン').trim();
+            const chars = Array.from(full);
+            const shown = chars.length > 25 ? chars.slice(0, 25).join('') + '…' : full;
+            const $h = $('#headTitle').empty().attr('title', full);
+            $h.append(document.createTextNode('編集中：' + shown));
+            if (dirty) $h.append($('<span class="dirty" title="保存していない変更があります">●</span>'));
         }
 
         // ── JSON編集 ──
@@ -1238,7 +1513,7 @@
             const title = spec.title || 'かたりべプレゼン';
             const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const abs = JSON.parse(JSON.stringify(spec));
-            (abs.scenes || []).forEach(sc => (sc.tiles || []).forEach(t => {
+            (abs.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
                 if (t.html) t.html = t.html.replace(/(src\s*=\s*["'])\/kataribe\/img\//g,
                                                     '$1' + location.origin + '/kataribe/img/');
             }));
@@ -1275,41 +1550,49 @@ js +
             spec = parsed;
             presId = null;                       // 取り込みは常に新規作品として扱う
             if (!spec.title) spec.title = '取り込んだプレゼン';
-            curScene = 0; curTile = 0;
+            migrateSpec(spec);                   // 旧形式で書かれていれば手続きに移す
+            curScene = 0; curCmd = 0;
         }
 
         // ── イベント ──
-        $('#btnNew').on('click', () => {
+        $('#btnNew').on('click', () => guardUnsaved(() => {
             presId = null;
-            spec = { title: '無題のプレゼン', scenes: [ { title: '', subtitle: '', theme: 'cover', kind: 'cover', tiles: [] } ] };
+            spec = { title: '無題のプレゼン', scenes: [ { title: '', subtitle: '', theme: 'cover', kind: 'cover', steps: [] } ] };
             curScene = 0;
             renderEditor(); refreshPreview(false); syncJson();
             markSaved(); resetHistory();
-        });
-        $('#btnSample').on('click', () => {
+        }));
+        $('#btnSample').on('click', () => guardUnsaved(() => {
             $.get(API.sample, resp => {
                 if (!resp.success) return showResult('サンプル取得に失敗: ' + resp.error, true);
                 presId = null;
                 spec = resp.spec;
-                curScene = 0; curTile = 0;
+                migrateSpec(spec);
+                curScene = 0; curCmd = 0;
                 renderEditor(); refreshPreview(false); syncJson(); resetHistory();
                 showResult('サンプルを読み込みました（保存すると自分のプレゼンになります）', false);
             });
-        });
+        }));
         $('#btnSave').on('click', () => { if (isDirty()) save(); });
-        $('#btnDelete').on('click', () => {
-            if (!presId) return showResult('保存されていないプレゼンです', true);
-            if (!confirm('「' + spec.title + '」を削除しますか？')) return;
-            $.post(API.del + presId, resp => {
-                if (resp.success) {
-                    showResult('削除しました', false);
+        // プレゼンそのものの削除（プレゼン一覧の各行のボタンから）．物理削除で元に戻せない
+        function deletePres(p) {
+            const isOpen = (presId === p.id);
+            let msg = 'プレゼン「' + p.title + '」そのものを削除します．\n削除すると元に戻せません．よろしいですか？';
+            if (isOpen && isDirty()) msg += '\n（いま編集中のプレゼンです．保存していない変更も失われます）';
+            else if (isOpen) msg += '\n（いま編集中のプレゼンです）';
+            if (!confirm(msg)) return;
+            $.post(API.del + p.id, resp => {
+                if (!resp.success) return showResult('削除に失敗: ' + resp.error, true);
+                showResult('プレゼン「' + p.title + '」を削除しました', false);
+                if (isOpen) {
                     presId = null;
                     spec = { title: '無題のプレゼン', scenes: [] };
-                    renderEditor(); refreshPreview(false); loadList();
+                    renderEditor(); refreshPreview(false);
                     markSaved(); resetHistory();
-                } else showResult('削除に失敗: ' + resp.error, true);
+                }
+                loadList();
             });
-        });
+        }
         $('#btnJson').on('click', () => {
             $('#jsonWrap').toggle();
             syncJson();
@@ -1317,8 +1600,9 @@ js +
         $('#btnJsonApply').on('click', () => {
             try {
                 spec = JSON.parse($('#jsonArea').val());
+                migrateSpec(spec);
                 curScene = Math.min(curScene, Math.max(0, (spec.scenes || []).length - 1));
-                curTile = 0;
+                curCmd = 0;
                 renderEditor(); refreshFull(); commit('json');
                 showResult('JSONを反映しました', false);
             } catch (e) {
@@ -1328,11 +1612,22 @@ js +
         $('#presTitle').on('input', function(){ spec.title = this.value; commit('text'); });
         // 現在のシーンの直前／直後に新しいシーンを挿入する
         function addSceneAt(pos) {
-            spec.scenes.splice(pos, 0, { title: '', subtitle: '', theme: 'light', kind: 'body', tiles: [] });
-            curScene = pos; curTile = 0;
+            spec.scenes.splice(pos, 0, { title: '', subtitle: '', theme: 'light', kind: 'body', steps: [] });
+            curScene = pos; curCmd = 0;
             renderEditor(); refreshFull(); commit('scene');
             showResult(sceneLabel(pos) + ' として挿入しました', false);
         }
+        // このシーンを中身ごと複製して直後に入れる（似たシーンを作り直さずに使い回すため）
+        function dupSceneAfter() {
+            if (!spec.scenes.length) return;
+            const copy = JSON.parse(JSON.stringify(spec.scenes[curScene]));
+            spec.scenes.splice(curScene + 1, 0, copy);
+            scenePick = [];
+            curScene = curScene + 1; curCmd = 0;
+            renderEditor(); refreshFull(); commit('scene');
+            showResult(sceneLabel(curScene) + ' として複製しました（題名も中身もそのままコピーしています）', false);
+        }
+        $('#btnDupScene').on('click', dupSceneAfter);
         $('#btnAddBefore').on('click', () => addSceneAt(curScene));
         $('#btnAddAfter').on('click', () => addSceneAt(curScene + 1));
         $('#sceneSel').on('change', function(){ gotoScene(parseInt(this.value)); });
@@ -1357,11 +1652,10 @@ js +
             if (!confirm(label + (t ? '「' + t + '」' : '（無題）') + 'を削除しますか？')) return;
             spec.scenes.splice(curScene, 1);
             if (curScene >= spec.scenes.length) curScene = spec.scenes.length - 1;
-            curTile = 0;
+            curCmd = 0;
             renderEditor(); refreshFull(); commit('scene');
         });
         $('#sceneTitle').on('input', function(){ scene().title = this.value; schedulePreview(); commit('text'); });
-        $('#sceneSub').on('input', function(){ scene().subtitle = this.value; schedulePreview(); commit('text'); });
         $('#sceneTheme').on('change', function(){ scene().theme = this.value; refreshFull(); commit('scene'); });
         $('#sceneKind').on('change', function(){
             const sc = scene();
@@ -1381,7 +1675,13 @@ js +
             $('.tab').removeClass('active'); $(this).addClass('active');
             $('#paneTiles').toggle(curTab === 'tiles');
             $('#paneLayout').toggle(curTab === 'layout');
-            $('#paneScenes').toggle(curTab === 'scenes');
+            renderEditor();
+        });
+        $('.stab').on('click', function(){
+            sceneTab = $(this).data('stab');
+            $('.stab').removeClass('active'); $(this).addClass('active');
+            $('#sceneEdit').toggle(sceneTab === 'edit');
+            $('#paneScenes').toggle(sceneTab === 'list');
             renderEditor();
         });
         $('#imgFile').on('change', function(){
@@ -1409,27 +1709,35 @@ js +
             r.readAsText(f);
         });
 
-        // ── FUJINダッシュボードへ戻るとき，未保存の変更を確認する ──
-        let leaveTo = null;
+        // ── 未保存の変更があるとき，続行かキャンセルかを確かめてから処理する ──
+        // （FUJINへ戻る・一覧からの読み込み・新規・サンプル読み込みで共用）
+        let leaveAction = null;
+        function guardUnsaved(action){
+            if (!isDirty()) return action();
+            leaveAction = action;
+            $('#leaveMsg').text('「' + ($('#presTitle').val() || '無題のプレゼン')
+                + '」に，まだ保存していない変更があります．このまま続けると変更は失われます．どうしますか？');
+            $('#leaveModal').css('display', 'flex');
+        }
         $('#btnHome').on('click', function(e){
             if (!isDirty()) return;                     // 変更がなければそのまま移動
             e.preventDefault();
-            leaveTo = this.href;
-            $('#leaveMsg').text('「' + ($('#presTitle').val() || '無題のプレゼン')
-                + '」に，まだ保存していない変更があります．どうしますか？');
-            $('#leaveModal').css('display', 'flex');
+            const href = this.href;
+            guardUnsaved(() => { window.location.href = href; });
         });
-        $('#btnLeaveCancel').on('click', () => { $('#leaveModal').hide(); leaveTo = null; });
+        $('#btnLeaveCancel').on('click', () => { $('#leaveModal').hide(); leaveAction = null; });
         $('#btnLeaveDiscard').on('click', () => {
             $('#leaveModal').hide();
             savedSnapshot = snapshot();                 // 以後の離脱警告を止める
-            if (leaveTo) window.location.href = leaveTo;
+            const a = leaveAction; leaveAction = null;
+            if (a) a();
         });
         $('#btnLeaveSave').on('click', () => {
             const title = ($('#presTitle').val() || '').trim();
             if (!title) { showResult('題名を入れてから保存してください', true); return; }
             $('#leaveModal').hide();
-            save(() => { if (leaveTo) window.location.href = leaveTo; });
+            const a = leaveAction; leaveAction = null;
+            save(() => { if (a) a(); });
         });
         // タブを閉じる・別のURLへ移動する場合の保険
         window.addEventListener('beforeunload', function(e){
@@ -1438,6 +1746,8 @@ js +
         let keysBound = false;
         function setFullView(on) {
             $('body').toggleClass('fullview', on);
+            // プレビューの箱の大きさが変わるので，プレイヤーに測り直させる
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 0);
             if (on) {
                 // 全コンテンツ表示は再生画面と同等に使えるようキー操作も有効にする
                 if (!keysBound) { KtbPlayer.bindKeys(); keysBound = true; }
@@ -1511,8 +1821,14 @@ js +
 
         // ── 初期化 ──
         KtbPlayer.init(document.getElementById('player'));
+        // プレビュー側でシーンを移動したら（▶▶・◀◀・先頭へ・＃ジャンプ・自動プレゼン），
+        // そのシーンだけを選んだのと同じ状態にする（編集カードもシーン一覧のチェックも追随）
         KtbPlayer.onSceneChange(function(i){
-            if (i !== curScene){ curScene = i; renderEditor(); }
+            if (i !== curScene){
+                curScene = i;
+                scenePick = spec.scenes.map((_, k) => k === curScene);
+                renderEditor();
+            }
         });
         renderEditor();
         refreshPreview(false);

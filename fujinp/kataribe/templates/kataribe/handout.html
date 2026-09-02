@@ -69,15 +69,8 @@
         .snap.ktb-player { display:block; width:1100px; height:auto; overflow:visible; }
         .snap .ktb-stage { flex:none; overflow:visible; height:auto; }
         .snap .ktb-fit { transform:none !important; }
-        /* vh 依存を断つ：画面と印刷で viewport 高が違うと縦寸が変わるので，仮想高 700px 相当の固定値にする */
-        .snap .k-img { max-height:364px; }
-        .snap .k-img.sm { max-height:154px; } .snap .k-img.md { max-height:252px; } .snap .k-img.lg { max-height:476px; }
-        .snap .k-img.full { max-height:none; }
-        .snap .k-frame, .snap .k-video { height:420px; }
-        .snap .k-frame.sm, .snap .k-video.sm { height:210px; }
-        .snap .k-frame.md, .snap .k-video.md { height:315px; }
-        .snap .k-frame.lg, .snap .k-video.lg { height:525px; }
-        .snap .k-frame.full, .snap .k-video.full { height:602px; }
+        /* 図・動画の縦寸はプレイヤー側（_player.html）が仮想高700px相当の設計pxで
+           持つようになったので，ここでの上書きは不要。表示倍率だけ画面と合わせる。 */
     </style>
 </head>
 <body>
@@ -171,6 +164,7 @@
         function snapFor(sc){
             var wrap = h('div', 'snapwrap');
             var pl = h('div', 'ktb-player static snap');
+            pl.style.setProperty('--kz', String(KZ));   // 画面の表示倍率と同じにする
             var theme = sc.theme || 'light';
             if (theme === 'dark') pl.classList.add('theme-dark');
             if (theme === 'cover') pl.classList.add('theme-cover');
@@ -188,8 +182,11 @@
             stage.appendChild(fit); pl.appendChild(stage);
 
             var total = totalOf(sc), showAll = (kind !== 'body');
-            var tiles = (sc.tiles && sc.tiles.length) ? sc.tiles : null;
-            if (tiles){
+            var prog = (sc.steps && sc.steps.length) ? sc.steps : null;
+            var tiles = (!prog && sc.tiles && sc.tiles.length) ? sc.tiles : null;
+            if (prog){
+                KtbPlayer.buildInto(sc, fit);      // 手続き方式はプレイヤーと同じ組み立てを使う
+            } else if (tiles){
                 var rows = {}, order = [];
                 tiles.forEach(function(t, i){
                     var r = t.row || 1;
@@ -211,7 +208,7 @@
                     rowEl.appendChild(inner);
                     fit.appendChild(rowEl);
                 });
-            } else {
+            } else if (!prog) {
                 (sc.blocks || []).forEach(function(b){
                     var wrapB = h('div', 'ktb-blk');
                     if (visibleAtEnd(b, total, showAll)) wrapB.classList.add('on');
@@ -235,7 +232,10 @@
             return 'シーン' + no;
         }
 
-        const BASE_W = 1100;      // スナップショットの仮想横幅（px）
+        const BASE_W = 1100;      // スナップショットの仮想横幅（px．_player.html の DESIGN_W と同じ）
+        // 表示倍率（プレイヤーで設定したものをそのまま使う）
+        let KZ = 1;
+        try { const z = parseFloat(localStorage.getItem('ktb.zoom')); if (z > 0) KZ = z; } catch (e) {}
         function build(){
             var M = parseInt($('#selCols').val(), 10), N = parseInt($('#selRows').val(), 10);
             var $sheets = $('#sheets').empty();

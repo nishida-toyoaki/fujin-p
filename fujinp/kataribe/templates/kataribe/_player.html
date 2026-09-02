@@ -10,27 +10,41 @@
   .ktb-player{
     --navy:#1c2733; --navy-deep:#141d26; --teal:#10b5a0; --teal-soft:#d9f3ef;
     --bg:#eef2f3; --card:#ffffff; --ink:#233038; --ink-sub:#5a6a74;
+    --gap:16px; --gap-row:14px;   /* タイル間・行間の隙間（設計上のpx） */
+    --kz:1;                       /* 表示倍率：文字に対する図・動画の大きさ */
+    --bs:1;                       /* 題名バーと余白をシーンの縮尺に合わせる係数 */
     position:relative; display:flex; flex-direction:column;
     background:var(--bg); color:var(--ink); overflow:hidden;
     font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif;
     line-height:1.65;
   }
   .ktb-bar{
-    background:var(--navy); color:#fff; padding:14px 26px; flex:0 0 auto;
+    background:var(--navy); color:#fff; flex:0 0 auto;
+    padding:calc(14px * var(--bs)) calc(26px * var(--bs));
     display:flex; align-items:baseline; justify-content:space-between;
   }
   .ktb-bar .ktb-scene-title{
     font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
-    font-size:22px; font-weight:600; letter-spacing:.04em;
+    font-size:calc(22px * var(--bs)); font-weight:600; letter-spacing:.04em;
   }
-  .ktb-bar .ktb-scene-sub{ font-size:13px; font-style:italic; color:var(--teal); letter-spacing:.06em; }
-  .ktb-bar .ktb-counter{ font-size:12px; color:var(--teal); letter-spacing:.06em; white-space:nowrap; }
+  .ktb-bar .ktb-scene-sub{ font-size:calc(13px * var(--bs)); font-style:italic; color:var(--teal); letter-spacing:.06em; }
+  .ktb-bar .ktb-counter{ font-size:calc(12px * var(--bs)); color:var(--teal); letter-spacing:.06em; white-space:nowrap; }
   .ktb-bar.hidden{ display:none; }
   .ktb-stage{
-    flex:1 1 auto; overflow-y:auto; padding:22px 30px 16px;
+    flex:1 1 auto; overflow-y:auto;
+    padding:calc(24px * var(--bs)) calc(30px * var(--bs));
+    display:flex; flex-direction:column;
+    justify-content:center; justify-content:safe center;
   }
+  /* 収まりきらないときだけ上そろえに戻す（中央そろえだと上が切れるため） */
+  .ktb-player.fit-overflow .ktb-stage{ justify-content:flex-start; }
+  /* 見出し・箇条書きの大きさをシーンごとにばらつかせない */
+  .ktb-stage h2{ font-size:25px; font-weight:700; line-height:1.45; letter-spacing:.02em; }
+  .ktb-stage h3{ font-size:20px; font-weight:700; line-height:1.5; }
+  .ktb-stage h4{ font-size:16px; font-weight:700; line-height:1.6; }
+  .ktb-stage li{ margin:.15em 0; }
   /* 画面に収まらないシーンは，横幅を先に活用してから必要分だけ縮小する */
-  .ktb-fit{ transform-origin:top center; transition:transform .35s ease; will-change:transform; }
+  .ktb-fit{ flex:0 0 auto; transform-origin:top center; transition:transform .35s ease; will-change:transform; }
   .ktb-player.fitted .ktb-stage{ overflow:hidden; }
   .ktb-player.fit-overflow .ktb-stage{ overflow-y:auto; overflow-x:hidden; }
   /* ── ブロックの出入り（fade + 高さの伸縮） ── */
@@ -78,7 +92,7 @@
   /* ── シーンのテーマ ── */
   .ktb-player.theme-dark{ background:radial-gradient(circle at 82% 8%,#26343f 0%,var(--navy-deep) 55%); color:#e9f0f2; }
   .ktb-player.theme-cover{ background:linear-gradient(160deg,var(--navy) 0%,var(--navy-deep) 100%); color:#fff; }
-  .ktb-player.theme-cover .ktb-stage{ display:flex; flex-direction:column; justify-content:center; }
+  .ktb-player.theme-cover .ktb-stage{ display:flex; flex-direction:column; justify-content:safe center; }
   .ktb-player.theme-dark .k-card{ background:rgba(255,255,255,.05); color:#e9f0f2; border:1.5px solid rgba(16,181,160,.65); border-top-width:6px; }
   .ktb-player.theme-cover .k-card{ background:rgba(255,255,255,.06); color:#fff; border:1px solid rgba(255,255,255,.25); }
   .ktb-player.theme-dark .k-note, .ktb-player.theme-cover .k-note{ color:#9fb3ba; }
@@ -88,10 +102,16 @@
   /* ── 行とタイル（レイアウト＋出入り） ── */
   .ktb-row{ display:grid; grid-template-rows:0fr; opacity:0; margin:0;
             transition:grid-template-rows .6s ease, margin .6s ease, opacity .6s ease; }
-  .ktb-row.on{ grid-template-rows:1fr; opacity:1; margin:0 0 14px; }
-  .ktb-row > .ktb-row-in{ overflow:hidden; min-height:0; display:flex; gap:16px; align-items:stretch; }
+  .ktb-row.on{ grid-template-rows:1fr; opacity:1; margin:0; }
+  /* 隙間は「見えている行・タイルの間」だけに置く（末尾に余白を残さない） */
+  .ktb-row.on ~ .ktb-row.on{ margin-top:var(--gap-row); }
+  .ktb-row > .ktb-row-in{ overflow:hidden; min-height:0; display:flex; gap:0; align-items:stretch; }
   .ktb-tile{ flex:0 1 0; min-width:0; opacity:0; transform:translateY(8px);
-             transition:flex-grow .6s ease, opacity .6s ease, transform .6s ease; }
+             transition:flex-grow .6s ease, margin .6s ease, opacity .6s ease, transform .6s ease; }
+  .ktb-tile.on ~ .ktb-tile.on{ margin-left:var(--gap); }
+  /* タイルの中身は，行の高さが余ったら縦中央に置く（カードだけは行いっぱいに伸ばす） */
+  .ktb-tile > .ktb-tile-in{ height:100%; display:flex; flex-direction:column; justify-content:center; }
+  .ktb-tile > .ktb-tile-in > .k-card{ flex:1 1 auto; }
   /* 非表示タイルの中身を寸法計算から外す。幅0で折り返した将来の本文が
      現在表示中の画像を誤って縮小させることを防ぐ。 */
   .ktb-tile:not(.on) > .ktb-tile-in{ display:none; }
@@ -101,9 +121,11 @@
   /* ── 固定配置モード（自動送り・自動プレゼン中） ──
      シーンに入った時点で全タイルを置いた完成形の配置と縮尺を決め，
      以後は各タイルをその場で表示／消去するだけにする（行の伸縮・再パッキングをしない）。 */
-  .ktb-player.static .ktb-row{ grid-template-rows:1fr; opacity:1; margin:0 0 14px; transition:none; }
-  .ktb-player.static .ktb-tile{ flex:var(--span,1) 1 0; transform:none;
+  .ktb-player.static .ktb-row{ grid-template-rows:1fr; opacity:1; margin:0; transition:none; }
+  .ktb-player.static .ktb-row + .ktb-row{ margin-top:var(--gap-row); }
+  .ktb-player.static .ktb-tile{ flex:var(--span,1) 1 0; transform:none; margin-left:0;
                                 transition:opacity .6s ease; }
+  .ktb-player.static .ktb-tile + .ktb-tile{ margin-left:var(--gap); }
   .ktb-player.static .ktb-tile:not(.on){ opacity:0; }
   .ktb-player.static .ktb-tile:not(.on) > .ktb-tile-in{ display:block; visibility:hidden; }
   .ktb-player.static .ktb-blk{ grid-template-rows:1fr; transform:none; transition:opacity .7s ease; }
@@ -115,7 +137,8 @@
   .k-title{ font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:40px; font-weight:600; letter-spacing:.03em; line-height:1.25; }
   .k-sub{ font-size:17px; font-style:italic; color:var(--teal); letter-spacing:.05em; margin-top:4px; }
   .k-lead{ font-size:16.5px; line-height:1.95; border-left:4px solid var(--teal); padding-left:16px; }
-  .k-card{ background:var(--card); border-radius:12px; border-top:6px solid var(--teal); box-shadow:0 4px 12px rgba(28,39,51,.08); padding:16px 22px; height:100%; }
+  .k-card{ background:var(--card); border-radius:12px; border-top:6px solid var(--teal); box-shadow:0 4px 12px rgba(28,39,51,.08); padding:16px 22px; height:100%;
+           font-size:14.5px; line-height:1.85; }
   .ktb-player .k-card.violet{ border-top-color:#8a63d2; } .ktb-player .k-card.rose{ border-top-color:#e0607e; }
   .ktb-player .k-card.green{ border-top-color:#2f9e63; } .ktb-player .k-card.navy{ border-top-color:#1f3f7a; }
   .ktb-player .k-card.blue{ border-top-color:#2f7fd6; } .ktb-player .k-card.orange{ border-top-color:#ef8a3c; }
@@ -133,18 +156,48 @@
   .k-stat .v small{ font-size:18px; } .k-stat .l{ font-size:13.5px; color:var(--ink-sub); margin-top:2px; }
   .k-num{ font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:26px; color:var(--teal); }
   .k-head{ background:var(--navy); color:#fff; border-radius:10px 10px 0 0; padding:8px 0; text-align:center; font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-size:20px; letter-spacing:.08em; }
-  .k-img{ max-width:100%; max-height:52vh; width:auto; height:auto; display:block;
+  /* 縦寸は画面の高さ（vh）ではなく設計上のpxで決める。画面の大きさやブラウザの
+     ズームで組み合わせが変わらず，配布資料（一覧PDF）とも同じ見えになる。 */
+  .k-img{ max-width:100%; max-height:calc(364px / var(--kz)); width:auto; height:auto; display:block;
           margin:0 auto; object-fit:contain; border-radius:10px; }
-  .k-img.sm{ max-height:22vh; } .k-img.md{ max-height:36vh; } .k-img.lg{ max-height:68vh; }
+  .k-img.sm{ max-height:calc(154px / var(--kz)); } .k-img.md{ max-height:calc(252px / var(--kz)); } .k-img.lg{ max-height:calc(476px / var(--kz)); }
   .k-img.full{ max-height:none; width:100%; }
   .k-arrow{ display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--teal); font-weight:700; height:100%; }
   /* 埋め込みHTML（自己完結の作品をそのまま動かす枠） */
-  .k-frame{ display:block; width:100%; height:60vh; border:0; border-radius:10px; background:#02040d; }
-  .k-frame.sm{ height:30vh; } .k-frame.md{ height:45vh; } .k-frame.lg{ height:75vh; } .k-frame.full{ height:86vh; border-radius:0; }
+  .k-frame{ display:block; width:100%; height:calc(420px / var(--kz)); border:0; border-radius:10px; background:#02040d; }
+  .k-frame.sm{ height:calc(210px / var(--kz)); } .k-frame.md{ height:calc(315px / var(--kz)); } .k-frame.lg{ height:calc(525px / var(--kz)); } .k-frame.full{ height:calc(602px / var(--kz)); border-radius:0; }
+
+  /* ── 手続き方式（v4） ──
+     行（kb-row）の中に段（kb-col）を並べ，段の中に箱（kb-box）と部品（kb-part）を
+     上から積む。配置は最初から完成形で確保し，見えるかどうかだけを切り替える。 */
+  .kb-row{ display:flex; align-items:stretch; gap:var(--gap); }
+  .kb-row.jl{ justify-content:flex-start; } .kb-row.jc{ justify-content:center; } .kb-row.jr{ justify-content:flex-end; }
+  .kb-row.jl > .kb-col, .kb-row.jc > .kb-col, .kb-row.jr > .kb-col{ flex:0 1 auto; }
+  .kb-row + .kb-row{ margin-top:var(--gap-row); }
+  .kb-col{ flex:var(--w,1) 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--gap-row); }
+  .kb-col.mid{ justify-content:center; } .kb-col.bot{ justify-content:flex-end; }
+  .kb-box{ display:flex; flex-direction:column; gap:9px; }
+  .kb-col > .kb-box:only-child, .kb-col > .kb-part:only-child{ flex:1 1 auto; }   /* 中身ひとつだけの段は行の高さいっぱいに伸ばす（カードの高さがそろう） */
+  /* 伸ばした部品の中で，中身を段の縦の位置（上／中央／下）に置く．カードは従来どおり高さいっぱい */
+  .kb-col > .kb-part:only-child{ display:flex; flex-direction:column; justify-content:flex-start; }
+  .kb-col.mid > .kb-part:only-child{ justify-content:center; }
+  .kb-col.bot > .kb-part:only-child{ justify-content:flex-end; }
+  .kb-col > .kb-part:only-child > .k-card{ flex:1 1 auto; }
+  .kb-col > .kb-part:only-child > img, .kb-col > .kb-part:only-child > video, .kb-col > .kb-part:only-child > iframe, .kb-col > .kb-part:only-child > svg{ flex:0 0 auto; align-self:flex-start; }   /* 画像などは横に引き伸ばさない */
+  .kb-col > .kb-part:only-child > .k-img.full, .kb-col > .kb-part:only-child > [style*="width:100%"], .kb-col > .kb-part:only-child > [style*="width: 100%"]{ align-self:stretch; }
+  .kb-line{ display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start; }
+  .kb-el{ opacity:0; transition:opacity .55s ease; }
+  .kb-el.on{ opacity:1; }
+  .ktb-player.fastmode .kb-el{ transition-duration:.12s; }
+  /* 上から積む（既定は中央そろえ．シーンの詰め方で選ぶ） */
+  .ktb-player.align-top .ktb-stage{ justify-content:flex-start; }
+  /* ページめくり：シーンが変わったときだけ下から送り込む */
+  @keyframes ktb-turn{ from{ transform:translateY(26px); opacity:.2; } to{ transform:none; opacity:1; } }
+  .ktb-stage.turn{ animation:ktb-turn .42s cubic-bezier(.22,.61,.36,1); }
 
   /* 動画（公開UPしたMP4を流す枠．受動メディアなのでスクリプトは動かない） */
-  .k-video{ display:block; width:100%; height:60vh; object-fit:contain; border-radius:10px; background:#02040d; }
-  .k-video.sm{ height:30vh; } .k-video.md{ height:45vh; } .k-video.lg{ height:75vh; } .k-video.full{ height:86vh; border-radius:0; }
+  .k-video{ display:block; width:100%; height:calc(420px / var(--kz)); object-fit:contain; border-radius:10px; background:transparent; }
+  .k-video.sm{ height:calc(210px / var(--kz)); } .k-video.md{ height:calc(315px / var(--kz)); } .k-video.lg{ height:calc(525px / var(--kz)); } .k-video.full{ height:calc(602px / var(--kz)); border-radius:0; }
 
   /* ── 操作バー ── */
   .ktb-ctrl{
@@ -162,6 +215,12 @@
   .ktb-ctrl button:hover{ border-color:var(--teal); color:#fff; }
   .ktb-ctrl button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
   .ktb-ctrl .spd{ font-size:6px; color:#9fb3ba; min-width:44px; text-align:center; }
+  .ktb-ctrl input.jump{
+    font:inherit; font-size:11px; width:52px; text-align:center; color:#e8eef1;
+    background:rgba(28,39,51,.82); border:1px solid rgba(255,255,255,.25);
+    border-radius:999px; padding:4px 8px;
+  }
+  .ktb-ctrl input.jump:focus{ outline:none; border-color:var(--teal); }
   /* 全画面プレゼン：ブラウザのヘッダを消し，最下行のコントローラは残す */
   .ktb-player:fullscreen{ width:100%; height:100%; }
   .ktb-player:-webkit-full-screen{ width:100%; height:100%; }
@@ -227,6 +286,124 @@ var KtbPlayer = (function(){
     return box.innerHTML;
   }
   function tilesOf(sc){ return (sc && sc.tiles && sc.tiles.length) ? sc.tiles : null; }
+  // 手続き方式（v4）：シーンが steps を持つときはこちらで組む
+  function progOf(sc){ return (sc && sc.steps && sc.steps.length) ? sc.steps : null; }
+  function isPart(c){ return !c || !c.op || c.op === 'part'; }
+  // at:0 は「最初から出ている」部品。ステップ総数はいちばん大きな番号。
+  function progTotal(prog){
+    var n = 0, m = 0;
+    (prog || []).forEach(function(c){
+      if (!isPart(c)) return;
+      n = (typeof c.at === 'number' && c.at >= 0) ? c.at : n + 1;
+      if (n > m) m = n;
+    });
+    return m;
+  }
+  // 画像は届いてから測り直す。autoplay付きの動画は play() で確実に始動させる
+  // （動的挿入では autoplay が空振りする環境や，低電力モード等で止められる場合の保険．
+  //   無音は自動再生の必要条件なので muted を強制．音を出したい動画は autoplay を外し
+  //   controls を付けて手動再生にする）
+  function prepMedia(box){
+    [].slice.call(box.querySelectorAll('img')).forEach(function(im){
+      im.addEventListener('load', scheduleFit);
+    });
+    [].slice.call(box.querySelectorAll('video[autoplay]')).forEach(function(v){
+      v.muted = true;
+      v.setAttribute('playsinline', '');
+      var kick = function(){ var p = v.play(); if (p && p.catch) p.catch(function(){}); };
+      if (v.readyState >= 2) kick();
+      else v.addEventListener('loadeddata', kick);
+    });
+  }
+
+  // 命令を上から順にたどって完成形を組み，部品に登場ステップを振る。
+  //   {op:'row', align:'center'}     … 新しい行を始める（align＝left/center/right でそろえ．省略時は幅の比で広げる）
+  //   {op:'col', w:2, align:'middle'}… 行の中に段を作る（w＝幅の比．align＝middle/bottom で中身の縦の位置．省略時は上）
+  //   {op:'box', cls:'k-card'}       … 箱を開く（以降の部品はこの中に積む）
+  //   {op:'end'}                     … 箱を閉じる
+  //   {op:'part', html:'…', flow:'inline', at:3} … 部品を置く（1ステップ消費）
+  //   {op:'br'}                      … 横並びを打ち切って改行する
+  // at を書かなければ 1,2,3… と自動で振られる。同じ at を書けば同時に出る。
+  function buildProgram(prog, mount){
+    var row = null, col = null, boxes = [], line = null, step = 0;
+
+    function newRow(align){
+      var jc = { left:'jl', center:'jc', right:'jr' }[align] || '';
+      row = h('div', 'kb-row kb-el' + (jc ? ' ' + jc : ''));
+      mount.appendChild(row);
+      col = null; boxes = []; line = null;
+    }
+    function newCol(w, align){
+      if (!row) newRow();
+      col = h('div', 'kb-col kb-el');
+      col.style.setProperty('--w', String(w || 1));
+      if (align === 'middle' || align === true) col.classList.add('mid');
+      else if (align === 'bottom') col.classList.add('bot');
+      row.appendChild(col);
+      boxes = []; line = null;
+    }
+    function here(){
+      if (boxes.length) return boxes[boxes.length - 1];
+      if (!col) newCol(1, '');
+      return col;
+    }
+
+    (prog || []).forEach(function(cmd){
+      var op = (cmd && cmd.op) || 'part';
+      if (op === 'row'){ newRow(cmd.align); return; }
+      if (op === 'col'){ newCol(cmd.w, cmd.align); return; }
+      if (op === 'box'){
+        var b = h('div', 'kb-box kb-el' + (cmd.cls ? ' ' + cmd.cls : ''));
+        here().appendChild(b);
+        boxes.push(b); line = null;
+        return;
+      }
+      if (op === 'end'){ if (boxes.length) boxes.pop(); line = null; return; }
+      if (op === 'br'){ line = null; return; }
+      step = (typeof cmd.at === 'number' && cmd.at >= 0) ? cmd.at : step + 1;
+      var el = h('div', 'kb-part kb-el', sanitize(cmd.html));
+      el.dataset.step = String(step);
+      if (cmd.flow === 'inline'){
+        if (!line){ line = h('div', 'kb-line kb-el'); here().appendChild(line); }
+        line.appendChild(el);
+      } else {
+        line = null;
+        here().appendChild(el);
+      }
+      prepMedia(el);
+    });
+
+    // 入れ物の登場ステップ＝中身の最小値（中身が空の入れ物は最後まで出さない）。
+    // 文書順を逆にたどると子が親より先に来るので，内側から順に決まる。
+    [].slice.call(mount.querySelectorAll('.kb-row, .kb-col, .kb-box, .kb-line'))
+      .reverse().forEach(function(c){
+        var m = null;
+        [].slice.call(c.children).forEach(function(ch){
+          var v = parseInt(ch.dataset.step, 10);
+          if (!isNaN(v) && (m === null || v < m)) m = v;
+        });
+        if (m !== null) c.dataset.step = String(m);
+      });
+  }
+
+  // 旧方式（行・幅・入）の作品を手続きに移す。見え方は変えない。
+  function tilesToProgram(sc){
+    var tiles = (sc && sc.tiles) || [], rows = {}, order = [], prog = [];
+    tiles.forEach(function(t){
+      var r = t.row || 1;
+      if (!rows[r]){ rows[r] = []; order.push(r); }
+      rows[r].push(t);
+    });
+    order.sort(function(a, b){ return a - b; });
+    order.forEach(function(r){
+      prog.push({ op: 'row' });
+      rows[r].forEach(function(t){
+        prog.push({ op: 'col', w: t.span || 1, align: 'middle' });
+        prog.push({ op: 'part', name: t.name || '', html: t.html, at: t['in'] || 1 });
+      });
+    });
+    return prog;
+  }
   // シーン種別：cover＝表紙／end＝エンドノート／body＝本文
   function kindOf(sc){
     var k = sc && sc.kind;
@@ -284,6 +461,15 @@ var KtbPlayer = (function(){
     g1.appendChild(btn('◀ 前のステップ', function(){ stopAuto(); prevStep(); }));
     g1.appendChild(btn('次のステップ ▶', function(){ stopAuto(); nextStep(); }));
     g1.appendChild(btn('次のシーンへ ▶▶', function(){ stopAuto(); goScene(cur+1); }));
+    els.jump = h('input', 'jump');
+    els.jump.type = 'text';
+    els.jump.setAttribute('inputmode', 'numeric');
+    els.jump.placeholder = '＃';
+    els.jump.title = 'シーン番号（題名バーの「シーン n / N」の n）を入れて Enter でジャンプ';
+    els.jump.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); jumpToScene(this.value); this.value = ''; this.blur(); }
+    });
+    g1.appendChild(els.jump);
     g1.appendChild(btn('📌 固定配置', function(){ staticPref = !staticPref; paintStatic(); setStatic(staticPref || !!timer); }, 'staticBtn'));
     g2.appendChild(btn('− 減速', function(){ intervalMs = Math.min(48000, intervalMs*RATE); paintSpeed(); restartAuto(); }));
     els.spd = h('span', 'spd', '×1.0'); g2.appendChild(els.spd);
@@ -291,17 +477,51 @@ var KtbPlayer = (function(){
     g2.appendChild(btn('×1 標準', function(){ intervalMs = STD_MS; paintSpeed(); restartAuto(); }));
     g2.appendChild(btn('▶ 自動送り', function(){ timer ? stopAuto() : startAuto(); }, 'autoBtn'));
     g2.appendChild(btn('🎬 自動プレゼン', function(){ autoPresent(); }, 'presentBtn'));
+    g2.appendChild(btn('🔍−', function(){ setZoom(zoomPref / ZOOM_RATE); }));
+    g2.appendChild(btn('🔍 100%', function(){ setZoom(1); }, 'zoomBtn'));
+    g2.appendChild(btn('🔍＋', function(){ setZoom(zoomPref * ZOOM_RATE); }));
     g2.appendChild(btn('⛶ 全画面', function(){ toggleFullscreen(); }, 'fsBtn'));
     ctrl.appendChild(g1); ctrl.appendChild(g2);
     root.appendChild(ctrl);
 
     paintStatic();
+    applyZoom();
     bindFitWatchers();
+  }
+
+  // ── 表示倍率 ──
+  // 文字と余白は設計上のpxで固定し，図・埋め込み・動画の縦寸だけを倍率で割る。
+  // シーン全体は画面に合わせて自動で拡大縮小されるので，この倍率は
+  // 「図に対して文字をどれだけ大きく見せるか」＝ブラウザのズームでしていた調整にあたる。
+  var ZOOM_KEY = 'ktb.zoom', ZOOM_RATE = 1.1, zoomPref = 1;
+  try {
+    var savedZoom = parseFloat(localStorage.getItem(ZOOM_KEY));
+    if (savedZoom > 0) zoomPref = savedZoom;
+  } catch (e) {}
+  function setZoom(z){
+    zoomPref = Math.min(2.5, Math.max(0.5, Math.round(z * 100) / 100));
+    try { localStorage.setItem(ZOOM_KEY, String(zoomPref)); } catch (e) {}
+    applyZoom();
+  }
+  function applyZoom(){
+    if (!root) return;
+    root.style.setProperty('--kz', String(zoomPref));
+    if (els.zoomBtn){
+      els.zoomBtn.textContent = '🔍 ' + Math.round(zoomPref * 100) + '%';
+      els.zoomBtn.classList.toggle('active', Math.abs(zoomPref - 1) > 0.005);
+      els.zoomBtn.title = '表示倍率（クリックで100%に戻す）．全画面のままキーの ＋ − 0 でも変えられる';
+    }
+    needFit = true;
+    scheduleFit();
   }
 
   function computeTotals(){
     totalSteps = spec.scenes.map(function(sc){
-      if (kindOf(sc) !== 'body') return 0;      // 表紙・エンドノートは一括表示（アクションなし）
+      var prog = progOf(sc);
+      // 表紙・エンドノートも，手続きで書いてあれば本文と同じように積み上げる
+      // （旧方式の表紙は従来どおり一括表示）。
+      if (prog) return progTotal(prog);
+      if (kindOf(sc) !== 'body') return 0;
       var items = tilesOf(sc) || sc.blocks || [], m = 0;
       items.forEach(function(b){ m = Math.max(m, b['in'] || 1, b['out'] || 0); });
       return m;
@@ -328,7 +548,7 @@ var KtbPlayer = (function(){
 
   function renderScene(){
     els.stage.innerHTML = '';
-    root.classList.remove('theme-dark', 'theme-cover');
+    root.classList.remove('theme-dark', 'theme-cover', 'align-top');
     if (!spec || !spec.scenes.length){
       els.sceneTitle.textContent = '（シーンがありません）';
       els.sceneSub.textContent = '';
@@ -339,6 +559,7 @@ var KtbPlayer = (function(){
     var theme = sc.theme || 'light';
     if (theme === 'dark') root.classList.add('theme-dark');
     if (theme === 'cover') root.classList.add('theme-cover');
+    if (sc.align === 'top') root.classList.add('align-top');   // 詰め方：上そろえ
     var kind = kindOf(sc);
     els.bar.classList.toggle('hidden', kind !== 'body');   // 表紙・エンドノートは題名も番号も出さない
     els.sceneTitle.textContent = sc.title || '';
@@ -347,7 +568,9 @@ var KtbPlayer = (function(){
     els.fit = h('div', 'ktb-fit');
     els.stage.appendChild(els.fit);
 
-    var tiles = tilesOf(sc);
+    var prog = progOf(sc);
+    if (prog) buildProgram(prog, els.fit);
+    var tiles = prog ? null : tilesOf(sc);
     if (tiles){
       var rows = {}, order = [];
       tiles.forEach(function(t, i){
@@ -365,27 +588,14 @@ var KtbPlayer = (function(){
           tile.dataset.ti = rec.i;
           tile.style.setProperty('--span', String(rec.t.span || 1));
           var box = h('div', 'ktb-tile-in', sanitize(rec.t.html));
-          [].slice.call(box.querySelectorAll('img')).forEach(function(im){
-            im.addEventListener('load', scheduleFit);   // 画像が届いてから測り直す
-          });
-          // autoplay付きの動画は属性任せにせず play() で確実に始動させる。
-          // （動的挿入では autoplay が空振りする環境や，低電力モード等で止められる場合の保険．
-          //   無音は自動再生の必要条件なので muted を強制．音を出したい動画は autoplay を外し
-          //   controls を付けて手動再生にする）
-          [].slice.call(box.querySelectorAll('video[autoplay]')).forEach(function(v){
-            v.muted = true;
-            v.setAttribute('playsinline', '');
-            var kick = function(){ var p = v.play(); if (p && p.catch) p.catch(function(){}); };
-            if (v.readyState >= 2) kick();
-            else v.addEventListener('loadeddata', kick);
-          });
+          prepMedia(box);
           tile.appendChild(box);
           inner.appendChild(tile);
         });
         rowEl.appendChild(inner);
         els.fit.appendChild(rowEl);
       });
-    } else {
+    } else if (!prog) {
       (sc.blocks || []).forEach(function(b, bi){
         var wrap = h('div', 'ktb-blk');
         wrap.dataset.bi = bi;
@@ -395,9 +605,16 @@ var KtbPlayer = (function(){
         els.fit.appendChild(wrap);
       });
     }
+    if (lastRendered !== cur){          // ページめくりはシーンが変わったときだけ
+      els.stage.classList.remove('turn');
+      void els.stage.offsetWidth;
+      els.stage.classList.add('turn');
+    }
+    lastRendered = cur;
     needFit = true;
     paint();
   }
+  var lastRendered = -1;
 
   function renderBlock(b){
     var t = b.type || 'card';
@@ -421,11 +638,16 @@ var KtbPlayer = (function(){
   // タイル方式では，単純な等比縮小に入る前に仮想的な横幅を広げる。
   // 広げた横幅を逆数で縮小すれば表示幅は常にステージ一杯のままなので，
   // 改行が減り，横の空白を残さず，文字も可能な限り大きく保てる。
-  var MIN_SCALE = 0.45;          // これ以上は縮めない（読めなくなるため．超過分はスクロール）
-  var PACK_SEARCH_STEPS = 10;    // 横幅の最小拡張率を二分探索する回数
+  var DESIGN_W = 1100;           // 設計上の横幅（一覧PDFのスナップショットと同じ）
+  var MIN_SCALE = 0.45;          // 設計寸法のこれ以下には縮めない（超過分はスクロール）
+  var MAX_SCALE = 1.45;          // 設計寸法のこれ以上には拡げない
+  var PACK_SEARCH_STEPS = 12;    // 仮想幅を二分探索する回数
   var fitTimer = null;
   var needFit = true;     // 固定配置モードでは，シーン描画直後の1回だけ配置と縮尺を計算する
 
+  // シーンは「横1100pxの設計図」として組み，それをステージの幅に合わせて拡大縮小する。
+  // 縦が余る／あふれるぶんは仮想幅を伸縮させて調整する。画面の大きさやブラウザの
+  // ズームが変わっても，見えるものの組み合わせは変わらない。
   function fitScene(){
     if (!els.fit || !els.stage) return;
     root.classList.remove('fitted', 'fit-overflow');
@@ -434,45 +656,63 @@ var KtbPlayer = (function(){
     els.fit.style.width = '100%';
     els.fit.style.marginBottom = '0';
     var cs = getComputedStyle(els.stage);
+    var availW = els.stage.clientWidth
+               - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    if (availW > 0){
+      // 題名バーと余白も設計図と同じ割合で大きくする
+      var bs = Math.min(1.8, Math.max(0.85, availW / DESIGN_W));
+      root.style.setProperty('--bs', bs.toFixed(3));
+      cs = getComputedStyle(els.stage);
+      availW = els.stage.clientWidth
+             - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    }
     var avail = els.stage.clientHeight
               - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
     var natural = els.fit.scrollHeight;
     if (!avail || !natural) return;
     var k = avail / natural;
-    if (k >= 1) return;             // そのまま収まっている
 
     var sc = spec && spec.scenes ? spec.scenes[cur] : null;
-    if (tilesOf(sc)){
-      var low = 1;
-      var high = 1 / MIN_SCALE;
+    if ((progOf(sc) || tilesOf(sc)) && availW > 0){
+      // pack＝仮想幅を設計幅の何倍にするか。pack が小さいほど大きく見える。
+      // 固定配置中は完成形の寸法が測れるので拡大側も探す（途中で倍率が動かない）。
+      // 手続き方式は常に完成形で場所を取るので，いつでも拡大側を探せる
+      var grow = root.classList.contains('static') || !!progOf(sc);
+      var lo = grow ? 1 / MAX_SCALE : 1;
+      var hi = 1 / MIN_SCALE;
 
       function measurePacked(pack){
-        els.fit.style.width = (pack * 100).toFixed(4) + '%';
+        var w = pack * DESIGN_W;
+        els.fit.style.width = w.toFixed(2) + 'px';
         var h = els.fit.scrollHeight;
-        return { natural: h, visual: h / pack };
+        var scale = availW / w;
+        return { natural: h, visual: h * scale, scale: scale };
       }
 
-      // 最大まで横に広げれば収まる場合，収まる最小の拡張率を探す。
-      // 最小率を選ぶことが，表示文字を最も大きく保つことに相当する。
-      var measured = measurePacked(high);
-      if (measured.visual <= avail){
-        for (var i = 0; i < PACK_SEARCH_STEPS; i++){
-          var mid = (low + high) / 2;
-          var probe = measurePacked(mid);
-          if (probe.visual <= avail) high = mid;
-          else low = mid;
+      var measured = measurePacked(lo);
+      if (measured.visual > avail){
+        var probe = measurePacked(hi);
+        if (probe.visual <= avail){
+          for (var i = 0; i < PACK_SEARCH_STEPS; i++){
+            var mid = (lo + hi) / 2;
+            var m = measurePacked(mid);
+            if (m.visual <= avail) hi = mid; else lo = mid;
+          }
+          measured = measurePacked(hi);
+        } else {
+          measured = probe;            // 最小まで縮めても収まらない（スクロールに任せる）
         }
-        measured = measurePacked(high);
       }
 
-      k = 1 / high;
       els.fit.style.transformOrigin = 'top left';
-      els.fit.style.transform = 'scale(' + k.toFixed(4) + ')';
-      // transform はレイアウト上の高さを変えないため，余分な高さを相殺する。
-      els.fit.style.marginBottom = (-Math.max(0, measured.natural - measured.visual)).toFixed(2) + 'px';
+      els.fit.style.transform = 'scale(' + measured.scale.toFixed(4) + ')';
+      // transform はレイアウト上の高さを変えないため，見かけとの差を相殺する
+      // （縮小なら負，拡大なら正の余白になる。ステージの縦中央そろえもこれで効く）。
+      els.fit.style.marginBottom = (measured.visual - measured.natural).toFixed(2) + 'px';
       root.classList.add(measured.visual <= avail + 1 ? 'fitted' : 'fit-overflow');
       return;
     }
+    if (k >= 1) return;             // 旧ブロック形式はそのまま収まっていれば何もしない
 
     // 旧ブロック形式は従来どおり，中央を基準に等比縮小する。
     k = Math.max(MIN_SCALE, k);
@@ -493,10 +733,16 @@ var KtbPlayer = (function(){
     if (!spec || !spec.scenes.length) return;
     var sc = spec.scenes[cur];
     var s = steps[cur];
-    var tiles = tilesOf(sc);
+    var prog = progOf(sc);
+    var tiles = prog ? null : tilesOf(sc);
 
-    var showAllTiles = (kindOf(sc) !== 'body');
-    if (tiles){
+    var showAllTiles = (totalSteps[cur] === 0);   // ステップを持たないシーンは一括表示
+    if (prog){
+      [].slice.call(els.fit.querySelectorAll('.kb-el')).forEach(function(el){
+        var v = parseInt(el.dataset.step, 10);
+        el.classList.toggle('on', !isNaN(v) && (showAllTiles || v <= s));
+      });
+    } else if (tiles){
       var rowVisible = {};
       [].slice.call(els.fit.querySelectorAll('.ktb-tile')).forEach(function(el){
         var t = tiles[parseInt(el.dataset.ti, 10)];
@@ -530,7 +776,7 @@ var KtbPlayer = (function(){
 
   // シーンに入るときの規則：
   //   'zero' … 0ステップから積み上げる（順送り：次のステップ・自動プレゼンの進行）
-  //   'full' … 完成形（全タイル表示）で入る（飛び越し：次のシーンへ・前のシーン・先頭へ・エディタからの移動）
+  //   'full' … 完成形（全タイル表示）で入る（飛び越し：次のシーンへ・前のシーン・エディタからの移動）
   //   逆戻り（前のステップ）は 'full' で入り，そこから1つずつ消していく
   var onSceneChange = null;
   function enterScene(i, mode){
@@ -554,7 +800,23 @@ var KtbPlayer = (function(){
     return false;
   }
   function goScene(i){ enterScene(i, 'full'); }
-  function goTop(){ enterScene(0, 'full'); }
+  // シーン番号（題名バーの「シーン n / N」と同じ，本文だけの通し番号）で直接ジャンプする
+  function jumpToScene(v){
+    var n = parseInt(v, 10);
+    if (isNaN(n) || !spec || !spec.scenes) return;
+    var no = 0, idx = -1;
+    spec.scenes.forEach(function(s, j){
+      if (kindOf(s) !== 'body') return;
+      no++;
+      if (no === n && idx < 0) idx = j;
+    });
+    if (idx >= 0){ stopAuto(); goScene(idx); }
+  }
+  // 先頭へ＝いちばん最初の状態に戻す（表紙も段階表示を持つので，完成形ではなく0ステップで入る）
+  function goTop(){
+    steps = steps.map(function(){ return 0; });
+    enterScene(0, 'zero');
+  }
 
   function paintSpeed(){
     var x = STD_MS / intervalMs;
@@ -578,6 +840,10 @@ var KtbPlayer = (function(){
       els.fsBtn.classList.toggle('active', on);
       els.fsBtn.textContent = on ? '⛶ 全画面解除' : '⛶ 全画面';
     }
+    // 全画面のあいだはキー操作を自動で有効にする（エディタから全画面にした場合も
+    // ←→ でステップを送れるようにする）。抜けたら元の状態に戻す。
+    if (on){ if (!keysBound){ bindKeys(); keysAuto = true; } }
+    else if (keysAuto){ unbindKeys(); keysAuto = false; }
     needFit = true;       // 画面寸法が変わるので配置と縮尺を取り直す
     paint();
   }
@@ -628,16 +894,29 @@ var KtbPlayer = (function(){
     startAuto();
   }
 
+  var keysBound = false, keysAuto = false;
+  function onKeyDown(e){
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;      // ブラウザ側の操作は邪魔しない
+    if (e.key === 'ArrowRight' || e.key === ' '){ e.preventDefault(); stopAuto(); nextStep(); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); stopAuto(); prevStep(); }
+    else if (e.key === 'ArrowDown' || e.key === 'PageDown'){ e.preventDefault(); stopAuto(); goScene(cur+1); }
+    else if (e.key === 'ArrowUp' || e.key === 'PageUp'){ e.preventDefault(); stopAuto(); goScene(cur-1); }
+    else if (e.key === 'Home'){ e.preventDefault(); stopAuto(); goTop(); }
+    else if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); autoPresent(); }
+    else if (e.key === '+' || e.key === '='){ e.preventDefault(); setZoom(zoomPref * ZOOM_RATE); }
+    else if (e.key === '-'){ e.preventDefault(); setZoom(zoomPref / ZOOM_RATE); }
+    else if (e.key === '0'){ e.preventDefault(); setZoom(1); }
+  }
   function bindKeys(){
-    addEventListener('keydown', function(e){
-      if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-      if (e.key === 'ArrowRight' || e.key === ' '){ e.preventDefault(); stopAuto(); nextStep(); }
-      else if (e.key === 'ArrowLeft'){ e.preventDefault(); stopAuto(); prevStep(); }
-      else if (e.key === 'ArrowDown' || e.key === 'PageDown'){ e.preventDefault(); stopAuto(); goScene(cur+1); }
-      else if (e.key === 'ArrowUp' || e.key === 'PageUp'){ e.preventDefault(); stopAuto(); goScene(cur-1); }
-      else if (e.key === 'Home'){ e.preventDefault(); stopAuto(); goTop(); }
-      else if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); autoPresent(); }
-    });
+    if (keysBound) return;
+    keysBound = true;
+    addEventListener('keydown', onKeyDown);
+  }
+  function unbindKeys(){
+    if (!keysBound) return;
+    keysBound = false;
+    removeEventListener('keydown', onKeyDown);
   }
 
   return {
@@ -647,6 +926,15 @@ var KtbPlayer = (function(){
     getStep: function(){ return steps[cur] || 0; },
     setStep: function(s){ if (spec && spec.scenes.length){ steps[cur] = Math.max(0, Math.min(totalSteps[cur], s)); paint(); } },
     fit: function(){ scheduleFit(); },
+    toProgram: tilesToProgram,        // 旧方式の作品を手続きに移す
+    // シーンの完成形を指定した箱の中に組む（一覧PDFのスナップショット用）
+    buildInto: function(sc, mount){
+      buildProgram(progOf(sc) || [], mount);
+      [].slice.call(mount.querySelectorAll('.kb-el')).forEach(function(el){
+        if (el.dataset.step !== undefined) el.classList.add('on');
+      });
+    },
+    progTotal: progTotal,
     showAll: function(){ if (spec && spec.scenes.length){ steps[cur] = totalSteps[cur]; paint(); } },
     getTotal: function(){ return totalSteps[cur] || 0; },
     onSceneChange: function(fn){ onSceneChange = fn; }

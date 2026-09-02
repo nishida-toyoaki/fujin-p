@@ -135,11 +135,64 @@ def _step_pair(item):
     return b_in, b_out
 
 
+STEP_OPS = ('row', 'col', 'box', 'end', 'part', 'br')
+
+
+def normalize_steps(steps):
+    """手続き方式（v4）の命令列を検証して返す．
+
+    命令は row（行）／col（段）／box（箱を開く）／end（箱を閉じる）／
+    part（部品）／br（改行）の6種類．part の at は「第何歩で出るか」で，
+    0 は最初から出ている部品．書かれていなければ再生側が順に振る．
+    """
+    out = []
+    for c in steps:
+        if not isinstance(c, dict):
+            continue
+        op = c.get('op', 'part')
+        if op not in STEP_OPS:
+            continue
+        if op in ('end', 'br'):
+            out.append({'op': op})
+        elif op == 'row':
+            cmd = {'op': 'row'}
+            if c.get('align') in ('left', 'center', 'right'):
+                cmd['align'] = c['align']
+            out.append(cmd)
+        elif op == 'col':
+            try:
+                w = max(1, min(12, int(c.get('w', 1))))
+            except Exception:
+                w = 1
+            cmd = {'op': 'col', 'w': w}
+            if c.get('align') in ('middle', 'bottom'):
+                cmd['align'] = c['align']
+            out.append(cmd)
+        elif op == 'box':
+            out.append({'op': 'box', 'cls': str(c.get('cls', ''))[:120]})
+        else:
+            cmd = {
+                'op': 'part',
+                'name': str(c.get('name', ''))[:100],
+                'html': str(c.get('html', '')),
+            }
+            at = c.get('at')
+            if at is not None:
+                try:
+                    cmd['at'] = max(0, int(at))
+                except Exception:
+                    pass
+            if c.get('flow') == 'inline':
+                cmd['flow'] = 'inline'
+            out.append(cmd)
+    return out
+
+
 def normalize_spec(spec):
     """スペックJSONを検証し，欠けた項目を補って返す．不正なら ValueError．
 
-    タイル方式（v2）と旧ブロック方式（v1）の両方を受け付ける．
-    シーンに tiles があればタイル方式，なければ blocks を見る．
+    手続き方式（v4）と，タイル方式（v2）・旧ブロック方式（v1）を受け付ける．
+    シーンに steps があれば手続き方式，なければ tiles，それも無ければ blocks を見る．
     """
     if not isinstance(spec, dict):
         raise ValueError('スペックはオブジェクトである必要があります')
@@ -166,9 +219,14 @@ def normalize_spec(spec):
             'kind': kind,
             'theme': theme,
         }
+        if sc.get('align') == 'top':
+            scene['align'] = 'top'          # 詰め方：上そろえ（既定は中央そろえ）
 
+        steps = sc.get('steps')
         tiles = sc.get('tiles')
-        if isinstance(tiles, list) and tiles:
+        if isinstance(steps, list) and steps:
+            scene['steps'] = normalize_steps(steps)
+        elif isinstance(tiles, list) and tiles:
             scene['tiles'] = []
             for t in tiles:
                 if not isinstance(t, dict):
@@ -214,7 +272,7 @@ def normalize_spec(spec):
             if norm_blocks:
                 scene['blocks'] = norm_blocks
             else:
-                scene['tiles'] = []
+                scene['steps'] = []          # 空のシーンは手続き方式の空箱として持つ
         out['scenes'].append(scene)
     return out
 
