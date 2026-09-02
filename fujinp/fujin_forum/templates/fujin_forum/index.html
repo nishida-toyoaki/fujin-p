@@ -1,0 +1,389 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>えふえふ - FUJIN-P</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif; background: #f4f6f9; color: #333; font-size: 14px; }
+.top { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #fff; border-bottom: 1px solid #e5e7eb; height: 50px; }
+.top h1 { font-size: 1.1rem; }
+.top .sp { flex: 1; }
+.top .me { color: #666; font-size: .85rem; }
+.btn { display: inline-block; padding: 6px 12px; border-radius: 6px; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; cursor: pointer; font-size: .85rem; text-decoration: none; white-space: nowrap; }
+.btn:hover { filter: brightness(.96); }
+.btn.red { background: #e74c3c; color: #fff; border-color: #e74c3c; border-radius: 20px; font-weight: 700; }
+.btn.green { background: #10b981; color: #fff; border-color: #10b981; }
+.btn.sm { padding: 3px 8px; font-size: .78rem; }
+.btn.ghost { background: #fff; color: #555; border-color: #d1d5db; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.app { display: grid; grid-template-columns: 240px 380px 1fr; height: calc(100% - 50px); }
+.col { overflow-y: auto; min-height: 0; }
+.col-ch { background: #1f2340; color: #d7d9e6; }
+.col-list { background: #fff; border-right: 1px solid #e5e7eb; }
+.col-post { background: #f4f6f9; }
+.col-head { position: sticky; top: 0; z-index: 2; padding: 10px 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.col-ch .col-head { background: #1f2340; color: #fff; border-bottom: 1px solid #343a5c; }
+.col-list .col-head { background: #fff; border-bottom: 1px solid #e5e7eb; }
+.col-post .col-head { background: #f4f6f9; border-bottom: 1px solid #e5e7eb; }
+.back { display: none; }
+
+.ch { display: flex; align-items: center; gap: 6px; padding: 7px 12px; cursor: pointer; font-size: .9rem; }
+.ch:hover { background: #2b3057; }
+.ch.active { background: #4f46e5; color: #fff; }
+.ch .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch .unread { background: #ef4444; color: #fff; border-radius: 10px; padding: 0 7px; font-size: .72rem; font-weight: 700; }
+.ch .arch { opacity: .6; font-size: .8rem; }
+.ch-sep { padding: 10px 12px 4px; font-size: .72rem; color: #8b90b3; text-transform: uppercase; letter-spacing: .05em; }
+
+.list-tools { padding: 8px 12px; display: flex; gap: 6px; border-bottom: 1px solid #f3f4f6; }
+.list-tools input { flex: 1; padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem; }
+.ch-desc { padding: 6px 12px; color: #666; font-size: .8rem; border-bottom: 1px solid #f3f4f6; }
+.post { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer; }
+.post:hover { background: #f8faff; }
+.post.active { background: #eef2ff; border-left: 3px solid #4f46e5; }
+.post .meta { display: flex; gap: 8px; font-size: .76rem; color: #888; }
+.post .meta b { color: #444; }
+.post .meta .slack { color: #a78bfa; }
+.post .title { font-weight: 700; margin: 2px 0; }
+.post .sum { color: #444; font-size: .85rem; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.post .badges { display: flex; gap: 6px; margin-top: 4px; font-size: .74rem; color: #666; flex-wrap: wrap; }
+.post .badges span { background: #f3f4f6; border-radius: 10px; padding: 0 7px; }
+.post .badges .rep { background: #eef2ff; color: #3730a3; }
+.more { text-align: center; padding: 10px; }
+.empty { color: #aaa; text-align: center; padding: 30px 10px; font-size: .9rem; }
+
+.msg { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin: 10px 14px; padding: 12px 16px; }
+.msg.reply { margin-left: 36px; border-left: 3px solid #c7d2fe; }
+.msg .m-meta { display: flex; gap: 10px; align-items: center; font-size: .78rem; color: #888; margin-bottom: 8px; flex-wrap: wrap; }
+.msg .m-meta b { color: #333; font-size: .88rem; }
+.msg .m-meta .sp { flex: 1; }
+.msg .m-tools { display: flex; gap: 6px; }
+.md { line-height: 1.7; word-break: break-word; }
+.md p { margin: 0 0 .7em; } .md p:last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: .6em 0 .4em; }
+.md h1 { font-size: 1.35rem; } .md h2 { font-size: 1.2rem; } .md h3 { font-size: 1.05rem; }
+.md ul, .md ol { margin: 0 0 .7em 1.6em; }
+.md blockquote { border-left: 3px solid #d1d5db; color: #666; padding-left: 10px; margin: .5em 0; }
+.md pre { background: #1f2937; color: #f3f4f6; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: .5em 0; font-size: .85rem; }
+.md code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: .88em; }
+.md pre code { background: none; padding: 0; }
+.md img { max-width: 100%; height: auto; display: block; margin: .4em 0; border-radius: 6px; border: 1px solid #e5e7eb; }
+.md a { color: #4f46e5; }
+.md a.ff-att { display: inline-block; background: #f3f4f6; border-radius: 6px; padding: 2px 8px; margin: 2px 0; text-decoration: none; }
+.md table { border-collapse: collapse; margin: .5em 0; }
+.md th, .md td { border: 1px solid #d1d5db; padding: 4px 8px; }
+.md .mermaid svg { max-width: 100%; }
+.rx { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.rx button { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 12px; padding: 1px 9px; cursor: pointer; font-size: .85rem; }
+.rx button.mine { border-color: #4f46e5; background: #eef2ff; }
+.rx button:hover { background: #e5e7eb; }
+.rx .add { position: relative; }
+.rx .picker { display: none; position: absolute; left: 0; top: 26px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 5; white-space: nowrap; }
+.rx .picker.open { display: block; }
+.rx .picker button { border: none; background: none; font-size: 1.1rem; padding: 2px 4px; }
+.thread-tools { padding: 8px 14px; display: flex; gap: 8px; justify-content: flex-end; }
+
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100; align-items: center; justify-content: center; }
+.modal-bg.open { display: flex; }
+.modal { background: #fff; border-radius: 10px; padding: 20px 22px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+.modal h3 { font-size: 1.05rem; margin-bottom: 12px; }
+.modal label.f { display: block; font-size: .82rem; color: #555; margin: 8px 0 3px; }
+.modal input[type=text], .modal textarea { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .9rem; }
+.share-option { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; cursor: pointer; }
+.share-option.selected { border-color: #4f46e5; background: #eef2ff; }
+.share-option label { cursor: pointer; font-weight: 600; font-size: .9rem; }
+.share-option .sd { color: #666; font-size: .78rem; margin-left: 22px; }
+#group-list { display: none; margin: 8px 0; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; max-height: 180px; overflow-y: auto; }
+#group-list label { display: block; padding: 2px 0; font-size: .88rem; }
+.modal-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#toast { display: none; position: fixed; bottom: 20px; right: 20px; background: #1f2937; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 200; }
+#toast.err { background: #b91c1c; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .col { display: none; }
+  .app[data-view=ch] .col-ch, .app[data-view=list] .col-list, .app[data-view=post] .col-post { display: block; }
+  .back { display: inline-block; }
+  .msg.reply { margin-left: 20px; }
+  .top .me { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <a href="{{ url_for('fujin_forum.return_to_fujin') }}" class="btn red">🏠 FUJIN-P</a>
+  <h1>💬 えふえふ</h1>
+  <span class="sp"></span>
+  <span class="me">{{ user_name }}</span>
+  {% if can_create %}<button class="btn" id="btn-new-ch">＋ チャンネル</button>{% endif %}
+  {% if is_admin %}<a class="btn ghost" href="{{ url_for('fujin_forum.import_page') }}">📥 取込</a>{% endif %}
+</div>
+
+<div class="app" id="app" data-view="ch">
+  <div class="col col-ch">
+    <div class="col-head">チャンネル</div>
+    <div id="ch-list"><div class="empty">読み込み中…</div></div>
+  </div>
+  <div class="col col-list">
+    <div class="col-head"><button class="btn sm ghost back" data-view="ch">← 一覧</button><span id="list-title">記事</span><span class="sp" style="flex:1"></span>
+      <button class="btn sm ghost" id="btn-ch-settings" style="display:none">⚙</button>
+      <button class="btn sm green" id="btn-new-post" style="display:none">✎ 新規記事</button></div>
+    <div class="ch-desc" id="ch-desc" style="display:none"></div>
+    <div class="list-tools" id="list-tools" style="display:none"><input type="text" id="q" placeholder="本文・投稿者で絞り込み…"></div>
+    <div id="post-list"><div class="empty">チャンネルを選んでください</div></div>
+  </div>
+  <div class="col col-post">
+    <div class="col-head"><button class="btn sm ghost back" data-view="list">← 記事一覧</button><span id="post-title">記事</span></div>
+    <div id="thread"><div class="empty">記事を選ぶとここに表示されます</div></div>
+  </div>
+</div>
+
+<!-- チャンネル設定モーダル -->
+<div class="modal-bg" id="ch-modal">
+  <div class="modal">
+    <h3 id="ch-modal-title">チャンネルを作成</h3>
+    <label class="f">名前（# なし．空白と記号 / \ ? & = # は不可）</label>
+    <input type="text" id="ch-name" maxlength="100">
+    <label class="f">説明</label>
+    <textarea id="ch-descr" rows="2"></textarea>
+    <label class="f">公開範囲（見える人＝投稿できる人）</label>
+    {% for k, lab in share_labels.items() %}
+    <div class="share-option" data-key="{{ k }}">
+      <label><input type="radio" name="share_key" value="{{ k }}"> {{ {'private':'🔒','public':'🌐','domestic':'🏫','group':'👥','domestic_group':'🏫＋👥'}[k] }} {{ lab }}</label>
+      <div class="sd">{{ {'private':'作成者と admin だけ','public':'ログイン済みの全ユーザ（ゲストを含む）','domestic':'ログイン済みの構成員だけ','group':'指定グループの所属者だけ','domestic_group':'構成員と指定グループの所属者'}[k] }}</div>
+    </div>
+    {% endfor %}
+    <div id="group-list"><div id="group-items"></div></div>
+    <label class="f" id="arch-row" style="display:none"><input type="checkbox" id="ch-archived"> アーカイブ（読むだけにする．新規投稿・返信・リアクション不可）</label>
+    {% if is_admin %}
+    <div id="admin-tools" style="display:none;margin-top:12px;padding-top:10px;border-top:1px dashed #d1d5db">
+      <div style="font-size:.8rem;color:#555;margin-bottom:6px">管理者の操作</div>
+      <a class="btn ghost" id="ch-export" href="#" download>⬇ JSON エクスポート（全記事・添付込み）</a>
+      <button class="btn ghost" id="ch-delete" style="color:#b91c1c;border-color:#fca5a5">🗑 チャンネルを削除</button>
+    </div>
+    {% endif %}
+    <div class="modal-btns">
+      <button class="btn ghost" id="ch-cancel">キャンセル</button>
+      <button class="btn green" id="ch-save">保存</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+{% include 'fujin_forum/_md_runtime.html' %}
+<script>
+const API = {
+  channels: "{{ url_for('fujin_forum.api_channels') }}",
+  groups: "{{ url_for('fujin_forum.api_groups') }}",
+  posts: cid => "{{ url_for('fujin_forum.api_posts', channel_id=0) }}".replace('/0/', '/' + cid + '/'),
+  post: pid => "{{ url_for('fujin_forum.api_post', post_id=0) }}".replace(/0$/, pid),
+  react: pid => "{{ url_for('fujin_forum.api_react', post_id=0) }}".replace('/0/', '/' + pid + '/'),
+  del: pid => "{{ url_for('fujin_forum.api_post_delete', post_id=0) }}".replace('/0/', '/' + pid + '/'),
+  chUpdate: cid => "{{ url_for('fujin_forum.api_channel_update', channel_id=0) }}".replace(/0$/, cid),
+  chDelete: cid => "{{ url_for('fujin_forum.api_channel_delete', channel_id=0) }}".replace('/0/', '/' + cid + '/'),
+  chExport: cid => "{{ url_for('fujin_forum.export_channel_json', channel_id=0) }}".replace('/0.json', '/' + cid + '.json'),
+  compose: "{{ url_for('fujin_forum.compose') }}",
+};
+const REACTIONS = {{ reaction_choices|tojson }};
+const ME = {{ user_id|tojson }};
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+
+let channels = [], curCh = null, curPost = null, posts = [], groups = null, canPost = false;
+const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+function toast(m, err) { const t = document.getElementById('toast'); t.textContent = m; t.className = err ? 'err' : ''; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 2500); }
+async function GET(u) { const r = await fetch(u); const j = await r.json(); if (!j.success) throw new Error(j.error || r.status); return j; }
+async function POST(u, b) { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }); const j = await r.json(); if (!j.success) throw new Error(j.error || r.status); return j; }
+function setView(v) { document.getElementById('app').dataset.view = v; }
+document.querySelectorAll('.back').forEach(b => b.onclick = () => setView(b.dataset.view));
+function setHash(cid, pid) { const h = '#c=' + cid + (pid ? '&p=' + pid : ''); if (location.hash !== h) history.replaceState(null, '', h); }
+function parseHash() { const m = {}; location.hash.slice(1).split('&').forEach(kv => { const [k, v] = kv.split('='); if (k) m[k] = v; }); return m; }
+
+// ── チャンネル ───────────────────────────
+async function loadChannels(keep) {
+  try {
+    const j = await GET(API.channels); channels = j.channels;
+    const el = document.getElementById('ch-list'); el.innerHTML = '';
+    if (!channels.length) { el.innerHTML = '<div class="empty">見えるチャンネルがありません</div>'; return; }
+    const live = channels.filter(c => !c.is_archived), arch = channels.filter(c => c.is_archived);
+    const sec = (title, list) => {
+      if (!list.length) return;
+      el.insertAdjacentHTML('beforeend', `<div class="ch-sep">${title}</div>`);
+      list.forEach(c => el.insertAdjacentHTML('beforeend',
+        `<div class="ch${curCh && curCh.id === c.id ? ' active' : ''}" data-id="${c.id}" title="${esc(c.description)}">
+           <span>${c.is_archived ? '📦' : '#'}</span><span class="nm">${esc(c.name)}</span>
+           ${c.unread ? `<span class="unread">${c.unread}</span>` : ''}</div>`));
+    };
+    sec('チャンネル', live); sec('アーカイブ', arch);
+    el.querySelectorAll('.ch').forEach(d => d.onclick = () => openChannel(+d.dataset.id));
+    if (!keep) {
+      const h = parseHash();
+      if (h.c && channels.find(c => c.id === +h.c)) openChannel(+h.c, h.p ? +h.p : null);
+    }
+  } catch (e) { toast('チャンネルの読み込みに失敗: ' + e.message, true); }
+}
+
+async function openChannel(cid, pid) {
+  curCh = channels.find(c => c.id === cid); if (!curCh) return;
+  curPost = null; posts = [];
+  document.querySelectorAll('.ch').forEach(d => d.classList.toggle('active', +d.dataset.id === cid));
+  document.getElementById('list-title').textContent = (curCh.is_archived ? '📦 ' : '# ') + curCh.name;
+  const desc = document.getElementById('ch-desc'); desc.textContent = curCh.description || ''; desc.style.display = curCh.description ? 'block' : 'none';
+  document.getElementById('list-tools').style.display = 'flex';
+  document.getElementById('q').value = '';
+  document.getElementById('btn-ch-settings').style.display = curCh.can_manage ? '' : 'none';
+  document.getElementById('thread').innerHTML = '<div class="empty">記事を選ぶとここに表示されます</div>';
+  document.getElementById('post-title').textContent = '記事';
+  setHash(cid, pid); setView('list');
+  await loadPosts(false);
+  if (pid) openPost(pid);
+}
+
+// ── 記事一覧 ─────────────────────────────
+async function loadPosts(more) {
+  const cid = curCh.id, el = document.getElementById('post-list');
+  if (!more) el.innerHTML = '<div class="empty">読み込み中…</div>';
+  try {
+    let u = API.posts(cid); const q = document.getElementById('q').value.trim();
+    const ps = []; if (more && posts.length) ps.push('before=' + posts[posts.length - 1].id); if (q) ps.push('q=' + encodeURIComponent(q));
+    if (ps.length) u += '?' + ps.join('&');
+    const j = await GET(u);
+    if (curCh.id !== cid) return;
+    canPost = j.can_post; curCh = Object.assign(curCh, j.channel);
+    document.getElementById('btn-new-post').style.display = canPost ? '' : 'none';
+    if (!more) { posts = []; el.innerHTML = ''; }
+    el.querySelector('.more')?.remove();
+    posts = posts.concat(j.posts);
+    j.posts.forEach(p => el.insertAdjacentHTML('beforeend', postRow(p)));
+    if (!posts.length) el.innerHTML = '<div class="empty">' + (q ? '該当する記事がありません' : 'まだ記事がありません') + '</div>';
+    if (j.more) el.insertAdjacentHTML('beforeend', '<div class="more"><button class="btn ghost sm" onclick="loadPosts(true)">さらに読む</button></div>');
+    el.querySelectorAll('.post').forEach(d => d.onclick = () => openPost(+d.dataset.id));
+  } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function rxSummary(rs) { return (rs || []).map(r => `<span title="${esc(r.names.join('、'))}">${esc(r.emoji)} ${r.count}</span>`).join(''); }
+function postRow(p) {
+  return `<div class="post${curPost === p.id ? ' active' : ''}" data-id="${p.id}">
+    <div class="meta"><b>${esc(p.author)}</b><span>${p.created_at}</span>${p.source === 'slack' ? '<span class="slack">Slack</span>' : ''}${p.edited ? '<span>編集済</span>' : ''}</div>
+    ${p.title ? `<div class="title">${esc(p.title)}</div>` : ''}
+    <div class="sum">${esc(p.summary) || '<i style="color:#aaa">（本文なし）</i>'}</div>
+    <div class="badges">${p.reply_count ? `<span class="rep">💬 ${p.reply_count}${p.last_reply_at ? '・' + p.last_reply_at.slice(5) : ''}</span>` : ''}${rxSummary(p.reactions)}</div>
+  </div>`;
+}
+let qTimer; document.getElementById('q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => loadPosts(false), 350); });
+document.getElementById('btn-new-post').onclick = () => location.href = API.compose + '?channel=' + curCh.id;
+
+// ── 記事とスレッド ───────────────────────
+async function openPost(pid) {
+  const el = document.getElementById('thread'); el.innerHTML = '<div class="empty">読み込み中…</div>';
+  setView('post');
+  try {
+    const j = await GET(API.post(pid));
+    curPost = j.post.id; setHash(j.channel_id, curPost);
+    document.querySelectorAll('.post').forEach(d => d.classList.toggle('active', +d.dataset.id === curPost));
+    document.getElementById('post-title').textContent = j.post.title || (j.post.summary || '記事').slice(0, 40);
+    el.innerHTML = msgHtml(j.post, false) + j.replies.map(r => msgHtml(r, true)).join('') +
+      (j.can_post ? `<div class="thread-tools"><a class="btn green" href="${API.compose}?parent=${j.post.id}">↩ 返信を書く</a></div>` : '');
+    bindMsg(el, j.can_post);
+    await window.ffRender(el);
+    // 既読反映
+    const c = channels.find(c => c.id === j.channel_id); if (c && c.unread) { c.unread = 0; loadChannels(true); }
+  } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function msgHtml(m, reply) {
+  return `<div class="msg${reply ? ' reply' : ''}" data-id="${m.id}">
+    <div class="m-meta"><b>${esc(m.author)}</b><span>${m.created_at}</span>${m.source === 'slack' ? '<span style="color:#a78bfa">Slack</span>' : ''}${m.edited ? '<span>（編集済み）</span>' : ''}<span class="sp"></span>
+      <span class="m-tools">${m.can_edit ? `<a class="btn sm ghost" href="${API.compose}?post=${m.id}">編集</a><button class="btn sm ghost del" data-id="${m.id}">削除</button>` : ''}</span></div>
+    <div class="md">${m.html}</div>
+    <div class="rx" data-id="${m.id}">${rxButtons(m)}</div>
+  </div>`;
+}
+function rxButtons(m) {
+  const have = (m.reactions || []).map(r => `<button class="${r.mine ? 'mine' : ''}" data-emoji="${esc(r.emoji)}" title="${esc(r.names.filter(Boolean).join('、'))}">${esc(r.emoji)} ${r.count}</button>`).join('');
+  return have + (canPost ? `<span class="add"><button class="add-btn" title="リアクション">＋</button><span class="picker">${REACTIONS.map(e => `<button data-emoji="${e}">${e}</button>`).join('')}</span></span>` : '');
+}
+function bindMsg(root, canPostNow) {
+  root.querySelectorAll('.rx').forEach(rx => {
+    const pid = +rx.dataset.id;
+    rx.querySelectorAll('button[data-emoji]').forEach(b => b.onclick = async (ev) => {
+      ev.stopPropagation(); if (!canPostNow) return;
+      rx.querySelector('.picker')?.classList.remove('open');
+      try { const j = await POST(API.react(pid), { emoji: b.dataset.emoji }); rx.innerHTML = rxButtons({ reactions: j.reactions }); bindMsg(rx.parentElement, canPostNow); refreshListReactions(pid, j.reactions); }
+      catch (e) { toast(e.message, true); }
+    });
+    const add = rx.querySelector('.add-btn'); if (add) add.onclick = (ev) => { ev.stopPropagation(); rx.querySelector('.picker').classList.toggle('open'); };
+  });
+  root.querySelectorAll('.del').forEach(b => b.onclick = async () => {
+    if (!confirm('この記事を削除しますか？（返信も一緒に消えます）')) return;
+    try { const j = await POST(API.del(+b.dataset.id)); toast('削除しました'); await loadPosts(false); if (j.parent_id) openPost(j.parent_id); else { document.getElementById('thread').innerHTML = '<div class="empty">削除しました</div>'; setView('list'); } }
+    catch (e) { toast(e.message, true); }
+  });
+}
+function refreshListReactions(pid, rs) { const p = posts.find(p => p.id === pid); if (p) { p.reactions = rs; const d = document.querySelector(`.post[data-id="${pid}"]`); if (d) d.outerHTML = postRow(p); document.querySelector(`.post[data-id="${pid}"]`).onclick = () => openPost(pid); } }
+document.addEventListener('click', () => document.querySelectorAll('.picker.open').forEach(p => p.classList.remove('open')));
+
+// ── チャンネル設定 ───────────────────────
+let editingCh = null;
+async function ensureGroups() { if (groups) return; try { groups = (await GET(API.groups)).groups; } catch (e) { groups = []; } }
+function selectShare(k) { document.querySelectorAll('.share-option').forEach(o => o.classList.toggle('selected', o.dataset.key === k)); document.querySelector(`input[name=share_key][value="${k}"]`).checked = true; document.getElementById('group-list').style.display = (k === 'group' || k === 'domestic_group') ? 'block' : 'none'; }
+document.querySelectorAll('.share-option').forEach(o => o.onclick = () => selectShare(o.dataset.key));
+async function openChModal(ch) {
+  await ensureGroups(); editingCh = ch;
+  document.getElementById('ch-modal-title').textContent = ch ? 'チャンネル設定：# ' + ch.name : 'チャンネルを作成';
+  document.getElementById('ch-name').value = ch ? ch.name : '';
+  document.getElementById('ch-descr').value = ch ? ch.description : '';
+  const gi = document.getElementById('group-items'); gi.innerHTML = groups.length ? groups.map(g => `<label><input type="checkbox" name="gid" value="${g.id}" ${ch && ch.group_ids.includes(g.id) ? 'checked' : ''}> ${esc(g.name)}</label>`).join('') : '<div style="color:#aaa;font-size:.85rem">まいぐるにグループが登録されていません</div>';
+  selectShare(ch ? ch.share_key : 'private');
+  document.getElementById('arch-row').style.display = ch ? 'block' : 'none';
+  document.getElementById('ch-archived').checked = !!(ch && ch.is_archived);
+  const at = document.getElementById('admin-tools');
+  if (at) { at.style.display = (ch && IS_ADMIN) ? 'block' : 'none'; if (ch) document.getElementById('ch-export').href = API.chExport(ch.id); }
+  document.getElementById('ch-modal').classList.add('open');
+}
+document.getElementById('ch-delete')?.addEventListener('click', async () => {
+  if (!editingCh) return;
+  const typed = prompt(`チャンネル「${editingCh.name}」を完全に削除します。記事・返信・リアクション・添付（公開した複製も）がすべて消え、元に戻せません。\n確認のためチャンネル名を入力してください：`);
+  if (typed === null) return;
+  try {
+    const j = await POST(API.chDelete(editingCh.id), { confirm_name: typed });
+    document.getElementById('ch-modal').classList.remove('open');
+    toast(`削除しました（ファイル ${j.files_removed} 件）`);
+    curCh = null; curPost = null; document.getElementById('post-list').innerHTML = '<div class="empty">チャンネルを選んでください</div>';
+    document.getElementById('thread').innerHTML = '<div class="empty">記事を選ぶとここに表示されます</div>';
+    document.getElementById('list-title').textContent = '記事'; document.getElementById('list-tools').style.display = 'none';
+    document.getElementById('btn-new-post').style.display = 'none'; document.getElementById('btn-ch-settings').style.display = 'none';
+    history.replaceState(null, '', '#'); setView('ch'); loadChannels(true);
+  } catch (e) { toast(e.message, true); }
+});
+document.getElementById('btn-new-ch')?.addEventListener('click', () => openChModal(null));
+document.getElementById('btn-ch-settings').onclick = () => openChModal(curCh);
+document.getElementById('ch-cancel').onclick = () => document.getElementById('ch-modal').classList.remove('open');
+// モーダルは「キャンセル」「保存」（と削除）でだけ閉じる．背景クリックや Esc では閉じない
+// （テキスト選択中にマウスが外へ出ても消えないように）
+document.getElementById('ch-save').onclick = async () => {
+  const body = { name: document.getElementById('ch-name').value, description: document.getElementById('ch-descr').value,
+    share_key: document.querySelector('input[name=share_key]:checked')?.value, group_ids: [...document.querySelectorAll('input[name=gid]:checked')].map(i => +i.value),
+    is_archived: editingCh ? document.getElementById('ch-archived').checked : false };
+  try {
+    const j = editingCh ? await POST(API.chUpdate(editingCh.id), body) : await POST(API.channels, body);
+    document.getElementById('ch-modal').classList.remove('open'); toast('保存しました');
+    const cid = editingCh ? editingCh.id : j.id; await loadChannels(true); openChannel(cid);
+  } catch (e) { toast(e.message, true); }
+};
+
+window.addEventListener('hashchange', () => { const h = parseHash(); if (h.c && (!curCh || curCh.id !== +h.c)) openChannel(+h.c, h.p ? +h.p : null); else if (h.p && curPost !== +h.p) openPost(+h.p); });
+loadChannels(false);
+</script>
+</body>
+</html>

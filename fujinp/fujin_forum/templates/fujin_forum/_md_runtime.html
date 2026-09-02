@@ -1,0 +1,56 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+
+  描画済み Markdown（process_markdown の HTML）を innerHTML で差し込んだあとに
+  スクリプト（mermaid 等）を実行し，KaTeX を当てる共通処理．マイノートの
+  edit_note.html のプレビュー処理と同じ．window.ffRender(root) を呼ぶ．
+#}
+<script>
+(function () {
+  const loadedScriptSrc = new Set();
+  async function activateScripts(root) {
+    for (const oldScript of Array.from(root.querySelectorAll('script'))) {
+      const src = oldScript.getAttribute('src');
+      if (src && loadedScriptSrc.has(src)) { oldScript.remove(); continue; }
+      const s = document.createElement('script');
+      for (const a of oldScript.attributes) s.setAttribute(a.name, a.value);
+      s.async = false;
+      if (!src) s.textContent = oldScript.textContent;
+      const loaded = src ? new Promise(r => { s.onload = r; s.onerror = r; }) : null;
+      oldScript.replaceWith(s);
+      if (src) { loadedScriptSrc.add(src); await loaded; }
+    }
+  }
+  async function renderMermaidIn(root) {
+    root.querySelectorAll('code.language-mermaid, code.mermaid').forEach(code => {
+      const div = document.createElement('div'); div.className = 'mermaid'; div.textContent = code.textContent;
+      (code.closest('pre') || code).replaceWith(div);
+    });
+    await new Promise(r => setTimeout(r, 80));
+    const nodes = Array.from(root.querySelectorAll('.mermaid')).filter(n => !n.querySelector('svg'));
+    if (!nodes.length) return;
+    if (!window.mermaid) {
+      try {
+        const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        window.mermaid = mod.default; window.mermaid.initialize({ startOnLoad: false });
+      } catch (e) { console.error('mermaid load failed', e); return; }
+    }
+    nodes.forEach(n => { if (!n.dataset.src) n.dataset.src = n.textContent; n.removeAttribute('data-processed'); n.innerHTML = n.dataset.src; });
+    try { await window.mermaid.run({ nodes }); } catch (e) { console.warn('mermaid skipped', e); }
+  }
+  window.ffRender = async function (root) {
+    await activateScripts(root);
+    await renderMermaidIn(root);
+    if (window.renderMathInElement) {
+      renderMathInElement(root, {
+        delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false},
+                     {left: '\\[', right: '\\]', display: true}, {left: '\\(', right: '\\)', display: false}],
+        ignoredClasses: ['mermaid'], throwOnError: false
+      });
+    }
+  };
+})();
+</script>
