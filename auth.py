@@ -129,6 +129,19 @@ def create_user_from_approved(email, full_name, category, affiliation=None):
 
 ###### routes
 
+@auth_bp.app_context_processor
+def _inject_public_cards():
+    """★2026-08-27 使用コントローラー：ログイン不要（open）のカード一覧をテンプレートへ．
+    login.html が {% for c in public_launcher_cards() %} で使う．呼ばれたときだけ計算する．"""
+    def public_launcher_cards():
+        try:
+            from fujinp.registry import public_cards
+            return public_cards()
+        except Exception:
+            return []
+    return {'public_launcher_cards': public_launcher_cards}
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """ログインページ（ユーザー名/パスワード + Google認証）"""

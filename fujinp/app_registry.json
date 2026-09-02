@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-02 17:14:09",
+  "generated_at": "2026-09-02 17:18:22",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -55,8 +55,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260902.165222-0ea41a",
-      "version_confirmed_at": "2026-09-02 16:52:22"
+      "version_id": "v20260902.171806-e5e5ee",
+      "version_confirmed_at": "2026-09-02 17:18:06"
     },
     {
       "app_name": "table_cycle",
