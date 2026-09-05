@@ -84,6 +84,24 @@
             background:#c0392b; color:#fff; border:1px solid #a93226; white-space:nowrap;
         }
         .pres-item .presdel:hover { background:#a93226; }
+        .pres-item .share {
+            font-size:11px; color:#5a6a74; white-space:nowrap;
+            border:1px solid #d5dde2; border-radius:999px; padding:0 8px;
+        }
+
+        /* 公開範囲（マイノートと同じ5区分） */
+        .share-section { margin:10px 0 4px; }
+        .share-section h3 { font-size:12.5px; color:#1c2733; margin-bottom:4px; letter-spacing:.04em; }
+        .share-option { display:flex; align-items:baseline; gap:8px; padding:2px 0; font-size:13px; }
+        .share-option label { cursor:pointer; white-space:nowrap; }
+        .share-option input[type="radio"] { margin-right:4px; }
+        .share-description { font-size:11.5px; color:#5a6a74; }
+        .group-list {
+            margin:6px 0 0 22px; padding:6px 10px; border:1px solid #d5dde2; border-radius:8px;
+            background:#f7fafb; font-size:12.5px; max-height:120px; overflow-y:auto;
+        }
+        .group-list h4 { font-size:11.5px; color:#5a6a74; margin-bottom:3px; font-weight:600; }
+        .group-list label { display:block; cursor:pointer; padding:1px 0; }
 
         body.fullview .pane-editor,
         body.fullview #result { display:none !important; }
@@ -264,6 +282,39 @@
                 <div class="toolbar" style="margin-bottom:8px;">
                     <input type="text" id="presTitle" placeholder="プレゼンの題名" style="flex:1;">
                 </div>
+                <div class="share-section">
+                    <h3>公開範囲（誰がこのプレゼンを見られるか）</h3>
+                    <div class="share-option">
+                        <label><input type="radio" name="share_key" value="private" checked><strong>🔒 非公開</strong></label>
+                        <span class="share-description">自分とadminだけが見られます（既定）</span>
+                    </div>
+                    <div class="share-option">
+                        <label><input type="radio" name="share_key" value="public"><strong>🌐 ゲストにも</strong></label>
+                        <span class="share-description">ログイン済みの全ユーザが見られます</span>
+                    </div>
+                    <div class="share-option">
+                        <label><input type="radio" name="share_key" value="domestic"><strong>🏢 構成員だけ</strong></label>
+                        <span class="share-description">ログイン済みの構成員だけが見られます</span>
+                    </div>
+                    <div class="share-option">
+                        <label><input type="radio" name="share_key" value="group"><strong>👥 グループ</strong></label>
+                        <span class="share-description">指定グループの所属者だけが見られます</span>
+                    </div>
+                    <div class="share-option">
+                        <label><input type="radio" name="share_key" value="domestic_group"><strong>🏢＋👥 構成員＋グループ</strong></label>
+                        <span class="share-description">構成員と指定グループの所属者が見られます</span>
+                    </div>
+                    <div id="groupList" class="group-list" style="display:none;">
+                        <h4>許可するグループを選択（チェックしたグループの所属者に公開）</h4>
+                        {% for group in all_groups %}
+                        <label><input type="checkbox" name="access_groups" value="{{ group.id }}"> {{ group.name }}</label>
+                        {% endfor %}
+                        {% if not all_groups %}
+                        <div style="color:#718096;">（ユーザーグループが未登録です）</div>
+                        {% endif %}
+                    </div>
+                    <div class="hint">公開範囲は「保存」で確定します．編集はどの区分でも自分（admin）だけです．</div>
+                </div>
                 <div class="toolbar">
                     <button id="btnSave">💾 保存</button>
                     <button id="btnSaveAs" class="ghost">📄 別名で保存</button>
@@ -272,7 +323,7 @@
                     <button id="btnLoadIn" class="ghost">📂 作品JSONを取り込む</button>
                     <button id="btnExport" class="ghost">⬇ 作品JSONを書き出す</button>
                     <button id="btnExportHtml" class="ghost">🎞 プレゼンHTML</button>
-                    <button id="btnPlayUrl" class="ghost" title="再生専用ページ（ログイン済みなら誰でも見られる）のURLを表示・コピー">🔗 このコンテンツのURL</button>
+                    <button id="btnPlayUrl" class="ghost" title="再生専用ページ（公開範囲で許された利用者が見られる）のURLを表示・コピー">🔗 このコンテンツのURL</button>
                     <button id="btnJson" class="ghost">{ } JSON</button>
                 </div>
                 <div id="jsonWrap" style="display:none; margin-top:8px;">
@@ -409,6 +460,10 @@
         // ── 状態 ──
         let spec = { title: '無題のプレゼン', scenes: [] };
         let presId = null;
+        // 公開範囲（DBの share_key と kataribe_access_groups．作品JSONには含めない）
+        const SHARE_LABELS = {{ share_labels | tojson }};
+        const SHARE_ICONS = { private:'🔒', public:'🌐', domestic:'🏢', group:'👥', domestic_group:'🏢＋👥' };
+        const DEFAULT_SHARE = { key: 'private', groups: [] };
         let previewTimer = null;
 
         const BLOCK_TYPES = [
@@ -1305,6 +1360,30 @@
             KtbPlayer.showAll();
         }
 
+        // ── 公開範囲の読み書き（フォーム ⇄ 値） ──
+        function getShare() {
+            const key = ($('input[name="share_key"]:checked').val()) || 'private';
+            const groups = (key === 'group' || key === 'domestic_group')
+                ? $('input[name="access_groups"]:checked').map((_, el) => parseInt(el.value, 10)).get().sort((a, b) => a - b)
+                : [];
+            return { key: key, groups: groups };
+        }
+        function setShare(sh) {
+            const key = (sh && SHARE_LABELS[sh.key]) ? sh.key : 'private';
+            const groups = (sh && Array.isArray(sh.groups)) ? sh.groups.map(Number) : [];
+            $('input[name="share_key"][value="' + key + '"]').prop('checked', true);
+            $('input[name="access_groups"]').each(function(){
+                this.checked = groups.includes(parseInt(this.value, 10));
+            });
+            paintGroupList();
+        }
+        function paintGroupList() {
+            const key = $('input[name="share_key"]:checked').val();
+            $('#groupList').toggle(key === 'group' || key === 'domestic_group');
+        }
+        $('input[name="share_key"]').on('change', () => { paintGroupList(); commit('share'); });
+        $('input[name="access_groups"]').on('change', () => commit('share'));
+
         // ── 一覧・読み込み・保存 ──
         function loadList() {
             $.get(API.list, resp => {
@@ -1316,6 +1395,7 @@
                 resp.presentations.forEach(p => {
                     const $i = $('<div class="pres-item">');
                     $i.append($('<a>').text(p.title).on('click', () => guardUnsaved(() => openPres(p.id))));
+                    $i.append($('<span class="share" title="公開範囲">').text((p.share_icon || '') + ' ' + (p.share_label || '')));
                     $i.append($('<span class="date">').text(p.updated_at));
                     $i.append($('<button class="presdel" title="このプレゼンそのものを削除します（元に戻せません）">🗑 プレゼン削除</button>')
                         .on('click', () => deletePres(p)));
@@ -1330,6 +1410,7 @@
                 presId = resp.presentation.id;
                 spec = resp.presentation.spec;
                 spec.title = resp.presentation.title;
+                setShare({ key: resp.presentation.share_key, groups: resp.presentation.access_groups });
                 const moved = migrateSpec(spec);
                 curScene = 0; curCmd = 0;
                 renderEditor(); refreshPreview(false); syncJson();
@@ -1341,15 +1422,20 @@
 
         function save(done) {
             spec.title = $('#presTitle').val().trim() || spec.title;
+            const sh = getShare();
+            if ((sh.key === 'group' || sh.key === 'domestic_group') && !sh.groups.length)
+                return showResult('グループ公開では許可するグループを1つ以上選んでください', true);
             $.ajax({
                 url: API.save, method: 'POST', contentType: 'application/json',
                 dataType: 'json',
-                data: JSON.stringify({ id: presId, title: spec.title, spec: spec }),
+                data: JSON.stringify({ id: presId, title: spec.title, spec: spec,
+                                       share_key: sh.key, access_groups: sh.groups }),
                 success: resp => {
                     if (resp && resp.success) {
                         presId = resp.id;
                         markSaved();
-                        showResult('保存しました', false);
+                        showResult('保存しました（公開範囲：' + (SHARE_ICONS[sh.key] || '') + ' '
+                            + (resp.share_label || SHARE_LABELS[sh.key] || '') + '）', false);
                         loadList();
                         if (typeof done === 'function') done();
                     }
@@ -1365,7 +1451,7 @@
         let savedSnapshot = null;          // 最後に保存（または読み込み）した時点の内容
 
         function snapshot() {
-            return JSON.stringify({ t: $('#presTitle').val(), s: spec });
+            return JSON.stringify({ t: $('#presTitle').val(), s: spec, sh: getShare() });
         }
         function markSaved() { savedSnapshot = snapshot(); paintSaveButton(); }
         function hasContent() {
@@ -1408,6 +1494,7 @@
             restoring = true;
             spec = o.s;
             $('#presTitle').val(o.t || '');
+            setShare(o.sh || DEFAULT_SHARE);
             if (curScene >= spec.scenes.length) curScene = Math.max(0, spec.scenes.length - 1);
             const list = (spec.scenes[curScene] || {}).steps || [];
             if (curCmd >= list.length) curCmd = Math.max(0, list.length - 1);
@@ -1549,6 +1636,7 @@ js +
             const parsed = importSpecText(text);
             spec = parsed;
             presId = null;                       // 取り込みは常に新規作品として扱う
+            setShare(DEFAULT_SHARE);             // 公開範囲は作品JSONに含めない（新規は非公開）
             if (!spec.title) spec.title = '取り込んだプレゼン';
             migrateSpec(spec);                   // 旧形式で書かれていれば手続きに移す
             curScene = 0; curCmd = 0;
@@ -1558,6 +1646,7 @@ js +
         $('#btnNew').on('click', () => guardUnsaved(() => {
             presId = null;
             spec = { title: '無題のプレゼン', scenes: [ { title: '', subtitle: '', theme: 'cover', kind: 'cover', steps: [] } ] };
+            setShare(DEFAULT_SHARE);
             curScene = 0;
             renderEditor(); refreshPreview(false); syncJson();
             markSaved(); resetHistory();
@@ -1567,6 +1656,7 @@ js +
                 if (!resp.success) return showResult('サンプル取得に失敗: ' + resp.error, true);
                 presId = null;
                 spec = resp.spec;
+                setShare(DEFAULT_SHARE);
                 migrateSpec(spec);
                 curScene = 0; curCmd = 0;
                 renderEditor(); refreshPreview(false); syncJson(); resetHistory();
@@ -1587,6 +1677,7 @@ js +
                 if (isOpen) {
                     presId = null;
                     spec = { title: '無題のプレゼン', scenes: [] };
+                    setShare(DEFAULT_SHARE);
                     renderEditor(); refreshPreview(false);
                     markSaved(); resetHistory();
                 }

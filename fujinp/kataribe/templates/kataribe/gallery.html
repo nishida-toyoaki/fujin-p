@@ -44,6 +44,10 @@
         .row .ttl { flex:1; font-size:15.5px; font-weight:600; }
         .row .meta { font-size:12px; color:#5a6a74; white-space:nowrap; }
         .row .go { font-size:13px; color:#0b6c60; white-space:nowrap; }
+        .row .share {
+            font-size:11.5px; color:#5a6a74; white-space:nowrap;
+            border:1px solid #d5dde2; border-radius:999px; padding:1px 9px;
+        }
         .empty { padding:28px 20px; text-align:center; color:#5a6a74; font-size:14px; }
         .note { margin-top:14px; font-size:12.5px; color:#5a6a74; }
     </style>
@@ -62,18 +66,19 @@
                 {% for p in presentations %}
                 <a class="row" href="{{ url_for('kataribe.play', pres_id=p.id) }}">
                     <span class="ttl">{{ p.title }}</span>
+                    {% if can_edit %}<span class="share" title="公開範囲">{{ p.share_label }}</span>{% endif %}
                     {% if p.author %}<span class="meta">{{ p.author }}</span>{% endif %}
                     <span class="meta">{{ p.updated_at }}</span>
                     <span class="go">▶ 見る</span>
                 </a>
                 {% endfor %}
             {% else %}
-                <p class="empty">まだプレゼンがありません．</p>
+                <p class="empty">見られるプレゼンはまだありません．</p>
             {% endif %}
         </div>
 
         {% if can_edit %}
-        <p class="note"><a href="{{ url_for('kataribe.index') }}">✎ 編集画面へ</a></p>
+        <p class="note"><a href="{{ url_for('kataribe.index') }}">✎ 編集画面へ</a>　公開範囲は編集画面の「プレゼンの設定」で決めます（管理者にはすべてのプレゼンが見えます）．</p>
         {% else %}
         <p class="note">プレゼンの作成・編集は管理者が行います．</p>
         {% endif %}
