@@ -1,0 +1,466 @@
+{
+  "spec_version": 1,
+  "name": "gyomu_jisseki_shokomoku",
+  "title": "年度業務実績報告書 ④小項目別評価",
+  "sheet": "④小項目別評価",
+  "note": "節（大項目×中項目）の帯が繰り返し，その下に中期計画がぶら下がる様式。小見出しの有る形と無い形の二通り。",
+  "grid": {
+    "cols": 9,
+    "col_widths": {
+      "A": 1.75,
+      "B": 7.0,
+      "C": 38.625,
+      "D": 7.0,
+      "E": 39.375,
+      "F": 103.75,
+      "G": 9.875,
+      "H": 3.125,
+      "I": 9.0
+    },
+    "row_height": 15
+  },
+  "dataset_col": "dataset",
+  "tables": {
+    "setsu": {
+      "table": "gj_setsu",
+      "seq": "setsu_no",
+      "note": "節。大項目と中項目の組",
+      "columns": {
+        "setsu_no": "INT",
+        "dai": "VARCHAR(200)",
+        "chu": "VARCHAR(200)",
+        "mokuhyo": "TEXT",
+        "note": "TEXT",
+        "gap_rows": "INT",
+        "chu2": "VARCHAR(200)"
+      }
+    },
+    "plan": {
+      "table": "gj_plan",
+      "seq": "row_no",
+      "note": "中期計画と，そこにぶら下がる年度計画・実績・自己評価",
+      "inherit": {
+        "setsu_no": "setsu.setsu_no"
+      },
+      "columns": {
+        "setsu_no": "INT",
+        "row_no": "INT",
+        "plan_no": "VARCHAR(16)",
+        "komidashi": "VARCHAR(200)",
+        "chuki": "TEXT",
+        "nendo_no": "VARCHAR(16)",
+        "nendo": "TEXT",
+        "jisseki": "MEDIUMTEXT",
+        "hyoka": "VARCHAR(16)",
+        "form": "VARCHAR(16)"
+      }
+    }
+  },
+  "styles": {
+    "h1": {
+      "bold": true,
+      "fill": "DCE6F1"
+    },
+    "h2": {
+      "bold": true,
+      "fill": "EEF3FA"
+    },
+    "lbl": {
+      "bold": true,
+      "fill": "F2F2F2",
+      "align": "center"
+    },
+    "body": {},
+    "num": {
+      "align": "center"
+    }
+  },
+  "bands": [
+    {
+      "id": "head",
+      "kind": "once",
+      "rows": [
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 4,
+              "v": {
+                "lit": "（２）小項目別業務実績・自己評価結果"
+              },
+              "style": "h1"
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 2,
+              "v": {
+                "lit": "項 目 別 の 状 況"
+              },
+              "style": "h2"
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "c": 6,
+              "cs": 2,
+              "v": {
+                "lit": ""
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "setsu",
+      "kind": "repeat",
+      "use": "setsu",
+      "rows": [
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 4,
+              "v": {
+                "col": "dai"
+              },
+              "style": "h1"
+            },
+            {
+              "c": 6,
+              "cs": 2,
+              "v": {
+                "col": "note"
+              },
+              "opt": true
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 5,
+              "v": {
+                "col": "chu"
+              },
+              "style": "h2"
+            }
+          ]
+        },
+        {
+          "blank": true
+        },
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 2,
+              "v": {
+                "lit": "中　期　目　標"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 4,
+              "cs": 4,
+              "v": {
+                "col": "mokuhyo"
+              },
+              "style": "body"
+            }
+          ]
+        },
+        {
+          "blank": true
+        },
+        {
+          "sig": "B2x1,C2x1,D2x1,E2x1,F2x1,G2x1",
+          "slots": [
+            {
+              "c": 2,
+              "rs": 2,
+              "v": {
+                "lit": "中期計画番号"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 3,
+              "rs": 2,
+              "v": {
+                "lit": "中期計画"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 4,
+              "rs": 2,
+              "v": {
+                "lit": "年度計画番号"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 5,
+              "rs": 2,
+              "v": {
+                "lit": "年度計画"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 6,
+              "rs": 2,
+              "v": {
+                "lit": "業務の実績"
+              },
+              "style": "lbl"
+            },
+            {
+              "c": 7,
+              "rs": 2,
+              "v": {
+                "lit": "自己評価"
+              },
+              "style": "lbl"
+            }
+          ]
+        },
+        {
+          "covered": true
+        },
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 6,
+              "v": {
+                "fmt": "{dai}を達成するための措置"
+              },
+              "style": "h1"
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "c": 2,
+              "cs": 6,
+              "v": {
+                "col": "chu2"
+              },
+              "style": "h2"
+            }
+          ]
+        }
+      ],
+      "bands": [
+        {
+          "id": "plan_headed",
+          "kind": "repeat",
+          "use": "plan",
+          "rows": [
+            {
+              "slots": [
+                {
+                  "c": 2,
+                  "rs": 2,
+                  "v": {
+                    "col": "plan_no"
+                  },
+                  "style": "num",
+                  "req": true
+                },
+                {
+                  "c": 3,
+                  "cs": 5,
+                  "v": {
+                    "col": "komidashi"
+                  },
+                  "style": "h2"
+                }
+              ]
+            },
+            {
+              "slots": [
+                {
+                  "c": 3,
+                  "v": {
+                    "col": "chuki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 4,
+                  "v": {
+                    "col": "nendo_no"
+                  },
+                  "style": "num"
+                },
+                {
+                  "c": 5,
+                  "v": {
+                    "col": "nendo"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 6,
+                  "v": {
+                    "col": "jisseki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 7,
+                  "v": {
+                    "col": "hyoka"
+                  },
+                  "style": "num"
+                }
+              ]
+            }
+          ],
+          "when": {
+            "form": "headed"
+          }
+        },
+        {
+          "id": "plan_midashi",
+          "kind": "repeat",
+          "use": "plan",
+          "rows": [
+            {
+              "slots": [
+                {
+                  "c": 3,
+                  "cs": 5,
+                  "v": {
+                    "col": "komidashi"
+                  },
+                  "style": "h2"
+                }
+              ]
+            },
+            {
+              "slots": [
+                {
+                  "c": 2,
+                  "v": {
+                    "col": "plan_no"
+                  },
+                  "style": "num"
+                },
+                {
+                  "c": 3,
+                  "v": {
+                    "col": "chuki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 4,
+                  "v": {
+                    "col": "nendo_no"
+                  },
+                  "style": "num"
+                },
+                {
+                  "c": 5,
+                  "v": {
+                    "col": "nendo"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 6,
+                  "v": {
+                    "col": "jisseki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 7,
+                  "v": {
+                    "col": "hyoka"
+                  },
+                  "style": "num"
+                }
+              ]
+            }
+          ],
+          "when": {
+            "form": "midashi"
+          }
+        },
+        {
+          "id": "plan_plain",
+          "kind": "repeat",
+          "use": "plan",
+          "rows": [
+            {
+              "slots": [
+                {
+                  "c": 2,
+                  "v": {
+                    "col": "plan_no"
+                  },
+                  "style": "num"
+                },
+                {
+                  "c": 3,
+                  "v": {
+                    "col": "chuki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 4,
+                  "v": {
+                    "col": "nendo_no"
+                  },
+                  "style": "num"
+                },
+                {
+                  "c": 5,
+                  "v": {
+                    "col": "nendo"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 6,
+                  "v": {
+                    "col": "jisseki"
+                  },
+                  "style": "body"
+                },
+                {
+                  "c": 7,
+                  "v": {
+                    "col": "hyoka"
+                  },
+                  "style": "num"
+                }
+              ]
+            }
+          ],
+          "when": {
+            "form": "plain"
+          }
+        }
+      ],
+      "gap": {
+        "col": "gap_rows",
+        "max": 3
+      }
+    }
+  ]
+}

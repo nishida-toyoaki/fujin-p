@@ -1,0 +1,11 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}テーコン{% endblock %}
+{% block body %}
+<h1>テーコン</h1>
+<div class="err">テーコンは管理者だけが使えます。任意の SQL テーブルへ書き込むためです。</div>
+<p><a class="btn" href="{{ url_for('table_converter.return_to_fujin') }}">🏠 FUJIN ダッシュボードに戻る</a></p>
+{% endblock %}

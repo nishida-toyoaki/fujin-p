@@ -1,0 +1,47 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}復元の確かめ — {{ s.title }}{% endblock %}
+{% block body %}
+<h1>復元の確かめ</h1>
+<p class="muted">{{ s.title }} ／ シート {{ rows|length }} 枚</p>
+
+{% if ok %}
+<div class="ok"><b>全シートが元どおりに戻りました。</b>
+  いまの塗りで骨と穴に割り，骨に中身を入れ直しても，一か所も違いません。</div>
+{% else %}
+<div class="err"><b>戻らないシートがあります。</b>下の一覧を見てください。</div>
+{% endif %}
+
+<table class="list">
+  <tr><th>シート</th><th>骨</th><th>穴（データ）</th><th>差分</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=r.sheet) }}">{{ r.sheet }}</a>
+        {% if not r.painted %}<span class="muted">（見当のまま）</span>{% endif %}</td>
+    <td>{{ r.bones }}</td>
+    <td>{{ r.holes }}</td>
+    <td>{% if r.ok %}<span class="pill">0</span>{% else %}{{ r.diff|length }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% for r in rows %}{% if not r.ok %}
+<h3>{{ r.sheet }} のずれ</h3>
+<table class="list">
+  <tr><th>行</th><th>列</th><th>元</th><th>戻したもの</th></tr>
+  {% for d in r.diff[:20] %}
+  <tr><td>{{ d.r }}</td><td>{{ d.c }}</td>
+      <td>{{ d.a[:60] }} <span class="muted">{{ d.span_a }}</span></td>
+      <td>{{ d.b[:60] }} <span class="muted">{{ d.span_b }}</span></td></tr>
+  {% endfor %}
+</table>
+{% endif %}{% endfor %}
+
+<p style="margin-top:20px">
+  <a class="btn key" href="{{ url_for('table_converter.sample', sample_id=s.id) }}">標本に戻る</a>
+  <a class="btn" href="{{ url_for('table_converter.restore_xlsx', sample_id=s.id) }}">⬇ 組み立て直した本を受け取る</a>
+</p>
+{% endblock %}

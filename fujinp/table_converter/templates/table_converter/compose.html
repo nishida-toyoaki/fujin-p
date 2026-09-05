@@ -1,0 +1,28 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}表 → 絵 — テーコン{% endblock %}
+{% block body %}
+<h1>表 → 絵</h1>
+<p class="muted">対応式「{{ row.name }}」・版「{{ dataset or '（無名）' }}」から組み立てました。
+  {{ g.rows }} 行 × {{ g.cols }} 列。</p>
+
+<div class="card">
+  {% for a, n in counts.items() %}<span class="pill">{{ a }} {{ n }} 行</span> {% endfor %}
+  <span class="pill">残余 {{ residue }} 枠</span>
+  <div style="margin-top:8px">
+    <a class="btn key" href="{{ url_for('table_converter.download', spec_id=row.id, dataset=dataset) }}">⬇ xlsx で受け取る</a>
+    <a class="btn" href="{{ url_for('table_converter.spec_page', spec_id=row.id) }}">対応式に戻る</a>
+  </div>
+</div>
+
+<h2>プレビュー（{{ r0 }} 行目から）</h2>
+<form method="get" style="margin-bottom:8px">
+  <input type="hidden" name="dataset" value="{{ dataset }}">
+  <label>先頭の行 <input type="text" name="from" value="{{ r0 }}" style="width:70px"></label>
+  <button type="submit">見る</button>
+</form>
+<div class="scroll">{{ grid_html|safe }}</div>
+{% endblock %}

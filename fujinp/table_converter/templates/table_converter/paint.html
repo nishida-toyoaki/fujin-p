@@ -1,0 +1,213 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}セル区分 — {{ s.title }}{% endblock %}
+{% block body %}
+<style>
+  table.paint { border-collapse:collapse; font-size:11px; table-layout:fixed;
+                user-select:none; -webkit-user-select:none; }
+  table.paint th { background:#eef2f7; border:1px solid #c9d1dc; padding:1px 4px;
+        font-weight:600; color:#6b7686; cursor:pointer; }
+  table.paint th.rn { width:42px; }
+  table.paint td { border:1px solid #d6dbe3; padding:2px 4px; vertical-align:top;
+        max-width:230px; overflow:hidden; cursor:crosshair; }
+  table.paint td.k-blank { background:#fbfcfe; color:#aab3c0; }
+  table.paint td.k-label { background:#e7e9ee; color:#43506b; font-weight:600; }
+  table.paint td.k-data  { background:#e3f0ff; color:#12305a; }
+  table.paint td.fr { box-shadow: inset 0 0 0 1px #b8c2d0; }
+  .brush { display:inline-flex; gap:0; border:1px solid var(--line); border-radius:6px;
+           overflow:hidden; }
+  .brush button { border:0; border-right:1px solid var(--line); border-radius:0;
+                  padding:6px 14px; }
+  .brush button:last-child { border-right:0; }
+  .brush button.on { outline:2px solid var(--key); outline-offset:-2px; font-weight:700; }
+  .sticky { position:sticky; top:0; z-index:5; background:var(--bg); padding:8px 0;
+            border-bottom:1px solid var(--line); }
+</style>
+
+<h1>セル区分 — {{ s.title }}</h1>
+<p style="margin:0 0 8px">
+  {% for n in names %}
+    {% if n == sheet %}
+      <span class="btn key" style="padding:3px 10px">{{ n }}{% if n in done %} ●{% endif %}</span>
+    {% else %}
+      <a class="btn" style="padding:3px 10px"
+         href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=n) }}">{{ n }}{% if n in done %} ●{% endif %}</a>
+    {% endif %}
+  {% endfor %}
+  <a class="btn" style="padding:3px 10px"
+     href="{{ url_for('table_converter.sample', sample_id=s.id) }}">本の見通し</a>
+</p>
+<p class="muted">{{ g.rows }} 行 × {{ g.cols }} 列 ／ 枠のあるセル {{ st.framed }}
+  ／ 行の署名 {{ nsigs }} 種類 ／ ● は塗り済み</p>
+<div class="{{ 'ok' if kata.ok else 'err' }}" style="margin:6px 0">
+  型 ＝ 骨 {{ kata.bones }} ＋ 穴（データ） {{ kata.holes }}。
+  {% if kata.ok %}骨に中身を入れ直すと，このシートは元どおりに戻ります。
+  {% else %}戻すと {{ kata.diff|length }} か所ずれます。{% endif %}
+  <a href="{{ url_for('table_converter.form_json', sample_id=s.id, sheet=sheet) }}"
+     target="_blank">型を見る</a>
+</div>
+
+<div class="cols">
+  <div class="card">
+    <h3>① 絵テーブルを JSON にして生成AIへ</h3>
+    <p class="muted">依頼文には，この JSON がまるごと入っています。エクセルを添えなくても渡せます。
+      <a href="{{ url_for('table_converter.book_json', sample_id=s.id, ask=1) }}" target="_blank">全シートまとめての依頼文</a>もあります。</p>
+    <button onclick="cp('ask','askmsg')">依頼文を写す（{{ '{:,}'.format(ask_text|length) }} 字）</button>
+    {% if brief %}
+      <a class="btn" href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=sheet) }}">全部のせにする</a>
+    {% else %}
+      <a class="btn" href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=sheet, brief=3) }}">短くする（署名ごとに3行）</a>
+    {% endif %}
+    <a class="btn" href="{{ url_for('table_converter.sheet_json', sample_id=s.id, sheet=sheet, brief=brief) }}">JSON だけ見る</a>
+    <span id="askmsg" class="muted"></span>
+    <textarea id="ask" rows="7" readonly>{{ ask_text }}</textarea>
+  </div>
+  <div class="card">
+    <h3>② 返ってきた区分を貼り込む</h3>
+    {% if rep %}
+      <div class="{{ 'err' if rep.skipped else 'ok' }}">
+        {{ rep.painted }} セルを塗りました
+        （署名で {{ rep.by_sig }}／範囲で {{ rep.ranges }}／一つずつ {{ rep.marks }}）。
+        {% if rep.sheets and rep.sheets|length > 1 %}<br>塗ったシート:
+          {% for x in rep.sheets %}<span class="pill">{{ x.sheet }} {{ x.painted }}</span> {% endfor %}{% endif %}
+        {% if rep.comment %}<br>AIの言い添え: {{ rep.comment }}{% endif %}
+        {% if rep.skipped %}<br>読めなかったもの: {{ rep.skipped[:5]|join('／') }}{% endif %}
+      </div>
+    {% endif %}
+    {% if err %}<div class="err">{{ err }}</div>{% endif %}
+    <form method="post" action="{{ url_for('table_converter.paint_apply', sample_id=s.id) }}">
+      <input type="hidden" name="sheet" value="{{ sheet }}">
+      <textarea name="reply" rows="7" placeholder="生成AIが返してきた JSON をここへ（全シートぶんでも，このシートだけでも）"
+                spellcheck="false"></textarea>
+      <div style="margin-top:6px">
+        <button class="key" type="submit">重ねる</button>
+        <span class="muted">いまの塗りの上に重ねます。触れなかったセルはそのまま残ります。</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form method="post" id="pf"
+      action="{{ url_for('table_converter.paint_save', sample_id=s.id) }}">
+<input type="hidden" name="sheet" value="{{ sheet }}">
+<input type="hidden" name="marks" id="mk" value="">
+<input type="hidden" name="from" value="{{ r0 }}">
+
+<div class="sticky">
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+    <span>筆</span>
+    <span class="brush">
+      <button type="button" class="bk" data-k="blank" style="background:#fbfcfe">空白</button>
+      <button type="button" class="bk on" data-k="label" style="background:#e7e9ee">ラベル</button>
+      <button type="button" class="bk" data-k="data" style="background:#e3f0ff">データ</button>
+    </span>
+    <span class="muted">セルを押す／なぞる。行番号・列名を押すとその行・列をまとめて。</span>
+    <span class="sp" style="flex:1"></span>
+    <span id="cnt" class="pill"></span>
+    <button type="button" onclick="spread()">⇉ 同じ署名の行へ広げる</button>
+    <button type="button" onclick="guessLabels()">繰り返す文字をラベルに</button>
+    <button class="key" type="submit">保存する</button>
+  </div>
+</div>
+</form>
+
+{% if g.rows > win %}
+<p class="muted" style="margin-top:10px">
+  {{ r0 }} 〜 {{ r1 }} 行目を出しています（全 {{ g.rows }} 行）。
+  塗りは画面から出ている行のぶんも覚えているので，途中で保存しても失われません。
+  {% for p in pages %}
+    <a class="btn" href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=sheet, **{'from': p}) }}"
+       style="padding:2px 8px">{{ p }}〜</a>
+  {% endfor %}
+</p>
+{% endif %}
+
+<div class="scroll" style="max-height:74vh">{{ grid_html|safe }}</div>
+
+<script>
+var MARKS = {{ marks_json|safe }};
+var REPEAT = {{ repeat_json|safe }};
+var brush = 'label', down = false, lastRow = 0;
+
+document.querySelectorAll('.bk').forEach(function (b) {
+  b.onclick = function () {
+    document.querySelectorAll('.bk').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on'); brush = b.dataset.k;
+  };
+});
+
+function put(td) {
+  if (!td || !td.dataset.a) return;
+  MARKS[td.dataset.a] = brush;
+  td.className = td.className.replace(/k-\w+/, 'k-' + brush);
+  lastRow = parseInt(td.dataset.r, 10);
+}
+function count() {
+  var n = {blank: 0, label: 0, data: 0};
+  for (var a in MARKS) { if (n[MARKS[a]] !== undefined) n[MARKS[a]]++; }
+  document.getElementById('cnt').textContent =
+    '空白 ' + n.blank + ' ／ ラベル ' + n.label + ' ／ データ ' + n.data;
+}
+var pg = document.getElementById('pg');
+pg.addEventListener('mousedown', function (e) {
+  var t = e.target;
+  if (t.tagName === 'TD') { down = true; put(t); count(); e.preventDefault(); }
+  else if (t.tagName === 'TH' && t.dataset.r) { paintRow(parseInt(t.dataset.r, 10)); }
+  else if (t.tagName === 'TH' && t.dataset.c) { paintCol(parseInt(t.dataset.c, 10)); }
+});
+pg.addEventListener('mouseover', function (e) {
+  if (down && e.target.tagName === 'TD') { put(e.target); count(); }
+});
+document.addEventListener('mouseup', function () { down = false; });
+
+function paintRow(r) {
+  pg.querySelectorAll('td[data-r="' + r + '"]').forEach(put); lastRow = r; count();
+}
+function paintCol(c) {
+  pg.querySelectorAll('td[data-c="' + c + '"]').forEach(put); count();
+}
+function spread() {
+  if (!lastRow) { alert('先に，見本にする行のどこかを塗ってください'); return; }
+  var tr = pg.querySelector('th[data-r="' + lastRow + '"]').parentNode;
+  var sig = tr.dataset.sig, plan = {};
+  tr.querySelectorAll('td').forEach(function (td) {
+    plan[td.dataset.c] = MARKS[td.dataset.a] || 'blank';
+  });
+  var n = 0;
+  pg.querySelectorAll('tr[data-sig]').forEach(function (row) {
+    if (row.dataset.sig !== sig) return;
+    row.querySelectorAll('td').forEach(function (td) {
+      var k = plan[td.dataset.c];
+      if (!k) return;
+      MARKS[td.dataset.a] = k;
+      td.className = td.className.replace(/k-\w+/, 'k-' + k); n++;
+    });
+  });
+  count();
+  alert('署名「' + sig + '」の行に広げました（' + n + ' セル）。'
+        + '画面に出ていない行にも及ぼすには，そのあたりを表示して押し直してください。');
+}
+function guessLabels() {
+  var n = 0;
+  for (var a in REPEAT) {
+    MARKS[a] = 'label'; n++;
+    var td = pg.querySelector('td[data-a="' + a + '"]');
+    if (td) td.className = td.className.replace(/k-\w+/, 'k-label');
+  }
+  count();
+  alert('何度も出てくる文字のセル ' + n + ' 個をラベルにしました。行き過ぎたところは塗り直してください。');
+}
+function cp(id, msg) {
+  var t = document.getElementById(id); t.select(); t.setSelectionRange(0, 999999);
+  try { document.execCommand('copy'); document.getElementById(msg).textContent = '写しました'; }
+  catch (e) { document.getElementById(msg).textContent = '選んで手で写してください'; }
+}
+document.getElementById('pf').addEventListener('submit', function () {
+  document.getElementById('mk').value = JSON.stringify(MARKS);
+});
+count();
+</script>
+{% endblock %}

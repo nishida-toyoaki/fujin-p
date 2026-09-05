@@ -1,0 +1,91 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block body %}
+<h1>テーコン</h1>
+<p class="muted">お絵描きの道具として使われているエクセルを，対応式にしたがって
+ふつうの SQL テーブル群に分解し，また元の様式へ組み立て直します。</p>
+
+<div class="cols">
+  <div class="card">
+    <h3>① 絵エクセルを預ける</h3>
+    <form method="post" action="{{ url_for('table_converter.sample_upload') }}"
+          enctype="multipart/form-data">
+      <input type="file" name="file" accept=".xlsx,.xlsm" required>
+      <input type="text" name="title" placeholder="題名（省略可）" style="width:180px">
+      <button class="key" type="submit">預ける</button>
+    </form>
+    <p class="muted" style="margin-bottom:0">方眼と行の署名をながめ，生成AIへの依頼文をこしらえます。</p>
+  </div>
+  <div class="card">
+    <h3>② セル区分（塗り分け）</h3>
+    <p class="muted">一つ一つのセルを空白・ラベル・データに分けます。生成AIに区分を頼み，
+      返ってきたものを重ねて，あとは手で塗り直します。対応式づくりはそのあとです。</p>
+    <a class="btn key" href="{{ url_for('table_converter.spec_new') }}">＋ 新しい対応式（旧）</a>
+  </div>
+</div>
+
+<h2>対応式</h2>
+{% if specs %}
+<table class="list">
+  <tr><th>名前</th><th>題名</th><th>シート</th><th></th><th>更新</th></tr>
+  {% for s in specs %}
+  <tr>
+    <td><a href="{{ url_for('table_converter.spec_page', spec_id=s.id) }}">{{ s.name }}</a></td>
+    <td>{{ s.title }}</td>
+    <td class="muted">{{ s.sheet }}</td>
+    <td><span class="pill">{{ '仕上がり' if s.status == 'ready' else '下書き' }}</span></td>
+    <td class="muted">{{ s.updated_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">まだありません。</p>{% endif %}
+
+<h2>預かっている絵エクセル</h2>
+{% if samples %}
+<table class="list">
+  <tr><th>題名</th><th>ファイル</th><th>預かった日</th><th></th></tr>
+  {% for s in samples %}
+  <tr>
+    <td><a href="{{ url_for('table_converter.sample', sample_id=s.id) }}">{{ s.title }}</a></td>
+    <td class="muted">{{ s.filename }}</td>
+    <td class="muted">{{ s.created_at }}</td>
+    <td>
+      <form method="post" style="display:inline"
+            action="{{ url_for('table_converter.sample_delete', sample_id=s.id) }}"
+            onsubmit="return confirm('この標本を消します。よろしいですか')">
+        <button type="submit">🗑</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">まだありません。</p>{% endif %}
+
+{% if runs %}
+<h2>近ごろの通し</h2>
+<table class="list">
+  <tr><th>日時</th><th>向き</th><th>版</th><th>結果</th></tr>
+  {% for r in runs %}
+  <tr>
+    <td class="muted">{{ r.created_at }}</td>
+    <td>{{ '絵 → 表' if r.direction == 'decompose' else '表 → 絵' }}</td>
+    <td>{{ r.dataset }}</td>
+    <td class="muted">{{ r.summary[:120] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>考えかた</h2>
+<div class="card">
+<p style="margin-top:0">絵エクセルの一枚は，たいてい「帯の縦の連なり」でできています。決まり文句が一度だけ出る
+<b>固定帯</b>と，テーブルの各行につき一度ずつ出る<b>反復帯</b>です。帯の中の<b>枠</b>には，
+様式の側の決まり文句か，テーブルの列かが入ります。すると一枚の絵は</p>
+<p style="text-align:center"><b>絵 ＝ Σ（帯のパターン ⊗ テーブルの行） ⊕ 残余</b></p>
+<p>と分解されます。左が積で，これがふつうの SQL テーブル群になります。右の残余は，帯で説明のつかなかった
+セルで，そのまま台帳に控えます。<b>残余があっても往復はできます。</b>残余が減るほど，その様式をよく捉えたことになります。</p>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-04 01:59:27",
+  "generated_at": "2026-09-05 17:27:57",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -494,8 +494,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260902.135220-42ea73",
-      "version_confirmed_at": "2026-09-02 13:52:21"
+      "version_id": "v20260905.103222-bda890",
+      "version_confirmed_at": "2026-09-05 10:32:22"
     },
     {
       "app_name": "user_groups",
@@ -1221,8 +1221,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260902.124507-d970bb",
-      "version_confirmed_at": "2026-09-02 12:45:08"
+      "version_id": "v20260905.102937-89d754",
+      "version_confirmed_at": "2026-09-05 10:29:38"
     },
     {
       "app_name": "fujin_forum",
@@ -1258,8 +1258,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260902.131849-1e36b4",
-      "version_confirmed_at": "2026-09-02 13:18:49"
+      "version_id": "v20260905.102751-3b4594",
+      "version_confirmed_at": "2026-09-05 10:27:51"
     },
     {
       "app_name": "cqm",
@@ -1294,8 +1294,44 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260904.v1-0-3-reportfix",
-      "version_confirmed_at": null
+      "version_id": "v20260905.102458-4a21ab",
+      "version_confirmed_at": "2026-09-05 10:24:59"
+    },
+    {
+      "app_name": "table_converter",
+      "display_name": "テーコン",
+      "icon": "🔀",
+      "description": "絵エクセルとふつうのSQLテーブル群を，対応式によって往復させる。対応式は人と生成AIが標本を見ながらこしらえる。まず一つ一つのセルを空白・ラベル・データに分け，そのうえで絵を〈帯のパターン ⊗ テーブルの行〉の積と残余に分解する",
+      "sort_order": 390.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "table_converter_bp",
+          "name": "table_converter",
+          "module": "fujinp.table_converter",
+          "url_prefix": "/table_converter"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🔀",
+          "label": "テーコン",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "table_converter.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 40,
+          "visibility": "private",
+          "description": "絵エクセルとSQLテーブルの相互変換",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260905.v0-3",
+      "version_confirmed_at": "2026-09-05 17:11:27"
     }
   ],
   "sections": [

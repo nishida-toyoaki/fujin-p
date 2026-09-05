@@ -1,0 +1,96 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}試し分解 — テーコン{% endblock %}
+{% block body %}
+<h1>試し分解</h1>
+<p class="muted">対応式「{{ row.name }}」でシート「{{ sheet }}」を分解してみました。
+  SQL には何も書いていません。</p>
+
+<div class="card">
+  <b>{{ rep.rows_matched }}</b> 行が帯に合い，<b>{{ rep.rows_residue }}</b> 行が残余に落ちました。
+  枠は <b>{{ rep.cells_used }}</b> ／ {{ rep.cells_total }} が説明されています
+  （{{ (100 * rep.cells_used // (rep.cells_total or 1)) }}%）。
+  {% if rep.list_unparsed %}<br>一つのセルに詰まっていたもののうち，
+    <b>{{ rep.list_unparsed }}</b> 件はほぐせませんでした。{% endif %}
+  <div style="margin-top:6px">
+    帯の回数:
+    {% for k, v in rep.instances.items() %}<span class="pill">{{ k }} × {{ v }}</span> {% endfor %}
+  </div>
+</div>
+
+{% if diff %}
+<div class="err"><b>往復すると {{ diff|length }} か所ずれます。</b>
+  対応式がまだ様式を取りきれていません。下の一覧を手掛かりに直してください。
+  <table class="list" style="margin-top:6px">
+    <tr><th>行</th><th>列</th><th>元</th><th>戻したもの</th></tr>
+    {% for d in diff[:20] %}
+    <tr><td>{{ d.r }}</td><td>{{ d.c }}</td>
+        <td>{{ d.a[:60] }} <span class="muted">{{ d.span_a }}</span></td>
+        <td>{{ d.b[:60] }} <span class="muted">{{ d.span_b }}</span></td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="ok"><b>往復して元に戻りました。</b>この対応式で分解しても，何も失われません。</div>
+{% endif %}
+
+<h2>分解した中身</h2>
+<div class="cols">
+{% for alias, rows in data.items() %}
+  <div class="card">
+    <h3>{{ alias }} <span class="muted">→ {{ tables[alias] }}</span>
+      <span class="pill">{{ rows|length }} 行</span></h3>
+    {% if rows %}
+    <div style="overflow:auto">
+    <table class="list">
+      <tr>{% for c in rows[0].keys() %}{% if c != '_ord' %}<th>{{ c }}</th>{% endif %}{% endfor %}</tr>
+      {% for r in rows[:8] %}
+      <tr>{% for c, v in r.items() %}{% if c != '_ord' %}
+        <td>{{ (v|string)[:70] if v is not none else '' }}</td>{% endif %}{% endfor %}</tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% if rows|length > 8 %}<p class="muted">ほか {{ rows|length - 8 }} 行</p>{% endif %}
+    {% else %}<p class="muted">空です。</p>{% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<h2>残余 <span class="pill">{{ residue|length }} 枠</span></h2>
+{% if residue %}
+<p class="muted">帯で説明のつかなかったところです。台帳に控えられ，生成のときにそのまま戻されます。</p>
+<div style="overflow:auto; max-height:260px" class="card">
+<table class="list">
+  <tr><th>元の行</th><th>列</th><th>宛先</th><th>中身</th></tr>
+  {% for e in residue[:40] %}
+  <tr><td>{{ e.r }}</td><td>{{ e.c }}</td>
+      <td class="muted">{{ e.band }}#{{ e.ord }}{{ '内' if e.mode == 'in' else '後' }}+{{ e.dr }}</td>
+      <td>{{ (e.v or '')[:80] }}</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}<p class="muted">ありません。対応式が様式をすっかり説明しています。</p>{% endif %}
+
+<h2>方眼（{{ r0 }} 行目から）</h2>
+<p class="legend">
+  <span><i class="sw" style="background:#eaf3ff"></i>データとして取れたところ</span>
+  <span><i class="sw" style="background:#f1f1f4"></i>様式の決まり文句</span>
+  <span><i class="sw" style="background:#fff3d9"></i>残余</span>
+  <span><i class="sw" style="background:#fff"></i>まだ見ていない行</span>
+</p>
+<form method="get" style="margin-bottom:8px">
+  <input type="hidden" name="spec" value="{{ row.id }}">
+  <input type="hidden" name="sample" value="{{ sample_id }}">
+  <input type="hidden" name="sheet" value="{{ sheet }}">
+  <label>先頭の行 <input type="text" name="from" value="{{ r0 }}" style="width:70px"></label>
+  <button type="submit">見る</button>
+</form>
+<div class="scroll">{{ grid_html|safe }}</div>
+
+<p style="margin-top:20px">
+  <a class="btn key" href="{{ url_for('table_converter.spec_page', spec_id=row.id) }}">対応式に戻る</a>
+</p>
+{% endblock %}

@@ -1,0 +1,86 @@
+{
+  "spec_version": 1,
+  "name": "jikanwari",
+  "title": "時間割表（前学期）",
+  "sheet": "時間割",
+  "note": "下書き。一つのセルに何件も詰まっている様式の見本として置く。実物のエクセルを預けたら，行の署名を見ながら列番号と帯の高さを合わせる。曜日は様式の側の軸なので枠の位置で表し，各セルの中身は list で子の表へほぐす。",
+  "grid": {
+    "cols": 12,
+    "col_widths": {"A": 4.0, "B": 8.0, "C": 4.0, "D": 22.0, "E": 22.0, "F": 22.0, "G": 22.0, "H": 22.0},
+    "row_height": 15
+  },
+  "dataset_col": "dataset",
+  "tables": {
+    "koma": {
+      "table": "jk_koma",
+      "seq": "koma_no",
+      "note": "時限と学部区分の組。表の縦軸",
+      "columns": {
+        "koma_no": "INT",
+        "jigen": "VARCHAR(8)",
+        "kubun": "VARCHAR(32)"
+      }
+    },
+    "jugyo": {
+      "table": "jk_jugyo",
+      "seq": "line_no",
+      "note": "一コマ一件の授業。セルに詰まっていたものをほぐした結果",
+      "inherit": {"koma_no": "koma.koma_no"},
+      "columns": {
+        "koma_no": "INT",
+        "line_no": "INT",
+        "youbi": "VARCHAR(4)",
+        "gakunen": "VARCHAR(16)",
+        "kamoku": "VARCHAR(120)",
+        "tantou": "VARCHAR(80)"
+      }
+    }
+  },
+  "styles": {
+    "lbl": {"bold": true, "fill": "F2F2F2", "align": "center"},
+    "body": {}
+  },
+  "bands": [
+    {
+      "id": "head",
+      "kind": "once",
+      "rows": [
+        {"slots": [
+          {"c": 1, "cs": 2, "v": {"lit": "時限"}, "style": "lbl"},
+          {"c": 3, "v": {"lit": "学部"}, "style": "lbl"},
+          {"c": 4, "v": {"lit": "月"}, "style": "lbl"},
+          {"c": 5, "v": {"lit": "火"}, "style": "lbl"},
+          {"c": 6, "v": {"lit": "水"}, "style": "lbl"},
+          {"c": 7, "v": {"lit": "木"}, "style": "lbl"},
+          {"c": 8, "v": {"lit": "金"}, "style": "lbl"}
+        ]}
+      ]
+    },
+    {
+      "id": "koma",
+      "kind": "repeat",
+      "use": "koma",
+      "rows": [
+        {"slots": [
+          {"c": 1, "cs": 2, "v": {"col": "jigen"}, "style": "lbl"},
+          {"c": 3, "v": {"col": "kubun"}, "style": "lbl"},
+          {"c": 4, "v": {"list": {"table": "jugyo", "match": {"youbi": "月"},
+                                  "fmt": "{gakunen} {kamoku} {tantou}", "sep": "\n",
+                                  "order": ["line_no"]}}, "style": "body"},
+          {"c": 5, "v": {"list": {"table": "jugyo", "match": {"youbi": "火"},
+                                  "fmt": "{gakunen} {kamoku} {tantou}", "sep": "\n",
+                                  "order": ["line_no"]}}, "style": "body"},
+          {"c": 6, "v": {"list": {"table": "jugyo", "match": {"youbi": "水"},
+                                  "fmt": "{gakunen} {kamoku} {tantou}", "sep": "\n",
+                                  "order": ["line_no"]}}, "style": "body"},
+          {"c": 7, "v": {"list": {"table": "jugyo", "match": {"youbi": "木"},
+                                  "fmt": "{gakunen} {kamoku} {tantou}", "sep": "\n",
+                                  "order": ["line_no"]}}, "style": "body"},
+          {"c": 8, "v": {"list": {"table": "jugyo", "match": {"youbi": "金"},
+                                  "fmt": "{gakunen} {kamoku} {tantou}", "sep": "\n",
+                                  "order": ["line_no"]}}, "style": "body"}
+        ]}
+      ]
+    }
+  ]
+}

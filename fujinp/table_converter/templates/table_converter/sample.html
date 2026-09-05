@@ -1,0 +1,76 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}{{ s.title }} — テーコン{% endblock %}
+{% block body %}
+<h1>{{ s.title }}</h1>
+<p class="muted">{{ s.filename }} ／ 預かり {{ s.created_at }} ／ シート {{ rows|length }} 枚</p>
+{% if err %}<div class="err">{{ err }}</div>{% endif %}
+
+<div class="card">
+  <h3>本（ブック）まるごと生成AIへ</h3>
+  <p class="muted">全シートを一度に渡し，シートごとに分けて返してもらいます。
+    署名ごとに先頭 3 行だけを載せた短い形です。</p>
+  <a class="btn key" href="{{ url_for('table_converter.book_json', sample_id=s.id, ask=1) }}" target="_blank">依頼文を開く</a>
+  <a class="btn" href="{{ url_for('table_converter.book_json', sample_id=s.id) }}" target="_blank">JSON だけ見る</a>
+  <span class="muted">返ってきた JSON は，どのシートの塗り分け画面からでも貼り込めます。</span>
+</div>
+
+<h2>シート</h2>
+<table class="list">
+  <tr><th>シート</th><th>大きさ</th><th>枠</th><th>署名</th>
+      <th>ラベル</th><th>データ</th><th>塗り</th><th>復元</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=r.name) }}">{{ r.name }}</a></td>
+    <td class="muted">{{ r.rows }} × {{ r.cols }}</td>
+    <td>{{ r.framed }}</td>
+    <td>{{ r.sigs }}</td>
+    <td>{{ r.label }}</td>
+    <td><b>{{ r.data }}</b></td>
+    <td>{% if r.painted %}<span class="pill">塗り済み</span>{% else %}<span class="muted">見当のまま</span>{% endif %}</td>
+    <td>{% if r.ok %}<span class="pill">戻る</span>{% else %}<span class="err" style="padding:1px 6px">{{ r.ndiff }} か所ずれ</span>{% endif %}</td>
+    <td><a class="btn" href="{{ url_for('table_converter.paint', sample_id=s.id, sheet=r.name) }}"
+           style="padding:2px 10px">塗り分ける</a></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="card">
+  <h3>型と復元</h3>
+  <p style="margin-top:0">データでないセルはすべて<b>骨</b>として取り置かれ，データセルは<b>穴</b>になります。
+    <b>シート ＝ 骨 ＋ 穴に入れたデータ</b>。この割りかたなら，元のエクセルがどれほど変な作りでも
+    必ず元に戻せます。塗り分けの出来ばえとは関わりなく，復元だけは保たれます。</p>
+  <a class="btn" href="{{ url_for('table_converter.verify', sample_id=s.id) }}">復元を確かめる</a>
+  <a class="btn" href="{{ url_for('table_converter.restore_xlsx', sample_id=s.id) }}">⬇ 組み立て直した本を受け取る</a>
+  <form method="post" style="display:inline"
+        action="{{ url_for('table_converter.paint_all', sample_id=s.id) }}">
+    <button type="submit">まだ塗っていないシートに見当を置く</button>
+  </form>
+</div>
+
+{% if specs %}
+<div class="card">
+  <h3>対応式にかけてみる（旧）</h3>
+  <form method="get" action="{{ url_for('table_converter.tryout') }}">
+    <input type="hidden" name="sample" value="{{ s.id }}">
+    <select name="sheet">
+      {% for n in names %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+    </select>
+    <select name="spec">
+      {% for sp_ in specs %}<option value="{{ sp_.id }}">{{ sp_.name }} — {{ sp_.title }}</option>{% endfor %}
+    </select>
+    <button type="submit">試す（SQL には書きません）</button>
+  </form>
+</div>
+{% endif %}
+
+<p style="margin-top:20px">
+  <form method="post" action="{{ url_for('table_converter.sample_delete', sample_id=s.id) }}"
+        onsubmit="return confirm('この標本と，その塗りを消します。よろしいですか')">
+    <button type="submit">🗑 この標本を消す</button>
+  </form>
+</p>
+{% endblock %}

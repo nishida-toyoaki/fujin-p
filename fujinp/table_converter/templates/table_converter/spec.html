@@ -1,0 +1,103 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}{{ row.name if row else '新しい対応式' }} — テーコン{% endblock %}
+{% block body %}
+<h1>{{ row.title if row else '新しい対応式' }}</h1>
+{% if row %}<p class="muted">{{ row.name }} ／ シート「{{ row.sheet }}」 ／ 更新 {{ row.updated_at }}</p>{% endif %}
+
+{% if errs %}
+<div class="err"><b>直すところ</b><ul style="margin:4px 0 0 18px">
+  {% for e in errs %}<li>{{ e }}</li>{% endfor %}</ul></div>
+{% elif row %}
+<div class="ok">対応式は筋が通っています。</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('table_converter.spec_save', spec_id=row.id)
+       if row else url_for('table_converter.spec_new') }}">
+  <div class="card">
+    <h3>対応式（JSON）</h3>
+    <textarea name="spec_json" rows="24" spellcheck="false">{{ text }}</textarea>
+    <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <input type="text" name="note" style="width:320px" placeholder="覚え書き"
+             value="{{ row.note if row else '' }}">
+      {% if row %}
+      <label>状態
+        <select name="status">
+          <option value="draft" {{ 'selected' if row.status != 'ready' }}>下書き</option>
+          <option value="ready" {{ 'selected' if row.status == 'ready' }}>仕上がり</option>
+        </select>
+      </label>
+      {% endif %}
+      <button class="key" type="submit">保存する</button>
+    </div>
+  </div>
+</form>
+
+{% if row and not errs %}
+<div class="cols">
+  <div class="card">
+    <h3>この対応式が求めるテーブル</h3>
+    {% if missing %}
+      <div class="err">まだ無いテーブル: {{ missing|join('，') }}</div>
+    {% else %}
+      <div class="ok">テーブルはそろっています。</div>
+    {% endif %}
+    <p class="muted">下の CREATE 文を MySQL コンソールに貼るのが本筋です。
+      急ぐときは，この場で作ることもできます。</p>
+    <form method="post" action="{{ url_for('table_converter.spec_create_tables', spec_id=row.id) }}"
+          onsubmit="return confirm('この場でテーブルを作ります。よろしいですか')">
+      <button type="submit" {{ 'disabled' if not missing }}>この場で作る</button>
+    </form>
+    <pre>{{ ddl }}</pre>
+  </div>
+
+  <div class="card">
+    <h3>絵 → 表（分解）</h3>
+    <form method="post" action="{{ url_for('table_converter.decompose', spec_id=row.id) }}"
+          onsubmit="return confirm('同じ版の中身を入れ替えます。よろしいですか')">
+      <p><label>標本
+        <select name="sample">
+          {% for s in samples %}<option value="{{ s.id }}">{{ s.title }}</option>{% endfor %}
+        </select></label></p>
+      <p><label>版（データセット）
+        <input type="text" name="dataset" value="R6" style="width:120px"></label>
+        <span class="muted">同じ様式の年度ぶんなどを分けて持ちます</span></p>
+      <button class="key" type="submit" {{ 'disabled' if missing or not samples }}>
+        分解して SQL へ入れる</button>
+    </form>
+
+    <h3 style="margin-top:18px">表 → 絵（生成）</h3>
+    {% if datasets %}
+    <form method="get" action="{{ url_for('table_converter.compose', spec_id=row.id) }}">
+      <label>版
+        <select name="dataset">
+          {% for d in datasets %}<option value="{{ d }}">{{ d or '（無名）' }}</option>{% endfor %}
+        </select></label>
+      <button class="key" type="submit">プレビュー</button>
+    </form>
+    {% else %}<p class="muted">まだ中身がありません。</p>{% endif %}
+  </div>
+</div>
+
+{% if runs %}
+<h2>通しの記録</h2>
+<table class="list">
+  <tr><th>日時</th><th>向き</th><th>版</th><th>結果</th></tr>
+  {% for r in runs %}
+  <tr><td class="muted">{{ r.created_at }}</td>
+      <td>{{ '絵 → 表' if r.direction == 'decompose' else '表 → 絵' }}</td>
+      <td>{{ r.dataset }}</td><td class="muted">{{ r.summary[:160] }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<form method="post" action="{{ url_for('table_converter.spec_delete', spec_id=row.id) }}"
+      onsubmit="return confirm('この対応式と，控えてある残余を消します。データのテーブルは消しません。よろしいですか')"
+      style="margin-top:24px">
+  <button type="submit">🗑 この対応式を消す</button>
+</form>
+{% endif %}
+{% endblock %}

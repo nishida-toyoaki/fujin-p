@@ -1,0 +1,28 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P.  Copyright (C) 2024-2026 Toyoaki Nishida
+   Source: https://github.com/nishida-toyoaki/fujin-p #}
+{% extends "table_converter/_base.html" %}
+{% block title %}通しました — テーコン{% endblock %}
+{% block body %}
+<h1>{{ '通しました' if ok else '通せませんでした' }}</h1>
+<div class="{{ 'ok' if ok else 'err' }}">{{ msg }}</div>
+{% if summary %}
+<div class="card">
+  <p>{{ summary.rows_matched }} 行が帯に合い，{{ summary.rows_residue }} 行が残余に落ちました。</p>
+  {% if summary.tables %}
+  <table class="list">
+    <tr><th>テーブル</th><th>入れた行数</th></tr>
+    {% for t, n in summary.tables.items() %}<tr><td>{{ t }}</td><td>{{ n }}</td></tr>{% endfor %}
+    <tr><td>（残余の控え）</td><td>{{ summary.residue }}</td></tr>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+<p>
+  <a class="btn key" href="{{ url_for('table_converter.spec_page', spec_id=row.id) }}">対応式に戻る</a>
+  {% if ok %}
+  <a class="btn" href="{{ url_for('table_converter.compose', spec_id=row.id, dataset=dataset) }}">絵に組み立て直して確かめる</a>
+  {% endif %}
+</p>
+{% endblock %}
