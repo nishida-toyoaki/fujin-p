@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>書き出しと読み込み — こんか</title>
+<style>
+ *{box-sizing:border-box}
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;background:#f6f7f9;color:#1d2330;line-height:1.7;font-size:14px}
+ .wrap{max-width:1000px;padding:12px 16px 40px}
+ .bar{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e2e6ec;margin-bottom:14px}
+ .bar .ttl{font-weight:700;font-size:16px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:14px 16px;margin-bottom:12px}
+ .card h2{font-size:14px;margin:0 0 8px;color:#4a5568}
+ table.ex{width:100%;border-collapse:collapse;font-size:13px}
+ table.ex td{border-bottom:1px solid #eef1f5;padding:5px 6px;vertical-align:middle}
+ table.ex td.a{text-align:right;white-space:nowrap}
+ .btn{display:inline-block;padding:4px 10px;font-size:12px;border:1px solid #cfd6e0;border-radius:6px;background:#fff;color:#1d2330;margin-left:4px;cursor:pointer;font-family:inherit}
+ .btn:hover{background:#eef2f7;text-decoration:none}
+ .small{font-size:12px;color:#6b7280}
+ input[type=file]{font-size:13px}
+ label.r{display:block;font-size:13px;margin:3px 0}
+ button.pri{padding:7px 16px;font-size:14px;border:1px solid #1b5fa8;border-radius:8px;background:#1b5fa8;color:#fff;cursor:pointer;margin-top:10px}
+ .rep{border-radius:8px;padding:10px 12px;margin-top:10px}
+ .rep.ok{background:#e7f6ec;color:#1e5c33}
+ .rep.ng{background:#fdeaea;color:#8a2a2a}
+ ul{margin:6px 0 0;padding-left:1.2em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <span class="ttl">📤 書き出しと読み込み</span>
+    <div><a href="{{ url_for('cqm.index') }}">← こんか</a>　<a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN</a></div>
+  </div>
+
+  {% if report %}
+  <div class="rep {{ 'ok' if report.ok else 'ng' }}">
+    {% if not report.ok %}{{ report.error }}
+    {% elif report.kind == 'json' %}
+      読み込みました。作品・複合部品 {{ report.arenas_new }} 件を作り、倉庫部品は新規 {{ report.boxes_new }} 件／上書き {{ report.boxes_updated }} 件、箇条 {{ report['items'] }} 件{% if report.gc %}（外れた古い箇条 {{ report.gc }} 件を掃除）{% endif %}。
+      {% if report.root %}<a href="{{ url_for('cqm.arena_edit', arena_id=report.root) }}">→ 開く</a>{% endif %}
+    {% else %}
+      エクセルから {{ report.updated }} 件を書き戻しました（変わらなかったもの {{ report.same }} 件）。
+      {% if report.skipped %}<ul>{% for s in report.skipped %}<li>{{ s.title or s.id }}：{{ s.why }}</li>{% endfor %}</ul>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if report and report.kind == 'sql' %}<div class="rep ok">{{ report.text }}</div>{% endif %}
+  <div class="card">
+    <h2>倉庫の器</h2>
+    <div class="small">実行時は SQL を使いません。倉庫の全部（量子 {{ info.quanta }}・並び {{ info.links }}・依頼 {{ info.requests }}）は
+      <code>{{ info.file }}</code>（{{ (info.bytes/1024)|round(0)|int }} KB，最終保存 {{ info.saved_at }}）にあり，編集のたびに書き戻します。
+      SQL は写しとして，要るときだけ格納・読み込みします。</div>
+    <form method="post" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" name="sql" value="store" type="submit">🗄 SQL へ格納（写しを作る）</button>
+      <button class="btn" name="sql" value="load" type="submit"
+        onclick="return confirm('SQL の写しで倉庫のファイルを置き換えます。いまの倉庫は上書きされます。よろしいですか？')">📥 SQL から読み込む（倉庫を置き換える）</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>掃除</h2>
+    <div class="small">どこからも指されていない複合部品が <b>{{ orphans|length }}</b> 件あります（途中で切れた取り込みの残骸など）。中の倉庫部品は残ります。</div>
+    {% if orphans %}
+    <details style="margin-top:6px"><summary class="small">一覧を見る</summary>
+      <ul class="small" style="max-height:200px;overflow:auto">{% for o in orphans %}<li>#{{ o.id }} {{ o.title }}</li>{% endfor %}</ul></details>
+    <form method="post" style="margin-top:8px">
+      <button class="btn" name="gc" value="parts" type="submit"
+        onclick="return confirm('指されていない複合部品 {{ orphans|length }} 件を消します。元に戻せません。よろしいですか？')">🧹 まとめて消す</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>書き出す</h2>
+    <div class="small">JSON は，作品と，そこから辿れる複合部品・倉庫部品・箇条をひとまとめにした写しです（別のサイトへ運べます）。
+      xlsx は，方眼をそのままシートの行と列に落としたもので、「対応」シートを添えてあるので直して読み戻せます。</div>
+    <table class="ex">
+      {% for a in works %}
+      <tr><td>🏛 {{ a.title or '（無題）' }}<span class="small">　#{{ a.id }}</span></td>
+        <td class="a">
+          <a class="btn" href="{{ url_for('cqm.export_json', arena_id=a.id) }}">⬇ JSON</a>
+          <a class="btn" href="{{ url_for('cqm.export_json', arena_id=a.id) }}?acl=1" title="公開範囲や割り当ても入れる">⬇ JSON＋権限</a>
+          <a class="btn" href="{{ url_for('cqm.export_xlsx', arena_id=a.id) }}">⬇ xlsx</a>
+          <a class="btn" href="{{ url_for('cqm.transfer', arena_id=a.id) }}">📥 この作品へ読み込む</a>
+        </td></tr>
+      {% endfor %}
+      {% for a in parts %}
+      <tr><td>🧱 {{ a.title or '（無題）' }}<span class="small">　#{{ a.id }}</span></td>
+        <td class="a"><a class="btn" href="{{ url_for('cqm.export_json', arena_id=a.id) }}">⬇ JSON</a>
+          <a class="btn" href="{{ url_for('cqm.export_xlsx', arena_id=a.id) }}">⬇ xlsx</a></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>読み込む{% if arena %}（{{ arena.title }} へ）{% endif %}</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".json,.xlsx">
+      <div style="margin-top:8px">
+        <div class="small">JSON のとき</div>
+        <label class="r"><input type="radio" name="mode" value="merge" checked>
+          <b>あわせる</b> — key_path が同じ倉庫部品は中身を上書きし、無いものは作る（同じサイトへ戻すとき）</label>
+        <label class="r"><input type="radio" name="mode" value="new">
+          <b>そっくり作る</b> — すべて新しく作る（別のサイトへ運ぶとき。key_path は付けない）</label>
+      </div>
+      <div class="small" style="margin-top:8px">xlsx のときは「表」シートのセルを読み、「対応」シートの手掛かりで元の倉庫部品へ書き戻します。
+        書く権限のない部品は飛ばします。凍結中も同じです。</div>
+      <button class="pri" type="submit">読み込む</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

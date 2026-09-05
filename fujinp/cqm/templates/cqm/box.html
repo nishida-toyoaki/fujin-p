@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ box.title or '箱' }} — こんか</title>
+<style>
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.75}
+ .wrap{max-width:820px;margin:0 auto;padding:16px}
+ .bar{display:flex;justify-content:space-between;align-items:center;
+      padding:10px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;font-size:14px}
+ h1{font-size:19px;margin:6px 0}
+ .key{font-family:ui-monospace,monospace;font-size:12px;color:#6b7280}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;
+       padding:12px 14px;margin-bottom:12px}
+ .st{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;
+     border-radius:10px}
+ .ok{background:#e7f6ec;color:#1e7a3c}
+ .partial{background:#fff3d9;color:#8a5b06}
+ .ng{background:#fdeaea;color:#a32a2a}
+ ul.lines{margin:8px 0 0;padding-left:1.1em}
+ ul.lines li{margin-bottom:6px}
+ .field{border-top:1px dashed #e2e6ec;padding-top:8px;margin-top:8px}
+ .label{font-weight:600;font-size:14px}
+ .rich{margin-top:6px}
+ .rich img{max-width:100%}
+ .rich table{border-collapse:collapse}
+ .rich td,.rich th{border:1px solid #cfd6e0;padding:3px 6px}
+ .pend{background:#fdf3f3;border-radius:8px;padding:8px 10px;font-size:13px;
+       color:#8a3a3a;margin-top:8px}
+ label{display:block;font-size:13px;color:#4a5568;margin-top:8px}
+ input,textarea{width:100%;box-sizing:border-box;padding:7px 9px;font-size:14px;
+   border:1px solid #cfd6e0;border-radius:7px;font-family:inherit}
+ button{margin-top:10px;padding:8px 16px;font-size:14px;border:0;border-radius:8px;
+   background:#1b5fa8;color:#fff;cursor:pointer}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .small{font-size:12px;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a href="{{ url_for('cqm.index') }}">← 倉庫</a>
+    <a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN ダッシュボードに戻る</a>
+  </div>
+
+  <div class="key">{{ box.key_path or '' }}</div>
+  <h1>{{ box.title or '（無題）' }}</h1>
+  <div class="small">型 {{ '📝 テキスト' if box.recipe == 'text' else box.recipe }}
+    　<a href="{{ url_for('cqm.box_edit', box_id=box.id) }}">✏ 編集</a></div>
+
+  <div class="card">
+    <div><strong>いまの出来</strong>
+      <span class="st {{ answer.status }}">{{ answer.status }}</span>
+      <span class="small">{{ answer.note }}</span></div>
+
+    {% if box.recipe == 'record' %}
+      {% for f in answer.value or [] %}
+      <div class="field">
+        <div class="label">{{ f.label }} <span class="st {{ f.status }}">{{ f.status }}</span></div>
+        <ul class="lines">
+          {% for ln in f.lines %}<li>{{ ln.body }}</li>{% endfor %}
+        </ul>
+        {% if f.kind == 'box' %}
+        <div class="small"><a href="{{ url_for('cqm.box', box_id=f.id) }}">この欄だけをひらく</a></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% elif box.recipe == 'text' %}
+      {% for ln in answer.value or [] %}<div class="rich">{{ ln.html|safe }}</div>{% endfor %}
+    {% else %}
+      <ul class="lines">
+        {% for ln in answer.value or [] %}<li>{{ ln.body }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if answer.pending %}
+    <div class="pend">
+      <strong>未達</strong>
+      <ul class="lines">
+        {% for p in answer.pending %}<li>{{ p.key }}：{{ p.why }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <strong>執筆を依頼する</strong>
+    <form method="post" action="{{ url_for('cqm.make_request', box_id=box.id) }}">
+      <label>宛先<input type="text" name="addressee" placeholder="部局名や担当者名"></label>
+      <label>依頼文<textarea name="message" rows="3"
+        placeholder="このボックスを埋めてください，など"></textarea></label>
+      <label>期日<input type="date" name="due_on"></label>
+      <button type="submit">依頼を送る</button>
+    </form>
+  </div>
+
+  {% if requests %}
+  <div class="card">
+    <strong>依頼の履歴</strong>
+    <ul class="lines">
+      {% for r in requests %}
+      <li>{{ r.created_at }} — {{ r.addressee }}（{{ r.status }}）
+        <a href="{{ url_for('cqm.write', req_id=r.id) }}">執筆画面</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

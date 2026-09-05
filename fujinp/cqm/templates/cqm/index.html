@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>こんか</title>
+<style>
+ *{box-sizing:border-box}
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.65;font-size:14px}
+ .wrap{max-width:none;margin:0;padding:12px 16px 40px}
+ .bar{display:flex;justify-content:space-between;align-items:center;
+      padding:8px 0;border-bottom:1px solid #e2e6ec;margin-bottom:14px}
+ .bar .ttl{font-weight:700;font-size:16px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:start}
+ @media(max-width:1000px){.cols{grid-template-columns:1fr}}
+ .col{min-width:0}
+ .colhead{display:flex;justify-content:space-between;align-items:baseline;
+          margin-bottom:6px;gap:8px}
+ .colhead h2{font-size:15px;margin:0}
+ .colhead .n{font-size:12px;color:#6b7280}
+ .lead{font-size:12px;color:#6b7280;margin-bottom:10px}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;
+       padding:10px 12px;margin-bottom:9px}
+ .card.new{border-style:dashed;background:#fbfcfe}
+ .key{font-family:ui-monospace,monospace;font-size:11px;color:#6b7280;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .ttl2{font-weight:600;margin:1px 0 5px}
+ .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;
+      background:#eef2f7;color:#4a5568;margin-right:4px}
+ .tag.req{background:#fff8e6;color:#7a5a12}
+ .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+ .acts a,.acts button{font-size:12px;padding:3px 9px;border:1px solid #cfd6e0;
+   border-radius:6px;background:#fff;color:#1d2330;cursor:pointer;line-height:1.6}
+ .acts a:hover,.acts button:hover{background:#eef2f7;text-decoration:none}
+ .acts button.del{color:#c0392b;border-color:#e5b4ae}
+ .acts button.del:hover{background:#fdeaea}
+ form.inline{display:flex;gap:6px}
+ form.inline input[type=text]{flex:1;min-width:0;padding:6px 8px;font-size:13px;
+   border:1px solid #cfd6e0;border-radius:6px;font-family:inherit}
+ form.inline button{padding:6px 12px;font-size:13px;border:1px solid #1b5fa8;
+   border-radius:6px;background:#1b5fa8;color:#fff;cursor:pointer;white-space:nowrap}
+ .small{font-size:12px;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <span class="ttl">こんか</span>
+    <div>{% if can_edit %}<a href="{{ url_for('cqm.transfer') }}">📤 書き出し・読み込み</a>　{% endif %}
+      <a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN ダッシュボードに戻る</a></div>
+  </div>
+
+  <div class="cols">
+
+    <div class="col">
+      <div class="colhead"><h2>🏛 最終部品（作品）</h2><span class="n">{{ works|length }}</span></div>
+      <div class="lead">そのまま人に見せるもの。複合部品と倉庫部品を組み合わせて出来ています。</div>
+      {% if can_edit %}
+      <div class="card new">
+        <form class="inline" method="post" action="{{ url_for('cqm.arena_new') }}">
+          <input type="hidden" name="level" value="work">
+          <input type="text" name="title" placeholder="新しい作品の名前">
+          <button type="submit">＋ 作る</button>
+        </form>
+      </div>
+      {% endif %}
+      {% for a in works %}
+      <div class="card">
+        <div class="ttl2"><a href="{{ url_for('cqm.arena_view', arena_id=a.id) }}">{{ a.title or '（無題）' }}</a></div>
+        <div class="small">#{{ a.id }}　{{ a.updated_at }}</div>
+        <div class="acts">
+          <a href="{{ url_for('cqm.arena_view', arena_id=a.id) }}">👁 閲覧</a>
+          {% if can_edit %}
+          <a href="{{ url_for('cqm.arena_edit', arena_id=a.id) }}">✏ 編集</a>
+          <form method="post" action="{{ url_for('cqm.arena_copy', arena_id=a.id) }}"
+                style="display:inline"><button type="submit">⧉ 複製</button></form>
+          <form method="post" action="{{ url_for('cqm.delete_quantum', arena_id=a.id) }}"
+                style="display:inline" onsubmit="return confirm('作品「{{ a.title }}」を消します。元に戻せません。よろしいですか？')"><button type="submit" class="del">🗑</button></form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="card small">まだありません。</div>
+      {% endfor %}
+    </div>
+
+    <div class="col">
+      {% if can_edit %}
+      <div class="colhead"><h2>🧱 複合部品</h2><span class="n">{{ parts|length }}</span></div>
+      <div class="lead">アリーナに横並び・縦並びのカルーセルを入れ子にしたもの。作品の中に埋め込めます。</div>
+      {% if can_edit %}
+      <div class="card new">
+        <form class="inline" method="post" action="{{ url_for('cqm.arena_new') }}">
+          <input type="hidden" name="level" value="part">
+          <input type="text" name="title" placeholder="新しい複合部品の名前">
+          <button type="submit">＋ 作る</button>
+        </form>
+      </div>
+      {% endif %}
+      {% for a in parts %}
+      <div class="card">
+        <div class="ttl2"><a href="{{ url_for('cqm.arena_view', arena_id=a.id) }}">{{ a.title or '（無題）' }}</a></div>
+        <div class="small">#{{ a.id }}　{{ a.updated_at }}</div>
+        <div class="acts">
+          <a href="{{ url_for('cqm.arena_view', arena_id=a.id) }}">👁 閲覧</a>
+          <a href="{{ url_for('cqm.arena_edit', arena_id=a.id) }}">✏ 編集</a>
+          <form method="post" action="{{ url_for('cqm.arena_copy', arena_id=a.id) }}"
+                style="display:inline"><button type="submit">⧉ 複製</button></form>
+          <form method="post" action="{{ url_for('cqm.delete_quantum', arena_id=a.id) }}"
+                style="display:inline" onsubmit="return confirm('複合部品「{{ a.title }}」を消します。元に戻せません。よろしいですか？')"><button type="submit" class="del">🗑</button></form>
+        </div>
+      </div>
+      {% else %}
+      <div class="card small">まだありません。</div>
+      {% endfor %}
+      {% else %}
+      <div class="colhead"><h2>🧱 複合部品</h2></div>
+      <div class="card small">複合部品は編集者だけが扱います。</div>
+      {% endif %}
+    </div>
+
+    <div class="col">
+      {% if can_edit %}
+      <div class="colhead"><h2>📦 倉庫部品</h2><span class="n">{{ boxes|length }}</span></div>
+      <div class="lead">材料の置き場。部品からこの名前を指します。型は当面「テキスト」だけで，中身は HTML を書けます。</div>
+      {% if can_edit %}
+      <div class="card new">
+        <form class="inline" method="post" action="{{ url_for('cqm.box_new') }}">
+          <input type="text" name="title" placeholder="新しい倉庫部品の名前">
+          <button type="submit">＋ 作る</button>
+        </form>
+      </div>
+      {% endif %}
+      {% for b in boxes %}
+      <div class="card">
+        <div class="key">{{ b.key_path or ('#' ~ b.id) }}</div>
+        <div class="ttl2"><a href="{{ url_for('cqm.box', box_id=b.id) }}">{{ b.title or '（無題）' }}</a></div>
+        <span class="tag">{{ '📝 テキスト' if b.recipe == 'text' else '作法 ' ~ b.recipe }}</span>
+        {% if b.recipe != 'text' %}<span class="tag">{{ b.n_children }} 個</span>{% endif %}
+        {% if b.attrs.get('addressee') %}<span class="tag">担当 {{ b.attrs.get('addressee') }}</span>{% endif %}
+        {% for r in by_box.get(b.id, []) %}{% if r.status == 'open' %}
+          <span class="tag req">依頼中 {{ r.addressee }}</span>
+        {% endif %}{% endfor %}
+        <div class="acts">
+          <a href="{{ url_for('cqm.box', box_id=b.id) }}">👁 閲覧</a>
+          {% if can_edit %}
+          <a href="{{ url_for('cqm.box_edit', box_id=b.id) }}">✏ 編集</a>
+          <form method="post" action="{{ url_for('cqm.box_copy', box_id=b.id) }}"
+                style="display:inline"><button type="submit">⧉ 複製</button></form>
+          <form method="post" action="{{ url_for('cqm.delete_quantum', arena_id=b.id) }}"
+                style="display:inline" onsubmit="return confirm('倉庫部品「{{ b.title }}」を消します（中の箇条も）。元に戻せません。よろしいですか？')"><button type="submit" class="del">🗑</button></form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="card small">倉庫がまだ空です。</div>
+      {% endfor %}
+      {% else %}
+      <div class="colhead"><h2>📦 倉庫部品</h2></div>
+      <div class="card small">倉庫部品は編集者だけが扱います。</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

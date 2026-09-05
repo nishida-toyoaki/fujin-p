@@ -1,0 +1,88 @@
+{# 担当を選ぶ部品：個人は users から探して選ぶ，グループは まいぐる の一覧から印を付ける（文書アーカイブの選び方を流用） #}
+<style>
+ .pk{border:1px dashed #cfd6e0;border-radius:8px;padding:8px 10px;margin-top:6px;background:#fbfcfe}
+ .pk .h{font-size:12px;color:#4a5568;margin:4px 0 2px}
+ .pk .chips{display:flex;flex-wrap:wrap;gap:4px;min-height:22px}
+ .pk .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:#e7effa;color:#1b3f6f;
+   border-radius:11px;padding:1px 8px}
+ .pk .chip b{cursor:pointer;color:#6b7280}
+ .pk input.q{width:100%;padding:5px 8px;font-size:12px;border:1px solid #cfd6e0;border-radius:6px;font-family:inherit;margin-top:4px}
+ .pk .hits{max-height:160px;overflow:auto;border:1px solid #e2e6ec;border-radius:6px;background:#fff;display:none;margin-top:2px}
+ .pk .hit{padding:4px 8px;cursor:pointer;border-bottom:1px solid #f1f3f6;font-size:12px}
+ .pk .hit:hover{background:#eef2f7}
+ .pk .hit .sub{color:#6b7280}
+ .pk .gsel{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px;margin-top:2px}
+ .pk .gsel label{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .pk .gsel input{width:auto}
+</style>
+<script>
+// 担当の選び場（prefix ごとに独立して持てる）
+const PK = {};
+let PK_GROUPS = null;
+async function pkGroups(){
+  if(PK_GROUPS) return PK_GROUPS;
+  try{ const r = await fetch('/cqm/api/groups'); const j = await r.json(); PK_GROUPS = j.groups || []; }
+  catch(e){ PK_GROUPS = []; }
+  return PK_GROUPS;
+}
+function pkEsc(t){ return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function pkInit(prefix, persons, grps){
+  PK[prefix] = {persons: (persons||[]).map(x=>({id:Number(x.id), name:x.name})),
+                grps: (grps||[]).map(x=>({id:Number(x.id), name:x.name}))};
+}
+function pkHtml(prefix){
+  const st = PK[prefix] || {persons:[], grps:[]};
+  const groups = PK_GROUPS || [];
+  const chosen = new Set(st.grps.map(g=>g.id));
+  return `<div class="pk" id="${prefix}" onclick="event.stopPropagation()">
+    <div class="h">執筆：個人（氏名・メール・所属で探して選ぶ）</div>
+    <div class="chips" id="${prefix}-p">${st.persons.map(u=>`<span class="chip">${pkEsc(u.name)} <b onclick='pkRemove(${JSON.stringify(prefix)},${u.id})'>✕</b></span>`).join('') || '<span class="small">（なし）</span>'}</div>
+    <input class="q" id="${prefix}-q" placeholder="探す…" oninput='pkSearch(${JSON.stringify(prefix)}, this.value)'>
+    <div class="hits" id="${prefix}-hits"></div>
+    <div class="h">執筆：グループ（まいぐる）</div>
+    <div class="gsel" id="${prefix}-g">${groups.length ? groups.map(g=>`<label><input type="checkbox" ${chosen.has(g.id)?'checked':''}
+        onchange='pkToggle(${JSON.stringify(prefix)}, ${g.id}, ${JSON.stringify(g.name)}, this.checked)'> ${pkEsc(g.name)}</label>`).join('')
+      : '<span class="small">（グループがありません）</span>'}</div>
+  </div>`;
+}
+let pkTmr = null;
+function pkSearch(prefix, q){
+  clearTimeout(pkTmr);
+  const el = document.getElementById(prefix+'-hits'); if(!el) return;
+  if(!q.trim()){ el.style.display='none'; return; }
+  pkTmr = setTimeout(async ()=>{
+    const r = await fetch('/cqm/api/users?q='+encodeURIComponent(q)); const j = await r.json();
+    const have = new Set((PK[prefix]||{persons:[]}).persons.map(u=>u.id));
+    el.innerHTML = (j.users||[]).filter(u=>!have.has(u.id)).map(u=>
+      `<div class="hit" onclick='pkAdd(${JSON.stringify(prefix)}, ${u.id}, ${JSON.stringify(u.name)})'>
+        ${pkEsc(u.name)} <span class="sub">${pkEsc(u.affiliation)}　${pkEsc(u.email)}</span></div>`).join('')
+      || '<div class="hit small">見つかりません</div>';
+    el.style.display = 'block';
+  }, 200);
+}
+function pkAdd(prefix, id, name){
+  const st = PK[prefix]; if(!st) return;
+  if(!st.persons.some(u=>u.id===id)) st.persons.push({id, name});
+  pkRepaint(prefix);
+}
+function pkRemove(prefix, id){
+  const st = PK[prefix]; if(!st) return;
+  st.persons = st.persons.filter(u=>u.id!==id);
+  pkRepaint(prefix);
+}
+function pkToggle(prefix, id, name, on){
+  const st = PK[prefix]; if(!st) return;
+  st.grps = st.grps.filter(g=>g.id!==id);
+  if(on) st.grps.push({id, name});
+}
+function pkRepaint(prefix){
+  const host = document.getElementById(prefix); if(!host) return;
+  const q = (document.getElementById(prefix+'-q')||{}).value || '';
+  host.outerHTML = pkHtml(prefix);
+  const qi = document.getElementById(prefix+'-q'); if(qi){ qi.value = q; }
+}
+function pkValue(prefix){
+  const st = PK[prefix] || {persons:[], grps:[]};
+  return {persons: st.persons.map(u=>u.id).join(','), grps: st.grps.map(g=>g.id).join(',')};
+}
+</script>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>執筆担当表 — {{ arena.title }}</title>
+<style>
+ *{box-sizing:border-box}
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.6;font-size:14px}
+ .wrap{padding:12px 16px 40px}
+ .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:8px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;flex-wrap:wrap}
+ .bar .ttl{font-weight:700;font-size:17px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ button{padding:5px 11px;font-size:13px;border:1px solid #cfd6e0;border-radius:7px;background:#fff;cursor:pointer}
+ button:hover{background:#eef2f7}
+ button.pri{background:#1b5fa8;color:#fff;border-color:#1b5fa8}
+ button[disabled]{opacity:.45;cursor:default}
+ .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+ .tools select,.tools input{padding:5px 8px;font-size:13px;border:1px solid #cfd6e0;border-radius:6px;font-family:inherit}
+ .small{font-size:12px;color:#6b7280}
+ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e6ec;border-radius:10px;overflow:hidden}
+ th,td{border-bottom:1px solid #e2e6ec;padding:6px 8px;text-align:left;vertical-align:top}
+ th{background:#f1f4f8;color:#4a5568;font-weight:600;font-size:12px;cursor:pointer;user-select:none;white-space:nowrap}
+ th .ar{color:#9aa2b1;font-size:10px;margin-left:3px}
+ tr:hover td{background:#fbfcfe}
+ td input,td textarea{width:100%;padding:4px 6px;font-size:13px;border:1px solid #cfd6e0;border-radius:5px;font-family:inherit}
+ td textarea{min-height:34px;resize:vertical}
+ .st{display:inline-block;font-size:12px;font-weight:700;padding:1px 9px;border-radius:10px;white-space:nowrap}
+ .ok{background:#e7f6ec;color:#1e7a3c}.partial{background:#fff3d9;color:#8a5b06}
+ .ng{background:#fdeaea;color:#a32a2a}.gray{background:#eef2f7;color:#4a5568}
+ .id{font-family:ui-monospace,monospace;color:#6b7280}
+ .num{text-align:right;font-family:ui-monospace,monospace}
+ .late{color:#a32a2a;font-weight:600}
+ .acts{display:flex;gap:4px;flex-wrap:wrap}
+ .acts button{font-size:11px;padding:2px 7px}
+ .newrow{background:#fbfcfe;border:1px dashed #cfd6e0;border-radius:10px;padding:10px 12px;margin-top:12px;
+   display:grid;grid-template-columns:2fr 1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end}
+ .newrow label{display:block;font-size:12px;color:#4a5568}
+ .newrow input,.newrow select{width:100%;padding:5px 8px;font-size:13px;border:1px solid #cfd6e0;border-radius:6px;font-family:inherit}
+ .msg{margin-top:8px;font-size:13px}
+ .sum{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 10px}
+ .sum .k{background:#fff;border:1px solid #e2e6ec;border-radius:8px;padding:6px 12px}
+ .sum .k b{font-size:18px;margin-right:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <div><span class="ttl">📋 執筆担当表</span>　<span>{{ arena.title }}</span></div>
+    <div><a href="{{ url_for('cqm.arena_edit', arena_id=arena.id) }}" target="_blank">✏ 作品を開く</a>
+      　<button onclick="load()">🔄 更新</button>
+      　<label class="small"><input type="checkbox" id="auto" checked> 30秒ごとに更新</label></div>
+  </div>
+
+  <div class="sum" id="sum"></div>
+
+  <div class="tools">
+    <label class="small">状態
+      <select id="f-status" onchange="paint()">
+        <option value="">すべて</option><option value="open">依頼中</option><option value="writing">執筆中</option>
+        <option value="done">執筆完了</option><option value="answered">送り返し済み</option>
+        <option value="closed">取り下げ</option><option value="frozen">凍結</option>
+      </select></label>
+    <label class="small">相手 <input id="f-who" placeholder="名前で絞る" oninput="paint()"></label>
+    <span class="small" id="wacl"></span>
+  </div>
+
+  <table id="tbl">
+    <thead><tr>
+      <th onclick="sortBy('id')">ID<span class="ar"></span></th>
+      <th onclick="sortBy('order')">部品<span class="ar"></span></th>
+      <th onclick="sortBy('created_at')">依頼日<span class="ar"></span></th>
+      <th onclick="sortBy('status')">最新の状態<span class="ar"></span></th>
+      <th onclick="sortBy('state_at')">状態の日付<span class="ar"></span></th>
+      <th>個人</th><th>グループ</th>
+      <th onclick="sortBy('due_on')">期限<span class="ar"></span></th>
+      <th>依頼文</th><th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  {% if can_edit %}
+  <div class="newrow">
+    <label>部品<select id="n-box"></select></label>
+    <label>期限<input id="n-due" type="date"></label>
+    <label style="grid-column:span 3">依頼文<input id="n-msg" placeholder="この部品の執筆をお願いします。"></label>
+    <button class="pri" onclick="addNew()">＋ 依頼を立てる</button>
+    <div style="grid-column:1 / -1" id="n-pk-host"></div>
+  </div>
+  {% endif %}
+  <div class="msg" id="msg"></div>
+</div>
+
+{% include 'cqm/_picker.html' %}
+<script>
+const AID = {{ arena.id }};
+const CAN_EDIT = {{ 'true' if can_edit else 'false' }};
+let ROWS = [], PARTS = [], WACL = {}, SORT = {key:'order', dir:1}, EDITING = null;
+const esc = t => (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const JA = {open:'依頼中', writing:'執筆中', done:'執筆完了', answered:'送り返し済み', closed:'取り下げ', frozen:'凍結'};
+const CLS = {open:'gray', writing:'partial', done:'ok', answered:'ok', closed:'gray', frozen:'ng'};
+const today = new Date().toISOString().slice(0,10);
+
+async function post(url, body){
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+  const j = await r.json(); if(!j.success) throw new Error(j.error || ('HTTP '+r.status)); return j;
+}
+async function load(){
+  try{
+    const r = await fetch(`/cqm/api/arena/${AID}/requests`); const j = await r.json();
+    if(!j.success) throw new Error(j.error);
+    ROWS = (j.requests||[]).map((x,i)=>Object.assign({order:i}, x));
+    PARTS = j.parts || []; WACL = j.work_acl || {};
+    const sel = document.getElementById('n-box');
+    if(sel) sel.innerHTML = PARTS.map(p=>`<option value="${p.id}">${esc(p.title||('#'+p.id))}</option>`).join('');
+    document.getElementById('wacl').textContent = (WACL.frozen ? '❄ 作品は凍結中' : '') + (WACL.due ? '　期限 '+WACL.due : '');
+    paint();
+  }catch(e){ document.getElementById('msg').textContent = e.message; }
+}
+function sortBy(k){ SORT = {key:k, dir: SORT.key===k ? -SORT.dir : 1}; paint(); }
+function paint(){
+  const fs = document.getElementById('f-status').value, fw = (document.getElementById('f-who').value||'').trim();
+  let rows = ROWS.filter(x => (!fs || x.status===fs) && (!fw || (x.addressee||'').indexOf(fw)>=0));
+  rows.sort((a,b)=>{ const k=SORT.key; const va=a[k]==null?'':a[k], vb=b[k]==null?'':b[k]; return (va<vb?-1:va>vb?1:0)*SORT.dir; });
+  const by = {}; ROWS.forEach(x=>{ by[x.status]=(by[x.status]||0)+1; });
+  document.getElementById('sum').innerHTML = ['open','writing','done','answered'].map(k=>`<span class="k"><b>${by[k]||0}</b>${JA[k]}</span>`).join('')
+    + `<span class="k"><b>${ROWS.filter(x=>x.due_on && x.due_on<today && x.status!=='done' && x.status!=='answered').length}</b>期限超過</span>`;
+  document.querySelectorAll('th .ar').forEach(a=>a.textContent='');
+  const th=[...document.querySelectorAll('th')].find(t=>t.getAttribute('onclick')===`sortBy('${SORT.key}')`);
+  if(th) th.querySelector('.ar').textContent = SORT.dir>0?'▲':'▼';
+  document.getElementById('rows').innerHTML = rows.map(x=>{
+    const late = x.due_on && x.due_on<today && x.status!=='done' && x.status!=='answered';
+    if(EDITING===x.id) return editRow(x);
+    return `<tr>
+      <td class="id">${x.id}</td>
+      <td>${esc(x.title)}<div class="small">${esc(x.key_path)}</div></td>
+      <td class="small">${esc(x.created_at)}</td>
+      <td><span class="st ${CLS[x.status]||'gray'}">${esc(JA[x.status]||x.status)}</span></td>
+      <td class="small">${esc(x.state_at)}</td>
+      <td>${esc((x.persons_names||[]).map(u=>u.name).join('、'))||'<span class="small">—</span>'}</td>
+      <td>${esc((x.grps_names||[]).map(g=>g.name).join('、'))||'<span class="small">—</span>'}</td>
+      <td class="${late?'late':''}">${esc(x.due_on)}${late?' ⚠':''}</td>
+      <td class="small">${esc(x.message)}</td>
+      <td class="acts">${CAN_EDIT ? `<button onclick="startEdit(${x.id})">✏</button>
+        <button onclick="setStatus(${x.id},'open')" title="依頼中に戻す／凍結中でも執筆を許可">🔓</button>
+        <button onclick="setStatus(${x.id},'closed')" title="取り下げ">✕</button>` : ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" class="small">依頼はまだありません。</td></tr>`;
+}
+function startEdit(id){
+  const x = ROWS.find(r=>r.id===id); if(!x) return;
+  pkInit('e-pk', x.persons_names||[], x.grps_names||[]);
+  EDITING = id; paint();
+}
+function editRow(x){
+  return `<tr>
+    <td class="id">${x.id}</td>
+    <td>${esc(x.title)}</td>
+    <td class="small">${esc(x.created_at)}</td>
+    <td><select id="e-status"><option value="open"${x.status==='open'?' selected':''}>依頼中</option><option value="writing"${x.status==='writing'?' selected':''}>執筆中</option><option value="done"${x.status==='done'?' selected':''}>執筆完了</option><option value="closed"${x.status==='closed'?' selected':''}>取り下げ</option></select></td>
+    <td class="small">${esc(x.state_at)}</td>
+    <td colspan="2">${pkHtml('e-pk')}</td>
+    <td><input id="e-due" type="date" value="${esc(x.due_on)}"></td>
+    <td><textarea id="e-msg">${esc(x.message)}</textarea></td>
+    <td class="acts"><button class="pri" onclick="saveRow(${x.id})">💾</button><button onclick="EDITING=null;paint()">戻す</button></td>
+  </tr>`;
+}
+async function saveRow(id){
+  const v = k => (document.getElementById(k)||{}).value || '';
+  try{
+    const pv = pkValue('e-pk');
+    await post(`/cqm/api/request/${id}`, {arena: AID, persons: pv.persons, grps: pv.grps, due_on: v('e-due'),
+                                          message: v('e-msg'), status: v('e-status')});
+    EDITING = null; document.getElementById('msg').textContent = '保存しました'; await load();
+  }catch(e){ document.getElementById('msg').textContent = e.message; }
+}
+async function setStatus(id, status){
+  try{
+    const r = ROWS.find(x=>x.id===id);
+    await post(`/cqm/api/request/${id}`, {arena: AID, status});
+    if(status==='open' && r) await post(`/cqm/api/box/${r.box_id}/state`, {arena: AID, state:'open'});
+    await load();
+  }catch(e){ document.getElementById('msg').textContent = e.message; }
+}
+async function addNew(){
+  const v = k => (document.getElementById(k)||{}).value || '';
+  try{
+    const pv = pkValue('n-pk');
+    await post('/cqm/api/request/new', {arena: AID, box_id: Number(v('n-box')), persons: pv.persons, grps: pv.grps,
+                                        due_on: v('n-due'), message: v('n-msg')});
+    pkInit('n-pk', [], []); document.getElementById('n-pk-host').innerHTML = pkHtml('n-pk');
+    document.getElementById('msg').textContent = '依頼を立てました'; await load();
+  }catch(e){ document.getElementById('msg').textContent = e.message; }
+}
+setInterval(()=>{ if(document.getElementById('auto').checked && EDITING===null) load(); }, 30000);
+pkGroups().then(()=>{ pkInit('n-pk', [], []); const h=document.getElementById('n-pk-host'); if(h) h.innerHTML = pkHtml('n-pk'); load(); });
+</script>
+</body>
+</html>

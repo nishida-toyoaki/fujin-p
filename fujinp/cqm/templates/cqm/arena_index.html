@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アリーナ — こんか</title>
+<style>
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.7}
+ .wrap{max-width:820px;margin:0 auto;padding:16px}
+ .bar{display:flex;justify-content:space-between;align-items:center;
+      padding:10px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;font-size:14px}
+ h1{font-size:20px;margin:8px 0 4px}
+ .sub{color:#68707f;font-size:13px;margin-bottom:16px}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;
+       padding:12px 14px;margin-bottom:10px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .small{font-size:12px;color:#6b7280}
+ input[type=text]{padding:7px 9px;font-size:14px;border:1px solid #cfd6e0;
+   border-radius:7px;font-family:inherit;width:60%}
+ button{padding:8px 16px;font-size:14px;border:0;border-radius:8px;
+   background:#1b5fa8;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a href="{{ url_for('cqm.index') }}">← 倉庫</a>
+    <a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN ダッシュボードに戻る</a>
+  </div>
+
+  <h1>アリーナ</h1>
+  <div class="sub">長方形の中に，横並び・縦並びのカルーセルを入れ子にして，
+    末端のテキストボックスから倉庫を指します。</div>
+
+  <div class="card">
+    <form method="post" action="{{ url_for('cqm.arena_new') }}">
+      <input type="text" name="title" placeholder="新しいアリーナの名前">
+      <button type="submit">つくる</button>
+    </form>
+  </div>
+
+  {% for a in arenas %}
+  <div class="card">
+    <a href="{{ url_for('cqm.arena_edit', arena_id=a.id) }}">{{ a.title or '（無題）' }}</a>
+    <div class="small">{{ a.updated_at }}</div>
+  </div>
+  {% else %}
+  <div class="card">まだありません。</div>
+  {% endfor %}
+</div>
+</body>
+</html>

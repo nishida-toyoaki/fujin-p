@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-02 17:20:14",
+  "generated_at": "2026-09-04 01:59:27",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -13,8 +13,8 @@
       "enabled": true,
       "blueprints": [],
       "launchers": [],
-      "version_id": "v20260902.172000-da39a3",
-      "version_confirmed_at": "2026-09-02 17:20:01"
+      "version_id": "v20260902.172043-da39a3",
+      "version_confirmed_at": "2026-09-02 17:20:43"
     },
     {
       "app_name": "admin",
@@ -1260,6 +1260,42 @@
       ],
       "version_id": "v20260902.131849-1e36b4",
       "version_confirmed_at": "2026-09-02 13:18:49"
+    },
+    {
+      "app_name": "cqm",
+      "display_name": "こんか",
+      "icon": "🧊",
+      "description": "会話量子の倉庫と部品エディタ。作品・複合部品・倉庫部品の3列で管理し，アリーナに横並び・縦並びのカルーセルを入れ子にして倉庫を指す。倉庫はアプリ配下の data/store.json（実行時は SQL を使わない）",
+      "sort_order": 380.0,
+      "kind": "app",
+      "enabled": true,
+      "blueprints": [
+        {
+          "attr": "cqm_bp",
+          "name": "cqm",
+          "module": "fujinp.cqm",
+          "url_prefix": "/cqm"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🧊",
+          "label": "こんか",
+          "groups": [],
+          "params": "",
+          "section": "internal",
+          "endpoint": "cqm.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 10,
+          "visibility": "private",
+          "description": "会話量子の倉庫。依頼して書いてもらい，出来ぐあいを尋ねる",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260904.v1-0-3-reportfix",
+      "version_confirmed_at": null
     }
   ],
   "sections": [

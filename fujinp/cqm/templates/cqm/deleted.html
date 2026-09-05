@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>削除 — こんか</title>
+<style>
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;background:#f6f7f9;color:#1d2330;margin:0;font-size:14px}
+ .wrap{max-width:720px;padding:16px}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:14px 16px}
+ a{color:#1b5fa8;text-decoration:none}
+ button{padding:6px 14px;border-radius:7px;border:1px solid #c0392b;background:#c0392b;color:#fff;cursor:pointer}
+ ul{margin:6px 0;padding-left:1.2em}
+</style></head>
+<body><div class="wrap"><div class="card">
+  <h2 style="margin-top:0">消せませんでした</h2>
+  <p>{{ rep.error }}</p>
+  {% if rep.referrers %}
+  <p>先に，指しているところ（下）からこの部品を外すか，指している側を消してください。</p>
+  <ul>{% for r in rep.referrers %}<li>{{ r.title or ('#' ~ r.id) }}</li>{% endfor %}</ul>
+  <form method="post" action="{{ url_for('cqm.delete_quantum', arena_id=qid) }}" onsubmit="return confirm('指している側に穴が空きます（「倉庫に見つかりません」になります）。それでも消しますか？')">
+    <input type="hidden" name="force" value="1">
+    <button type="submit">それでも消す</button>
+  </form>
+  {% endif %}
+  <p style="margin-top:12px"><a href="{{ url_for('cqm.index') }}">← こんかへ戻る</a></p>
+</div></div></body></html>

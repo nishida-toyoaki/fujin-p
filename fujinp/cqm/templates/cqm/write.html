@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>執筆 — こんか</title>
+<style>
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.75}
+ .wrap{max-width:760px;margin:0 auto;padding:16px}
+ .bar{display:flex;justify-content:space-between;align-items:center;
+      padding:10px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;font-size:14px}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;
+       padding:12px 14px;margin-bottom:12px}
+ .ask{background:#fff8e6;border-color:#f0e0b8}
+ h1{font-size:18px;margin:6px 0}
+ .key{font-family:ui-monospace,monospace;font-size:12px;color:#6b7280}
+ textarea{width:100%;box-sizing:border-box;min-height:280px;padding:10px;
+   font-size:15px;line-height:1.8;border:1px solid #cfd6e0;border-radius:8px;
+   font-family:inherit}
+ button{margin-top:10px;padding:9px 18px;font-size:15px;border:0;border-radius:8px;
+   background:#1b5fa8;color:#fff;cursor:pointer}
+ .st{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:10px}
+ .ok{background:#e7f6ec;color:#1e7a3c}
+ .partial{background:#fff3d9;color:#8a5b06}
+ .ng{background:#fdeaea;color:#a32a2a}
+ .small{font-size:12px;color:#6b7280}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a href="{{ url_for('cqm.box', box_id=box.id) }}">← 箱</a>
+    <a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN ダッシュボードに戻る</a>
+  </div>
+
+  <div class="card ask">
+    <div class="small">{{ req.addressee }} へ{% if req.due_on %}／{{ req.due_on }}まで{% endif %}</div>
+    <strong>依頼</strong>
+    <div>{{ req.message }}</div>
+  </div>
+
+  <div class="key">{{ box.key_path or '' }}</div>
+  <h1>{{ box.title or '（無題）' }}</h1>
+
+  {% if answer %}
+  <div class="card">
+    <span class="st {{ answer.status }}">{{ answer.status }}</span> {{ answer.note }}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post">
+      <div class="small">1行が1件です。行の頭の「・」は付けても付けなくても構いません。</div>
+      <textarea name="body">{{ text }}</textarea>
+      <button type="submit">倉庫へ送り返す</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

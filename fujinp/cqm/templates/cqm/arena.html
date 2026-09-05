@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ arena.title }} — アリーナ</title>
+<style>
+ *{box-sizing:border-box}
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.65;font-size:14px}
+ .wrap{max-width:none;margin:0;padding:12px 16px 40px}   /* 左詰め・全幅。中身のある側を左端に */
+ .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:8px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;flex-wrap:wrap}
+ .bar .ttl{font-weight:700;font-size:16px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ button{padding:6px 12px;font-size:13px;border:1px solid #cfd6e0;border-radius:7px;
+        background:#fff;color:#1d2330;cursor:pointer}
+ button:hover{background:#eef2f7}
+ button.pri{background:#1b5fa8;color:#fff;border-color:#1b5fa8}
+ button.warm{background:#a8560f;color:#fff;border-color:#a8560f}
+ button.on{background:#1d2330;color:#fff;border-color:#1d2330}
+ .cols{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px}
+ .cols>*{min-width:0}                        /* 右の列が舞台の幅に押し広げられないように */
+ .cols.one{grid-template-columns:minmax(0,1fr)}
+ @media(max-width:900px){.cols{grid-template-columns:1fr}}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:12px}
+ .card h2{font-size:13px;margin:0 0 8px;color:#4a5568;letter-spacing:.04em}
+ .tree{font-size:13px}
+ .tnode{padding:2px 6px;border-radius:6px;cursor:pointer;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis}
+ .tnode:hover{background:#eef2f7}
+ .tnode.sel{background:#1b5fa8;color:#fff}
+ .tkids{margin-left:12px;border-left:1px dotted #cfd6e0;padding-left:4px}
+ .tg{display:inline-block;width:14px;color:#8a93a3;font-size:10px;cursor:pointer;user-select:none}
+ .tnode.emb{color:#1b5fa8}
+ .tnode.edim{color:#8a93a3;cursor:default}
+ .tnode.eleaf{cursor:text}
+ .tnode.emb.sel{background:#1b5fa8;color:#fff}
+ .tnode.ehead{font-size:11px;color:#6b7280;cursor:default;margin-top:2px}
+ .where{background:#eef2f7;border-radius:6px;padding:4px 8px;margin-bottom:6px}
+ .emb.pick{outline:2px solid #1b5fa8;outline-offset:1px}
+ .btns{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}
+ label.f{display:block;font-size:12px;color:#4a5568;margin-top:8px}
+ input,select,textarea{width:100%;padding:6px 8px;font-size:13px;border:1px solid #cfd6e0;
+   border-radius:6px;font-family:inherit}
+ .inlbox{margin-top:10px;border-top:1px solid #e2e6ec;padding-top:8px}
+ .inlbox textarea.code{min-height:150px;font-family:ui-monospace,Consolas,monospace;
+   font-size:12px;line-height:1.7;margin-top:4px}
+ .inlbox a{font-size:12px;margin-left:8px}
+ .szbox{margin-top:10px;border-top:1px solid #e2e6ec;padding-top:8px}
+ .szrow{display:flex;gap:8px}
+ .szrow label{flex:1}
+ details.mkbox{margin-top:12px;border-top:1px solid #e2e6ec;padding-top:8px}
+ details.mkbox summary{cursor:pointer;font-size:12px;color:#1b5fa8}
+ .picker{margin-top:8px}
+ .hits{max-height:180px;overflow:auto;margin-top:6px;border:1px solid #e2e6ec;border-radius:6px}
+ .hit{padding:5px 8px;cursor:pointer;border-bottom:1px solid #f1f3f6;font-size:12px}
+ .hit:hover{background:#eef2f7}
+ .hit b{font-family:ui-monospace,monospace}
+ /* アリーナ */
+ /* 容器の大きさの示し方（その一）：エクセルのセルの個数で数える。
+    セル1個の見かけの寸法をここで決める。 */
+ :root{--cell-w:64px;--cell-h:20px}
+ .arena{background:#fff;border:1px solid #cfd6e0;border-radius:10px;padding:10px;
+        width:100%;display:flex;overflow-x:auto;position:relative}
+ .stage{flex:1 1 auto;display:flex;transform-origin:0 0}
+ .arena.grid{overflow:hidden;padding:0;max-width:100%}
+ .arena.grid .stage{flex:none;display:block}
+ .arena.grid .row{gap:0}
+ .arena.grid .col{gap:0}
+ .arena.grid .tbox{border-radius:0;flex:0 0 auto}
+ .arena.grid .emb{border-radius:0;padding:0;border-left-width:2px}
+ .stage.measuring .row{align-items:flex-start}
+ .stage.measuring .row>.nd{align-self:flex-start;height:auto}
+ .ruler{position:relative;height:22px;margin-bottom:2px;border-bottom:1px solid #cfd6e0}
+ .ruler .mk{position:absolute;top:0;transform:translateX(-50%);cursor:col-resize;
+   color:#1b5fa8;font-size:14px;line-height:22px;user-select:none;touch-action:none}
+ .ruler .mk:hover{color:#a8560f}
+ .hinfo{margin-left:6px;white-space:normal}
+ .tbox.nolb{padding-top:6px}
+ .tbox{position:relative}
+ .bds{position:absolute;top:2px;right:4px;font-size:10px;line-height:1;display:flex;gap:2px;z-index:2}
+ .bd{opacity:.85}
+ .bd.ok{color:#1e9e4a}
+ .bd.need{color:#d33}
+ .bd.no{font-size:11px}
+ .bd.frz{color:#4a7ab8;font-size:11px}
+ .tbox.hidden{background:#f2f3f5;color:#9aa2b1;min-height:40px}
+ .asg{margin-top:8px;border-top:1px dashed #cfd6e0;padding-top:6px}
+ .pol{display:flex;flex-direction:column;gap:2px;font-size:13px}
+ .gsel2{margin-top:6px;background:#f6f7f9;border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:2px;font-size:13px}
+ .asg input,.asg select{font-size:12px;padding:4px 6px}
+ .frzmsg{color:#4a7ab8;margin-top:4px}
+ table.rq{width:100%;border-collapse:collapse;font-size:12px}
+ table.rq th,table.rq td{border-bottom:1px solid #e2e6ec;padding:4px 6px;text-align:left;vertical-align:top}
+ table.rq th{color:#4a5568;font-weight:600}
+ table.rq button{font-size:11px;padding:2px 7px}
+ label.chk{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+ label.chk input{width:auto}
+ body.busy #left,body.busy #cmdbar,body.busy #ruler,body.busy .bar{pointer-events:none;opacity:.55}
+ .busyov{position:fixed;inset:0;background:rgba(246,247,249,.55);z-index:50;
+   display:flex;align-items:center;justify-content:center}
+ .busybox{background:#fff;border:1px solid #cfd6e0;border-radius:12px;padding:16px 22px;
+   display:flex;align-items:center;gap:12px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+ .spin{width:22px;height:22px;border:3px solid #cfd6e0;border-top-color:#1b5fa8;border-radius:50%;
+   animation:spin .8s linear infinite}
+ @keyframes spin{to{transform:rotate(360deg)}}
+ .lnk{font-size:12px;padding:5px 8px}
+ .sep{display:inline-block;width:1px;height:20px;background:#cfd6e0;margin:0 4px}
+ .pz{display:inline-flex;align-items:center;gap:6px}
+ .pz input[type=range]{width:120px}
+ .nd{min-width:0}
+ .row{display:flex;flex-direction:row;gap:8px;flex:1 1 auto;min-height:0}
+ .col{display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-width:0}
+ /* 縦並びの中では，行も箱も中身なりの高さ。余りは分け合わず下に残す。
+    高さの重み（縦セル数）は要素の style が上書きする。 */
+ .col>.row,.col>.col,.col>.tbox,.col>.emb{flex:0 0 auto}
+ .stage{align-self:flex-start}
+ .row.jl{justify-content:flex-start}.row.jc{justify-content:center}.row.jr{justify-content:flex-end}
+ .col.jt{justify-content:flex-start}.col.jm{justify-content:center}.col.jb{justify-content:flex-end}
+ .row>.nd{align-self:stretch}
+ .tbox{border:1px solid #d7dce4;border-radius:8px;padding:8px 10px;background:#fcfcfd;
+       min-width:60px;flex:0 1 auto;overflow:visible}
+ .tbox.pick{outline:2px solid #1b5fa8;outline-offset:1px}
+ .tbox.edit{flex:1 1 auto}
+ .tbox.clickable{cursor:text}
+ .tbox.clickable:hover{border-color:#1b5fa8;background:#f4f8fd}
+ textarea.inplace{width:100%;min-height:90px;margin-top:5px;padding:6px 8px;
+   font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.7;
+   border:1px solid #cfd6e0;border-radius:6px;resize:vertical}
+ .inbtns{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+ .inpick{margin-top:4px}
+ .inpick .hits{margin-top:4px}
+ .inpick input{width:100%;padding:5px 8px;font-size:12px;border:1px solid #cfd6e0;
+   border-radius:6px;font-family:inherit}
+ button[disabled]{opacity:.45;cursor:default}
+ button[disabled]:hover{background:#fff}
+ .inbtns button{font-size:12px;padding:3px 10px}
+ .tbox .lb{font-size:11px;color:#6b7280;display:flex;justify-content:space-between;gap:6px}
+ .tbox ul{margin:4px 0 0;padding-left:1.05em}
+ .tbox li{margin-bottom:3px;font-size:13px}
+ .tbox textarea{min-height:110px;margin-top:5px;font-size:13px;line-height:1.7}
+ .rich img{max-width:100%}
+ .rich table{border-collapse:collapse}
+ .rich td,.rich th{border:1px solid #cfd6e0;padding:3px 6px}
+ .empty{border:1px dashed #cfd6e0;border-radius:8px;padding:10px;color:#9aa2b1;
+        font-size:12px;text-align:center;flex:1 1 auto}
+ .st{font-size:11px;font-weight:700;padding:0 7px;border-radius:9px}
+ .ok{background:#e7f6ec;color:#1e7a3c}.partial{background:#fff3d9;color:#8a5b06}
+ .ng{background:#fdeaea;color:#a32a2a}
+ .mine{border-color:#d9b98a;background:#fffaf3}
+ .mine.clickable:hover{border-color:#a8560f}
+ .msg{margin-top:8px;font-size:13px}
+ .pend{background:#fdf3f3;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a3a3a;margin-top:8px}
+ .small{font-size:12px;color:#6b7280}
+ .lv{font-size:12px;background:#eef2f7;color:#4a5568;border-radius:9px;padding:1px 8px}
+ .emb{border:1px solid #b9c2d0;border-left:3px solid #1b5fa8;border-radius:8px;
+      padding:6px 8px;background:#fbfcfe;flex:1 1 auto;min-width:0;overflow:visible}
+ .emb>.eh{font-size:11px;color:#1b5fa8;margin-bottom:4px}
+ .cmd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="bar">
+   <div><a href="{{ url_for('cqm.index') }}">← こんか</a>
+     　<span class="ttl">{{ arena.title }}</span>
+     <span class="lv">{{ '🏛 作品' if level == 'work' else '🧱 複合部品' }}</span>
+     {% if not editing %}<span class="small">（閲覧）</span>{% endif %}</div>
+   <div class="btns" style="margin:0">
+     <button id="m-ed" class="on" onclick="setMode('editor')">編集者</button>
+     <button id="m-wr" onclick="setMode('writer')">執筆者</button>
+     {% if editing %}<a href="{{ url_for('cqm.arena_view', arena_id=arena.id) }}">👁 閲覧へ</a>
+     {% else %}<a href="{{ url_for('cqm.arena_edit', arena_id=arena.id) }}">✏ 編集へ</a>{% endif %}
+     <a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN</a>
+   </div>
+ </div>
+
+ <div class="cols{% if not editing %} one{% endif %}" id="cols">
+  <div id="left"{% if not editing %} style="display:none"{% endif %}>
+   {% if editing %}
+   <div class="card" style="margin-bottom:12px">
+    <h2>この部品</h2>
+    <label class="f">題名<input id="a-title" value="{{ arena.title }}"></label>
+    <label class="f">種別
+     <select id="a-level">
+      <option value="part"{{ ' selected' if level != 'work' }}>🧱 複合部品</option>
+      <option value="work"{{ ' selected' if level == 'work' }}>🏛 最終部品（作品）</option>
+     </select></label>
+    <div class="btns"><button onclick="saveMeta()">この部品の情報を保存</button></div>
+    <div id="metamsg" class="small"></div>
+   </div>
+   <div id="workacl"></div>
+   {% endif %}
+   <div class="card">
+    <h2>組み立て</h2>
+    <div id="tree" class="tree"></div>
+    <div class="btns">
+      <button onclick="add('row')">＋横並び</button>
+      <button onclick="add('col')">＋縦並び</button>
+      <button onclick="add('text')">＋部品</button>
+    </div>
+    <div class="btns">
+      <button onclick="move(-1)">↑</button>
+      <button onclick="move(1)">↓</button>
+      <button onclick="del()">🗑 削除</button>
+      <button id="btn-save" class="pri" onclick="save()" disabled>💾 保存</button>
+    </div>
+    <div id="dirty" class="small"></div>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <h2>選んだところ</h2>
+    <div id="props"></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="card">
+    <div class="cmd" id="cmdbar"></div>
+    <div id="ruler" class="ruler" style="display:none"></div>
+    <div id="arena" class="arena"><div id="stage" class="stage"></div></div>
+    <div id="msg" class="msg"></div>
+   </div>
+   <div id="reqs" class="card" style="margin-top:12px;{% if not editing %}display:none{% endif %}"></div>
+  </div>
+ </div>
+</div>
+
+{% include 'cqm/_picker.html' %}
+<script>
+const AID = {{ arena.id }};
+const EDITING = {{ 'true' if editing else 'false' }};
+
+// ---------------------------------------------------------------- 状態
+// 組み立ての対象は，この作品と，埋め込んだ複合部品たち。アリーナIDごとにレイアウトを持つ。
+const ARENAS = {};                 // aid -> {layout, title, dirty}
+ARENAS[AID] = {layout: {{ layout|tojson }}, title: {{ arena.title|tojson }}, dirty: false};
+let SEL = null;                    // {aid, path} 選んだ節点
+let REF2 = {};                     // ref -> 集めた結果（入れ子の中も）
+let REQS = {};                     // qid -> 開いている依頼
+let MODE = 'editor';
+let EDITREF = null;                // 枠の中で書いている部品の指し先
+// 右肩の小さな印：🚫 閲覧不可／● 緑＝自分が編集・執筆できる／● 赤＝担当が要る（空で担当なし．編集者にだけ）
+function badgeHtml(g){
+  const pm = g && g.perm; if(!pm) return '';
+  if(!pm.view) return `<span class="bd no" title="閲覧の権限がありません">🚫</span>`;
+  let b = '';
+  if(pm.write || pm.edit || pm.writer) b += `<span class="bd ok" title="編集・執筆できます">●</span>`;
+  if((canEditNow() || MODE==='assign') && !pm.assigned && g.status==='ng') b += `<span class="bd need" title="担当の割り当てが要ります">●</span>`;
+  if(pm.frozen) b += `<span class="bd frz" title="凍結中（執筆不可）">❄</span>`;
+  return b ? `<span class="bds">${b}</span>` : '';
+}
+
+let ASSIGN = null;                 // 担当割り当ての欄を開いている指し先
+function toggleAssign(ref){ ASSIGN = (ASSIGN===ref) ? null : ref; renderArena(); }
+let PK_FOR = null;                 // 選び場を用意した部品（qid）
+function assignHtml(g){
+  const a = (g.acl) || {edit:[], write:[], view:[], open:false};
+  if(PK_FOR !== g.qid){            // 部品が変わったときだけ，いまの相手で選び場を用意
+    const req = REQS[String(g.qid)] || {};
+    pkInit('as-pk', req.persons_names || [], req.grps_names || []);
+    PK_FOR = g.qid;
+  }
+  return `<div class="asg" onclick="event.stopPropagation()">
+    <div class="small"><b>担当の割り当て</b></div>
+    ${pkHtml('as-pk')}
+    <label class="f">期限<input id="as-due" type="date" value="${esc((REQS[String(g.qid)]||{}).due_on||'')}"></label>
+    <label class="f">編集<input id="as-edit" value="${esc((a.edit||[]).join('、'))}" placeholder="（空なら作品の編集者だけ）"></label>
+    <label class="f">閲覧の例外
+      <select id="as-vmode">
+        <option value="and" ${a.view_mode!=='or'?'selected':''}>原則見せるが，ここは限定する（AND：作品の閲覧者のうち，下の人だけ）</option>
+        <option value="or" ${a.view_mode==='or'?'selected':''}>原則見せないが，ここは例外で許す（OR：作品が見えなくても，下の人は見える）</option>
+      </select></label>
+    <label class="f">その人・グループ<input id="as-view" value="${esc((a.view||[]).join('、'))}" placeholder="（空なら例外なし）"></label>
+    <label class="f">依頼文<input id="as-msg" value="${esc((REQS[String(g.qid)]||{}).message||'')}" placeholder="この部品の執筆をお願いします。"></label>
+    <label class="f chk"><input type="checkbox" id="as-open" ${a.open?'checked':''}> 凍結中もこの部品は執筆を許可する</label>
+    <div class="btns"><button class="pri" onclick='saveAssign(${g.qid})'>💾 割り当てを保存</button>
+      <span id="asmsg" class="small"></span></div></div>`;
+}
+async function saveAssign(qid){
+  const v = id => (document.getElementById(id)||{}).value || '';
+  try{
+    const pv = pkValue('as-pk');
+    const j = await post(`/cqm/api/box/${qid}/acl`, {arena: AID, write_p: pv.persons, write_g: pv.grps,
+      edit: v('as-edit'), view: v('as-view'), view_mode: v('as-vmode') || 'and', message: v('as-msg'),
+      due: v('as-due'), open: !!(document.getElementById('as-open')||{}).checked});
+    const m = document.getElementById('asmsg'); if(m) m.textContent = '保存しました' + (j.requests.length ? `（依頼 ${j.requests.length} 件）` : '');
+    ASSIGN = null; PK_FOR = null; await gather(); loadRequests();
+  }catch(e){ const m = document.getElementById('asmsg'); if(m) m.textContent = e.message; }
+}
+
+function writerStateHtml(g){
+  const req = REQS[String(g.qid)];
+  return `<div class="inbtns" onclick="event.stopPropagation()">
+      <button onclick='setState(${g.qid}, "writing")'>✍ 執筆中</button>
+      <button onclick='setState(${g.qid}, "done")'>✅ 執筆完了</button>
+      ${req ? `<span class="small">状態：${esc(stateJa(req.status))}${req.due_on?'／期限 '+esc(req.due_on):''}${req.message?'／'+esc(req.message):''}${req.addressee?'／担当 '+esc(req.addressee):''}</span>` : ''}</div>`;
+}
+// （旧）執筆者の枠を最初から入力欄にする描き方．いまは使わない
+function writerBodyHtml(g){
+  const pm = g.perm || {};
+  const text = (g.lines||[]).map(l=>'・'+(l.body||'')).join('\n');
+  const req = REQS[String(g.qid)];
+  const stateBtns = `<div class="inbtns" onclick="event.stopPropagation()">
+      <button onclick='setState(${g.qid}, "writing")'>✍ 執筆中</button>
+      <button onclick='setState(${g.qid}, "done")'>✅ 執筆完了</button>
+      ${req ? `<span class="small">状態：${esc(stateJa(req.status))}${req.due_on?'／期限 '+esc(req.due_on):''}</span>` : ''}</div>`;
+  if(!pm.write){
+    return richBody(g.lines||[]) + `<div class="small frzmsg">❄ 凍結中のため書けません（編集者が許可すれば書けます）</div>` + stateBtns;
+  }
+  const isText = g.qrecipe==='text';
+  return `<textarea data-ref="${esc(String(g.ref||''))}" placeholder="${isText?'HTML を書けます':'1行が1件です'}">${esc(isText ? htmlOf(g) : text)}</textarea>
+          ${req && req.message ? `<div class="small">${esc(req.message)}</div>` : ''}${stateBtns}`;
+}
+function stateJa(s){ return {open:'依頼中', writing:'執筆中', done:'執筆完了', answered:'送り返し済み', frozen:'凍結'}[s] || s; }
+async function setState(qid, state){
+  try{ await post(`/cqm/api/box/${qid}/state`, {arena: AID, state}); await gather(); loadRequests(); }
+  catch(e){ say('<span class="st ng">ng</span> '+esc(e.message)); }
+}
+
+// 作品の権限（閲覧・編集の割り当て，凍結）
+const POLICY_JA = [['private','非公開（編集者だけ）'],['domestic','構成員だけ'],['group','グループ'],
+                   ['domestic_group','構成員＋グループ'],['public','一般公開（未ログインでも閲覧可）']];
+function workAclHtml(){
+  const a = (layOf(AID).acl) || {policy:'private', groups:[], frozen:false, due:''};
+  const groups = PK_GROUPS || []; const chosen = new Set((a.groups||[]).map(Number));
+  const lv = {{ level|tojson }};
+  if(lv !== 'work') return `<div class="card" style="margin-bottom:12px"><h2>公開範囲</h2>
+    <div class="small">複合部品は編集者（admin／こんか編集者）だけが見られます。作品に埋め込めば，作品の公開範囲で見えます。</div></div>`;
+  return `<div class="card" style="margin-bottom:12px">
+    <h2>公開範囲（この作品を誰が見られるか）</h2>
+    <div class="pol">${POLICY_JA.map(([v,l])=>`<label class="chk"><input type="radio" name="wa-pol" value="${v}" ${(a.policy||'private')===v?'checked':''}
+        onchange="paintPolGroups()"> ${l}</label>`).join('')}</div>
+    <div id="wa-groups" class="gsel2" style="${(a.policy==='group'||a.policy==='domestic_group')?'':'display:none'}">
+      <div class="small">閲覧を許可するグループ（まいぐる）</div>
+      ${groups.length ? groups.map(g=>`<label class="chk"><input type="checkbox" name="wa-g" value="${g.id}" ${chosen.has(g.id)?'checked':''}> ${esc(g.name)}</label>`).join('') : '<span class="small">（グループがありません）</span>'}
+    </div>
+    <div class="small" style="margin-top:6px">執筆の担当者は，公開範囲に関わらず自分の担当がある作品を開けます。編集できるのは編集者（admin／こんか編集者）だけです。</div>
+    <label class="f">執筆の期限<input id="wa-due" type="date" value="${esc(a.due||'')}"></label>
+    <label class="f chk"><input type="checkbox" id="wa-frozen" ${a.frozen?'checked':''}> 凍結（執筆を止める。部品ごとの許可は残る）</label>
+    <div class="btns"><button onclick="saveWorkAcl()">💾 公開範囲を保存</button><span id="wamsg" class="small"></span></div>
+  </div>`;
+}
+function paintPolGroups(){
+  const p = (document.querySelector('input[name=wa-pol]:checked')||{}).value;
+  const g = document.getElementById('wa-groups'); if(g) g.style.display = (p==='group'||p==='domestic_group') ? '' : 'none';
+}
+async function saveWorkAcl(){
+  const v = id => (document.getElementById(id)||{}).value || '';
+  try{
+    const policy = (document.querySelector('input[name=wa-pol]:checked')||{}).value || 'private';
+    const groups = [...document.querySelectorAll('input[name=wa-g]:checked')].map(x=>Number(x.value));
+    const j = await post(`/cqm/api/arena/${AID}/acl`, {policy, groups,
+      due: v('wa-due'), frozen: !!(document.getElementById('wa-frozen')||{}).checked});
+    layOf(AID).acl = j.acl;
+    document.getElementById('wamsg').textContent = '保存しました';
+    await gather(); loadRequests();
+  }catch(e){ document.getElementById('wamsg').textContent = e.message; }
+}
+
+// 依頼一覧（編集者）
+async function loadRequests(){
+  const el = document.getElementById('reqs'); if(!el || (MODE!=='editor' && MODE!=='assign') || !EDITING) return;
+  try{
+    const r = await fetch(`/cqm/api/arena/${AID}/requests`); const j = await r.json();
+    if(!j.success){ el.innerHTML = ''; return; }
+    const rows = j.requests || [];
+    el.innerHTML = `<h2>依頼一覧 <span class="small">${rows.length} 件${j.work_acl && j.work_acl.frozen ? '｜❄ 作品は凍結中' : ''}${j.work_acl && j.work_acl.due ? '｜期限 '+esc(j.work_acl.due) : ''}</span></h2>
+      ${rows.length ? `<table class="rq"><tr><th>部品</th><th>宛先</th><th>依頼文</th><th>期限</th><th>状態</th><th></th></tr>` +
+      rows.map(x=>`<tr><td>${esc(x.title)}<div class="small">${esc(x.key_path)}</div></td><td>${esc((x.grps_names||[]).map(g=>g.name).join('、'))}${(x.grps_names||[]).length&&(x.persons_names||[]).length?'／':''}<span class="small">${esc((x.persons_names||[]).map(u=>u.name).join('、'))}</span></td>
+        <td class="small">${esc(x.message)}</td><td>${esc(x.due_on)}</td><td><span class="st ${x.status==='done'?'ok':(x.status==='writing'?'partial':'')}">${esc(stateJa(x.status))}</span></td>
+        <td><button onclick='setState(${x.box_id}, "open")' title="凍結中でもこの部品の執筆を許可">🔓 許可</button>
+            <button onclick='setState(${x.box_id}, "frozen")' title="この部品の許可を取り消す">❄</button></td></tr>`).join('') + '</table>'
+      : '<div class="small">まだ依頼はありません。部品の 👤 担当 か 📨 情報要求 から出せます。</div>'}`;
+  }catch(e){ el.innerHTML = `<div class="small">${esc(e.message)}</div>`; }
+}
+
+let INPICK = null;                 // null / 'store' / 'part'
+let SCOPE = 'store';
+let TDIRTY = false;
+let DRAFT = null;                  // {ref, val}
+let OPEN_MK = false;
+const COLLAPSED = new Set();
+const CELL_W = 64, CELL_H = 20;
+
+const esc = t => (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const attr = v => JSON.stringify(v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                   .replace(/'/g,'&#39;');
+const ALIGN_ROW = {left:'jl', center:'jc', right:'jr'};
+const ALIGN_COL = {top:'jt', middle:'jm', bottom:'jb'};
+
+function layOf(aid){ return ARENAS[aid] ? ARENAS[aid].layout : null; }
+function rootOf(aid){ const l = layOf(aid); return l ? l.root : null; }
+function at(sel){
+  if(!sel) return null;
+  let n = rootOf(sel.aid);
+  for(const i of sel.path) n = n && (n.items||[])[i];
+  return n;
+}
+function parentSel(sel){ return {aid: sel.aid, path: sel.path.slice(0,-1)}; }
+function sameSel(a, b){ return !!a && !!b && a.aid===b.aid && JSON.stringify(a.path)===JSON.stringify(b.path); }
+function isBox(n){ return n && (n.t==='row' || n.t==='col'); }
+function anyDirty(){ return Object.values(ARENAS).some(a=>a.dirty); }
+function mark(aid){ (ARENAS[aid] || ARENAS[AID]).dirty = true; paintSave(); }
+function paintSave(){
+  const b = document.getElementById('btn-save');
+  const on = anyDirty();
+  if(b){ b.disabled = !on; b.className = on ? 'pri' : ''; }
+  const d = document.getElementById('dirty');
+  if(d){
+    const names = Object.keys(ARENAS).filter(k=>ARENAS[k].dirty && Number(k)!==AID).map(k=>ARENAS[k].title);
+    d.textContent = on ? ('● 未保存' + (names.length ? '（複合部品も：'+names.join('・')+'）' : '')) : '';
+  }
+}
+
+// 容器の大きさ（その一：エクセルのセルの個数）
+function sizeOf(n){ const z = n && n.size; return (z && z.u==='cell') ? z : null; }
+function styleFor(node, parentType){
+  const z = sizeOf(node);
+  if(!z) return '';
+  if(parentType==='row' && z.w) return ` style="flex:${z.w} 1 0"`;
+  if(parentType==='col' && z.h) return ` style="flex:${z.h} 1 0"`;
+  if(z.w) return ` style="width:calc(${z.w} * var(--cell-w))"`;
+  if(z.h) return ` style="height:calc(${z.h} * var(--cell-h))"`;
+  return '';
+}
+
+// ---------------------------------------------------------------- 組み立て（どのアリーナでも同じ手）
+
+function add(kind){
+  const node = kind==='text' ? {t:'text', ref:'', label:''}
+             : {t:kind, align: kind==='row'?'left':'top', items:[]};
+  let aid = SEL ? SEL.aid : AID;
+  if(!SEL || !SEL.path.length){                   // 何も選んでいなければ，そのアリーナの末尾へ
+    const r = rootOf(aid); r.items = r.items || []; r.items.push(node);
+    SEL = {aid, path:[r.items.length-1]};
+  }else{
+    const cur = at(SEL);
+    if(isBox(cur) && !(cur.items||[]).length){    // 空の入れ物だけは，その中へ
+      cur.items = [node]; SEL = {aid, path: SEL.path.concat([0])};
+    }else{                                        // ふつうは選んだものの次に，同じ段で
+      const p = at(parentSel(SEL)); const i = SEL.path[SEL.path.length-1];
+      p.items.splice(i+1, 0, node);
+      SEL = {aid, path: SEL.path.slice(0,-1).concat([i+1])};
+    }
+  }
+  EDITREF = node.t==='text' ? '' : null;
+  mark(aid); render();
+}
+function del(){
+  if(!SEL || !SEL.path.length) return;
+  const p = at(parentSel(SEL));
+  p.items.splice(SEL.path[SEL.path.length-1], 1);
+  const aid = SEL.aid; SEL = parentSel(SEL); EDITREF = null;
+  mark(aid); render();
+}
+function move(d){
+  if(!SEL || !SEL.path.length) return;
+  const p = at(parentSel(SEL));
+  const i = SEL.path[SEL.path.length-1], j = i + d;
+  if(j < 0 || j >= p.items.length) return;
+  [p.items[i], p.items[j]] = [p.items[j], p.items[i]];
+  const aid = SEL.aid; SEL = {aid, path: SEL.path.slice(0,-1).concat([j])};
+  mark(aid); render();
+}
+function pick(sel){
+  SEL = sel;
+  const n = at(sel);
+  EDITREF = (n && n.t==='text') ? String(n.ref||'') : null;
+  INPICK = null;
+  render();
+}
+function pickRef(ref){ EDITREF = String(ref||''); INPICK = null; renderArena(); renderTree(); }
+function setAlign(v){ at(SEL).align = v; mark(SEL.aid); render(); }
+function setRef(v){ at(SEL).ref = v.trim(); EDITREF = at(SEL).ref; mark(SEL.aid); renderArena(); renderTree(); }
+function setLabel(v){ at(SEL).label = v; mark(SEL.aid); renderArena(); renderTree(); }
+function labelsOn(){ return !!layOf(AID).show_labels; }          // 既定は非表示
+function setLabels(on){ layOf(AID).show_labels = !!on; mark(AID); renderArena(); }
+function setSize(which, v){
+  const n = SEL && SEL.path.length ? at(SEL) : null;
+  const aid = SEL ? SEL.aid : AID;
+  const t = n || layOf(aid);                       // 何も選んでいなければアリーナ自身
+  const num = parseInt(v, 10);
+  let z = (t.size && t.size.u==='cell') ? t.size : {u:'cell'};
+  if(isNaN(num) || num <= 0){ delete z[which]; } else { z[which] = num; }
+  if(z.w || z.h) t.size = z; else delete t.size;
+  mark(aid); render();
+}
+
+// ---------------------------------------------------------------- 木
+
+function toggleTree(key){
+  if(COLLAPSED.has(key)) COLLAPSED.delete(key); else COLLAPSED.add(key);
+  renderTree();
+}
+function tg(key, has){
+  if(!has) return '<span class="tg"></span>';
+  return `<span class="tg" onclick='event.stopPropagation();toggleTree(${attr(key)})'>${COLLAPSED.has(key)?'▶':'▼'}</span>`;
+}
+function nameOf(node, g){
+  const z = sizeOf(node);
+  const zs = z ? ' ['+(z.w||'-')+'×'+(z.h||'-')+']' : '';
+  if(node.t==='row') return '↔ 横並び（'+ (node.align||'left') +'）'+zs;
+  if(node.t==='col') return '↕ 縦並び（'+ (node.align||'top') +'）'+zs;
+  const icon = g && g.embed ? '🧱 ' : (node.ref ? '▭ ' : '▫ ');
+  return icon + (node.label || (g && g.qtitle) || node.ref || '（指し先を未指定）') + zs;
+}
+function embedAid(g){ return (g && g.embed && g.qid && ARENAS[g.qid]) ? g.qid : null; }
+
+function treeHtml(aid, node, path, depth){
+  const key = aid + ':' + path.join('.');
+  const sel = {aid, path};
+  const g = node.t==='text' ? REF2[String(node.ref||'')] : null;
+  const kids = node.items || [];
+  const eaid = embedAid(g);
+  const has = kids.length > 0 || !!eaid;
+  const cls = 'tnode' + (aid!==AID ? ' emb' : '') + (sameSel(sel, SEL) ? ' sel' : '');
+  const mark_ = (eaid && ARENAS[eaid].dirty) ? ' ●' : '';
+  let h = `<div class="${cls}" onclick='pick(${attr(sel)})'>${tg(key, has)}${esc(nameOf(node, g))}${mark_}</div>`;
+  if(has && !COLLAPSED.has(key)){
+    h += '<div class="tkids">';
+    if(kids.length) h += kids.map((c,i)=>treeHtml(aid, c, path.concat([i]), depth)).join('');
+    if(eaid && depth < 6) h += treeHtml(eaid, rootOf(eaid), [], depth+1);
+    h += '</div>';
+  }
+  return h;
+}
+function renderTree(){
+  document.getElementById('tree').innerHTML = treeHtml(AID, rootOf(AID), [], 0);
+}
+
+// ---------------------------------------------------------------- 選んだところ
+
+function sizeHtml(){
+  const n = SEL && SEL.path.length ? at(SEL) : null;
+  const z = sizeOf(n || layOf(SEL ? SEL.aid : AID)) || {};
+  const who = n ? '' : '（アリーナ全体）';
+  return `<div class="szbox">
+    <div class="small">大きさ${who} — エクセルのセルの個数で数えます。空ければ中身なり。</div>
+    <div class="szrow">
+      <label class="f" style="margin:0">横（セル）
+        <input type="number" min="1" value="${z.w||''}" oninput="setSize('w',this.value)"></label>
+      <label class="f" style="margin:0">縦（セル）
+        <input type="number" min="1" value="${z.h||''}" oninput="setSize('h',this.value)"></label>
+    </div></div>`;
+}
+function newBoxHtml(isText){
+  return `<details class="mkbox"${OPEN_MK?' open':''} ontoggle="OPEN_MK=this.open">
+    <summary>＋ 倉庫部品を新規生成</summary>
+    <label class="f">題名<input id="n-title" placeholder="業務の実績 など"></label>
+    <label class="f">key_path（省略可）<input id="n-key" placeholder="R6.plan3.result"></label>
+    <label class="f">型
+      <select id="n-recipe"><option value="text">📝 テキスト（HTML を書ける）</option></select></label>
+    <label class="f">担当（省略可）<input id="n-add" placeholder="教務課"></label>
+    <div class="btns"><button class="pri" onclick="makeBox()">生やして
+      ${isText ? 'ここに入れる' : 'ここに追加する'}</button></div>
+    <div id="mkmsg" class="small"></div>
+  </details>`;
+}
+function inlineTextHtml(n){
+  const g = REF2[String(n.ref||'')];
+  if(!g || !isEditableKind(g)) return '';
+  return `<div class="inlbox"><div class="small">中身は右のアリーナの枠の中で直接書けます。
+      <a href="/cqm/box/${g.qid}/edit" target="_blank">✏ 別画面で編集</a></div></div>`;
+}
+function whereHtml(){
+  if(!SEL || SEL.aid===AID) return '';
+  return `<div class="small where">🧱 複合部品「${esc(ARENAS[SEL.aid].title||'')}」の中を組み立てています。保存はその部品へ。</div>`;
+}
+function propsHtml(){
+  const n = SEL && SEL.path.length ? at(SEL) : null;
+  if(!n) return '<div class="small">アリーナ全体（下の木から選んでください）</div>'
+                + whereHtml() + sizeHtml() + newBoxHtml(false);
+  if(n.t==='text'){
+    return whereHtml() + `<label class="f">指し先（倉庫のID・key_path・複合部品の番号）
+      <input id="p-ref" value="${esc(n.ref||'')}" oninput="setRef(this.value)"></label>
+      <label class="f">見出し（省略可）
+      <input id="p-label" value="${esc(n.label||'')}" oninput="setLabel(this.value)"></label>
+
+      <div class="picker">
+        <div class="btns" style="margin:6px 0 4px">
+          <button id="sc-store" class="${SCOPE==='store'?'on':''}" onclick="setScope('store')">📦 倉庫から</button>
+          <button id="sc-part" class="${SCOPE==='part'?'on':''}" onclick="setScope('part')">🧱 複合部品から</button>
+        </div>
+        <input id="p-q" placeholder="${SCOPE==='part'?'絞り込み（空なら全部）':'key_path や題名の一部'}"
+               oninput="doSearch(this.value)">
+        <div id="hits" class="hits" style="display:none"></div>
+      </div>` + inlineTextHtml(n) + sizeHtml() + newBoxHtml(true);
+  }
+  const opts = n.t==='row'
+    ? [['left','左詰め'],['center','中央寄せ'],['right','右詰め']]
+    : [['top','上寄せ'],['middle','中央'],['bottom','下寄せ']];
+  return whereHtml() + `<label class="f">そろえ
+    <select onchange="setAlign(this.value)">${opts.map(([v,l])=>
+      `<option value="${v}"${(n.align||opts[0][0])===v?' selected':''}>${l}</option>`).join('')}
+    </select></label>
+    <div class="small" style="margin-top:8px">中に横並び・縦並び・部品を入れられます。</div>`
+    + sizeHtml() + newBoxHtml(false);
+}
+
+// 倉庫部品をその場で生やす
+async function makeBox(){
+  const title = (document.getElementById('n-title')||{}).value || '';
+  const msg = document.getElementById('mkmsg');
+  if(!title.trim()){ msg.textContent = '題名を入れてください'; return; }
+  const body = {title: title.trim(),
+                key_path: (document.getElementById('n-key')||{}).value || '',
+                recipe: (document.getElementById('n-recipe')||{}).value || 'text',
+                addressee: (document.getElementById('n-add')||{}).value || ''};
+  try{
+    const j = await post('/cqm/api/box/new', body);
+    const ref = j.box.key_path || String(j.box.id);
+    const aid = SEL ? SEL.aid : AID;
+    const sel = SEL && SEL.path.length ? at(SEL) : null;
+    if(sel && sel.t==='text'){
+      sel.ref = ref; if(!sel.label) sel.label = j.box.title;
+    }else{
+      const target = sel || rootOf(aid);
+      target.items = target.items || [];
+      target.items.push({t:'text', ref: ref, label: j.box.title});
+      SEL = {aid, path: (sel ? SEL.path : []).concat([target.items.length-1])};
+    }
+    EDITREF = ref; OPEN_MK = true; mark(aid); render(); gather();
+    document.getElementById('mkmsg').textContent = '倉庫に ' + ref + ' を生やしました';
+  }catch(e){ msg.textContent = e.message; }
+}
+
+// ---------------------------------------------------------------- 探す
+
+let tmr = null;
+function setScope(sc){ SCOPE = sc; render(); if(sc==='part') doSearch(''); }
+function doSearch(q){
+  clearTimeout(tmr);
+  const el = document.getElementById('a-hits') || document.getElementById('hits');
+  if(!el) return;
+  if(SCOPE!=='part' && !q.trim()){ el.style.display='none'; return; }
+  tmr = setTimeout(async ()=>{
+    const exclude = SEL ? SEL.aid : AID;
+    const url = '{{ url_for("cqm.api_search") }}?scope='+SCOPE+'&exclude='+exclude+'&q='+encodeURIComponent(q||'');
+    const r = await fetch(url);
+    const j = await r.json();
+    el.innerHTML = (j.items||[]).map(it=>{
+      const ref = it.key_path || String(it.id);
+      const what = it.is_arena ? (it.level==='work'?'🏛 作品':'🧱 複合部品')
+                 : (it.kind==='box' ? ('📦 箱 / '+(it.recipe||'')) : '📄 箇条');
+      return `<div class="hit" onclick='useHit(${attr(ref)}, ${attr(it.title||'')})'>
+        <b>${esc(it.key_path||('#'+it.id))}</b> ${esc(it.title||'')}
+        <div class="small">${what} ${esc(it.excerpt||'')}</div></div>`;
+    }).join('') || '<div class="hit small">見つかりません</div>';
+    el.style.display='block';
+  }, 200);
+}
+function useHit(ref, title){
+  const n = at(SEL);
+  n.ref = ref;
+  if(!n.label) n.label = title || ref;
+  INPICK = null; EDITREF = String(ref);
+  mark(SEL.aid); render(); gather();
+}
+
+// ---------------------------------------------------------------- 枠の中の編集
+
+function canEditNow(){ return EDITING && MODE==='editor'; }
+function isEditableKind(g){ return g && (g.qrecipe==='text' || g.qrecipe==='seq'); }
+function htmlOf(g){
+  if(!g) return '';
+  if(g.html) return g.html;
+  const l = (g.lines || [])[0];
+  return (l && l.html) || '';
+}
+function draftLive(){ return TDIRTY && DRAFT && DRAFT.ref === EDITREF; }
+function paintTextSave(){
+  const b = document.getElementById('btn-text');
+  const on = draftLive();
+  if(b){ b.disabled = !on; b.className = on ? 'pri' : ''; }
+}
+function editorHtml(g){
+  const isText = g.qrecipe==='text';
+  const val = isText ? htmlOf(g) : (g.lines||[]).map(l=>'・'+(l.body||'')).join('\n');
+  return `<textarea id="a-html" class="inplace" onclick="event.stopPropagation()"
+      oninput="TDIRTY=true;DRAFT={ref:EDITREF,val:this.value};paintTextSave()"
+      placeholder="${isText ? 'HTML を書けます' : '1行が1件です'}">${esc(val)}</textarea>
+    <div class="inbtns" onclick="event.stopPropagation()">
+      <button id="btn-text" class="pri" onclick='saveContent(${attr(String(g.ref||''))}, ${g.qid}, ${attr(g.qrecipe)})' disabled>💾 中身を保存</button>
+      <span id="tmsg" class="small"></span>
+    </div>`;
+}
+async function saveContent(ref, qid, recipe){
+  const ta = document.getElementById('a-html');
+  if(!ta) return;
+  try{
+    let title = '';
+    if(recipe==='text'){
+      const j = await post(`/cqm/api/box/${qid}/text`, {html: ta.value, arena: AID});
+      title = j.title || '';
+    }else{
+      const vals = {}; vals[ref] = ta.value;
+      await post(`/cqm/api/arena/${AID}/write`, {values: vals});
+    }
+    TDIRTY = false; DRAFT = null; paintTextSave();
+    const n = SEL ? at(SEL) : null;
+    if(n && n.t==='text' && String(n.ref||'')===ref && !n.label && title){ n.label = title; mark(SEL.aid); }
+    const m = document.getElementById('tmsg'); if(m) m.textContent = '保存しました';
+    await gather();
+  }catch(e){ const m = document.getElementById('tmsg'); if(m) m.textContent = e.message; }
+}
+function startPick(sc){ INPICK = sc; SCOPE = sc; renderArena(); doSearch(''); }
+function inPickHtml(){
+  return `<div class="inpick" onclick="event.stopPropagation()">
+    <div class="btns" style="margin:4px 0">
+      <button class="pri" onclick="makeTextHere()">＋ テキストで新規</button>
+      <button class="${INPICK==='store'?'on':''}" onclick="startPick('store')">📦 倉庫から</button>
+      <button class="${INPICK==='part'?'on':''}" onclick="startPick('part')">🧱 複合部品から</button>
+    </div>
+    ${INPICK ? `<input id="a-q" placeholder="${INPICK==='part'?'絞り込み（空なら全部）':'key_path や題名の一部'}"
+        oninput="doSearch(this.value)"><div id="a-hits" class="hits"></div>` : ''}
+  </div>`;
+}
+async function makeTextHere(){
+  const n = SEL ? at(SEL) : null;
+  if(!n || n.t!=='text') return;
+  try{
+    const j = await post('/cqm/api/box/new', {title:'（無題）', recipe:'text'});
+    n.ref = j.box.key_path || String(j.box.id);
+    EDITREF = n.ref; INPICK = null; mark(SEL.aid); render(); await gather();
+    const ta = document.getElementById('a-html'); if(ta) ta.focus();
+  }catch(e){ say('<span class="st ng">ng</span> '+esc(e.message)); }
+}
+
+// ---------------------------------------------------------------- アリーナ（どのアリーナでも同じ描き手）
+
+let PATHS = new Map();
+function pathOf(n){ return PATHS.get(n) || {aid:AID, path:[]}; }
+function richBody(lines){
+  if(lines.length===1 && lines[0].html) return `<div class="rich">${lines[0].html}</div>`;
+  return '<ul>' + lines.map(l=>`<li>${esc(l.body)}</li>`).join('') + '</ul>';
+}
+
+function arenaHtml(aid, node, path, pt, depth){
+  if(!node) return '';
+  PATHS.set(node, {aid, path});
+  const sel = {aid, path};
+  const st = styleFor(node, pt);
+  const picked = sameSel(sel, SEL);
+  if(node.t==='text'){
+    const ref = String(node.ref||'');
+    const g = REF2[ref];
+    const qid = g && g.qid;
+    const pm = (g && g.perm) || null;
+    const canEdit = canEditNow() && picked;
+    const mine = MODE==='writer' && pm && (pm.writer || pm.write);       // 自分の担当（薄く色づく）
+    const canWrite = MODE==='writer' && pm && pm.write && isEditableKind(g);
+    const stat = g ? `<span class="st ${g.status}">${g.status}</span>` : '';
+    const badge = badgeHtml(g);
+    if(pm && !pm.view){                                     // 閲覧できない部品
+      return `<div data-sel='${aid}:${path.join(".")}' class="nd tbox nolb hidden"${st}>${badge}
+        <div class="small">（閲覧の権限がありません）</div></div>`;
+    }
+    const showLb = labelsOn() && !node.hide_label;
+    const head = showLb
+      ? `<div class="lb"><span>${esc(node.label || (g&&g.qtitle) || ref || '未指定')}</span>${stat}</div>` : '';
+    const cls = 'nd tbox' + (picked?' pick':'') + (mine?' mine':'') + (showLb?'':' nolb');
+    // 指し先がまだ無い枠は，その場で決める
+    if(canEdit && (!ref || (g && !g.qid))){
+      return `<div data-sel='${aid}:${path.join(".")}' class="${cls} edit"${st} onclick='pick(${attr(sel)})'>${badge}${head}${inPickHtml()}</div>`;
+    }
+    // 埋め込み：その複合部品のレイアウトで描く（無ければ集めた木で）
+    if(g && g.embed){
+      const eaid = embedAid(g);
+      const inner = (eaid && depth < 6) ? arenaHtml(eaid, rootOf(eaid), [], null, depth+1) : gHtml(g.embed, null);
+      return `<div data-sel='${aid}:${path.join(".")}' class="nd emb${picked?' pick':''}"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>
+        <div class="eh">🧱 ${esc(g.embed_title || node.label || '')}</div>${inner}</div>`;
+    }
+    // その場で書く
+    if(canEditNow() && isEditableKind(g) && EDITREF === ref && picked){
+      return `<div data-sel='${aid}:${path.join(".")}' class="${cls} edit"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>${badge}${head}${editorHtml(g)}
+        <div class="inbtns" onclick="event.stopPropagation()"><button onclick="startPick('store')">🔁 差し替え</button>
+          <button class="${ASSIGN===ref?'on':''}" onclick='toggleAssign(${attr(ref)})'>👤 担当</button></div>
+        ${INPICK ? inPickHtml() : ''}${ASSIGN===ref ? assignHtml(g) : ''}</div>`;
+    }
+    // 執筆者割り当て：たたいた枠に担当の欄が開く（見た目は執筆者画面と同じ）
+    if(MODE==='assign' && isEditableKind(g) && picked){
+      return `<div data-sel='${aid}:${path.join(".")}' class="${cls} edit"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>${badge}${head}${richBody(g.lines||[])}${assignHtml(g)}</div>`;
+    }
+    // 執筆者：自分の担当をたたくと，その場が入力欄になる（編集者と同じ見た目）
+    if(MODE==='writer' && mine && picked && EDITREF === ref){
+      const inner = canWrite ? editorHtml(g)
+                  : (richBody(g.lines||[]) + `<div class="small frzmsg">❄ 凍結中のため書けません（編集者が許可すれば書けます）</div>`);
+      return `<div data-sel='${aid}:${path.join(".")}' class="${cls} edit"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>${badge}${head}${inner}${writerStateHtml(g)}</div>`;
+    }
+    let body;
+    if(g && (g.lines||[]).length){
+      body = richBody(g.lines);
+    }else if(g){
+      body = `<div class="small">${esc(g.note||'（まだ何もありません）')}</div>`;
+    }else{
+      body = `<div class="small">${ref?esc(ref):'倉庫を指していません'}</div>`;
+    }
+    const clickable = ((canEditNow() && isEditableKind(g)) || (MODE==='writer' && mine) || (MODE==='assign' && isEditableKind(g))) ? ' clickable' : '';
+    return `<div data-sel='${aid}:${path.join(".")}' class="${cls}${clickable}"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>${badge}${head}${body}</div>`;
+  }
+  const cls = node.t==='row' ? 'row '+(ALIGN_ROW[node.align||'left']) : 'col '+(ALIGN_COL[node.align||'top']);
+  const kids = node.items || [];
+  const inner = kids.length ? kids.map((k,i)=>arenaHtml(aid, k, path.concat([i]), node.t, depth)).join('')
+                            : `<div class="empty" onclick='event.stopPropagation();pick(${attr(sel)})'>${node.t==='row'?'横':'縦'}並び（空）</div>`;
+  return `<div data-sel='${aid}:${path.join(".")}' class="nd ${cls}${picked?' pick':''}"${st} onclick='event.stopPropagation();pick(${attr(sel)})'>${inner}</div>`;
+}
+
+// 集めた木をそのまま描く（レイアウトが手元に無い埋め込みの保険）
+function gHtml(node, pt){
+  if(!node) return '';
+  const st = styleFor(node, pt);
+  if(node.t==='text'){
+    const head = (!labelsOn() || node.hide_label) ? '' : `<div class="lb"><span>${esc(node.label || node.qtitle || node.ref || '')}</span>
+      ${node.status?`<span class="st ${node.status}">${node.status}</span>`:''}</div>`;
+    if(node.embed) return `<div class="nd emb"${st}><div class="eh">🧱 ${esc(node.embed_title||'')}</div>${gHtml(node.embed)}</div>`;
+    const lines = node.lines || [];
+    const body = lines.length ? richBody(lines) : `<div class="small">${esc(node.note||'')}</div>`;
+    return `<div class="nd tbox"${st}>${badgeHtml(node)}${head}${body}</div>`;
+  }
+  const cls = node.t==='row' ? 'row '+(ALIGN_ROW[node.align||'left']) : 'col '+(ALIGN_COL[node.align||'top']);
+  const kids = node.items || [];
+  return `<div class="nd ${cls}"${st}>${kids.length?kids.map(k=>gHtml(k, node.t)).join(''):'<div class="empty">（空）</div>'}</div>`;
+}
+
+function renderArena(){
+  const keep = draftLive() ? DRAFT.val : null;
+  PATHS = new Map();
+  const el = document.getElementById('arena');
+  const stage = document.getElementById('stage');
+  stage.innerHTML = arenaHtml(AID, rootOf(AID), [], null, 0);
+  if(gridOn()){
+    gridApply();
+  }else{
+    stage.style.transform = ''; stage.style.width = ''; el.style.height = '';
+    el.classList.remove('grid');
+    const L = layOf(AID), z = sizeOf(L);
+    const ratio = (z && z.w && z.h) ? (z.h*CELL_H)/(z.w*CELL_W) : (L.h||620)/(L.w||1000);
+    el.style.minHeight = Math.round((el.clientWidth || 900) * ratio) + 'px';
+  }
+  if(keep != null){ const ta = document.getElementById('a-html'); if(ta) ta.value = keep; }
+  paintTextSave();
+  paintRuler();
+  paintHeight();
+}
+function paintHeight(){
+  const el = document.getElementById('hinfo'); if(!el) return;
+  const stage = document.getElementById('stage');
+  const h = stage.offsetHeight || 0;
+  if(gridOn()){
+    const s = sum(layOf(AID).view.cellw); const k = dispW() / s;
+    el.textContent = `画面 ${Math.round(dispW())}px（縮尺 ${k.toFixed(2)}）｜総高さ ${Math.round(h)}px → 画面 ${Math.round(h*k)}px`;
+  }else{
+    el.textContent = `総高さ ${Math.round(h)}px`;
+  }
+}
+function render(){
+  renderTree();
+  document.getElementById('props').innerHTML = propsHtml();
+  const wa = document.getElementById('workacl'); if(wa && EDITING) wa.innerHTML = workAclHtml();
+  renderArena();
+}
+
+// ---------------------------------------------------------------- コマンド
+
+function cmdbar(){
+  const el = document.getElementById('cmdbar');
+  const lbl = `<label class="small chk"><input type="checkbox" ${labelsOn()?'checked':''}
+      onchange="setLabels(this.checked)"> 部品ラベル表示</label>`;
+  if(MODE==='editor' || MODE==='assign'){
+    el.innerHTML = `<button class="${MODE==='assign'?'on':''}" onclick="setMode('${MODE==='assign'?'editor':'assign'}')">👥 執筆者割り当て</button>
+      <button onclick="openAssignments()">📋 執筆担当表（別窓）</button>
+      <a class="lnk" href="/cqm/arena/${AID}/export.xlsx">⬇ xlsx</a>
+      <a class="lnk" href="/cqm/arena/${AID}/transfer">📤 書き出し・読み込み</a>
+      <button onclick="gather()" title="読み直す">🔄</button>
+      <span class="sep"></span>
+      <button id="btn-opt" onclick="optimizeAll()" ${MODE==='assign'?'disabled':''}>⚖ 最適化</button>
+      <label class="small pz">設計幅 s
+        <input id="s-range" type="range" min="${S_MIN}" max="${S_MAX}" step="10" value="${Math.round(viewS())}"
+               oninput="setS(this.value)"><span id="s-val">${Math.round(viewS())}px</span></label>
+      <span id="hinfo" class="small hinfo"></span>
+      <span class="sep"></span>${lbl}`;
+  }else{
+    el.innerHTML = `<button onclick="gather()">🔄 読み直す</button>
+      <span class="small">色づいた枠があなたの担当です。たたくとその場で書けます。</span>
+      <span class="sep"></span>
+      <label class="small pz">設計幅 s
+        <input id="s-range" type="range" min="${S_MIN}" max="${S_MAX}" step="10" value="${Math.round(viewS())}"
+               oninput="setS(this.value)"><span id="s-val">${Math.round(viewS())}px</span></label>
+      <span id="hinfo" class="small hinfo"></span>
+      <span class="sep"></span>${lbl}`;
+  }
+}
+async function post(url, body){
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+                             body: JSON.stringify(body||{})});
+  const j = await r.json();
+  if(!j.success) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
+}
+function say(h){ document.getElementById('msg').innerHTML = h; }
+function otherLayouts(){
+  const o = {};
+  for(const k in ARENAS) if(Number(k)!==AID) o[k] = ARENAS[k].layout;
+  return o;
+}
+
+// 埋め込んだ複合部品のレイアウトを手元に持つ（親の画面から組み立てるため）
+async function loadEmbeds(root){
+  const need = [];
+  (function walk(n){
+    if(!n) return;
+    if(n.t==='text' && n.embed && n.qid && !ARENAS[n.qid]) need.push(n.qid);
+    if(n.t==='text' && n.embed) walk(n.embed);
+    (n.items||[]).forEach(walk);
+  })(root);
+  for(const aid of [...new Set(need)]){
+    try{
+      const r = await fetch(`/cqm/api/arena/${aid}/layout?via=${AID}`);
+      const j = await r.json();
+      if(j.success) ARENAS[aid] = {layout: j.layout, title: j.title, dirty: false};
+    }catch(e){ /* 無ければ集めた木で描く */ }
+  }
+}
+
+async function gather(){
+  try{
+    const j = await post(`/cqm/api/arena/${AID}/gather`, {layout: layOf(AID), layouts: otherLayouts()});
+    REQS = j.requests || {};
+    // 埋め込みのレイアウトは返事に同梱されている（1個ずつ取りに行かない）
+    for(const k in (j.layouts||{})){
+      if(!ARENAS[k]) ARENAS[k] = {layout: j.layouts[k].layout, title: j.layouts[k].title, dirty: false};
+    }
+    REF2 = {};
+    (function walk(n){
+      if(!n) return;
+      if(n.t==='text'){ REF2[String(n.ref||'')] = n; if(n.embed) walk(n.embed); }
+      (n.items||[]).forEach(walk);
+    })((j.answer.value||{}).root);
+    await loadEmbeds((j.answer.value||{}).root);
+    const a = j.answer;
+    let h = `<span class="st ${a.status}">${a.status}</span> ${esc(a.note||'')}`;
+    if((a.pending||[]).length){
+      h += `<div class="pend"><b>未達</b><ul>` +
+           a.pending.map(p=>`<li>${esc(p.key)}：${esc(p.why)}</li>`).join('') + '</ul></div>';
+    }
+    say(h); renderArena(); renderTree();
+  }catch(e){ say('<span class="st ng">ng</span> '+esc(e.message)); }
+}
+async function askInfo(){
+  const message = prompt('依頼文（すべての部品に同じ文で出します）', 'このボックスを埋めてください。');
+  if(message===null) return;
+  const due = prompt('期日（YYYY-MM-DD、無ければ空のまま）', '') || '';
+  try{
+    const j = await post(`/cqm/api/arena/${AID}/request`, {message, due_on: due, layout: layOf(AID)});
+    let h = `<b>情報要求</b> ${j.made.length} 件に依頼を出しました`;
+    if(j.made.length) h += '<ul>'+j.made.map(m=>`<li>${esc(m.ref)} ${esc(m.title)}</li>`).join('')+'</ul>';
+    if(j.skipped.length) h += `<div class="pend">見送り<ul>`+
+      j.skipped.map(s=>`<li>${esc(s.ref)}：${esc(s.why)}</li>`).join('')+'</ul></div>';
+    say(h); gather();
+  }catch(e){ say('<span class="st ng">ng</span> '+esc(e.message)); }
+}
+async function sendBack(){
+  const values = {};
+  document.querySelectorAll('#arena textarea[data-ref]').forEach(t=>{ values[t.dataset.ref] = t.value; });
+  if(!Object.keys(values).length){ say('入力できる箱がありません。'); return; }
+  try{
+    const j = await post(`/cqm/api/arena/${AID}/write`, {values});
+    const a = j.answer;
+    say(`<span class="st ${a.status}">${a.status}</span> ${esc(a.note||'')}`);
+    gather();
+  }catch(e){ say('<span class="st ng">ng</span> '+esc(e.message)); }
+}
+
+// 保存：直したアリーナを，それぞれの持ち主へ
+async function save(){
+  const d = document.getElementById('dirty');
+  try{
+    const done = [];
+    for(const k in ARENAS){
+      if(!ARENAS[k].dirty) continue;
+      await post(`/cqm/api/arena/${k}/save`, {layout: ARENAS[k].layout});
+      ARENAS[k].dirty = false; done.push(ARENAS[k].title || ('#'+k));
+    }
+    paintSave();
+    d.textContent = done.length ? '保存しました：' + done.join('・') : '';
+    renderTree();
+  }catch(e){ d.textContent = '保存できません：'+e.message; }
+}
+async function saveMeta(){
+  const title = document.getElementById('a-title').value;
+  const level = document.getElementById('a-level').value;
+  try{
+    await post(`/cqm/api/arena/${AID}/meta`, {title, level});
+    ARENAS[AID].title = title;
+    document.getElementById('metamsg').textContent = '保存しました（題名は再読み込みで反映）';
+  }catch(e){ document.getElementById('metamsg').textContent = e.message; }
+}
+function openAssignments(){
+  // 別窓（補助スクリーン一面に広げて使える独立ページ）
+  window.open(`/cqm/arena/${AID}/assignments`, 'cqm_assign_'+AID, 'width=1400,height=900,resizable=yes,scrollbars=yes');
+}
+function setMode(m){
+  MODE = m; ASSIGN = null; INPICK = null;
+  document.getElementById('m-ed').className = (m==='editor' || m==='assign') ? 'on' : '';
+  document.getElementById('m-wr').className = m==='writer' ? 'on' : '';
+  const showLeft = EDITING && m==='editor';
+  document.getElementById('left').style.display = showLeft ? '' : 'none';
+  document.getElementById('cols').classList.toggle('one', !showLeft);
+  cmdbar(); renderArena();
+}
+
+// ================================================================ 方眼と表示幅
+// 原理：見えない方眼（原セルの列）があり，どの行の部品もその列にそろう。
+// 原セル一列ごとの表示幅 cellw[i]（設計px）を持ち，合計 s = 画面幅 × 圧縮率 p。
+// 埋め込みの原セルは親の原セルに 1対1 で写す。
+
+const H0 = 30;                     // 見出し行など，幅に依らない高さの分
+let SPANS = new Map();             // 'aid:path' -> [a,b]（原セルの範囲）
+let MEAS  = {};                    // 'aid:path' -> 面積 A（高さ×幅，設計px²）
+let DRAG  = null;
+
+// 設計幅 s はスライダで直接決める（画面幅に対してリニア）。上限は経験値（2000px）。
+const S_MIN = 400, S_MAX = 2000;
+function viewOf(){ const L = layOf(AID); if(!L.view) L.view = null; return L.view; }
+function gridOn(){ return !!(layOf(AID).view && layOf(AID).view.cellw); }
+function viewS(){ const v = viewOf(); return (v && v.cellw) ? sum(v.cellw) : (v && v.s ? Number(v.s) : dispW()); }
+function viewP(){ return viewS() / Math.max(1, dispW()); }   // 縮尺のために導く（表示用）
+function dispW(){ return document.getElementById('arena').clientWidth || 900; }
+function designS(){ return viewS(); }
+
+function ensureGrid(){           // 列そろえは常時オン（無ければ作る）
+  const L = layOf(AID);
+  if(!gridOn()){ L.view = {s: Math.min(S_MAX, Math.max(S_MIN, dispW())), cellw: null}; initCells(); }
+}
+function toggleGrid(){
+  const L = layOf(AID);
+  if(gridOn()){ L.view = null; }
+  else{
+    L.view = {s: Math.min(S_MAX, Math.max(S_MIN, dispW())), cellw: null};
+    initCells();
+  }
+  mark(AID); cmdbar(); renderArena();
+  if(gridOn()) setTimeout(optimizeAll, 50);
+}
+
+function setS(v){
+  const L = layOf(AID); if(!L.view) return;
+  const oldS = sum(L.view.cellw); const ns = Math.min(S_MAX, Math.max(S_MIN, Number(v)));
+  L.view.s = ns;
+  L.view.cellw = L.view.cellw.map(x => x * ns / oldS);     // 列幅の比はそのまま
+  const el = document.getElementById('s-val'); if(el) el.textContent = Math.round(ns) + 'px';
+  mark(AID); renderArena();
+}
+function sum(a){ return a.reduce((t,x)=>t+x, 0); }
+
+// 方眼の列数：明示の横セル数があればそれ。無ければ，保存してある列幅の本数を正とし，
+// 部品がそれより先まで使っていれば，その分だけ広い（縮めることはしない）。
+function gridW(){
+  const L = layOf(AID); const z = sizeOf(L);
+  if(z && z.w) return z.w;
+  const have = (L.view && L.view.cellw) ? L.view.cellw.length : 0;
+  computeSpans(1e6);
+  let m = 1; SPANS.forEach(([a,b])=>{ if(b < 1e5) m = Math.max(m, b); });
+  return Math.max(have, m);
+}
+// 列幅の用意：既にあるものは触らない。足りない分は平均で継ぎ足し，明示の列数が減ったときだけ切る。
+function initCells(){
+  const L = layOf(AID); const W = gridW();
+  let cw = (L.view.cellw || []).slice();
+  if(!cw.length){
+    const s = L.view.s ? Number(L.view.s) : Math.min(S_MAX, Math.max(S_MIN, dispW()));
+    for(let i=0;i<W;i++) cw.push(s/W);
+  }else if(cw.length < W){
+    const s0 = sum(cw); const avg = s0 / cw.length;   // 継ぎ足しても設計幅 s は保つ
+    while(cw.length < W) cw.push(avg);
+    const s1 = sum(cw); cw = cw.map(x => x * s0 / s1);
+  }else if(cw.length > W){
+    cw = cw.slice(0, W);
+  }
+  L.view.cellw = cw;
+  L.view.s = sum(cw);
+}
+
+// 原セルの範囲を，直下にも埋め込みにも同じ手で割り当てる
+function computeSpans(Wtop){
+  SPANS = new Map();
+  const W = Wtop != null ? Wtop : gridW();
+  (function walk(aid, node, path, a, b, depth){
+    if(!node || depth > 6) return;
+    const key = aid + ':' + path.join('.');
+    SPANS.set(key, [a, b]);
+    if(node.t==='row'){
+      const kids = node.items || [];
+      const ws = kids.map(k => (sizeOf(k) && sizeOf(k).w) ? sizeOf(k).w : null);
+      const fixed = ws.reduce((t,x)=>t+(x||0), 0);
+      const nmiss = ws.filter(x=>x==null).length;
+      const rem = Math.max(0, (b-a) - fixed);
+      const each = nmiss ? Math.max(1, Math.floor(rem/nmiss)) : 0;
+      let c = a;
+      kids.forEach((k,i)=>{ const w = ws[i]!=null ? ws[i] : each; walk(aid, k, path.concat([i]), c, c+w, depth); c += w; });
+    }else if(node.t==='col'){
+      (node.items||[]).forEach((k,i)=>walk(aid, k, path.concat([i]), a, b, depth));
+    }else if(node.t==='text'){
+      const g = REF2[String(node.ref||'')]; const e = embedAid(g);
+      if(e){ const iz = sizeOf(layOf(e)); walk(e, rootOf(e), [], a, a + ((iz && iz.w) || (b-a)), depth+1); }
+    }
+  })(AID, rootOf(AID), [], 0, W, 0);
+}
+function cum(cellw){ const c=[0]; for(const x of cellw) c.push(c[c.length-1]+x); return c; }
+function usedBoundaries(){
+  const W = gridW(); const set = new Set([0, W]);
+  SPANS.forEach(([a,b], key)=>{ if(a>=0 && b<=W){ set.add(a); set.add(b); } });
+  return [...set].sort((x,y)=>x-y);
+}
+
+// 描いたものに幅を当て，画面幅に合わせて縮める
+function gridApply(){
+  const L = layOf(AID); const el = document.getElementById('arena'); const stage = document.getElementById('stage');
+  computeSpans();
+  const W = gridW();
+  if(!L.view.cellw || L.view.cellw.length !== W) initCells();
+  const c = cum(L.view.cellw); const s = c[W];
+  el.classList.add('grid');
+  stage.style.width = Math.round(s) + 'px';
+  stage.querySelectorAll('[data-sel]').forEach(d=>{
+    const sp = SPANS.get(d.dataset.sel); if(!sp) return;
+    const w = Math.max(0, Math.round(c[Math.min(sp[1],W)] - c[Math.min(sp[0],W)]));
+    d.style.width = w + 'px';
+    d.style.minWidth = '0';
+    // flex-basis は親の向きに沿って効く。横並びの中でだけ幅として使い，
+    // 縦並びの中では高さに化けるので使わない（中身なりの高さ）。
+    const inRow = d.parentElement && d.parentElement.classList.contains('row');
+    d.style.flex = inRow ? ('0 0 ' + w + 'px') : '0 0 auto';
+  });
+  const k = dispW() / s;
+  stage.style.transform = 'scale(' + k + ')';
+  el.style.minHeight = '';
+  el.style.height = Math.round(stage.offsetHeight * k) + 'px';
+  measure();
+}
+// 実物を測る：部品ごとに 土台 h0（見出しや余白，幅に依らない分）と 面積 A = (高さ − h0) × 幅
+function measure(){
+  const L = layOf(AID); const c = cum(L.view.cellw); const W = gridW();
+  MEAS = {};
+  const stage = document.getElementById('stage');
+  stage.classList.add('measuring');           // 行の高さに引き伸ばされた箱ではなく，中身なりの高さを測る
+  document.querySelectorAll('#stage .tbox[data-sel]').forEach(d=>{
+    const sp = SPANS.get(d.dataset.sel); if(!sp) return;
+    const w = c[Math.min(sp[1],W)] - c[Math.min(sp[0],W)];
+    const lb = d.querySelector(':scope > .lb');
+    const cs = getComputedStyle(d);
+    const h0 = (lb ? lb.offsetHeight : 0) + (parseFloat(cs.paddingTop)||0) + (parseFloat(cs.paddingBottom)||0)
+             + (parseFloat(cs.borderTopWidth)||0) + (parseFloat(cs.borderBottomWidth)||0);
+    MEAS[d.dataset.sel] = {h0: h0, A: Math.max(0, d.offsetHeight - h0) * Math.max(1, w)};
+  });
+  document.querySelectorAll('#stage .emb[data-sel]').forEach(d=>{
+    const eh = d.querySelector(':scope > .eh');
+    MEAS[d.dataset.sel] = {h0: eh ? eh.offsetHeight : 0, A: 0, emb: true};
+  });
+  stage.classList.remove('measuring');
+}
+// 模型：部品 h = h0 + A/w，横並びは最大，縦並びは和，埋め込みは見出し分 + 中の根
+function modelHeight(cellw){
+  const c = cum(cellw); const W = cellw.length;
+  function h(aid, node, path, depth){
+    if(!node || depth > 6) return 0;
+    const key = aid + ':' + path.join('.');
+    if(node.t==='row') return Math.max(0, ...(node.items||[]).map((k,i)=>h(aid, k, path.concat([i]), depth)));
+    if(node.t==='col') return (node.items||[]).reduce((t,k,i)=>t + h(aid, k, path.concat([i]), depth), 0);
+    const g = REF2[String(node.ref||'')]; const e = embedAid(g);
+    const m = MEAS[key] || {h0: H0, A: 0};
+    if(e) return m.h0 + h(e, rootOf(e), [], depth+1);
+    const sp = SPANS.get(key) || [0,1];
+    const w = Math.max(1, c[Math.min(sp[1],W)] - c[Math.min(sp[0],W)]);
+    return m.h0 + m.A / w;
+  }
+  return h(AID, rootOf(AID), [], 0);
+}
+// 変分：使われている境界で区切った区間の幅 S を変数にし，合計 s を保って総高さを下げる。
+// 幅どうしで取り分を移す（乗法更新）ので，隣との順序や最小幅に引っかからない。
+function optimizeOnce(){
+  const L = layOf(AID); const W = gridW(); const U = usedBoundaries(); const K = U.length - 1;
+  if(K < 2) return;
+  const c0 = cum(L.view.cellw); const s = c0[W];
+  const minw = 40;
+  let S = []; for(let j=0;j<K;j++) S.push(c0[U[j+1]] - c0[U[j]]);
+  const toCells = (S)=>{ const cw = []; for(let j=0;j<K;j++){ const n = U[j+1]-U[j]; for(let i=0;i<n;i++) cw.push(S[j]/n); } return cw; };
+  const fix = (S)=>{                                 // 下限を守り，合計を s に戻す
+    let T = S.map(x => Math.max(minw, x));
+    for(let r=0;r<8;r++){
+      const free = T.map(x => x > minw + 1e-9);
+      const fixed = T.reduce((t,x,j)=> t + (free[j] ? 0 : x), 0);
+      const want = s - fixed; const have = T.reduce((t,x,j)=> t + (free[j] ? x : 0), 0);
+      if(have <= 0) break;
+      T = T.map((x,j)=> free[j] ? x * want / have : x);
+      if(T.every(x => x >= minw - 1e-6)) break;
+      T = T.map(x => Math.max(minw, x));
+    }
+    return T;
+  };
+  const f = (S)=> modelHeight(toCells(S));
+  S = fix(S);
+  let step = 0.5, f0 = f(S);
+  for(let it=0; it<200 && step > 1e-3; it++){
+    const g = S.map((x,j)=>{ const Y = S.slice(); Y[j] += 1; return f(Y) - f0; });   // 幅を1px増やしたときの高さの変化
+    const gm = Math.max(1e-9, ...g.map(Math.abs));
+    const Y = fix(S.map((x,j)=> x * Math.exp(-step * g[j] / gm)));
+    const f1 = f(Y);
+    if(f1 < f0 - 1e-6){ S = Y; f0 = f1; } else { step *= 0.5; }
+  }
+  L.view.cellw = toCells(S);
+}
+let BUSY = false;
+const tick = (ms)=> new Promise(r=>setTimeout(r, ms||0));
+function setBusy(on, text){
+  BUSY = on;
+  document.body.classList.toggle('busy', on);
+  let ov = document.getElementById('busyov');
+  if(on){
+    if(!ov){ ov = document.createElement('div'); ov.id = 'busyov'; ov.className = 'busyov'; document.body.appendChild(ov); }
+    ov.innerHTML = `<div class="busybox"><div class="spin"></div><div>${esc(text||'計算中…')}</div></div>`;
+    ov.style.display = '';
+  }else if(ov){ ov.style.display = 'none'; }
+}
+async function optimizeAll(){
+  if(!gridOn() || BUSY) return;
+  setBusy(true, '列幅を最適化しています…');
+  await tick(30);
+  try{
+    const L = layOf(AID); const stage = document.getElementById('stage');
+    renderArena(); await tick(20);
+    const before = Math.round(stage.offsetHeight || 0);
+    let best = {h: before, cellw: L.view.cellw.slice()};
+    for(let pass = 0; pass < 4; pass++){
+      optimizeOnce();                    // いまの実測で解く
+      renderArena(); await tick(20);     // 描いて測り直す
+      const h = Math.round(stage.offsetHeight || 0);
+      if(h < best.h) best = {h, cellw: L.view.cellw.slice()};
+    }
+    L.view.cellw = best.cellw;           // 実測でいちばん低かった配分に戻す
+    renderArena();
+    mark(AID);
+    say(`<span class="st ok">最適化</span> 総高さ ${before}px → ${best.h}px（設計）`);
+  }finally{ setBusy(false); }
+}
+
+// 定規：使われている境界に ▼ を立て，左右に動かす
+function paintRuler(){
+  const r = document.getElementById('ruler');
+  if(!r) return;
+  if(!gridOn() || !canEditNow()){ r.style.display = 'none'; return; }
+  const L = layOf(AID); const W = gridW(); const c = cum(L.view.cellw); const s = c[W];
+  const U = usedBoundaries(); const k = dispW() / s;
+  r.style.display = '';
+  r.innerHTML = U.slice(1, -1).map((u, j)=>
+    `<div class="mk" data-j="${j+1}" style="left:${Math.round(c[u]*k)}px" title="原セル ${u} の境界">▼</div>`).join('')
+    ;
+  r.querySelectorAll('.mk').forEach(m=>{
+    m.addEventListener('pointerdown', e=>{
+      e.preventDefault(); m.setPointerCapture(e.pointerId);
+      DRAG = {j: Number(m.dataset.j), x0: e.clientX, U, c: c.slice(), k, W};
+    });
+    m.addEventListener('pointermove', e=>{
+      if(!DRAG) return;
+      const d = DRAG; const dx = (e.clientX - d.x0) / d.k;   // 設計px
+      const X = d.U.map(u => d.c[u]); const j = d.j;
+      const nx = Math.max(X[j-1] + 40, Math.min(X[j+1] - 40, X[j] + dx));
+      X[j] = nx;
+      const cw = []; for(let q=0;q<d.U.length-1;q++){ const n = d.U[q+1]-d.U[q]; const w = (X[q+1]-X[q])/n; for(let i=0;i<n;i++) cw.push(w); }
+      layOf(AID).view.cellw = cw;
+      m.style.left = Math.round(nx * d.k) + 'px';
+      if(!DRAG.raf){ DRAG.raf = requestAnimationFrame(()=>{ DRAG && (DRAG.raf = null); renderArenaKeepRuler(); }); }
+    });
+    m.addEventListener('pointerup', e=>{ DRAG = null; mark(AID); renderArena(); });
+  });
+}
+function renderArenaKeepRuler(){
+  // ドラッグ中は定規を作り直さない（つかんでいる▼を失わないため）
+  const keep = draftLive() ? DRAFT.val : null;
+  PATHS = new Map();
+  document.getElementById('stage').innerHTML = arenaHtml(AID, rootOf(AID), [], null, 0);
+  gridApply();
+  if(keep != null){ const ta = document.getElementById('a-html'); if(ta) ta.value = keep; }
+}
+
+window.addEventListener('resize', ()=>{ renderArena(); });
+window.addEventListener('beforeunload', e=>{ if(anyDirty() || TDIRTY){ e.preventDefault(); e.returnValue=''; }});
+ensureGrid(); render(); setMode('editor'); paintSave(); pkGroups().then(()=>{ render(); gather().then(loadRequests); });
+</script>
+</body>
+</html>

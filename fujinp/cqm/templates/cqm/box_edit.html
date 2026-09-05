@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ box.title }} — 倉庫部品の編集</title>
+<style>
+ *{box-sizing:border-box}
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.7;font-size:14px}
+ .wrap{max-width:1080px;margin:0 auto;padding:12px 16px 40px}
+ .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:8px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;flex-wrap:wrap}
+ .bar .ttl{font-weight:700;font-size:16px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+ @media(max-width:900px){.cols{grid-template-columns:1fr}}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:12px 14px}
+ .card h2{font-size:13px;margin:0 0 8px;color:#4a5568;letter-spacing:.04em}
+ label.f{display:block;font-size:12px;color:#4a5568;margin-top:8px}
+ input,textarea{width:100%;padding:7px 9px;font-size:13px;border:1px solid #cfd6e0;
+   border-radius:7px;font-family:inherit}
+ textarea.code{min-height:420px;font-family:ui-monospace,Consolas,monospace;
+   font-size:13px;line-height:1.7}
+ button{margin-top:10px;padding:8px 16px;font-size:14px;border:1px solid #1b5fa8;
+   border-radius:8px;background:#1b5fa8;color:#fff;cursor:pointer}
+ .key{font-family:ui-monospace,monospace;font-size:12px;color:#6b7280}
+ .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;
+      background:#eef2f7;color:#4a5568;margin-right:4px}
+ .st{display:inline-block;font-size:12px;font-weight:700;padding:1px 9px;border-radius:10px}
+ .ok{background:#e7f6ec;color:#1e7a3c}.partial{background:#fff3d9;color:#8a5b06}
+ .ng{background:#fdeaea;color:#a32a2a}
+ .small{font-size:12px;color:#6b7280}
+ .prev{border:1px solid #d7dce4;border-radius:8px;padding:10px 12px;background:#fcfcfd;
+       min-height:200px;overflow:auto}
+ .prev img{max-width:100%}
+ .prev table{border-collapse:collapse}
+ .prev td,.prev th{border:1px solid #cfd6e0;padding:3px 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <div><a href="{{ url_for('cqm.index') }}">← こんか</a>
+      　<span class="ttl">{{ box.title }}</span>
+      <span class="tag">型 {{ '📝 テキスト' if box.recipe == 'text' else box.recipe }}</span>
+      {% if box.key_path %}<span class="key">{{ box.key_path }}</span>{% endif %}</div>
+    <div><a href="{{ url_for('cqm.box', box_id=box.id) }}">👁 閲覧へ</a>
+      　<a href="{{ url_for('cqm.return_to_fujin') }}">🏠 FUJIN</a></div>
+  </div>
+
+  {% if answer %}
+  <div class="card" style="margin-bottom:12px">
+    <span class="st {{ answer.status }}">{{ answer.status }}</span> {{ answer.note }}
+  </div>
+  {% endif %}
+
+  <form method="post">
+   <div class="cols">
+    <div class="card">
+      <h2>中身</h2>
+      {% if box.recipe == 'text' %}
+      <div class="small">HTML をそのまま書けます。見た目の指定は通り，動くもの（script など）は落とします。</div>
+      <textarea class="code" name="body" id="src"
+        oninput="preview()">{{ body }}</textarea>
+      {% else %}
+      <div class="small">1行が1件です。行の頭の「・」は付けても付けなくても構いません。</div>
+      <textarea class="code" name="body">{{ body }}</textarea>
+      {% endif %}
+      <button type="submit">💾 保存</button>
+    </div>
+
+    <div class="card">
+      <h2>この部品</h2>
+      <label class="f">題名<input type="text" name="title" value="{{ box.title }}"></label>
+      <label class="f">担当（省略可）
+        <input type="text" name="addressee" value="{{ box.attrs.get('addressee','') }}"></label>
+      {% if box.recipe == 'text' %}
+      <h2 style="margin-top:16px">見え方</h2>
+      <div class="prev" id="prev"></div>
+      {% endif %}
+    </div>
+   </div>
+  </form>
+</div>
+
+{% if box.recipe == 'text' %}
+<script>
+function preview(){
+  const src = document.getElementById('src').value;
+  const el = document.getElementById('prev');
+  el.innerHTML = src.replace(/<\s*(script|iframe|object|embed)\b[\s\S]*?<\s*\/\s*\1\s*>/gi,'')
+                    .replace(/<\s*(script|iframe|object|embed|link|meta)\b[^>]*>/gi,'')
+                    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'');
+}
+preview();
+</script>
+{% endif %}
+</body>
+</html>
