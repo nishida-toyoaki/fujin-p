@@ -6,7 +6,9 @@
 
   記事のエディタ．マイノート（my_md_notes/edit_note.html）のエディタと同じ構成：
   左＝ツールバー＋textarea，右＝プレビュー（/preview → process_markdown），
-  画像／PDF は /upload_image で ~/static/ffimgs/ に置いてタグを挿入する．
+  画像／PDF は /upload_image で保護領域に置き，リンクを挿入する．
+  公開の操作（★v1.3）は画像でも PDF でも同じ2つのボタンで行い，公開後の書き方は
+  画像＝<img data-att="N">，PDF などの画像以外＝<a data-att="N"> の公開リンクになる．
 #}
 <!DOCTYPE html>
 <html lang="ja">
@@ -44,6 +46,7 @@ textarea { flex: 1; margin: 0 12px 12px; padding: 10px; border: 1px solid #d1d5d
 .md code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; } .md pre code { background: none; padding: 0; }
 .md img { max-width: 100%; height: auto; display: block; margin: .4em 0; }
 .md table { border-collapse: collapse; } .md th, .md td { border: 1px solid #d1d5db; padding: 4px 8px; }
+.md a.ff-pub { display: inline-block; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 2px 8px; margin: 2px 0; text-decoration: none; color: #065f46; }
 .status { position: fixed; bottom: 16px; right: 16px; background: #1f2937; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: .85rem; display: none; }
 .hint { margin: 0 12px 6px; font-size: .76rem; color: #666; line-height: 1.5; }
 .flash { margin: 8px 12px 0; padding: 8px 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: .85rem; }
@@ -80,10 +83,10 @@ textarea { flex: 1; margin: 0 12px 12px; padding: 10px; border: 1px solid #d1d5d
         <button type="button" onclick="insertMarkdown('[', '](url)')">リンク</button>
         <button type="button" onclick="document.getElementById('imageUpload').click()">画像の添付（リンク）</button>
         <button type="button" onclick="document.getElementById('pdfUpload').click()">PDFの添付（リンク）</button>
-        <button type="button" onclick="publishLink()" title="カーソル位置のリンク [名前](/fujin_forum/file/N) を画像表示に変えます．ファイルは公開されます">リンク→画像表示（公開）</button>
-        <button type="button" onclick="unpublishImg()" title="カーソル位置の &lt;img data-att=N&gt; をリンクに戻し，公開複製を消します">画像→リンク（非公開）</button>
+        <button type="button" onclick="publishAtt()" title="カーソル位置のリンク [名前](/fujin_forum/file/N) を公開します．画像は画像表示に，PDF などは公開リンクに変わります">添付を公開（画像は画像表示）</button>
+        <button type="button" onclick="unpublishAtt()" title="カーソル位置の公開した添付（data-att 付きの &lt;img&gt; や &lt;a&gt;）をリンクに戻し，公開複製を消します">添付を非公開に戻す</button>
       </div>
-      <div class="hint">添付はこのチャンネルを見られる人だけが開けるリンクとして入ります．画像として本文中に表示したいときは「リンク→画像表示（公開）」を使います（そのファイルは URL を知る誰でも見られるようになります）．</div>
+      <div class="hint">添付はこのチャンネルを見られる人だけが開けるリンクとして入ります．画像を本文中に表示したいとき，PDF などをチャンネルの外にも渡したいときは「添付を公開（画像は画像表示）」を使います（そのファイルは URL を知る誰でも見られるようになります）．元に戻すときは「添付を非公開に戻す」を使います．</div>
       <textarea id="content" name="content" oninput="onInput()" placeholder="本文を Markdown で書きます．最初の行を「# 見出し」にすると一覧に題名として出ます．">{{ content }}</textarea>
       <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="uploadFile(this)">
       <input type="file" id="pdfUpload" accept=".pdf,application/pdf" style="display:none" onchange="uploadFile(this)">
@@ -127,44 +130,60 @@ function uploadFile(input) {
     else alert('アップロードに失敗しました: ' + d.error);
   }).catch(() => alert('アップロードに失敗しました')).finally(() => { input.value = ''; });
 }
-// ── 添付の公開／非公開（★v1.1） ──
+// ── 添付の公開／非公開（★v1.1，画像以外にも広げた ★v1.3） ──
 const ATT_RE_LINK = /\[([^\]]*)\]\((?:https?:\/\/[^\/]+)?\/fujin_forum\/file\/(\d+)\)/g;
 const ATT_RE_IMG = /<img\b[^>]*data-att="(\d+)"[^>]*>/g;
-function findAtCursor(re) {
-  const t = document.getElementById('content'), pos = t.selectionStart; let m, hit = null;
-  re.lastIndex = 0;
-  while ((m = re.exec(t.value)) !== null) { if (pos >= m.index && pos <= m.index + m[0].length) { hit = m; break; } if (!hit && m.index > pos) { hit = m; break; } }
-  return hit;
+const ATT_RE_A = /<a\b[^>]*data-att="(\d+)"[^>]*>[\s\S]*?<\/a>/g;
+const CLIP = '📎 ';
+function findAtCursor(res) {
+  const t = document.getElementById('content'), pos = t.selectionStart;
+  let inside = null, after = null;
+  for (const re of [].concat(res)) {
+    re.lastIndex = 0; let m;
+    while ((m = re.exec(t.value)) !== null) {
+      if (m[0].length === 0) { re.lastIndex++; continue; }
+      if (pos >= m.index && pos <= m.index + m[0].length) { if (!inside || m.index < inside.index) inside = m; }
+      else if (m.index > pos) { if (!after || m.index < after.index) after = m; }
+    }
+  }
+  return inside || after;
 }
 function replaceRange(start, end, text) {
   const t = document.getElementById('content'); t.value = t.value.slice(0, start) + text + t.value.slice(end);
   t.focus(); t.setSelectionRange(start, start + text.length); onInput();
 }
-async function publishLink() {
+function attLabel(s) { return (s || '').replace(/[<>"]/g, '').trim() || 'ファイル'; }
+async function publishAtt() {
   const m = findAtCursor(ATT_RE_LINK);
   if (!m) { alert('カーソルの位置（または後ろ）に添付リンク [名前](/fujin_forum/file/N) が見つかりません'); return; }
   const name = m[1].replace(/^📎\s*/, ''), aid = m[2];
-  if (!confirm(`「${name}」を画像として表示します。\nこのファイルは公開領域に複製され、URL を知る誰でも（ログインしていなくても）見られるようになります。よろしいですか？`)) return;
+  if (!confirm(`「${name}」を公開します。\nこのファイルは公開領域に複製され、URL を知る誰でも（ログインしていなくても）見られるようになります。よろしいですか？`)) return;
   try {
     const r = await fetch("{{ url_for('fujin_forum.api_att_publish', aid=0) }}".replace(/0\/publish$/, aid + '/publish'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const d = await r.json(); if (!d.success) { alert(d.error); return; }
     const full = window.location.origin + d.url;
     const start = m.index, end = m.index + m[0].length;
     const t = document.getElementById('content');
-    const s0 = (t.value.slice(0, start).endsWith('📎 ') ? start - 2 : start);
-    replaceRange(s0, end, `<img class="k-img" src="${full}" style="width:100%;" alt="${name.replace(/"/g, '')}" data-att="${aid}">`);
-    showStatus('公開して画像表示にしました');
+    const s0 = (t.value.slice(0, start).endsWith(CLIP) ? start - CLIP.length : start);
+    const label = attLabel(name);
+    if (d.kind === 'image') {
+      replaceRange(s0, end, `<img class="k-img" src="${full}" style="width:100%;" alt="${label}" data-att="${aid}">`);
+      showStatus('公開して画像表示にしました');
+    } else {
+      replaceRange(s0, end, `<a class="ff-pub" href="${full}" target="_blank" rel="noopener" data-att="${aid}">🌐 ${label}</a>`);
+      showStatus('公開リンクにしました（URL を知る誰でも開けます）');
+    }
   } catch (e) { alert('失敗しました: ' + e.message); }
 }
-async function unpublishImg() {
-  const m = findAtCursor(ATT_RE_IMG);
-  if (!m) { alert('カーソルの位置（または後ろ）に公開した画像（data-att 付きの <img>）が見つかりません'); return; }
+async function unpublishAtt() {
+  const m = findAtCursor([ATT_RE_IMG, ATT_RE_A]);
+  if (!m) { alert('カーソルの位置（または後ろ）に公開した添付（data-att が付いた <img> や <a>）が見つかりません'); return; }
   const aid = m[1];
-  if (!confirm('この画像の公開複製を消し、リンクに戻します。よろしいですか？')) return;
+  if (!confirm('この添付の公開複製を消し、チャンネルを見られる人だけが開けるリンクに戻します。よろしいですか？')) return;
   try {
     const r = await fetch("{{ url_for('fujin_forum.api_att_unpublish', aid=0) }}".replace(/0\/unpublish$/, aid + '/unpublish'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const d = await r.json(); if (!d.success) { alert(d.error); return; }
-    replaceRange(m.index, m.index + m[0].length, `📎 [${d.name}](${d.url})`);
+    replaceRange(m.index, m.index + m[0].length, `${CLIP}[${d.name}](${d.url})`);
     showStatus('非公開に戻しました');
   } catch (e) { alert('失敗しました: ' + e.message); }
 }

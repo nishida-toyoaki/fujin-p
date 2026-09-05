@@ -41,7 +41,7 @@ fujin_forum（えふえふ）- ルート定義 v1.2
   POST /preview                          Markdown プレビュー
   POST /upload_image?channel=<id>        添付のアップロード（保護領域へ．リンクを返す）★v1.1
   GET  /file/<id>                        保護添付の配信（チャンネルの閲覧権で判定）★v1.1
-  POST /api/attachments/<id>/publish     添付を公開領域に複製し画像表示できるようにする ★v1.1
+  POST /api/attachments/<id>/publish     添付を公開領域に複製する（kind で画像／それ以外を返す）★v1.1／★v1.3
   POST /api/attachments/<id>/unpublish   公開複製を消す ★v1.1
   GET  /api/import/sources               すらくみのアーカイブ済みチャンネル（admin）
   POST /api/import                       取込の実行（admin）
@@ -53,10 +53,12 @@ fujin_forum（えふえふ）- ルート定義 v1.2
   添付は保護領域 data/files/<channel_id>/ に置き，/file/<id> で配信する．配信の
   たびにチャンネルの閲覧権を判定するので，チャンネルの公開範囲を変えれば
   リンク先のアクセス権も自動で追随する．本文にはリンク [📎 名前](/fujin_forum/file/<id>)
-  だけを書く．画像として表示したいときは，ユーザが「公開」操作で ~/static/ffimgs/
-  に乱数名の複製を作り（ホスティングの規則上，static は権限で隠せない），本文の
-  リンクを <img> に置き換える．描画時に /fujin_forum/file/… を指す <img> や ![]() は
-  リンクに変換するので，保護ファイルが画像表示されることはない．
+  だけを書く．画像として表示したいとき，PDF などをチャンネルの外にも渡したいときは，
+  ユーザが「公開」操作で ~/static/ffimgs/ に乱数名の複製を作り（ホスティングの
+  規則上，static は権限で隠せない），本文のリンクを画像なら <img data-att="N">，
+  それ以外なら公開リンク <a class="ff-pub" data-att="N"> に置き換える（★v1.3．
+  それまでは画像だけが公開できた）．描画時に /fujin_forum/file/… を指す <img> や
+  ![]() はリンクに変換するので，保護ファイルが画像表示されることはない．
   取込（すらくみ）の添付もすべて保護領域に置き，リンクだけを書く．
 
 【権限】
@@ -825,10 +827,14 @@ def _sanitize_svg(data):
 
 
 _ATT_REF_RE = re.compile(r'/fujin_forum/file/(\d+)')
+# 公開した添付は本文に保護リンクが残らない（<img data-att="N"> や公開リンク
+# <a data-att="N">）ので，data-att からも拾って post_id を結ぶ ★v1.3
+_ATT_DATA_RE = re.compile(r'\bdata-att\s*=\s*["\'](\d+)["\']')
 
 
 def _bind_attachments(cur, channel_id, post_id, body_md):
-    ids = sorted({int(x) for x in _ATT_REF_RE.findall(body_md or '')})
+    ids = sorted({int(x) for x in _ATT_REF_RE.findall(body_md or '')} |
+                 {int(x) for x in _ATT_DATA_RE.findall(body_md or '')})
     if not ids:
         return
     ph = ','.join(['%s'] * len(ids))
@@ -939,6 +945,18 @@ def serve_file(aid):
                      download_name=a.get('name') or f'file{aid}')
 
 
+IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+
+
+def _att_kind(name, mimetype=None):
+    """公開したときの本文での書き方を決める：画像は <img>，それ以外は公開リンク ★v1.3"""
+    name = name or ''
+    ext = name.rsplit('.', 1)[1].lower() if '.' in name else ''
+    if ext in IMAGE_EXTENSIONS or (mimetype or '').startswith('image/'):
+        return 'image'
+    return 'file'
+
+
 def _can_publish(a, uid, cat):
     """公開／非公開の操作は，添付した本人か admin（Slack 由来は admin だけ）"""
     return cat == 'admin' or (a.get('uploaded_by') is not None and a['uploaded_by'] == uid)
@@ -948,7 +966,9 @@ def _can_publish(a, uid, cat):
 @login_required
 @same_origin_required
 def api_att_publish(aid):
-    """添付を公開領域（~/static/ffimgs/）に複製し，画像表示に使える URL を返す（★v1.1）"""
+    """添付を公開領域（~/static/ffimgs/）に複製し，公開 URL を返す（★v1.1）．
+    画像／PDF などの別は kind（image / file）で返し，エディタは画像なら <img>，
+    それ以外なら公開リンク <a> を本文に書く（★v1.3）"""
     uid, cat, _ = _me()
     conn = _db()
     cur = conn.cursor(dictionary=True)
@@ -960,7 +980,8 @@ def api_att_publish(aid):
         if not _can_publish(a, uid, cat):
             return _err('公開できるのは添付した本人と管理者です', 403)
         if a.get('public_path'):
-            return _ok(url=a['public_path'], already=True)
+            return _ok(url=a['public_path'], already=True, name=a.get('name'),
+                       kind=_att_kind(a.get('name'), a.get('mimetype')))
         src = os.path.normpath(os.path.join(FILES_DIR, a['local_path'] or ''))
         if not src.startswith(os.path.normpath(FILES_DIR)) or not os.path.isfile(src):
             return _err('原本が見つかりません', 404)
@@ -972,7 +993,8 @@ def api_att_publish(aid):
         pub = f"{UPLOAD_URL_PREFIX}/{unique}"
         cur.execute("UPDATE fujin_forum_attachments SET public_path=%s WHERE id=%s", (pub, aid))
         conn.commit()
-        return _ok(url=pub, name=a.get('name'))
+        return _ok(url=pub, name=a.get('name'),
+                   kind=_att_kind(a.get('name'), a.get('mimetype')))
     finally:
         cur.close(); conn.close()
 
@@ -1002,7 +1024,8 @@ def api_att_unpublish(aid):
                     logging.warning("fujin_forum unpublish remove: %s", e)
         cur.execute("UPDATE fujin_forum_attachments SET public_path=NULL WHERE id=%s", (aid,))
         conn.commit()
-        return _ok(url=url_for('fujin_forum.serve_file', aid=aid), name=a.get('name'))
+        return _ok(url=url_for('fujin_forum.serve_file', aid=aid), name=a.get('name'),
+                   kind=_att_kind(a.get('name'), a.get('mimetype')))
     finally:
         cur.close(); conn.close()
 
