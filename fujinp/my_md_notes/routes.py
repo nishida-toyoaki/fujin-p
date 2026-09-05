@@ -53,7 +53,19 @@ UPLOAD_SUBDIR = 'mdimgs'
 UPLOAD_FOLDER = os.path.join(UPLOAD_BASE_DIR, 'static', UPLOAD_SUBDIR)
 UPLOAD_URL_PREFIX = f'/static/{UPLOAD_SUBDIR}'
 
+# 保護領域（添付の原本。アプリディレクトリ配下・実行時に自動生成・配布対象外）★4.0
+#   添付は既定でここに置き、/my_md_notes/file/<id> で配信する。配信のたびに
+#   ノートの公開範囲を判定するので、ノートの公開範囲を変えれば添付のアクセス権も
+#   自動で追随する。本文にはリンク [名前](/my_md_notes/file/<id>) だけを書く。
+#   画像として表示したいとき、PDFなどをノートの外へ渡したいときは、ユーザが
+#   「公開」操作で static/mdimgs/ に複製を作る（えふえふ＝fujin_forum と同じ規則）。
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+FILES_DIR = os.path.join(DATA_DIR, 'files')
+PROTECTED_URL_PREFIX = '/my_md_notes/file'
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'svg', 'pdf'}
+# 公開したときの本文での書き方を分ける（画像は <img>、それ以外は公開リンク）
+IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'svg'}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB
 
 # 拡張子ごとのマジックナンバー（拡張子偽装の検出用）
@@ -93,7 +105,8 @@ JST = pytz.timezone('Asia/Tokyo')
 #   users.id や user_groups.id はサイトごとに異なるので、所有者は email、
 #   許可グループは name で持ち運び、取り込み先で引き当てる。
 EXPORT_TYPE = 'fujinp_my_md_notes_content'
-EXPORT_FORMAT_VERSION = 1
+#   4.0 で添付が保護領域に移ったため、形式は 2 になった（1 も取り込める）。
+EXPORT_FORMAT_VERSION = 2
 DT_FORMAT = '%Y-%m-%d %H:%M:%S'
 IMPORT_MODES = ('skip', 'overwrite', 'add')
 
@@ -154,6 +167,10 @@ DOWNLOAD_HTML_CSS = """
 
         .content-area a { color: #4299e1; text-decoration: none; }
         .content-area a:hover { text-decoration: underline; }
+        .content-area a.mn-att { display: inline-block; background: #f3f4f6; border: 1px solid #e2e8f0;
+            border-radius: 6px; padding: 2px 8px; margin: 2px 0; text-decoration: none; color: #2d3748; }
+        .content-area a.mn-pub { display: inline-block; background: #ecfdf5; border: 1px solid #a7f3d0;
+            border-radius: 6px; padding: 2px 8px; margin: 2px 0; text-decoration: none; color: #065f46; }
 
         .content-area ul, .content-area ol {
             padding-left: 2em;
@@ -447,6 +464,192 @@ def can_view_note(note, user_id, user_category):
     return False
 
 
+def can_edit_note(note, user_id, user_category):
+    """ノートを編集できるのは所有者とadminだけ（添付の公開／非公開もこれに従う）"""
+    return user_category == 'admin' or note['オーナーID'] == user_id
+
+
+# =============================================================================
+# 添付ファイル（保護領域と公開複製）★4.0
+# =============================================================================
+
+PROTECTED_IMG_RE = re.compile(
+    r'<img\b[^>]*?\bsrc\s*=\s*["\']([^"\']*?' + re.escape(PROTECTED_URL_PREFIX) + r'/(\d+)[^"\']*)["\'][^>]*>',
+    re.IGNORECASE)
+
+PROTECTED_REF_RE = re.compile(
+    r'(?:https?://[^/\s"\')]+)?' + re.escape(PROTECTED_URL_PREFIX) + r'/(\d+)')
+
+DATA_ATT_RE = re.compile(r'\bdata-att\s*=\s*["\'](\d+)["\']')
+
+
+def attachment_kind(name, mimetype=None):
+    """公開したときの本文での書き方（画像は <img>、それ以外は公開リンク）"""
+    name = name or ''
+    ext = name.rsplit('.', 1)[1].lower() if '.' in name else ''
+    if ext in IMAGE_EXTENSIONS or (mimetype or '').startswith('image/'):
+        return 'image'
+    return 'file'
+
+
+def guard_protected_images(html_text):
+    """保護添付（/my_md_notes/file/…）を指す <img> はリンクに変える。
+
+    保護領域のファイルは画像として表示せず、必ずリンクで渡す（えふえふと同じ規則）。
+    画像として見せたいときは、編集画面の「添付を公開」で公開複製を作る。
+    """
+    def repl(m):
+        src = m.group(1)
+        alt = re.search(r'\balt\s*=\s*["\']([^"\']*)["\']', m.group(0))
+        label = (alt.group(1) if alt and alt.group(1) else f'添付 {m.group(2)}')
+        return f'<a href="{html.escape(src)}" class="mn-att">📎 {html.escape(label)}</a>'
+    return PROTECTED_IMG_RE.sub(repl, html_text)
+
+
+def render_note_html(markdown_text, user_category):
+    """本文のHTML化（保護添付のガードまで込み）"""
+    return guard_protected_images(process_markdown(markdown_text or '', user_category))
+
+
+def load_attachment(cursor, aid):
+    cursor.execute("SELECT * FROM my_md_notes_attachments WHERE id = %s", (aid,))
+    return cursor.fetchone()
+
+
+def load_note_row(cursor, note_id):
+    cursor.execute("SELECT * FROM my_md_notes_notes WHERE id = %s", (note_id,))
+    return cursor.fetchone()
+
+
+def unique_stored_name(original_name):
+    """保存名（乱数8桁を先頭に付けてURLの総当たり推測を防ぐ）"""
+    ext = original_name.rsplit('.', 1)[1].lower() if '.' in original_name else ''
+    base, _ = os.path.splitext(secure_filename(original_name))
+    return f"{uuid.uuid4().hex[:8]}_{base or 'file'}" + (f'.{ext}' if ext else '')
+
+
+def store_protected(cursor, note_id, original_name, data, mimetype, uploaded_by):
+    """保護領域にファイルを置き、台帳（my_md_notes_attachments）に1行作る"""
+    rel = os.path.join(str(note_id), unique_stored_name(original_name))
+    abs_path = os.path.join(FILES_DIR, rel)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    with open(abs_path, 'wb') as f:
+        f.write(data)
+    cursor.execute("""
+        INSERT INTO my_md_notes_attachments
+            (ノートID, name, mimetype, size, local_path, public_path, uploaded_by, 作成日時)
+        VALUES (%s, %s, %s, %s, %s, NULL, %s, %s)
+    """, (note_id, (original_name or 'file')[:500], (mimetype or '')[:100], len(data),
+          rel.replace('\\', '/'), uploaded_by, get_jst_now()))
+    aid = cursor.lastrowid
+    return {'id': aid, 'name': original_name,
+            'url': url_for('my_md_notes.serve_file', aid=aid)}
+
+
+def protected_abs_path(local_path):
+    """台帳の local_path を絶対パスにする（保護領域の外を指していたら None）"""
+    if not local_path:
+        return None
+    path = os.path.normpath(os.path.join(FILES_DIR, local_path))
+    if not path.startswith(os.path.normpath(FILES_DIR)):
+        return None
+    return path
+
+
+def public_abs_path(public_path):
+    """公開複製のURLから実ファイルの絶対パスを求める（公開領域の外なら None）"""
+    if not public_path or not public_path.startswith(UPLOAD_URL_PREFIX + '/'):
+        return None
+    path = os.path.normpath(os.path.join(UPLOAD_FOLDER, public_path[len(UPLOAD_URL_PREFIX) + 1:]))
+    if not path.startswith(os.path.normpath(UPLOAD_FOLDER)):
+        return None
+    return path
+
+
+def make_public_copy(src_path, original_name, fixed_name=None):
+    """公開領域に複製を作り、その URL を返す"""
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    unique = fixed_name or unique_stored_name(original_name or 'file')
+    with open(src_path, 'rb') as rf, open(os.path.join(UPLOAD_FOLDER, unique), 'wb') as wf:
+        wf.write(rf.read())
+    return f"{UPLOAD_URL_PREFIX}/{unique}"
+
+
+def remove_public_copy(public_path):
+    path = public_abs_path(public_path)
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError as e:
+            print(f"[my_md_notes] 公開複製の削除に失敗: {e}")
+
+
+def absolutize_protected_refs(text):
+    """保護添付への参照をフルURLにする（ダウンロードした先でも開けるように）"""
+    base = request.host_url.rstrip('/')
+    return PROTECTED_REF_RE.sub(
+        lambda m: f"{base}{PROTECTED_URL_PREFIX}/{m.group(1)}", text)
+
+
+def publish_note_attachments(conn, cursor, note, markdown_text):
+    """本文が参照する保護添付をすべて公開し、本文の参照を公開URLに置き換える。★4.0
+
+    アーカイブ（＝インターネット公開の経路）へ出すときに使う。戻り値は
+    （置き換えた本文, 公開したファイル名のリスト）。
+    """
+    ids = {int(x) for x in PROTECTED_REF_RE.findall(markdown_text or '')}
+    ids |= {int(x) for x in DATA_ATT_RE.findall(markdown_text or '')}
+    if not ids:
+        return markdown_text, []
+
+    base = request.host_url.rstrip('/')
+    published = []
+    url_by_id = {}
+    for aid in sorted(ids):
+        a = load_attachment(cursor, aid)
+        if not a or a.get('ノートID') != note['id']:
+            continue
+        pub = a.get('public_path')
+        if not pub:
+            src = protected_abs_path(a.get('local_path'))
+            if not src or not os.path.isfile(src):
+                continue
+            pub = make_public_copy(src, a.get('name'))
+            cursor.execute("UPDATE my_md_notes_attachments SET public_path = %s WHERE id = %s",
+                           (pub, aid))
+            published.append(a.get('name') or f'添付 {aid}')
+        url_by_id[aid] = base + pub
+    if published:
+        conn.commit()
+
+    def repl(m):
+        return url_by_id.get(int(m.group(1)), m.group(0))
+
+    return PROTECTED_REF_RE.sub(repl, markdown_text or ''), published
+
+
+def delete_note_attachments(cursor, note_id):
+    """ノートに属する添付の実体（原本と公開複製）と台帳の行を消す"""
+    cursor.execute("SELECT * FROM my_md_notes_attachments WHERE ノートID = %s", (note_id,))
+    rows = cursor.fetchall()
+    for a in rows:
+        path = protected_abs_path(a.get('local_path'))
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError as e:
+                print(f"[my_md_notes] 添付原本の削除に失敗: {e}")
+        remove_public_copy(a.get('public_path'))
+    cursor.execute("DELETE FROM my_md_notes_attachments WHERE ノートID = %s", (note_id,))
+    folder = os.path.join(FILES_DIR, str(note_id))
+    if os.path.isdir(folder):
+        try:
+            os.rmdir(folder)
+        except OSError:
+            pass
+    return len(rows)
+
+
 # =============================================================================
 # データアクセス
 # =============================================================================
@@ -686,8 +889,7 @@ def preview_markdown():
     user_category = session.get('user_category')
 
     try:
-        html = process_markdown(markdown_text, user_category)
-        return jsonify({'html': html})
+        return jsonify({'html': render_note_html(markdown_text, user_category)})
     except Exception as e:
         print(f"[my_md_notes] preview error: {e}")
         return jsonify({'html': '<p style="color: red;">プレビューの生成に失敗しました。</p>'})
@@ -697,7 +899,15 @@ def preview_markdown():
 @login_required
 @same_origin_required
 def upload_image():
-    """画像・PDFのアップロード（png / jpg / jpeg / svg / pdf、20MBまで）"""
+    """添付のアップロード（png / jpg / jpeg / svg / pdf、20MBまで）。★4.0
+
+    保護領域に置き、本文に書くリンク [名前](/my_md_notes/file/<id>) を返す。
+    query / form: note=<ノートID>（編集できるノート）
+    """
+    note_id = request.args.get('note', type=int) or request.form.get('note', type=int)
+    if not note_id:
+        return jsonify({'success': False, 'error': 'ノートが指定されていません'}), 400
+
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'ファイルが選択されていません'}), 400
 
@@ -733,36 +943,217 @@ def upload_image():
         if not magic_ok(head, ext):
             return jsonify({'success': False, 'error': 'ファイルの内容が拡張子と一致しません'}), 400
 
+    data = file.read()
+    if ext == 'svg':
+        # SVG はサニタイズしてから保存
+        data = _sanitize_svg(data)
+
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
     try:
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        note = load_note_row(cursor, note_id)
+        if not note:
+            return jsonify({'success': False, 'error': 'ノートが見つかりません'}), 404
+        if not can_edit_note(note, session['user_id'], session.get('user_category')):
+            return jsonify({'success': False, 'error': 'このノートに添付する権限がありません'}), 403
 
-        # 乱数8桁を先頭に付け、URLの総当たり推測を防ぐ（コレポと同じ規則）
-        timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
-        filename = secure_filename(file.filename)
-        name, _ = os.path.splitext(filename)
-        if not name:
-            name = 'file'
-        unique_filename = f"{uuid.uuid4().hex[:8]}_{name}_{timestamp}.{ext}"
-
-        filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
-        if ext == 'svg':
-            # SVG はサニタイズしてから保存
-            svg_data = _sanitize_svg(file.read())
-            with open(filepath, 'wb') as f:
-                f.write(svg_data)
-        else:
-            file.save(filepath)
-
+        r = store_protected(cursor, note_id, file.filename, data, file.mimetype,
+                            session['user_id'])
+        conn.commit()
         return jsonify({
             'success': True,
-            'filename': unique_filename,
-            'url': f"{UPLOAD_URL_PREFIX}/{unique_filename}",
+            'id': r['id'],
+            'filename': r['name'],
+            'url': r['url'],
             'kind': 'pdf' if ext == 'pdf' else 'image',
         })
 
     except Exception as e:
+        conn.rollback()
         print(f"[my_md_notes] upload error: {e}")
         return jsonify({'success': False, 'error': 'アップロードに失敗しました'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@my_md_notes_bp.route('/file/<int:aid>')
+@login_required
+def serve_file(aid):
+    """保護添付の配信。配信のたびにノートの公開範囲を判定する。★4.0"""
+    from flask import send_file, abort
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        a = load_attachment(cursor, aid)
+        if not a or not a.get('local_path'):
+            abort(404)
+        note = load_note_row(cursor, a['ノートID']) if a.get('ノートID') else None
+        if not note:
+            abort(404)
+        if not can_view_note(note, session['user_id'], session.get('user_category')):
+            abort(403)
+    finally:
+        cursor.close()
+        conn.close()
+
+    path = protected_abs_path(a['local_path'])
+    if not path or not os.path.isfile(path):
+        abort(404)
+    mt = a.get('mimetype') or 'application/octet-stream'
+    inline = (mt.startswith('image/') and 'svg' not in mt) or mt == 'application/pdf'
+    return send_file(path, mimetype=mt, as_attachment=not inline,
+                     download_name=a.get('name') or f'file{aid}')
+
+
+@my_md_notes_bp.route('/api/attachments/<int:aid>/publish', methods=['POST'])
+@login_required
+@same_origin_required
+def api_att_publish(aid):
+    """添付を公開領域（static/mdimgs/）に複製し、公開URLを返す。★4.0
+
+    画像／それ以外の別は kind（image / file）で返し、編集画面は画像なら <img>、
+    それ以外なら公開リンク <a> を本文に書く。
+    """
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        a = load_attachment(cursor, aid)
+        if not a:
+            return jsonify({'success': False, 'error': '添付がありません'}), 404
+        note = load_note_row(cursor, a.get('ノートID')) if a.get('ノートID') else None
+        if not note or not can_edit_note(note, session['user_id'], session.get('user_category')):
+            return jsonify({'success': False,
+                            'error': '公開できるのはノートの所有者と管理者です'}), 403
+
+        kind = attachment_kind(a.get('name'), a.get('mimetype'))
+        if a.get('public_path'):
+            return jsonify({'success': True, 'url': a['public_path'], 'name': a.get('name'),
+                            'kind': kind, 'already': True})
+
+        src = protected_abs_path(a.get('local_path'))
+        if not src or not os.path.isfile(src):
+            return jsonify({'success': False, 'error': '原本が見つかりません'}), 404
+
+        pub = make_public_copy(src, a.get('name'))
+        cursor.execute("UPDATE my_md_notes_attachments SET public_path = %s WHERE id = %s",
+                       (pub, aid))
+        conn.commit()
+        return jsonify({'success': True, 'url': pub, 'name': a.get('name'), 'kind': kind})
+    except Exception as e:
+        conn.rollback()
+        print(f"[my_md_notes] publish error: {e}")
+        return jsonify({'success': False, 'error': '公開に失敗しました'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@my_md_notes_bp.route('/api/attachments/unpublish', methods=['POST'])
+@login_required
+@same_origin_required
+def api_att_unpublish():
+    """公開複製を消して、保護領域のリンクに戻す。★4.0
+
+    JSON の引数は次のどちらか。
+      id   - 台帳にある添付のID（本文の data-att から取る）
+      url  - 公開領域(static/mdimgs/)のURL。4.0より前に貼った添付はまだ台帳に
+             載っていないので、その場合はここで台帳に登録し、実体を保護領域へ
+             移してから公開複製を消す（note＝そのノートIDも要る）
+    """
+    payload = request.get_json(silent=True) or {}
+    aid = payload.get('id')
+    url = (payload.get('url') or '').strip()
+    note_id = payload.get('note')
+
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cursor = conn.cursor(dictionary=True)
+    try:
+        a = None
+        if aid:
+            a = load_attachment(cursor, int(aid))
+        elif url:
+            path_only = url.split('://', 1)[-1]
+            path_only = path_only[path_only.index(UPLOAD_URL_PREFIX):] \
+                if UPLOAD_URL_PREFIX in path_only else ''
+            if not path_only:
+                return jsonify({'success': False, 'error': '公開領域のURLではありません'}), 400
+            cursor.execute("SELECT * FROM my_md_notes_attachments WHERE public_path = %s",
+                           (path_only,))
+            a = cursor.fetchone()
+            if not a:
+                # 台帳に無い＝4.0より前に貼ったファイル。ここで取り込む
+                return adopt_legacy_attachment(conn, cursor, path_only, note_id)
+
+        if not a:
+            return jsonify({'success': False, 'error': '添付がありません'}), 404
+
+        note = load_note_row(cursor, a.get('ノートID')) if a.get('ノートID') else None
+        if not note or not can_edit_note(note, session['user_id'], session.get('user_category')):
+            return jsonify({'success': False,
+                            'error': '非公開に戻せるのはノートの所有者と管理者です'}), 403
+
+        remove_public_copy(a.get('public_path'))
+        cursor.execute("UPDATE my_md_notes_attachments SET public_path = NULL WHERE id = %s",
+                       (a['id'],))
+        conn.commit()
+        return jsonify({'success': True, 'id': a['id'], 'name': a.get('name'),
+                        'url': url_for('my_md_notes.serve_file', aid=a['id'])})
+    except Exception as e:
+        conn.rollback()
+        print(f"[my_md_notes] unpublish error: {e}")
+        return jsonify({'success': False, 'error': '非公開に戻せませんでした'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def adopt_legacy_attachment(conn, cursor, public_path, note_id):
+    """4.0より前に static/mdimgs/ へ直接置かれたファイルを台帳に取り込む。★4.0
+
+    実体を保護領域へ移し、公開複製を消す。ほかのノートも同じファイルを参照して
+    いるときは、そのノートの本文が壊れるので断る。
+    """
+    if not note_id:
+        return jsonify({'success': False, 'error': 'ノートが指定されていません'}), 400
+    note = load_note_row(cursor, int(note_id))
+    if not note or not can_edit_note(note, session['user_id'], session.get('user_category')):
+        return jsonify({'success': False,
+                        'error': '非公開に戻せるのはノートの所有者と管理者です'}), 403
+
+    src = public_abs_path(public_path)
+    if not src or not os.path.isfile(src):
+        return jsonify({'success': False, 'error': '公開領域にファイルがありません'}), 404
+
+    cursor.execute("""
+        SELECT ノートID FROM my_md_notes_contents
+        WHERE 内容 LIKE %s AND ノートID <> %s
+    """, ('%' + public_path + '%', int(note_id)))
+    others = [r['ノートID'] for r in cursor.fetchall()]
+    if others:
+        return jsonify({'success': False,
+                        'error': 'ほかのノート（ID: '
+                                 + '、'.join(str(x) for x in others[:5])
+                                 + '）も同じファイルを参照しているので非公開にできません'}), 409
+
+    with open(src, 'rb') as f:
+        data = f.read()
+    original = os.path.basename(public_path)
+    # 先頭の乱数8桁は保存時に付けたものなので、表示名からは外す
+    display_name = original.split('_', 1)[1] if '_' in original[:9] else original
+    mimetype = ('image/svg+xml' if original.lower().endswith('.svg') else
+                'application/pdf' if original.lower().endswith('.pdf') else
+                'image/png' if original.lower().endswith('.png') else
+                'image/jpeg' if original.lower().endswith(('.jpg', '.jpeg')) else
+                'application/octet-stream')
+    r = store_protected(cursor, int(note_id), display_name, data, mimetype, session['user_id'])
+    conn.commit()
+    try:
+        os.remove(src)
+    except OSError as e:
+        print(f"[my_md_notes] 旧添付の公開複製を消せませんでした: {e}")
+    return jsonify({'success': True, 'id': r['id'], 'name': r['name'], 'url': r['url'],
+                    'adopted': True})
 
 
 @my_md_notes_bp.route('/view_note/<int:note_id>')
@@ -789,7 +1180,7 @@ def view_note(note_id):
             return redirect(url_for('my_md_notes.index'))
 
         add_display_dates([note])
-        html_content = process_markdown(note['内容'] or '', user_category)
+        html_content = render_note_html(note['内容'], user_category)
 
         return render_template('view_note.html',
                                note=note,
@@ -911,7 +1302,9 @@ def download_html(note_id):
             return redirect(url_for('my_md_notes.index'))
 
         title = note['名前'] or f'note_{note_id}'
-        body_html = process_markdown(note['内容'] or '', user_category)
+        # 保護添付はリンクのまま（開くにはログインが要る）。相対URLだと
+        # ダウンロードしたファイルからは辿れないので、フルURLにしておく。
+        body_html = absolutize_protected_refs(render_note_html(note['内容'], user_category))
 
         # 閲覧画面と同じ枠組み（.content-container > .content-area）に収めて返す。
         # 枠を合わせないと、表・引用・コードブロックに素のブラウザ既定スタイルが
@@ -1021,7 +1414,16 @@ def archive_note(note_id):
             flash('アーカイブタイトルは必須です。', 'error')
             return redirect(url_for('my_md_notes.index'))
 
-        body_html = process_markdown(note['内容'] or '', user_category)
+        # アーカイブは文書をインターネットへ出すための経路なので、保護添付は
+        # そのままでは読み手が開けない。既定では本文が参照する保護添付を公開し、
+        # 参照を公開URLに書き換えてから保存する（チェックを外すと保護のまま）。
+        publish_attachments = request.form.get('publish_attachments', '1') == '1'
+        content_md = note['内容'] or ''
+        published = []
+        if publish_attachments:
+            content_md, published = publish_note_attachments(conn, cursor, note, content_md)
+
+        body_html = absolutize_protected_refs(render_note_html(content_md, user_category))
 
         # 最小限のHTMLドキュメント構造に整形（コレポの generate_complete_archive_html と同形）
         final_html = """<!DOCTYPE html>
@@ -1044,8 +1446,15 @@ def archive_note(note_id):
         )
 
         if success:
-            flash(f'ノート「{note["名前"]}」をアーカイブに保存しました（{message}）。'
-                  'インターネットへの公開は文書アーカイブで公開範囲を設定してください。', 'success')
+            lines = [f'ノート「{note["名前"]}」をアーカイブに保存しました（{message}）。'
+                     'インターネットへの公開は文書アーカイブで公開範囲を設定してください。']
+            if published:
+                lines.append(f'本文が参照する添付 {len(published)} 件を公開しました：'
+                             + '、'.join(published[:10])
+                             + ('…' if len(published) > 10 else ''))
+            elif not publish_attachments:
+                lines.append('保護されたままの添付は、アーカイブの読み手には開けません。')
+            flash('\n'.join(lines), 'success')
         else:
             flash(f'アーカイブ保存中にエラーが発生しました: {message}', 'error')
 
@@ -1111,13 +1520,17 @@ def delete_note(note_id):
         if not note:
             return jsonify({'success': False, 'error': '権限がありません'}), 403
 
+        att_n = delete_note_attachments(cursor, note_id)
         cursor.execute("DELETE FROM my_md_notes_access_groups WHERE ノートID = %s", (note_id,))
         cursor.execute("DELETE FROM my_md_notes_contents WHERE ノートID = %s", (note_id,))
         cursor.execute("DELETE FROM my_md_notes_notes WHERE id = %s", (note_id,))
 
         conn.commit()
 
-        return jsonify({'success': True, 'message': f'ノート「{note["名前"]}」を削除しました'})
+        message = f'ノート「{note["名前"]}」を削除しました'
+        if att_n:
+            message += f'（添付 {att_n} 件も削除）'
+        return jsonify({'success': True, 'message': message})
 
     except mysql.connector.Error as err:
         if conn:
@@ -1240,7 +1653,34 @@ def export_json():
         attachments = []
         missing = []
         if include_attachments:
+            # (a) 台帳にある添付（4.0以降）。原本を保護領域から読み、公開複製が
+            #     あればその名前も持たせる（移行先で同じ名前の公開複製を作る）
+            cursor.execute("SELECT * FROM my_md_notes_attachments ORDER BY id")
+            public_names = set()
+            for a in cursor.fetchall():
+                path = protected_abs_path(a.get('local_path'))
+                if not path or not os.path.isfile(path):
+                    missing.append(a.get('name') or f'添付 {a["id"]}')
+                    continue
+                with open(path, 'rb') as f:
+                    data = f.read()
+                public_name = os.path.basename(a['public_path']) if a.get('public_path') else None
+                if public_name:
+                    public_names.add(public_name)
+                attachments.append({
+                    'ref': a['id'],
+                    'note_ref': a.get('ノートID'),
+                    'filename': a.get('name') or 'file',
+                    'public_name': public_name,
+                    'mimetype': a.get('mimetype') or '',
+                    'size': len(data),
+                    'data_base64': base64.b64encode(data).decode('ascii'),
+                })
+
+            # (b) 4.0より前に static/mdimgs/ へ直接置いた添付（台帳に無いもの）
             for name in find_attachment_names(n['内容'] for n in notes):
+                if name in public_names:
+                    continue
                 path = os.path.join(UPLOAD_FOLDER, name)
                 if not safe_attachment_name(name) or not os.path.isfile(path):
                     missing.append(name)
@@ -1252,6 +1692,11 @@ def export_json():
                     'size': len(data),
                     'data_base64': base64.b64encode(data).decode('ascii'),
                 })
+
+            # 本文の保護添付への参照は移行先でIDが変わるので目印に置き換える
+            for n in notes:
+                n['内容'] = PROTECTED_REF_RE.sub(
+                    lambda m: '{{att:%s}}' % m.group(1), n['内容'])
 
         payload = {
             'export_type': EXPORT_TYPE,
@@ -1334,6 +1779,11 @@ def import_json():
     me_id = session['user_id']
 
     counts = {'added': 0, 'overwritten': 0, 'skipped': 0}
+    note_id_map = {}        # 移行元のノートID → 当サイトのノートID
+    written = []            # (ノートID, 取り込んだ本文) …添付の目印を直すために控える
+    att_map = {}            # 移行元の添付ID → 当サイトの添付ID
+    att_ledger_restored = 0
+    att_ledger_rejected = []
     owner_fallback = []     # (ノート名, email)
     group_downgraded = []   # ノート名
     group_partial = []      # (ノート名, [未一致グループ名])
@@ -1442,6 +1892,68 @@ def import_json():
                     INSERT INTO my_md_notes_access_groups (ノートID, group_id) VALUES (%s, %s)
                 """, (note_id, gid))
 
+            if n.get('source_id') is not None:
+                note_id_map[str(n['source_id'])] = note_id
+            written.append((note_id, content))
+
+        # 台帳にある添付（形式2）の復元。原本を保護領域に置き、公開複製が
+        # あった添付は同じ名前で公開領域にも複製する（本文のURLがそのまま生きる）
+        for a in payload.get('attachments') or []:
+            if not isinstance(a, dict) or a.get('ref') is None:
+                continue                      # 旧形式（mdimgs 直置き）は後段で復元
+            note_id = note_id_map.get(str(a.get('note_ref')))
+            if note_id is None:
+                continue                      # 取り込まなかったノートの添付は捨てる
+            fname = a.get('filename') or 'file'
+            if not allowed_file(fname):
+                att_ledger_rejected.append(fname)
+                continue
+            try:
+                data = base64.b64decode(a.get('data_base64') or '')
+            except (ValueError, TypeError):
+                att_ledger_rejected.append(fname)
+                continue
+            ext = fname.rsplit('.', 1)[1].lower()
+            if ext == 'svg':
+                if not svg_head_ok(data[:2048]):
+                    att_ledger_rejected.append(fname)
+                    continue
+                data = _sanitize_svg(data)
+            elif not magic_ok(data[:8], ext):
+                att_ledger_rejected.append(fname)
+                continue
+
+            r = store_protected(cursor, note_id, fname, data, a.get('mimetype'), me_id)
+            att_map[str(a['ref'])] = r['id']
+            att_ledger_restored += 1
+
+            public_name = a.get('public_name') or ''
+            if public_name and safe_attachment_name(public_name):
+                os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+                public_path = os.path.join(UPLOAD_FOLDER, public_name)
+                if not os.path.exists(public_path):
+                    with open(public_path, 'wb') as f:
+                        f.write(data)
+                cursor.execute(
+                    "UPDATE my_md_notes_attachments SET public_path = %s WHERE id = %s",
+                    (f"{UPLOAD_URL_PREFIX}/{public_name}", r['id']))
+
+        # 本文の目印（{{att:N}} と data-att）を当サイトの添付IDに直す
+        for note_id, content in written:
+            fixed = re.sub(
+                r'\{\{att:(\d+)\}\}',
+                lambda m: (url_for('my_md_notes.serve_file', aid=att_map[m.group(1)])
+                           if m.group(1) in att_map else '#添付なし'),
+                content)
+            fixed = re.sub(
+                r'(\bdata-att\s*=\s*")(\d+)(")',
+                lambda m: m.group(1) + str(att_map.get(m.group(2), m.group(2))) + m.group(3),
+                fixed)
+            if fixed != content:
+                cursor.execute(
+                    "UPDATE my_md_notes_contents SET 内容 = %s WHERE ノートID = %s",
+                    (fixed, note_id))
+
         conn.commit()
     except Exception as err:
         conn.rollback()
@@ -1458,6 +1970,8 @@ def import_json():
     if restore_attachments:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         for a in payload.get('attachments') or []:
+            if isinstance(a, dict) and a.get('ref') is not None:
+                continue                      # 台帳ぶんはトランザクション内で復元済み
             fname = (a or {}).get('filename') or ''
             if not safe_attachment_name(fname):
                 att_rejected.append(fname or '(名称なし)')
@@ -1488,10 +2002,17 @@ def import_json():
     lines = [f'JSONの取り込みが完了しました（対象 {len(notes)} 件）。',
              f'追加 {counts["added"]} 件、上書き {counts["overwritten"]} 件、'
              f'スキップ {counts["skipped"]} 件。']
+    if att_ledger_restored or att_ledger_rejected:
+        lines.append(f'添付（保護領域）：復元 {att_ledger_restored} 件。')
+        if att_ledger_rejected:
+            lines.append('保護領域の添付のうち不正なため復元しなかったもの：'
+                         + '、'.join(att_ledger_rejected[:10])
+                         + ('…' if len(att_ledger_rejected) > 10 else ''))
     if restore_attachments:
-        lines.append(f'添付ファイル：復元 {att_restored} 件、既存のため温存 {att_kept} 件。')
+        lines.append(f'添付（公開領域・旧形式）：復元 {att_restored} 件、'
+                     f'既存のため温存 {att_kept} 件。')
         if att_rejected:
-            lines.append('添付ファイルのうち不正なため復元しなかったもの：' + '、'.join(att_rejected[:10])
+            lines.append('公開領域の添付のうち不正なため復元しなかったもの：' + '、'.join(att_rejected[:10])
                          + ('…' if len(att_rejected) > 10 else ''))
     if rewrite_urls and src_site_url and src_site_url != dst_site_url:
         lines.append(f'本文中の添付URLのホストを {src_site_url} → {dst_site_url} に書き換えました。')

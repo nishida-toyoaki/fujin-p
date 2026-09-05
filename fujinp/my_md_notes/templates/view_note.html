@@ -161,6 +161,29 @@
             text-decoration: underline;
         }
 
+        /* 添付リンク：保護（このノートを見られる人だけ）と公開（URLを知る誰でも） */
+        .content-area a.mn-att {
+            display: inline-block;
+            background: #f3f4f6;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 2px 8px;
+            margin: 2px 0;
+            text-decoration: none;
+            color: #2d3748;
+        }
+
+        .content-area a.mn-pub {
+            display: inline-block;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-radius: 6px;
+            padding: 2px 8px;
+            margin: 2px 0;
+            text-decoration: none;
+            color: #065f46;
+        }
+
         .content-area ul, .content-area ol {
             padding-left: 2em;
             margin-bottom: 1em;

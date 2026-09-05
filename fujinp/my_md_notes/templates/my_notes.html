@@ -521,6 +521,12 @@
                         <textarea id="owner_memo" name="owner_memo" rows="3"
                                   style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box;"></textarea>
                     </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 0.9rem; line-height: 1.5;">
+                            <input type="checkbox" name="publish_attachments" value="1" checked style="margin-top: 3px;">
+                            <span>本文が参照する添付を公開してから保存する（アーカイブの読み手はログインしないので、保護されたままの添付は開けません。公開すると URL を知る誰でも見られるようになります）</span>
+                        </label>
+                    </div>
                     <div style="text-align: right;">
                         <button type="submit" class="modal-btn modal-submit-btn">🗄 保存する</button>
                     </div>
