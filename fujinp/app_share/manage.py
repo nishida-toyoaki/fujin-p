@@ -254,6 +254,10 @@ def spec_view(app_name):
         row = _load_registry_row(cur, app_name)
         if not row:
             return f"アプリ「{app_name}」はレジストリにありません", 404
+        # 非公開（disclosed=0）のアプリの仕様書は admin 以外に見せない
+        if row.get('disclosed') is not None and not row['disclosed'] \
+                and not _routes.check_admin_permission(session.get('user_id')):
+            return "このアプリは公開されていません", 403
         cur.execute("""SELECT table_name, db_target, ddl, status, captured_at, note
                        FROM app_share_tables WHERE app_name=%s ORDER BY sort_order, table_name""",
                     (app_name,))

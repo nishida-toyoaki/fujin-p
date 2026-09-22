@@ -61,6 +61,7 @@ from . import app_share_bp
 from config import Config
 from db import DatabaseConfig
 from decorators import login_required
+from fujinp import registry as _reg
 
 # 定数
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -188,6 +189,33 @@ def touch_registry_timestamp(app_name, ts=None):
 
 
 # ============================================
+# 非公開フラグ（このサイト限定の表示制御）
+# ============================================
+# app_share_registry.disclosed が 0 のアプリは，admin 以外にアプシャの情報を出さない。
+# 開発中でサービスとして提供していないアプリを admin だけで扱うための仕掛け。
+# サイトごとの運用状態なので配布パッケージには乗せない。
+# 列が無いサイトでも動くよう，取得できなければ「公開」とみなす。
+
+def _is_disclosed(app_name):
+    conn = None
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        with conn.cursor(dictionary=True, buffered=True) as cursor:
+            cursor.execute("SELECT disclosed FROM app_share_registry WHERE app_name=%s", (app_name,))
+            row = cursor.fetchone()
+            while cursor.nextset(): pass
+        if not row or row.get('disclosed') is None:
+            return True
+        return bool(row['disclosed'])
+    except Exception as e:
+        logging.warning(f"_is_disclosed: {e}")
+        return True
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
+
+
+# ============================================
 # ダッシュボード・レジストリ（一覧の基本操作）
 # ============================================
 
@@ -210,9 +238,22 @@ def get_registry_apps():
     try:
         conn = mysql.connector.connect(**DatabaseConfig.default())
         cursor = conn.cursor(dictionary=True, buffered=True)
-        cursor.execute("""
-            SELECT * FROM app_share_registry ORDER BY sort_order ASC, id ASC
-        """)
+        if check_admin_permission(session.get('user_id')):
+            cursor.execute("""
+                SELECT * FROM app_share_registry ORDER BY sort_order ASC, id ASC
+            """)
+        else:
+            # 非公開（disclosed=0）のアプリは admin 以外の一覧に出さない。
+            # disclosed 列が無いサイトでは従来どおり全件。
+            try:
+                cursor.execute("""
+                    SELECT * FROM app_share_registry WHERE COALESCE(disclosed,1)=1
+                    ORDER BY sort_order ASC, id ASC
+                """)
+            except Exception:
+                cursor.execute("""
+                    SELECT * FROM app_share_registry ORDER BY sort_order ASC, id ASC
+                """)
         apps = cursor.fetchall()
         for a in apps:
             if a.get('updated_at'):
@@ -410,14 +451,52 @@ def registry_move(reg_id, direction):
 # 文書（マニュアル・仕様書の叙述・管理ノート）
 # ============================================
 
+@app_share_bp.route('/registry/disclose/<int:reg_id>', methods=['POST'])
+@login_required
+def registry_disclose(reg_id):
+    """非公開 ⇄ 公開の切り替え（admin 専用．before_request の既定で担保）"""
+    data = request.get_json(silent=True) or {}
+    want = 1 if data.get('disclosed') else 0
+    conn = None
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        cursor.execute("SELECT app_name FROM app_share_registry WHERE id=%s", (reg_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'アプリが見つかりません'}), 404
+        # updated_at を明示代入して ON UPDATE を抑止する（版の変更ではないため）
+        cursor.execute("UPDATE app_share_registry SET disclosed=%s, updated_at=updated_at WHERE id=%s",
+                       (want, reg_id))
+        # 続けて発行し，ランチャ（guest / public）の表示も同時に切り替える．
+        # app_registry.json の書き直しだけなので Reload は要らない．
+        published = True
+        try:
+            _reg.publish(cursor)
+        except Exception as e:
+            published = False
+            logging.warning(f"registry_disclose: publish failed: {e}")
+        conn.commit()
+        return jsonify({'success': True, 'app_name': row['app_name'], 'disclosed': want,
+                        'published': published})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if conn and conn.is_connected(): conn.close()
+
 @app_share_bp.route('/doc/<app_name>/<doc_type>/get', methods=['GET'])
 @login_required
 def get_document(app_name, doc_type):
     if doc_type not in ('manual', 'spec', 'note'):
         return jsonify({'success': False, 'error': '不正なドキュメントタイプ'}), 400
+    is_admin = check_admin_permission(session.get('user_id'))
     # 管理ノートは admin 専用
-    if doc_type == 'note' and not check_admin_permission(session.get('user_id')):
+    if doc_type == 'note' and not is_admin:
         return jsonify({'success': False, 'error': '管理者権限が必要です'}), 403
+    # 非公開アプリの文書は admin 以外に出さない
+    if not is_admin and not _is_disclosed(app_name):
+        return jsonify({'success': False, 'error': 'このアプリは公開されていません'}), 403
 
     conn = None
     try:
@@ -537,6 +616,9 @@ def edit_document(app_name, doc_type):
 def manual_page(app_name):
     """ユーザーズマニュアルの単独ページ"""
     is_admin = check_admin_permission(session.get('user_id'))
+    # 非公開アプリのマニュアルは admin 以外に出さない
+    if not is_admin and not _is_disclosed(app_name):
+        return "このアプリは公開されていません", 403
     display_name = app_name
     icon = '📖'
     doc = None

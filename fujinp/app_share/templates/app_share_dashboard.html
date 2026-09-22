@@ -78,6 +78,8 @@
         .btn-export{background:#10b981;color:#fff}.btn-export:hover{background:#059669}
         .btn-import{background:#f59e0b;color:#fff}.btn-import:hover{background:#d97706}
         .btn-mgmt{background:#475569;color:#fff}.btn-mgmt:hover{background:#334155}
+        .btn-disc{background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe}.btn-disc:hover{background:#c7d2fe}
+        .badge-priv{display:inline-block;padding:1px 7px;border-radius:10px;font-size:.7rem;font-weight:600;background:#fef3c7;color:#92400e;border:1px solid #fde68a}
         .btn-ver{background:#0d9488;color:#fff}.btn-ver:hover{background:#0f766e}
         .app-card .card-ver{font-size:.72rem;color:#0f766e;margin:2px 0 0}
         .app-card .card-ver code{background:#f0fdfa;padding:1px 5px;border-radius:4px}
@@ -309,7 +311,7 @@ function loadLocalApps(){
                     <div class="card-icon">${a.icon||'📦'}</div>
                     <div class="card-titles">
                         <div class="card-name">${esc(a.display_name||a.app_name)}</div>
-                        <div class="card-dir">${esc(a.app_name)}</div>
+                        <div class="card-dir">${esc(a.app_name)}${a.disclosed===0?' <span class="badge-priv">🔒 非公開</span>':''}</div>
                     </div>
                 </div>
                 <div class="card-desc">${esc(desc)}</div>
@@ -319,6 +321,7 @@ function loadLocalApps(){
                     <button class="btn-spec" onclick="location.href='/app_share/spec/'+encodeURIComponent('${a.app_name}')" title="正本と仕様書メモから組み立てた技術仕様書">📋 仕様書</button>
                     <button class="btn-export" onclick="exportApp('${a.app_name}')" title="アプリ一式をJSONパッケージでダウンロード">📦 エクスポート</button>
                     ${IS_ADMIN?`<button class="btn-import" onclick="location.href='/app_share/package/import?app='+encodeURIComponent('${a.app_name}')" title="パッケージで差し替え（検証→適用→発行）">📥 取り込み</button>`:''}
+                    ${IS_ADMIN&&a.disclosed!==undefined?`<button class="btn-disc" onclick="toggleDisclose(${a.id},${a.disclosed===0?0:1},event)" title="アプシャでのこのアプリの情報（一覧・マニュアル・仕様書）を admin 以外に見せるかどうか">${a.disclosed===0?'🔓 非公開→公開':'🔒 公開→非公開'}</button>`:''}
                     ${IS_ADMIN?`<button class="btn-mgmt" onclick="location.href='/app_share/app/'+encodeURIComponent('${a.app_name}')" title="正本の管理（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）">🛠 管理</button>`:''}
                     <span class="card-badges" data-app="${a.app_name}"></span>
                 </div>
@@ -384,6 +387,17 @@ function publishRegistry(withReload){
             showResult(m,r.need_reload&&!withReload);loadSummary();
         },
         error(x){showResult('発行失敗: '+((x.responseJSON&&x.responseJSON.error)||x.statusText),true)}});
+}
+
+// ========== 非公開 ⇄ 公開（admin のみ） ==========
+function toggleDisclose(id,cur,ev){
+    ev.stopPropagation();
+    const to=cur?0:1;
+    if(to===1&&!confirm('このアプリのアプシャ情報（一覧・マニュアル・仕様書）を admin 以外にも表示します。よろしいですか？'))return;
+    $.ajax({url:'/app_share/registry/disclose/'+id,method:'POST',contentType:'application/json',
+        data:JSON.stringify({disclosed:to}),
+        success(r){if(r.success){showResult(r.app_name+' を'+(to?'公開':'非公開')+'にしました'+(r.published?'（発行済み．ランチャにも反映）':'（発行は失敗．📢発行を押してください）'),false);loadLocalApps()}else showResult(r.error||'切り替えに失敗しました',true)},
+        error(x){showResult('切り替えに失敗しました: '+(x.responseJSON&&x.responseJSON.error||x.status),true)}});
 }
 
 // ========== アプリ単位エクスポート（全ログインユーザー） ==========
