@@ -43,6 +43,10 @@ fujinp.registry — アプリ正本（app_registry.json）の読み書き
       open           - ログインなしでも使える（ログイン画面にも並ぶ）
     dashboards（admin / guest）は「どのダッシュボードに置くか」という配置だけを
     表し，admin ダッシュボードでは区分を評価しない（管理者は全部見える）．
+    アプリ単位の非公開（2026-09-06）：app_share_registry.disclosed=0 のアプリは
+    guest / public ダッシュボードにカードを出さない（admin には出す）．
+    開発中でサービスとして提供していないアプリを利用者の目に触れさせないための
+    表示制御で，使用区分の上に重ねる減算．アプシャの「非公開→公開」ボタンで切り替える．
     区画（sections）は置き場所の見出しだけになり，区画側の表示条件は廃止した．
     旧形式（require_groups / require_categories / 区画条件）のカードは
     derive_visibility() で読み替えるので，移行前の JSON でも同じ表示になる．
@@ -281,6 +285,7 @@ def launcher_sections(dashboard, user_category=None, group_names=()):
       admin  - dashboards に admin を含むカード全部（区分は評価しない）
       guest  - dashboards に guest を含み，使用区分を満たすカード
       public - 使用区分が open のカード（ログイン不要．ログイン画面用．配置は無視）
+    disclosed=0（非公開）のアプリは admin 以外に出さない．
     区画は見出しと色だけで，カードが1枚も無い区画は出さない．
     戻り値: [{'key','title','css_class','cards':[...]}]"""
     reg = load_registry()
@@ -294,6 +299,9 @@ def launcher_sections(dashboard, user_category=None, group_names=()):
         cards = []
         for a in reg.get('apps', []):
             if not a.get('enabled', True):
+                continue
+            # 非公開アプリ（disclosed=0）は admin ダッシュボード以外に出さない
+            if dashboard != 'admin' and not a.get('disclosed', True):
                 continue
             for c in a.get('launchers') or []:
                 if dashboard == 'public':
@@ -361,14 +369,27 @@ def _jload(v, default):
 def build_registry_from_db(cursor):
     """DB（app_share_registry / app_share_sections）から発行用 dict を組み立てる．
     cursor は dictionary=True のカーソル．"""
-    cursor.execute("""
-        SELECT app_name, display_name, icon, description, sort_order, kind, enabled,
-               blueprints, launchers, version_id, version_confirmed_at
-        FROM app_share_registry
-        ORDER BY sort_order, id
-    """)
+    # disclosed 列（非公開フラグ）は 2026-09-06 追加．無いサイトでは全て公開扱い
+    try:
+        cursor.execute("""
+            SELECT app_name, display_name, icon, description, sort_order, kind, enabled,
+                   blueprints, launchers, version_id, version_confirmed_at,
+                   COALESCE(disclosed, 1) AS disclosed
+            FROM app_share_registry
+            ORDER BY sort_order, id
+        """)
+        rows = cursor.fetchall()
+    except Exception:
+        cursor.execute("""
+            SELECT app_name, display_name, icon, description, sort_order, kind, enabled,
+                   blueprints, launchers, version_id, version_confirmed_at,
+                   1 AS disclosed
+            FROM app_share_registry
+            ORDER BY sort_order, id
+        """)
+        rows = cursor.fetchall()
     apps = []
-    for r in cursor.fetchall():
+    for r in rows:
         apps.append({
             'app_name': r['app_name'],
             'display_name': r['display_name'] or r['app_name'],
@@ -377,6 +398,7 @@ def build_registry_from_db(cursor):
             'sort_order': float(r['sort_order'] or 0),
             'kind': r['kind'] or 'app',
             'enabled': bool(r['enabled']),
+            'disclosed': bool(r.get('disclosed', 1)),
             'blueprints': _jload(r['blueprints'], []),
             'launchers': _jload(r['launchers'], []),
             'version_id': r['version_id'],

@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-05 17:27:57",
+  "generated_at": "2026-09-06 22:03:04",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -11,6 +11,7 @@
       "sort_order": 0.0,
       "kind": "kernel",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [],
       "launchers": [],
       "version_id": "v20260902.172043-da39a3",
@@ -24,6 +25,7 @@
       "sort_order": 10.0,
       "kind": "kernel",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "admin_bp",
@@ -66,6 +68,7 @@
       "sort_order": 20.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "table_cycle_bp",
@@ -102,6 +105,7 @@
       "sort_order": 30.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "table_master_bp",
@@ -138,6 +142,7 @@
       "sort_order": 35.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "sql_saver_bp",
@@ -174,6 +179,7 @@
       "sort_order": 37.5,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "strm_bp",
@@ -210,6 +216,7 @@
       "sort_order": 40.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "slack_minutes_bp",
@@ -247,6 +254,7 @@
       "sort_order": 42.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "fukko_bp",
@@ -283,6 +291,7 @@
       "sort_order": 45.3,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "migration_assistant",
@@ -334,6 +343,7 @@
       "sort_order": 49.5,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "table_share_bp",
@@ -373,6 +383,7 @@
       "sort_order": 60.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "user_migration_bp",
@@ -412,6 +423,7 @@
       "sort_order": 70.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "migrate_fujinp_scions_bp",
@@ -466,6 +478,7 @@
       "sort_order": 80.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "my_md_notes_bp",
@@ -505,6 +518,7 @@
       "sort_order": 90.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "user_groups_bp",
@@ -542,6 +556,7 @@
       "sort_order": 100.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "colrep_bp",
@@ -603,6 +618,7 @@
       "sort_order": 110.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "table_post_bp",
@@ -640,6 +656,7 @@
       "sort_order": 140.0,
       "kind": "kernel",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "app_share_bp",
@@ -677,6 +694,7 @@
       "sort_order": 150.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "official_data_archive_bp",
@@ -714,6 +732,7 @@
       "sort_order": 160.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "data_center_bp",
@@ -751,6 +770,7 @@
       "sort_order": 190.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "index_review_bp",
@@ -788,6 +808,7 @@
       "sort_order": 200.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "stats_bp",
@@ -825,6 +846,7 @@
       "sort_order": 210.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "our_meeting_bp",
@@ -862,6 +884,7 @@
       "sort_order": 220.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "document_archive_bp",
@@ -899,6 +922,7 @@
       "sort_order": 230.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "free_hand_curve_bp",
@@ -936,6 +960,7 @@
       "sort_order": 240.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "ts_solvers_bp",
@@ -973,6 +998,7 @@
       "sort_order": 290.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "solar_gl_bp",
@@ -1010,6 +1036,7 @@
       "sort_order": 300.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "sorakara_bp",
@@ -1047,6 +1074,7 @@
       "sort_order": 310.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "window_shopping_bp",
@@ -1084,6 +1112,7 @@
       "sort_order": 320.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "tag_chase_bp",
@@ -1121,6 +1150,7 @@
       "sort_order": 330.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "block_breaker_bp",
@@ -1158,6 +1188,7 @@
       "sort_order": 350.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "lookout_bp",
@@ -1195,6 +1226,7 @@
       "sort_order": 360.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "kataribe_bp",
@@ -1232,6 +1264,7 @@
       "sort_order": 370.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "fujin_forum_bp",
@@ -1269,6 +1302,7 @@
       "sort_order": 380.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "cqm_bp",
@@ -1305,6 +1339,7 @@
       "sort_order": 390.0,
       "kind": "app",
       "enabled": true,
+      "disclosed": true,
       "blueprints": [
         {
           "attr": "table_converter_bp",
@@ -1330,8 +1365,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260905.v0-3",
-      "version_confirmed_at": "2026-09-05 17:11:27"
+      "version_id": "v20260905.213958-1c8ec2",
+      "version_confirmed_at": "2026-09-05 21:39:58"
     }
   ],
   "sections": [

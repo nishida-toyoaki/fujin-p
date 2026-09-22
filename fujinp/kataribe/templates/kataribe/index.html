@@ -399,9 +399,7 @@
     <div class="modal-bg" id="sceneInModal">
         <div class="modal" style="width:min(720px,94vw);">
             <h3>📂 シーンを取り込む</h3>
-            <p class="hint" style="margin-bottom:8px;">
-                挿入先：<b id="sceneInWhere"></b>　の前または後に入れます．
-            </p>
+            <p class="hint" style="margin-bottom:8px;" id="sceneInWhere"></p>
             <div class="toolbar" style="margin-bottom:8px;">
                 <input type="file" id="sceneInFile" accept=".json" style="flex:1;">
             </div>
@@ -1161,11 +1159,7 @@
                     .prop('disabled', !picked)
                     .on('click', exportScenes))
                 .append($('<button class="ghost">📂 シーンを取り込む</button>')
-                    .on('click', () => {
-                        $('#sceneInText').val(''); $('#sceneInFile').val('');
-                        $('#sceneInWhere').text(sceneLabel(curScene) + '「' + (spec.scenes[curScene].title || '無題') + '」');
-                        $('#sceneInModal').css('display', 'flex');
-                    }))
+                    .on('click', openSceneIn))
                 .append($('<button class="danger pick-dep">🗑 選んだシーンを削除</button>')
                     .prop('disabled', !picked)
                     .on('click', deletePickedScenes))
@@ -1189,7 +1183,7 @@
                 .append($('<button class="mini ghost">この番号の後へ</button>').on('click', () => moveSceneTo(true)))
                 .append($('<span class="hint">').text('チェックしたシーンを，＃番号の直前／直後へまとめて運びます')));
             $p.append($('<div class="hint" style="margin-top:6px;">')
-                .text('「→」でそのシーンへ移動します（複数選択中は一番若い番号へ）．▲▼は選択中のシーンをまとめて動かします．書き出したJSONは，別の作品に取り込めます（いま選ばれているシーンの前後に挿入）．'));
+                .text('「→」でそのシーンへ移動します（複数選択中は一番若い番号へ）．▲▼は選択中のシーンをまとめて動かします．書き出したJSONは，別の作品に取り込めます（チェックしたシーンの前後に挿入．チェックが無ければ開いているシーンの前後）．'));
             const $wrap = $('<div class="scenewrap">').append($tbl);
             $p.append($wrap);
             $wrap[0].scrollTop = sceneScroll;
@@ -1329,6 +1323,23 @@
             });
         }
 
+        // 取り込み先：「シーン一覧」タブではチェックしたシーン（複数なら，前は先頭・後は末尾），
+        // チェックが無いとき・「このシーンの編集」タブでは開いているシーン
+        let sceneInTarget = null;          // { before: 前に挿入する位置, after: 後に挿入する位置 }
+        function openSceneIn() {
+            const pk = (sceneTab === 'list') ? pickedIdx() : [];
+            const first = pk.length ? pk[0] : curScene;
+            const last  = pk.length ? pk[pk.length - 1] : curScene;
+            sceneInTarget = { before: first, after: last + 1 };
+            const name = i => '＃' + (i + 1) + ' ' + sceneLabel(i) + '「' + (spec.scenes[i].title || '無題') + '」';
+            const where = (first === last)
+                ? '挿入先：' + name(first) + '　の前または後に入れます．'
+                : '挿入先：チェックした' + pk.length + '件のまとまり．前に挿入は ' + name(first) + ' の前，後に挿入は ' + name(last) + ' の後に入れます．';
+            $('#sceneInWhere').text(where);
+            $('#sceneInText').val(''); $('#sceneInFile').val('');
+            $('#sceneInModal').css('display', 'flex');
+        }
+
         function importScenes(after) {
             let arr;
             try {
@@ -1337,13 +1348,27 @@
                 return showResult('シーンJSONとして読めませんでした: ' + e.message, true);
             }
             migrateSpec({ scenes: arr });          // 旧形式で書かれていれば手続きに移す
-            const pos = after ? curScene + 1 : curScene;
+            const t = sceneInTarget || { before: curScene, after: curScene + 1 };
+            const pos = Math.max(0, Math.min(spec.scenes.length, after ? t.after : t.before));
             spec.scenes.splice(pos, 0, ...arr);
-            scenePick = [];
-            curScene = pos; curCmd = 0;
+            // 後に挿入はまとまりの末尾，前に挿入はまとまりの先頭を「開いているシーン」にし，
+            // チェックも取り込んだシーンに付ける．こうしておくと，続けて取り込んでもまとまりが割れない
+            // （後に挿入の連続は A, S1…S5, T1… と後ろへ，前に挿入の連続は T1…, S1…S5, B と前へつながる）
+            curScene = after ? pos + arr.length - 1 : pos; curCmd = 0;
+            scenePick = spec.scenes.map((sc, k) => k >= pos && k < pos + arr.length);
+            sceneInTarget = null;
             $('#sceneInModal').hide();
             renderEditor(); refreshFull(); commit('scene');
-            showResult(arr.length + '件のシーンを取り込みました（' + sceneLabel(pos) + ' から）', false);
+            if (sceneTab === 'list') {             // 取り込んだ先頭行が見えるように表をスクロール
+                const wrap = $('#paneScenes .scenewrap')[0];
+                const row = $('#paneScenes table.scenes tr').get(pos + 1);
+                if (wrap && row && (row.offsetTop < wrap.scrollTop || row.offsetTop > wrap.scrollTop + wrap.clientHeight - 40)) {
+                    wrap.scrollTop = Math.max(0, row.offsetTop - 40);
+                    sceneScroll = wrap.scrollTop;
+                }
+            }
+            const range = arr.length > 1 ? '＃' + (pos + 1) + '〜＃' + (pos + arr.length) : '＃' + (pos + 1);
+            showResult(arr.length + '件のシーンを取り込みました（' + range + '）', false);
         }
 
         // ── シーン操作 ──

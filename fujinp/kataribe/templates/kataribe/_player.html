@@ -270,7 +270,7 @@ var KtbPlayer = (function(){
     // 自分のサイトにアップロードしたHTMLを指す iframe だけは残す（花火などの作品を埋め込むため）
     [].slice.call(box.querySelectorAll('iframe')).forEach(function(f){
       if (isOwnAsset(f.getAttribute('src'))){
-        f.setAttribute('sandbox', 'allow-scripts');   // 同一オリジン権限は与えない
+        f.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
         f.setAttribute('loading', 'eager');
       } else {
         f.parentNode.removeChild(f);
