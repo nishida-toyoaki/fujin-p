@@ -849,6 +849,88 @@ def _kernel_public_root_files():
         logging.warning(f"_kernel_public_root_files: {e}")
     return KERNEL_PUBLIC_ROOT_FILES
 
+# ============================================
+# カーネルの版（2026-09-23）
+# ============================================
+# カーネルの版IDもアプリと同じ形 v<確定日時>-<ハッシュ6桁> にする．
+# ハッシュは，カーネルパッケージに入るコードとテンプレート（ホーム直下の .py，
+# templates/ 配下，fujinp/__init__.py・registry.py）の「相対パス:整形後の大きさ」を
+# パス順に並べて作る．整形後の大きさを使うので，改行や BOM の違いでは変わらない．
+# 版そのものは正本（app_share_registry の _platform 行）に持ち，書き出しと取り込みで運ぶ．
+
+KERNEL_PLATFORM_ROW = '_platform'
+
+
+def _kernel_hash_files():
+    """版のハッシュの対象になるカーネルのファイル {相対パス: 絶対パス}"""
+    out = {}
+    for name in os.listdir(SITE_CODE_ROOT):
+        p = os.path.join(SITE_CODE_ROOT, name)
+        if not os.path.isfile(p) or not name.endswith('.py'):
+            continue
+        if name.startswith('.') or name in KERNEL_EXCLUDE_FILES or name.startswith(KERNEL_EXCLUDE_PREFIXES):
+            continue
+        out[name] = p
+    troot = os.path.join(SITE_CODE_ROOT, 'templates')
+    if os.path.isdir(troot):
+        for cur, dirs, fnames in os.walk(troot):
+            dirs[:] = [x for x in dirs if x != '__pycache__' and not x.startswith('.')]
+            for fn in fnames:
+                if fn.startswith('.') or fn.endswith('.pyc'):
+                    continue
+                ap = os.path.join(cur, fn)
+                out[os.path.relpath(ap, SITE_CODE_ROOT).replace('\\', '/')] = ap
+    for kf in ('__init__.py', 'registry.py'):
+        ap = os.path.join(BASE_DIR, kf)
+        if os.path.isfile(ap):
+            out['fujinp/' + kf] = ap
+    return out
+
+
+def kernel_content_hash6():
+    """カーネルの版IDのハッシュ6桁（アプリの _content_hash6 と同じ形）"""
+    from . import tidy as _t
+    parts = []
+    for rel, ap in sorted(_kernel_hash_files().items()):
+        try:
+            with open(ap, 'rb') as fh:
+                size = len(_t.normalize_bytes(rel, fh.read()))
+            parts.append('{}:{}'.format(rel, size))
+        except Exception:
+            parts.append(rel)
+    return hashlib.sha1('\n'.join(parts).encode('utf-8', 'replace')).hexdigest()[:6]
+
+
+def _kernel_version_record():
+    """正本の _platform 行の版 {version_id, version_confirmed_at, version_confirmed_by}．
+    行や版が無ければ，旧来の kernel_version.json の version_id を使う．"""
+    rec = {'version_id': None, 'version_confirmed_at': None, 'version_confirmed_by': None}
+    conn = None
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        with conn.cursor(dictionary=True, buffered=True) as cursor:
+            cursor.execute("""SELECT version_id, version_confirmed_at, version_confirmed_by
+                              FROM app_share_registry WHERE app_name=%s""", (KERNEL_PLATFORM_ROW,))
+            row = cursor.fetchone()
+        if row and row.get('version_id'):
+            at = row.get('version_confirmed_at')
+            rec = {'version_id': row['version_id'],
+                   'version_confirmed_at': at.strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'strftime') else at,
+                   'version_confirmed_by': row.get('version_confirmed_by')}
+            return rec
+    except Exception as e:
+        logging.warning(f"_kernel_version_record: {e}")
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
+    try:
+        with open(KERNEL_VERSION_FILE, 'r', encoding='utf-8') as f:
+            rec['version_id'] = (json.load(f) or {}).get('version_id')
+    except Exception:
+        pass
+    return rec
+
+
 def _build_kernel_package(generated_by=None, site_url=None, public=False):
     """カーネルのエクスポートパッケージを組み立てる。
     public=True（admin 以外の書き出し）では，ホーム直下は公開用の一覧にあるファイルだけにし，
@@ -971,12 +1053,9 @@ def _build_kernel_package(generated_by=None, site_url=None, public=False):
     updated_at = (datetime.datetime.fromtimestamp(latest_mtime, JST).strftime('%Y-%m-%d %H:%M:%S')
                   if latest_mtime else None)
 
-    version_id = None
-    try:
-        with open(KERNEL_VERSION_FILE, 'r', encoding='utf-8') as f:
-            version_id = (json.load(f) or {}).get('version_id')
-    except Exception:
-        pass
+    # 版は正本の _platform 行から（2026-09-23）．無ければ旧来の kernel_version.json
+    ver = _kernel_version_record()
+    version_id = ver['version_id']
     # 未確定なら None のまま。ここで時刻から作ると、内容が同じでも
     # エクスポートのたびに版が変わり、取り込み側の新旧判定が壊れる。
     # 同一性の判定は content_hash で行う。
@@ -994,6 +1073,8 @@ def _build_kernel_package(generated_by=None, site_url=None, public=False):
         'updated_at': updated_at,
         'content_hash': content_hash,
         'version_id': version_id,
+        'version_confirmed_at': ver['version_confirmed_at'],
+        'version_confirmed_by': ver['version_confirmed_by'],
         'file_count': len(files),
         'files': files,
         'static_excluded': static_excluded,

@@ -1252,6 +1252,10 @@ def api_issue_delete(app_name, issue_id):
 # ============================================================
 
 def _content_hash6(app_name):
+    # カーネルはアプリのディレクトリを持たないので，カーネルパッケージに入る
+    # コードとテンプレートから作る（2026-09-23）
+    if app_name == PLATFORM_ROW:
+        return _routes.kernel_content_hash6()
     app_path = _app_path(app_name)
     parts = []
     if os.path.isdir(app_path):

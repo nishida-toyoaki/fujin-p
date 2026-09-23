@@ -36,6 +36,9 @@ app_share.kernel — カーネルの取り込み（2026-09-23）
 書き込みを止めるのは，.py の構文エラーとパッケージの形の不正だけ
 （壊れたパッケージでサイトが起動しなくなるのを防ぐため）．
 
+パッケージに版（version_id）があれば，正本の _platform 行に写す（2026-09-23）．
+ファイルが手元と同じでも，版が違えば版だけを記録できる．
+
 書き込む前に ~/kernel_backups/<日時>/ へ上書き対象の元ファイルを写し，
 restore.py を置く．サイトが起動しなくなっても Bash コンソールから
   python3 ~/kernel_backups/<日時>/restore.py
@@ -165,12 +168,10 @@ def _analyze(pkg):
             ok = os.path.exists(os.path.join(ROOT, rel)) or rel in pkg_paths
         if not ok:
             missing_apps.append(ra)
-    local_hash = None
-    try:
-        with open(os.path.join(ROOT, 'kernel_version.json'), encoding='utf-8') as fh:
-            local_hash = (json.load(fh) or {}).get('version_id')
-    except Exception:
-        pass
+    # 版（2026-09-23）：手元は正本の _platform 行（無ければ旧来の kernel_version.json）
+    local_ver = _r._kernel_version_record()
+    pkg_ver = pkg.get('version_id') or None
+    version_differs = bool(pkg_ver) and pkg_ver != local_ver.get('version_id')
     return {
         'counts': counts,
         'files': items,
@@ -178,12 +179,15 @@ def _analyze(pkg):
         'site_notes': site_notes[:50],
         'missing_config_keys': missing_keys,
         'missing_apps': missing_apps,
-        'can_apply': not syntax_errors and (counts['new'] + counts['changed']) > 0,
+        'can_apply': not syntax_errors and ((counts['new'] + counts['changed']) > 0 or version_differs),
+        'version': {'package': pkg_ver, 'package_confirmed_at': pkg.get('version_confirmed_at'),
+                    'package_confirmed_by': pkg.get('version_confirmed_by'),
+                    'local': local_ver.get('version_id'), 'differs': version_differs},
         'package': {'site_name': pkg.get('site_name'), 'site_url': pkg.get('site_url'),
                     'generated_at': pkg.get('generated_at'), 'generated_by': pkg.get('generated_by'),
                     'version_id': pkg.get('version_id'), 'content_hash': pkg.get('content_hash'),
                     'public_download': bool(pkg.get('public_download'))},
-        'local': {'site_name': _local_user(), 'version_id': local_hash},
+        'local': {'site_name': _local_user(), 'version_id': local_ver.get('version_id')},
     }
 
 
@@ -239,6 +243,23 @@ def _backup(targets):
     return bdir, script
 
 
+def _record_version(pkg):
+    """パッケージの版を正本の _platform 行に写す（アプリの取り込みと同じ扱い）．
+    版の無いパッケージ（旧いサイトからの書き出し）では何もしない．戻り値は記録した版ID"""
+    vid = pkg.get('version_id')
+    if not vid:
+        return None
+    with _m._db() as (cur, conn):
+        cur.execute("""UPDATE app_share_registry
+                       SET version_id=%s, version_confirmed_at=%s, version_confirmed_by=%s
+                       WHERE app_name=%s""",
+                    (str(vid)[:40], _r._parse_ts(pkg.get('version_confirmed_at')),
+                     (pkg.get('version_confirmed_by') or None), _m.PLATFORM_ROW))
+        n = cur.rowcount
+        conn.commit()
+    return vid if n else None
+
+
 def _load_pkg():
     body = request.get_json(silent=True) or {}
     pkg = body.get('package') if isinstance(body.get('package'), dict) else body
@@ -274,7 +295,11 @@ def kernel_apply():
     by_path = {f.get('path'): f for f in pkg.get('files') or []}
     targets = [i['path'] for i in res['files'] if i['status'] in ('new', 'changed')]
     if not targets:
-        return _m._ok(result={'written': 0, 'message': '手元と同じでした．書き込みはありません'})
+        vid = _record_version(pkg) if res['version']['differs'] else None
+        msg = '手元と同じでした．書き込みはありません'
+        if vid:
+            msg = f'ファイルは手元と同じでした．版 {vid} を記録しました'
+        return _m._ok(result={'written': 0, 'message': msg, 'version_recorded': vid})
     bdir, script = _backup(targets)
     written, errors = [], []
     for rel in targets:
@@ -289,7 +314,13 @@ def kernel_apply():
             written.append(rel)
         except Exception as e:
             errors.append(f'{rel}: {e}')
+    try:
+        vid = _record_version(pkg)
+    except Exception as e:
+        vid = None
+        errors.append(f'版の記録: {e}')
     result = {'written': len(written), 'written_files': written, 'errors': errors,
+              'version_recorded': vid,
               'backup_dir': bdir, 'restore_command': f'python3 {script}',
               'missing_config_keys': res['missing_config_keys'], 'missing_apps': res['missing_apps']}
     if (body.get('options') or {}).get('reload'):

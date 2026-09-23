@@ -84,7 +84,9 @@ function show(x){
   document.getElementById('pills').innerHTML=Object.entries(x.counts).filter(([k,v])=>v>0).map(([k,v])=>`<span class="pill ${k}">${LABEL[k]} ${v}</span>`).join('');
   let n='';
   if(x.syntax_errors.length) n+=`<div class="box err">構文エラーがあるため取り込めません．${x.syntax_errors.map(s=>esc(s.path)+(s.line?'（'+s.line+'行）':'')+'：'+esc(s.message)).join('／')}</div>`;
-  if(!x.syntax_errors.length && !(x.counts.new+x.counts.changed)) n+=`<div class="box ok">手元のカーネルと同じです．取り込むものはありません．</div>`;
+  const v=x.version||{};
+  n+=`<div class="box info">版：パッケージ <code>${esc(v.package||'未確定')}</code>${v.package_confirmed_at?'（'+esc(v.package_confirmed_at)+(v.package_confirmed_by?'　'+esc(v.package_confirmed_by):'')+'）':''}　／　このサイト <code>${esc(v.local||'未確定')}</code>${v.package?(v.differs?'　→ 取り込むとパッケージの版を記録します':'　（同じ版）'):'　→ パッケージに版が無いので，このサイトの版は変わりません'}</div>`;
+  if(!x.syntax_errors.length && !(x.counts.new+x.counts.changed)) n+=v.differs?`<div class="box ok">ファイルは手元のカーネルと同じです．取り込むと版だけを記録します．</div>`:`<div class="box ok">手元のカーネルと同じです．取り込むものはありません．</div>`;
   if(x.site_notes.length) n+=`<div class="box warn">送り元のサイトの場所（/home/…/）が書かれている箇所があります．このサイトで動かないときはここを確かめてください．${x.site_notes.slice(0,8).map(s=>esc(s.path)+' '+s.line+'行（'+esc(s.user)+'）').join('，')}${x.site_notes.length>8?' ほか':''}</div>`;
   if(x.missing_config_keys.length) n+=`<div class="box warn">このサイトの config.py に無い設定があります：${x.missing_config_keys.map(esc).join('，')}</div>`;
   if(x.missing_apps.length) n+=`<div class="box warn">app.py が登録するのに手元に無いものがあります：${x.missing_apps.map(a=>esc(a.module)).join('，')}</div>`;
@@ -103,6 +105,7 @@ async function apply(){
   const x=r.result;
   if(!x.written){el.innerHTML=`<div class="box ok">${esc(x.message)}</div>`;return}
   el.innerHTML=`<h2>取り込みました（${x.written} ファイル）</h2>
+   ${x.version_recorded?`<div class="box ok">版 <code>${esc(x.version_recorded)}</code> を記録しました．</div>`:''}
    ${x.errors.length?`<div class="box err">書き込めなかったファイル：${x.errors.map(esc).join('／')}</div>`:''}
    <div class="box ${x.reloaded?'ok':'info'}">${x.reloaded?'Reload しました．':'Reload はまだです．PythonAnywhere の Web タブか，アプシャの「発行＋Reload」で行ってください．'}再起動の後，アプシャで「📢 発行」を押してください．</div>
    <div class="box info">元に戻すときは，Bash コンソールで次のコマンドを実行します（サイトが開けなくなった場合も使えます）．<br><code>${esc(x.restore_command)}</code></div>`;
