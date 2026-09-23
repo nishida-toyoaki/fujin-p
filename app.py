@@ -69,7 +69,8 @@ def create_app():
     if not app.debug:
         import logging
         from logging.handlers import RotatingFileHandler
-        handler = RotatingFileHandler('/home/nishida4fujinp/fujinp.log',
+        # ログはサイトのホーム直下（サイトごとに違うので直書きしない．2026-09-23）
+        handler = RotatingFileHandler(os.path.join(os.path.expanduser('~'), 'fujinp.log'),
                                      maxBytes=10485760, backupCount=10)
         handler.setFormatter(logging.Formatter(
             '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
