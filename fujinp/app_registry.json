@@ -1,22 +1,8 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-23 12:00:13",
+  "generated_at": "2026-09-23 15:52:11",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
-    {
-      "app_name": "_platform",
-      "display_name": "kernel",
-      "icon": "🧩",
-      "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
-      "sort_order": 0.0,
-      "kind": "kernel",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [],
-      "launchers": [],
-      "version_id": "v20260902.172043-da39a3",
-      "version_confirmed_at": "2026-09-02 17:20:43"
-    },
     {
       "app_name": "admin",
       "display_name": "admin",
@@ -61,42 +47,18 @@
       "version_confirmed_at": "2026-09-23 11:40:38"
     },
     {
-      "app_name": "app_share",
-      "display_name": "アプシャ",
-      "icon": "📦",
-      "description": "FUJIN-Pアプリの正本を管理するカーネルアプリ。起動・ランチャ・テーブル台帳・ライブラリと定数の目録をDBに持ち、発行でサイトに反映する。パッケージの輸出入とGitHubへのcommit/pushも行う。",
-      "sort_order": 3.0,
+      "app_name": "_platform",
+      "display_name": "kernel",
+      "icon": "🧩",
+      "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
+      "sort_order": 10.0,
       "kind": "kernel",
       "enabled": true,
       "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "app_share_bp",
-          "name": "app_share",
-          "module": "fujinp.app_share",
-          "url_prefix": null
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "📦️",
-          "label": "アプシャ",
-          "groups": [],
-          "params": "",
-          "section": "admin_support",
-          "endpoint": "app_share.dashboard",
-          "dashboards": [
-            "admin",
-            "guest"
-          ],
-          "sort_order": 1,
-          "visibility": "public",
-          "description": "アプリの正本管理・発行・パッケージ輸出入",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260917.153832-40fd8e",
-      "version_confirmed_at": "2026-09-17 15:38:33"
+      "blueprints": [],
+      "launchers": [],
+      "version_id": "v20260923.120142-da39a3",
+      "version_confirmed_at": "2026-09-23 12:01:42"
     },
     {
       "app_name": "table_cycle",
@@ -134,6 +96,44 @@
       ],
       "version_id": "v20260731.130621-05e507",
       "version_confirmed_at": "2026-07-31 13:06:21"
+    },
+    {
+      "app_name": "app_share",
+      "display_name": "アプシャ",
+      "icon": "📦",
+      "description": "FUJIN-Pアプリの正本を管理するカーネルアプリ。起動・ランチャ・テーブル台帳・ライブラリと定数の目録をDBに持ち、発行でサイトに反映する。パッケージの輸出入とGitHubへのcommit/pushも行う。",
+      "sort_order": 30.0,
+      "kind": "kernel",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "app_share_bp",
+          "name": "app_share",
+          "module": "fujinp.app_share",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📦️",
+          "label": "アプシャ",
+          "groups": [],
+          "params": "",
+          "section": "admin_support",
+          "endpoint": "app_share.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 1,
+          "visibility": "public",
+          "description": "アプリの正本管理・発行・パッケージ輸出入",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260923.154116-f2c97d",
+      "version_confirmed_at": "2026-09-23 15:41:16"
     },
     {
       "app_name": "table_master",
@@ -245,6 +245,73 @@
       ],
       "version_id": "v20260731.140501-f92cbd",
       "version_confirmed_at": "2026-07-31 14:05:01"
+    },
+    {
+      "app_name": "user_groups",
+      "display_name": "ユーザとグループ",
+      "icon": "👥",
+      "description": "ユーザーをグループに分類・管理するためのWebアプリケーション。グループの階層構造（サブグループ）、メンバーの有効期間管理、権限委譲（総管理者・グローバル管理者・グループ管理者）に対応。 2026-09-07：発令台帳（単位×役割×人×期間）と大表ビュー・Excel入出力を追加（段階1・試作）． 名寄せ（別名表・自動名寄せ）を追加． アカウント名簿（ug_persons→approved_users 発行）を追加． 種別「グループ」（管理者が作るグループ＝所有者／メンバー）を追加． 名簿発行に「users まで作る」を追加，名寄せに充て職除外・guest優先・括弧無視を追加． 名簿からパスワード設定メール送信を追加． 名簿にメール未記入の人を保持し，画面で入力できるように． 台帳が正：名簿の追加・修正・削除を users に直ちに反映，登録申請の承認・却下・ブラックリストを台帳で管理． 名寄せを「紐づけ／対象外」の2択に整理し，姓だけの先頭一致を廃止． グループを台帳から導く（ルール・候補生成・回帰照合）． 「台帳に合わせる」で user_groups を台帳から一括生成（冪等）． 名簿に「台帳未登録」のアカウントを表示し台帳登録できるように，Excel取込で外来の admin を regular に格下げ． 永続IDは元帳優先に：取込は既存の users・user_groups への付与だけとし，作成・所属追加をやめて所属は照合報告のみ．相手のない永続IDは控え，台帳の反映時に付け直す．",
+      "sort_order": 40.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "user_groups_bp",
+          "name": "user_groups",
+          "module": "fujinp.user_groups",
+          "url_prefix": "/user_groups"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🗄",
+          "label": "まいぐる（旧）",
+          "groups": [],
+          "params": "",
+          "section": "legacy",
+          "endpoint": "user_groups.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 990,
+          "visibility": "private",
+          "description": "グループ管理（旧）．「ユーザとグループ」に移行済み．やがて廃止",
+          "extra_class": ""
+        },
+        {
+          "icon": "👥",
+          "label": "ユーザとグループ",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "user_groups.ledger_page",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 5,
+          "visibility": "private",
+          "description": "ユーザ・グループの台帳（単位×役割×人×期間）．users と user_groups の正本",
+          "extra_class": ""
+        },
+        {
+          "icon": "🔗",
+          "label": "永続ID",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "user_groups.pids_page",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 6,
+          "visibility": "private",
+          "description": "サイトをまたぐアカウント・グループの識別子．発番（源泉サイトのみ）とXLSXの書き出し・取り込み",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260921.233710-29dacc",
+      "version_confirmed_at": "2026-09-21 23:37:11"
     },
     {
       "app_name": "slack_minutes",
@@ -577,73 +644,6 @@
       ],
       "version_id": "v20260905.103222-bda890",
       "version_confirmed_at": "2026-09-05 10:32:22"
-    },
-    {
-      "app_name": "user_groups",
-      "display_name": "ユーザとグループ",
-      "icon": "👥",
-      "description": "ユーザーをグループに分類・管理するためのWebアプリケーション。グループの階層構造（サブグループ）、メンバーの有効期間管理、権限委譲（総管理者・グローバル管理者・グループ管理者）に対応。 2026-09-07：発令台帳（単位×役割×人×期間）と大表ビュー・Excel入出力を追加（段階1・試作）． 名寄せ（別名表・自動名寄せ）を追加． アカウント名簿（ug_persons→approved_users 発行）を追加． 種別「グループ」（管理者が作るグループ＝所有者／メンバー）を追加． 名簿発行に「users まで作る」を追加，名寄せに充て職除外・guest優先・括弧無視を追加． 名簿からパスワード設定メール送信を追加． 名簿にメール未記入の人を保持し，画面で入力できるように． 台帳が正：名簿の追加・修正・削除を users に直ちに反映，登録申請の承認・却下・ブラックリストを台帳で管理． 名寄せを「紐づけ／対象外」の2択に整理し，姓だけの先頭一致を廃止． グループを台帳から導く（ルール・候補生成・回帰照合）． 「台帳に合わせる」で user_groups を台帳から一括生成（冪等）． 名簿に「台帳未登録」のアカウントを表示し台帳登録できるように，Excel取込で外来の admin を regular に格下げ． 永続IDは元帳優先に：取込は既存の users・user_groups への付与だけとし，作成・所属追加をやめて所属は照合報告のみ．相手のない永続IDは控え，台帳の反映時に付け直す．",
-      "sort_order": 90.0,
-      "kind": "app",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "user_groups_bp",
-          "name": "user_groups",
-          "module": "fujinp.user_groups",
-          "url_prefix": "/user_groups"
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "🗄",
-          "label": "まいぐる（旧）",
-          "groups": [],
-          "params": "",
-          "section": "legacy",
-          "endpoint": "user_groups.index",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 990,
-          "visibility": "private",
-          "description": "グループ管理（旧）．「ユーザとグループ」に移行済み．やがて廃止",
-          "extra_class": ""
-        },
-        {
-          "icon": "👥",
-          "label": "ユーザとグループ",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "user_groups.ledger_page",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 5,
-          "visibility": "private",
-          "description": "ユーザ・グループの台帳（単位×役割×人×期間）．users と user_groups の正本",
-          "extra_class": ""
-        },
-        {
-          "icon": "🔗",
-          "label": "永続ID",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "user_groups.pids_page",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 6,
-          "visibility": "private",
-          "description": "サイトをまたぐアカウント・グループの識別子．発番（源泉サイトのみ）とXLSXの書き出し・取り込み",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260921.233710-29dacc",
-      "version_confirmed_at": "2026-09-21 23:37:11"
     },
     {
       "app_name": "colrep",
