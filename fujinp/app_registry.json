@@ -1,14 +1,28 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-23 15:52:11",
+  "generated_at": "2026-09-23 15:54:49",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
+    {
+      "app_name": "_platform",
+      "display_name": "kernel",
+      "icon": "🧩",
+      "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
+      "sort_order": 10.0,
+      "kind": "kernel",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [],
+      "launchers": [],
+      "version_id": "v20260923.120142-da39a3",
+      "version_confirmed_at": "2026-09-23 12:01:42"
+    },
     {
       "app_name": "admin",
       "display_name": "admin",
       "icon": "📦",
       "description": "ユーザアカウントの登録・更新・削除と登録申請の審査（管理者専用）。管理者ダッシュボードとゲストダッシュボードも持ち、カードは正本から描く。",
-      "sort_order": 2.0,
+      "sort_order": 20.0,
       "kind": "kernel",
       "enabled": true,
       "disclosed": true,
@@ -45,57 +59,6 @@
       ],
       "version_id": "v20260923.114037-dd6c03",
       "version_confirmed_at": "2026-09-23 11:40:38"
-    },
-    {
-      "app_name": "_platform",
-      "display_name": "kernel",
-      "icon": "🧩",
-      "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
-      "sort_order": 10.0,
-      "kind": "kernel",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [],
-      "launchers": [],
-      "version_id": "v20260923.120142-da39a3",
-      "version_confirmed_at": "2026-09-23 12:01:42"
-    },
-    {
-      "app_name": "table_cycle",
-      "display_name": "テーブル サイクル",
-      "icon": "🔄",
-      "description": "MySQLデータベースのテーブルデータとExcelファイル（.xlsx）を相互に変換・同期するための管理ツール。",
-      "sort_order": 20.0,
-      "kind": "app",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "table_cycle_bp",
-          "name": "table_cycle",
-          "module": "fujinp.table_cycle",
-          "url_prefix": "/table_cycle"
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "🔃",
-          "label": "テーブルサイクル",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "table_cycle.table_cycle_dashboard",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 20,
-          "visibility": "private",
-          "description": "SQLファイル⇔.xlsxファイル",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260731.130621-05e507",
-      "version_confirmed_at": "2026-07-31 13:06:21"
     },
     {
       "app_name": "app_share",
@@ -644,6 +607,43 @@
       ],
       "version_id": "v20260905.103222-bda890",
       "version_confirmed_at": "2026-09-05 10:32:22"
+    },
+    {
+      "app_name": "table_cycle",
+      "display_name": "テーブル サイクル",
+      "icon": "🔄",
+      "description": "MySQLデータベースのテーブルデータとExcelファイル（.xlsx）を相互に変換・同期するための管理ツール。",
+      "sort_order": 100.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "table_cycle_bp",
+          "name": "table_cycle",
+          "module": "fujinp.table_cycle",
+          "url_prefix": "/table_cycle"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🔃",
+          "label": "テーブルサイクル",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "table_cycle.table_cycle_dashboard",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 20,
+          "visibility": "private",
+          "description": "SQLファイル⇔.xlsxファイル",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260731.130621-05e507",
+      "version_confirmed_at": "2026-07-31 13:06:21"
     },
     {
       "app_name": "colrep",
