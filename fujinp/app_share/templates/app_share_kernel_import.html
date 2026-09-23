@@ -43,12 +43,12 @@ details summary{cursor:pointer;font-size:.85rem;color:#334155;margin:8px 0}
 <body>
 <div class="container">
   <div class="header">
-    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a></div>
+    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}" style="background:#dc2626;color:#fff;border-color:#dc2626">📦 アプシャダッシュボードに戻る</a></div>
     <h1>⚙ カーネル取り込み</h1>
   </div>
 
   <div class="panel">
-    <div class="hint">カーネルパッケージ（⚙カーネルエクスポートで書き出した JSON）を読み込み，このサイト（{{ local_site }}）のカーネルを入れ替えます．パッケージにあるファイルは全部書き込みます．fujinp/app_registry.json と config.py は書き込みません．書き込む前に元のファイルを ~/kernel_backups/ に保存し，元に戻すためのコマンドを表示します．取り込み後は Reload し，アプシャで「発行」してください．</div>
+    <div class="hint">カーネルパッケージ（アプシャ一覧の kernel カードの「📦 エクスポート」，または kernel の管理画面の版タブで書き出した JSON）を読み込み，このサイト（{{ local_site }}）のカーネルを入れ替えます．パッケージにあるファイルは全部書き込みます．fujinp/app_registry.json と config.py は書き込みません．書き込む前に元のファイルを ~/kernel_backups/ に保存し，元に戻すためのコマンドを表示します．取り込み後は Reload し，アプシャで「発行」してください．</div>
     <input type="file" id="file" accept=".json,application/json">
   </div>
 

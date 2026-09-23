@@ -1,11 +1,11 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-23 11:38:25",
+  "generated_at": "2026-09-23 12:00:13",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
       "app_name": "_platform",
-      "display_name": "FUJIN-P プラットフォーム",
+      "display_name": "kernel",
       "icon": "🧩",
       "description": "カーネル共通の定数（DB接続・メール・OAuth など）と共通テーブル（users など）の目録",
       "sort_order": 0.0,
@@ -19,10 +19,10 @@
     },
     {
       "app_name": "admin",
-      "display_name": "アカウント管理",
+      "display_name": "admin",
       "icon": "📦",
       "description": "ユーザアカウントの登録・更新・削除と登録申請の審査（管理者専用）。管理者ダッシュボードとゲストダッシュボードも持ち、カードは正本から描く。",
-      "sort_order": 10.0,
+      "sort_order": 2.0,
       "kind": "kernel",
       "enabled": true,
       "disclosed": true,
@@ -57,8 +57,46 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260917.153900-9233f3",
-      "version_confirmed_at": "2026-09-17 15:39:01"
+      "version_id": "v20260923.114037-dd6c03",
+      "version_confirmed_at": "2026-09-23 11:40:38"
+    },
+    {
+      "app_name": "app_share",
+      "display_name": "アプシャ",
+      "icon": "📦",
+      "description": "FUJIN-Pアプリの正本を管理するカーネルアプリ。起動・ランチャ・テーブル台帳・ライブラリと定数の目録をDBに持ち、発行でサイトに反映する。パッケージの輸出入とGitHubへのcommit/pushも行う。",
+      "sort_order": 3.0,
+      "kind": "kernel",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "app_share_bp",
+          "name": "app_share",
+          "module": "fujinp.app_share",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📦️",
+          "label": "アプシャ",
+          "groups": [],
+          "params": "",
+          "section": "admin_support",
+          "endpoint": "app_share.dashboard",
+          "dashboards": [
+            "admin",
+            "guest"
+          ],
+          "sort_order": 1,
+          "visibility": "public",
+          "description": "アプリの正本管理・発行・パッケージ輸出入",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260917.153832-40fd8e",
+      "version_confirmed_at": "2026-09-17 15:38:33"
     },
     {
       "app_name": "table_cycle",
@@ -706,44 +744,6 @@
       ],
       "version_id": "v20260731.140538-425cf9",
       "version_confirmed_at": "2026-07-31 14:05:38"
-    },
-    {
-      "app_name": "app_share",
-      "display_name": "アプシャ",
-      "icon": "📦",
-      "description": "FUJIN-Pアプリの正本を管理するカーネルアプリ。起動・ランチャ・テーブル台帳・ライブラリと定数の目録をDBに持ち、発行でサイトに反映する。パッケージの輸出入とGitHubへのcommit/pushも行う。",
-      "sort_order": 140.0,
-      "kind": "kernel",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "app_share_bp",
-          "name": "app_share",
-          "module": "fujinp.app_share",
-          "url_prefix": null
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "📦️",
-          "label": "アプシャ",
-          "groups": [],
-          "params": "",
-          "section": "admin_support",
-          "endpoint": "app_share.dashboard",
-          "dashboards": [
-            "admin",
-            "guest"
-          ],
-          "sort_order": 1,
-          "visibility": "public",
-          "description": "アプリの正本管理・発行・パッケージ輸出入",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260917.153832-40fd8e",
-      "version_confirmed_at": "2026-09-17 15:38:33"
     },
     {
       "app_name": "official_data_archive",

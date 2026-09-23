@@ -55,7 +55,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#4338ca}
       <a class="edit" href="{{ url_for('app_share.edit_document', app_name=app_name, doc_type='spec') }}">📝 叙述を編集</a>
       <a class="gray" href="{{ url_for('app_share.manage_page', app_name=app_name) }}">🛠 管理</a>
       {% endif %}
-      <a href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+      <a href="{{ url_for('app_share.dashboard') }}" style="background:#dc2626;color:#fff;border-color:#dc2626">📦 アプシャダッシュボードに戻る</a>
       <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
     </div>
     <h1>{{ row.icon or '📦' }} {{ row.display_name or app_name }} <span style="font-weight:400;color:#666;font-size:.95rem">技術仕様書</span></h1>

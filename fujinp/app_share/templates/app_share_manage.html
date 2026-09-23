@@ -66,7 +66,7 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
     <div class="hdr-btns">
       <a class="btn sky" href="{{ url_for('app_share.spec_view', app_name=app_name) }}">📋 仕様書</a>
       <a class="btn gray" href="{{ url_for('app_share.api_diag', app_name=app_name) }}">🩺 診断JSON</a>
-      <a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+      <a class="btn gray" href="{{ url_for('app_share.dashboard') }}" style="background:#dc2626;color:#fff;border-color:#dc2626">📦 アプシャダッシュボードに戻る</a>
     </div>
     <h1><span id="h-icon">{{ icon }}</span> <span id="h-name">{{ display_name }}</span> <span style="font-weight:400;color:#666;font-size:.95rem">アプリ管理</span></h1>
     <div class="sub"><code>{{ app_name }}</code> <span id="h-meta"></span></div>
@@ -179,8 +179,13 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
     <div class="row" style="margin-top:10px">
       <button class="btn gray" onclick="tidyApp()">🧹 整形</button>
       <button class="btn green" onclick="confirmVersion()">🏷 版確定</button>
+      {% if app_name == '_platform' %}
+      <a class="btn sky" href="{{ url_for('app_share.export_kernel_package') }}" title="config.py を除くカーネル一式を JSON で書き出す">📦 カーネルエクスポート</a>
+      <a class="btn amber" href="{{ url_for('app_share.kernel_import_page') }}" title="カーネルパッケージでこのサイトのカーネルを入れ替える">📥 カーネル取り込み</a>
+      {% else %}
       <a class="btn sky" href="{{ url_for('app_share.package_export', app_name=app_name) }}">📦 エクスポート</a>
       <a class="btn amber" href="{{ url_for('app_share.package_import_page', app=app_name) }}">📥 取り込み（パッケージ）</a>
+      {% endif %}
     </div>
     <h3>GitHub（関所 → GitHub）</h3>
     <div id="git-body" class="hint">関所の状態を確認中…</div>

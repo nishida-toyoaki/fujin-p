@@ -26,6 +26,7 @@ app_share.package — アプリパッケージの輸出入（段階6c，format_v
 app_info.json／version.json／manifest.json は含めない（情報は正本にある）．
 
   GET  /app_share/package/export/<app_name>     輸出（?docs= 無しなら確認ゲートを表示．admin 以外はゲートなしでそのまま書き出す）
+                                                カーネル（_platform）はカーネルの書き出しへ回す
   GET  /app_share/package/export/<app_name>?docs=ok|later|draft|final
        ok=文書は最新（更新不要）／later=更新せず書き出す／draft=文書作成用の暫定版／final=文書を添付した最終版
   POST /app_share/api/app/<app_name>/docs/attach  Claude が書いたマニュアル・仕様書を保存（ゲートの「完了」）
@@ -51,7 +52,7 @@ import shutil
 import datetime
 import importlib.util
 
-from flask import render_template, request, jsonify, session, Response
+from flask import render_template, request, jsonify, session, Response, redirect, url_for
 
 from . import app_share_bp
 from . import manage as _m
@@ -449,6 +450,9 @@ def package_export(app_name):
     """?docs= が無ければ確認ゲートを表示し，ok／later／draft／final が付いていればダウンロードする．"""
     if not _m._valid_app(app_name):
         return "アプリ名が不正です", 400
+    # カーネル（_platform 行）はアプリのパッケージではなくカーネルパッケージで書き出す（2026-09-23）
+    if app_name == _m.PLATFORM_ROW:
+        return redirect(url_for('app_share.export_kernel_package'))
     choice = (request.args.get('docs') or '').strip().lower()
 
     if not _is_admin():
@@ -989,6 +993,9 @@ def package_import_page():
     app_name = request.args.get('app') or ''
     if app_name and not _m._valid_app(app_name):
         app_name = ''
+    # カーネル（_platform 行）の取り込みはカーネル取り込みの画面で行う（2026-09-23）
+    if app_name == _m.PLATFORM_ROW:
+        return redirect(url_for('app_share.kernel_import_page'))
     return render_template('app_share_package.html', app_name=app_name)
 
 
