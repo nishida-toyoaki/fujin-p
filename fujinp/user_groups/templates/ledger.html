@@ -1,0 +1,695 @@
+{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+   SPDX-License-Identifier: AGPL-3.0-or-later
+   This file is part of FUJIN-P. See <https://www.gnu.org/licenses/>. #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ユーザとグループ</title>
+<style>
+  :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fafbfc; font-size:14px; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { margin-left:12px; color:var(--acc); text-decoration:none; font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:4px; }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  #reqTabs .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .bar input[type=text], .bar input[type=date], .bar input[type=search] { padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+  .bar .sp { flex:1; }
+  .btn { border:1px solid var(--line); background:#fff; padding:6px 12px; cursor:pointer; border-radius:4px; font-size:13px; }
+  .btn.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btn.warn { color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .summary { padding:6px 16px; color:var(--sub); font-size:12px; }
+  .wrap { padding:0 16px 8px; overflow:auto; }   /* 高さは JS で画面内に収め，横スクロールバーを常に見せる */
+  table.grid { border-collapse:separate; border-spacing:0; min-width:100%; background:#fff; }
+  table.grid th, table.grid td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:4px 6px; vertical-align:top; }
+  table.grid th { background:var(--head); position:sticky; top:0; z-index:5; text-align:left; white-space:nowrap; }
+  table.grid th:first-child, table.grid td:first-child { position:sticky; left:0; background:#fff; z-index:6; border-left:1px solid var(--line); min-width:260px; max-width:420px; }
+  table.grid th:first-child { z-index:7; background:var(--head); }
+  td.unit { white-space:normal; }
+  td.unit .nm { cursor:default; }
+  td.unit .note { color:var(--sub); font-size:11px; margin-left:6px; }
+  tr.d0 td { background:#f3f6fa; font-weight:600; }
+  tr.d1 td { font-weight:500; }
+  tr.d0 td:first-child { background:#f3f6fa; }
+  .ind { display:inline-block; }
+  .chip { display:inline-block; margin:1px 4px 1px 0; padding:1px 7px; border-radius:10px; border:1px solid #b8bec6; background:#e4e7eb; color:#555; font-size:13px; white-space:nowrap; }
+  .chip.res { border-color:var(--acc); background:#e8f0fb; color:var(--ink); }
+  .chip.vac { border:1px dotted #c9ced5; color:#aab; background:#fff; }
+  .chip.hit { outline:2px solid #f6ad55; }
+  .editing .chip { cursor:pointer; }
+  .editing .chip:hover { background:#ffe9c7; }
+  .editing td.unit .nm { cursor:pointer; text-decoration:underline dotted; }
+  .editing th.role { cursor:pointer; }
+  .add { display:none; color:var(--acc); cursor:pointer; font-size:12px; margin-left:4px; }
+  .editing td:hover .add { display:inline; }
+  tr.hide { display:none; }
+  tr.dim td { opacity:.55; }
+  .empty { padding:30px; color:var(--sub); }
+  /* modal */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.on { display:flex; }
+  .md { background:#fff; border-radius:8px; padding:18px 20px; width:520px; max-width:95vw; max-height:90vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+  .md > *:not(.foot) { flex:0 0 auto; }
+  .md .foot { position:sticky; bottom:-18px; margin-left:-20px; margin-right:-20px; margin-bottom:-18px; padding:10px 20px; background:#fff; border-top:1px solid var(--line); z-index:2; }
+  .md h2 { font-size:16px; margin:0 0 12px; }
+  .md label { display:block; font-size:12px; color:var(--sub); margin-top:8px; }
+  .md input[type=text], .md input[type=date], .md input[type=number], .md select, .md textarea { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+  .md .row { display:flex; gap:10px; }
+  .md .row > div { flex:1; }
+  .md .foot { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .md .foot .left { margin-right:auto; }
+  .imp pre { background:#f6f8fa; padding:10px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  .person { padding:8px 16px; }
+  .person table { border-collapse:collapse; background:#fff; }
+  .person td, .person th { border:1px solid var(--line); padding:3px 8px; font-size:13px; }
+  .nm-table { border-collapse:collapse; width:100%; }
+  .nm-table th, .nm-table td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; vertical-align:middle; }
+  .nm-table select { max-width:220px; padding:3px; }
+  .nm-table .btn { padding:3px 8px; font-size:12px; }
+  .cand { padding:4px 8px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .cand:hover { background:#e8f0fb; }
+  .cand small { color:var(--sub); }
+  .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
+  .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
+</style>
+</head>
+<body>
+<header>
+  <h1>👥 ユーザとグループ</h1>
+  <span style="color:var(--sub);font-size:12px">単位 × 役割 × 人 × 期間</span>
+  <nav style="margin-left:auto">
+    <a href="{{ url_for('user_groups.index') }}">グループ管理へ</a>
+    <a href="{{ url_for('user_groups.return_to_fujin') }}">FUJINダッシュボードへ戻る</a>
+  </nav>
+</header>
+
+<div class="bar">
+  <span class="tabs" id="tabs">
+    {% for k, label in kinds %}<button data-kind="{{ k }}" {% if loop.first %}class="on"{% endif %}>{{ label }}</button>{% endfor %}
+  </span>
+  <span style="margin-left:12px">時点</span>
+  <input type="date" id="asof" value="{{ today }}">
+  <button class="btn" id="btnToday">今日</button>
+  <label><input type="checkbox" id="allPeriod"> 全期間</label>
+  <label><input type="checkbox" id="hideEmpty" checked> 空列を隠す</label>
+  <label title="紐づいた人は users の氏名で表示（元の表記はツールチップ）"><input type="checkbox" id="useUserName" checked> 名寄せ後の氏名</label>
+  <input type="search" id="filter" placeholder="表内を絞り込み（単位名・氏名）" style="width:240px;margin-left:12px">
+  <span class="sp"></span>
+  <input type="search" id="person" placeholder="人から引く（全種別・全期間）" style="width:200px">
+  {% if is_admin %}
+  <label class="btn"><input type="checkbox" id="editMode"> 編集</label>
+  <button class="btn" id="btnAddUnit" style="display:none">＋単位</button>
+  <button class="btn" id="btnAddRole" style="display:none">＋役割</button>
+  <button class="btn" id="btnImport">Excel取込</button>
+  <button class="btn" id="btnNames">名寄せ</button>
+  <button class="btn" id="btnRoster">名簿</button>
+  <button class="btn" id="btnGroups">グループ定義</button>
+  <button class="btn" id="btnReq">申請<span id="reqBadge" style="display:none;background:var(--bad);color:#fff;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px"></span></button>
+  {% endif %}
+  <a class="btn" href="{{ url_for('user_groups.ledger_export') }}">Excel出力</a>
+  <a class="btn" href="{{ url_for('user_groups.ledger_template') }}">雛形</a>
+</div>
+<div class="summary" id="summary"></div>
+<div class="person" id="personBox" style="display:none"></div>
+<div class="wrap" id="wrap"><div class="empty">読み込み中…</div></div>
+
+<!-- 発令 -->
+<div class="ov" id="ovAppt"><div class="md">
+  <h2 id="apptTitle">発令</h2>
+  <div id="apptUnit" style="font-size:13px;color:var(--sub)"></div>
+  <label>役割</label><select id="apptRole"></select>
+  <label>ユーザを検索（users ID・メール・氏名の一部）</label>
+  <input type="text" id="apptSearch" placeholder="例：34 / nishida / 西田" autocomplete="off">
+  <div id="apptCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="apptPicked" style="margin-top:6px;font-size:13px"></div>
+  <label>氏名（台帳の表記．ユーザを選ぶと自動で入ります．空なら空席）</label><input type="text" id="apptName">
+  <div class="row"><div><label>開始</label><input type="date" id="apptFrom"></div><div><label>終了</label><input type="date" id="apptUntil"></div></div>
+  <label>備考</label><input type="text" id="apptNote">
+  <label>出典</label><input type="text" id="apptSource">
+  <div class="foot"><button class="btn warn left" id="apptDel">削除</button><button class="btn" onclick="hide('ovAppt')">閉じる</button><button class="btn pri" id="apptSave">保存</button></div>
+</div></div>
+
+<!-- 単位 -->
+<div class="ov" id="ovUnit"><div class="md">
+  <h2 id="unitTitle">単位</h2>
+  <label>親（空なら最上位）</label><select id="unitParent"></select>
+  <label>名称</label><input type="text" id="unitName">
+  <div class="row"><div><label>序列</label><input type="number" id="unitSort"></div><div><label>開始</label><input type="date" id="unitFrom"></div><div><label>終了</label><input type="date" id="unitUntil"></div></div>
+  <label>備考</label><input type="text" id="unitNote">
+  <div class="foot"><button class="btn warn left" id="unitDel">削除（配下と発令も）</button><button class="btn" onclick="hide('ovUnit')">閉じる</button><button class="btn pri" id="unitSave">保存</button></div>
+</div></div>
+
+<!-- 役割 -->
+<div class="ov" id="ovRole"><div class="md">
+  <h2 id="roleTitle">役割</h2>
+  <label>役割名</label><input type="text" id="roleName">
+  <div class="row"><div><label>序列（小さいほど左）</label><input type="number" id="roleRank"></div></div>
+  <label>備考</label><input type="text" id="roleNote">
+  <div class="foot"><button class="btn warn left" id="roleDel">削除</button><button class="btn" onclick="hide('ovRole')">閉じる</button><button class="btn pri" id="roleSave">保存</button></div>
+</div></div>
+
+<!-- 取込 -->
+<div class="ov" id="ovImp"><div class="md imp">
+  <h2>Excel取込</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">シート「単位」「役割」「発令」「人」を読みます（「雛形」の形式）．先に「検証」でDBに触れずに内容を確かめ，それから「適用」してください．「人」シートで区分が admin の人は，このサイトの admin とメールが一致するときだけ admin のまま入り，それ以外は regular になります．</p>
+  <input type="file" id="impFile" accept=".xlsx">
+  <label style="display:block;margin-top:8px"><input type="checkbox" id="impReplace" checked> 同じ「出典」の既存発令を消してから入れる（年度表の入れ替え向き）</label>
+  <pre id="impOut" style="display:none"></pre>
+  <div class="foot"><button class="btn" onclick="hide('ovImp')">閉じる</button><button class="btn" id="impCheck">検証</button><button class="btn pri" id="impApply" disabled>適用</button></div>
+</div></div>
+
+<!-- 名寄せ -->
+<div class="ov" id="ovNames"><div class="md" style="width:900px">
+  <h2>名寄せ（氏名 → ユーザ）</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">自動で紐づくのは，users の氏名と完全一致するもの（空白・括弧は無視）と，名簿の氏名からメール経由で一意に決まるものだけです．姓だけの表記は曖昧なので自動では紐づけません．ここで人を選んで「紐づけ」を押すと，その氏名の発令をまとめて結びつけます．users に登録のない外部の方は「対象外」にすると一覧から消えます（下の一覧で解除できます）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <span id="namesSummary" style="font-size:13px"></span>
+    <label style="font-size:12px;margin-left:12px"><input type="checkbox" id="namesShowIgnored"> 対象外も表示</label>
+    <span style="flex:1"></span>
+    <button class="btn" id="namesAuto">自動名寄せを実行</button>
+  </div>
+  <div id="namesList" style="max-height:45vh;overflow:auto"></div>
+  <h2 style="margin-top:14px">対象外にした氏名</h2>
+  <div id="exclList" style="max-height:25vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovNames');load()">閉じる</button></div>
+</div></div>
+
+<!-- 名簿 -->
+<div class="ov" id="ovRoster"><div class="md" style="width:960px">
+  <h2>アカウント名簿（人 → ログインできる人）</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．ここで人を足す・直す・消すと，users に直ちに反映されます（自分自身と最後の admin は降格・削除しません）．メール未記入の人は先頭に出ます（右端の「編集」で直せます）．「発行」を押すと，有効期間内でまだ users にいない人を approved_users に写し，期限切れの人を approved_users から外します．approved_users にある人は初回ログインでアカウントが作られます．「users まで作る」を付けると，ログインを待たずに users を直接作ります（実験段階向け）．既にある users は触りません（退職者の停止はユーザ管理で）．発行後は名寄せを自動で掛け直します．Google を使わない人には 🔑 でパスワード設定メールを送れます（本人が「パスワードを忘れた方」から自分で設定することもできます）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <span id="rosterSummary" style="font-size:13px"></span>
+    <input type="search" id="rosterFilter" placeholder="絞り込み" style="padding:4px 8px;border:1px solid var(--line);border-radius:4px">
+    <button class="btn" id="rosterSortReset" title="所属順（既定）に戻す">並び順を戻す</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="rosterAdd">＋人</button>
+    <label style="font-size:12px"><input type="checkbox" id="rosterCreateUsers"> users まで作る</label>
+    <label style="font-size:12px"><input type="checkbox" id="rosterDeactivate"> 期限切れの users を無効化</label>
+    <button class="btn pri" id="rosterPublish">発行</button>
+  </div>
+  <div id="rosterList" style="max-height:60vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovRoster')">閉じる</button></div>
+</div></div>
+
+<!-- グループ定義 -->
+<div class="ov" id="ovGrp"><div class="md" style="width:980px">
+  <h2>グループ定義（台帳 → user_groups）</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．「台帳を users・user_groups 等に反映する」を押すと，名簿から users と approved_users を揃え，名寄せを掛け直し，台帳の全単位について user_groups とルールを揃えます．何度押しても同じ結果になり，既にあるグループは名前も直接メンバーもそのままで，不足しているルールだけを足します．「候補」から作ると，台帳のグループ種別はその名前のまま，組織の学部等は「◯◯教員」，事務局の課・係はその名前，会議体は「◯◯」（委員側）と「◯◯_事務」（事務職員）の2つができます．同名のグループが既にあれば，そこにルールを足すだけです．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="grpTabs">
+    <button class="btn on" data-t="list">いまのグループ <span></span></button>
+    <button class="btn" data-t="prop">候補 <span></span></button>
+    <span style="flex:1"></span>
+    <button class="btn pri" id="grpSync" title="名簿→users・approved_users，台帳の単位→user_groups とルール．何度押しても同じ結果になります">台帳を users・user_groups 等に反映する</button>
+    <button class="btn" id="grpSnap" title="ルールを入れる前の構成員を控えます">控えを取る</button>
+    <button class="btn" id="grpCmp" title="控えといまを突き合わせます">控えと照合</button>
+    <button class="btn pri" id="grpGen" style="display:none">選んだ候補を作る</button>
+  </div>
+  <div id="grpBody" style="max-height:60vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovGrp')">閉じる</button></div>
+</div></div>
+
+<!-- 登録申請 -->
+<div class="ov" id="ovReq"><div class="md" style="width:960px">
+  <h2>登録申請とブラックリスト</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">名簿にない人からの登録申請です．「承認」は名簿に載せて users を直ちに作ります（区分は申請どおり，ここで変えられます）．「ブラックリスト」はその後の申請とログインを止めます（users があれば無効化）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="reqTabs">
+    <button class="btn on" data-st="pending">承認待ち <span></span></button>
+    <button class="btn" data-st="approved">承認済 <span></span></button>
+    <button class="btn" data-st="rejected">却下 <span></span></button>
+    <button class="btn" data-st="blacklisted">ブラックリスト <span></span></button>
+    <span style="flex:1"></span>
+    <button class="btn" id="blAdd">＋ブラックリストに追加</button>
+  </div>
+  <div id="reqList" style="max-height:60vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovReq')">閉じる</button></div>
+</div></div>
+
+<!-- 人（名簿の1行） -->
+<div class="ov" id="ovPerson"><div class="md">
+  <h2 id="personTitle">人</h2>
+  <label>氏名</label><input type="text" id="pName">
+  <label>メール（空なら名簿だけ．users は作られない）</label><input type="text" id="pEmail">
+  <div class="row"><div><label>区分</label><select id="pCat"><option value="regular">regular</option><option value="guest">guest</option><option value="admin">admin</option></select></div><div><label>所属</label><input type="text" id="pAff"></div></div>
+  <div class="row"><div><label>開始</label><input type="date" id="pFrom"></div><div><label>終了</label><input type="date" id="pUntil"></div></div>
+  <label>備考</label><input type="text" id="pNote">
+  <div class="foot"><button class="btn" onclick="hide('ovPerson')">閉じる</button><button class="btn pri" id="pSave">保存（users にも反映）</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+const API = '{{ url_for("user_groups.ledger_grid") }}'.replace(/\/grid$/, '');
+let kind = document.querySelector('#tabs button.on').dataset.kind;
+let grid = null;
+let editing = false;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id){ $(id).classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null, form=null){
+  const opt = {method, headers:{}};
+  if (form) opt.body = form; else if (body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+  const r = await fetch(url, opt); const j = await r.json().catch(()=>({success:false,error:'応答が不正です'}));
+  if (!j.success) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
+}
+function asOfParam(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
+
+async function load(){
+  try{
+    grid = await api(`${API}/grid?kind=${kind}&as_of=${encodeURIComponent(asOfParam())}`);
+    render(); loadSummary();
+  }catch(e){ $('wrap').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}<br><small>テーブル（ug_units / ug_roles / ug_appointments）が未作成なら，先に作成してください．</small></div>`; }
+}
+async function loadSummary(){
+  try{
+    const s = await api(`${API}/summary`);
+    const k = s.kinds[kind];
+    $('summary').textContent = `${k.label}：単位 ${k.units}・役割 ${k.roles}・発令 ${k.appointments}（表示中 ${grid.appointment_count}）｜全体：未解決（usersに一致なし）${s.unresolved}・空席 ${s.vacant}｜出典：` +
+      (s.sources.map(x => `${x.source || '（なし）'} ${x.n}件`).join('，') || 'なし') + (grid.as_of ? `｜時点 ${grid.as_of}` : '｜全期間');
+  }catch(e){}
+}
+
+function render(){
+  const allPeriod = $('allPeriod').checked;
+  const rows = grid.rows;
+  const used = new Set(); for (const u of rows) for (const rid of Object.keys(u.cells)) if (u.cells[rid].length) used.add(rid);
+  const roles = ($('hideEmpty').checked && !editing) ? grid.roles.filter(r => used.has(String(r.id))) : grid.roles;
+  if (!rows.length){ $('wrap').innerHTML = `<div class="empty">「${esc(grid.kind_label)}」の単位がまだありません．${IS_ADMIN ? '「Excel取込」か「＋単位」で作れます．' : ''}</div>`; return; }
+  let h = '<table class="grid"><thead><tr><th>単位</th>';
+  for (const r of roles) h += `<th class="role" data-rid="${r.id}" title="${esc(r.note)}">${esc(r.name)}</th>`;
+  h += '</tr></thead><tbody>';
+  for (const u of rows){
+    const per = (u.from || u.until) ? ` <span class="note">[${esc(u.from)}〜${esc(u.until)}]</span>` : '';
+    h += `<tr class="d${Math.min(u.depth,3)}" data-uid="${u.id}" data-text="${esc((u.name + ' ' + Object.values(u.cells).flat().map(c=>c.name + ' ' + (c.user_name||'')).join(' ')).toLowerCase())}">`;
+    h += `<td class="unit"><span class="ind" style="width:${u.depth*18}px"></span><span class="nm" data-uid="${u.id}">${esc(u.name)}</span>${per}${u.note ? `<span class="note" title="${esc(u.note)}">※</span>` : ''}</td>`;
+    for (const r of roles){
+      const items = u.cells[String(r.id)] || [];
+      h += `<td data-uid="${u.id}" data-rid="${r.id}">`;
+      for (const c of items){
+        const cls = ['chip', c.resolved?'res':'', c.vacant?'vac':''].join(' ');
+        const per = (allPeriod && (c.from||c.until)) ? `<small style="color:var(--sub)"> ${esc(c.from)}〜${esc(c.until)}</small>` : '';
+        const useUN = $('useUserName').checked && c.resolved && c.user_name;
+        const label = c.vacant ? '空席' : esc(useUN ? c.user_name : c.name);
+        const tip = c.resolved ? `users #${c.user_id}${c.user_email ? ' ' + c.user_email : ''}` : '';
+        h += `<span class="${cls}" data-aid="${c.id}" title="${esc(tip)}">${label}${per}</span>`;
+      }
+      h += `<span class="add" data-uid="${u.id}" data-rid="${r.id}">＋</span></td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</tbody></table>';
+  $('wrap').innerHTML = h;
+  applyFilter();
+}
+
+function applyFilter(){
+  const q = $('filter').value.trim().toLowerCase();
+  const parent = {}; for (const u of grid.rows) parent[u.id] = u.parent_id;
+  const keep = new Set();
+  document.querySelectorAll('#wrap tbody tr').forEach(tr => {
+    if (!q || tr.dataset.text.includes(q)){ let id = +tr.dataset.uid; while (id){ keep.add(id); id = parent[id]; } }
+  });
+  document.querySelectorAll('#wrap tbody tr').forEach(tr => {
+    const hit = !q || tr.dataset.text.includes(q);
+    tr.classList.toggle('hide', !!q && !keep.has(+tr.dataset.uid));
+    tr.classList.toggle('dim', !!q && !hit);
+  });
+  document.querySelectorAll('#wrap .chip').forEach(ch => ch.classList.toggle('hit', !!q && ch.textContent.toLowerCase().includes(q)));
+}
+
+// ── イベント ──
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); kind=b.dataset.kind; load();
+});
+$('asof').onchange = load;
+$('btnToday').onclick = () => { $('asof').value = '{{ today }}'; $('allPeriod').checked=false; load(); };
+$('allPeriod').onchange = load;
+$('hideEmpty').onchange = render;
+$('useUserName').onchange = render;
+$('filter').oninput = applyFilter;
+$('person').onchange = async () => {
+  const q = $('person').value.trim(); const box = $('personBox');
+  if (!q){ box.style.display='none'; return; }
+  const r = await api(`${API}/persons?q=${encodeURIComponent(q)}`);
+  box.style.display='block';
+  if (!r.items.length){ box.innerHTML = `<b>${esc(q)}</b>：該当なし`; return; }
+  box.innerHTML = `<b>${esc(q)}</b>：${r.items.length}件 <button class="btn" style="padding:2px 8px" onclick="$('person').value='';$('personBox').style.display='none'">閉じる</button>` +
+    '<table><tr><th>種別</th><th>単位</th><th>役割</th><th>氏名</th><th>期間</th><th>備考</th></tr>' +
+    r.items.map(i => `<tr><td>${esc(i.kind_label)}</td><td>${esc(i.path.join('／'))}</td><td>${esc(i.role)}</td><td>${esc(i.name)}</td><td>${esc(i.from)}〜${esc(i.until)}</td><td>${esc(i.note)}</td></tr>`).join('') + '</table>';
+};
+
+if (IS_ADMIN){
+  $('editMode').onchange = () => { editing = $('editMode').checked; document.body.classList.toggle('editing', editing); render(); $('btnAddUnit').style.display = $('btnAddRole').style.display = editing ? '' : 'none'; };
+  $('btnImport').onclick = () => { $('impOut').style.display='none'; $('impApply').disabled=true; show('ovImp'); };
+  $('btnAddUnit').onclick = () => openUnit(null);
+  $('btnAddRole').onclick = () => openRole(null);
+
+  $('wrap').addEventListener('click', ev => {
+    if (!editing) return;
+    const t = ev.target;
+    if (t.classList.contains('chip')) openAppt(+t.dataset.aid, t.closest('td').dataset.uid, t.closest('td').dataset.rid);
+    else if (t.classList.contains('add')) openAppt(null, t.dataset.uid, t.dataset.rid);
+    else if (t.classList.contains('nm')) openUnit(+t.dataset.uid);
+    else if (t.classList.contains('role')) openRole(+t.dataset.rid);
+  });
+
+  // 発令
+  let curAppt = null, apptUser = null, apptTimer = null;
+  function showPicked(){
+    $('apptPicked').innerHTML = apptUser ? `<span class="picked">users #${apptUser.id} ${esc(apptUser.full_name)}${apptUser.email ? ' <small>' + esc(apptUser.email) + '</small>' : ''}<span class="x" id="apptUnpick" title="紐づけを外す">✕</span></span>` : '<span style="color:var(--sub)">ユーザに紐づいていません（氏名だけの発令）</span>';
+    const u = $('apptUnpick'); if (u) u.onclick = () => { apptUser = null; showPicked(); };
+  }
+  $('apptSearch').oninput = () => {
+    clearTimeout(apptTimer);
+    const q = $('apptSearch').value.trim();
+    if (!q){ $('apptCand').style.display = 'none'; return; }
+    apptTimer = setTimeout(async () => {
+      try{ const r = await api(`${API}/users?q=${encodeURIComponent(q)}`);
+        $('apptCand').innerHTML = r.items.length ? r.items.map(u => `<div class="cand" data-uid="${u.id}" data-name="${esc(u.full_name)}" data-email="${esc(u.email)}">#${u.id} <b>${esc(u.full_name)}</b> <small>${esc(u.email)}${u.inactive ? '（停止中）' : ''}</small></div>`).join('') + (r.more ? `<div class="cand"><small>ほか ${r.more} 件．絞り込んでください</small></div>` : '')
+          : '<div class="cand"><small>該当なし</small></div>';
+        $('apptCand').style.display = '';
+      }catch(e){}
+    }, 250);
+  };
+  $('apptCand').addEventListener('click', ev => {
+    const d = ev.target.closest('.cand'); if (!d || !d.dataset.uid) return;
+    apptUser = {id:+d.dataset.uid, full_name:d.dataset.name, email:d.dataset.email};
+    $('apptName').value = d.dataset.name; $('apptSearch').value = ''; $('apptCand').style.display = 'none'; showPicked();
+  });
+  function findAppt(aid){ for (const u of grid.rows) for (const items of Object.values(u.cells)) for (const c of items) if (c.id===aid) return {u, c}; return null; }
+  function openAppt(aid, uid, rid){
+    const u = grid.rows.find(x => x.id===+uid);
+    $('apptRole').innerHTML = grid.roles.map(r => `<option value="${r.id}" ${r.id===+rid?'selected':''}>${esc(r.name)}</option>`).join('');
+    $('apptUnit').textContent = u.path.join('／');
+    const f = aid ? findAppt(aid) : null;
+    curAppt = {aid, uid:+uid};
+    $('apptTitle').textContent = aid ? '発令を編集' : '発令を追加';
+    $('apptName').value = f ? (f.c.vacant ? '' : f.c.name) : '';
+    apptUser = (f && f.c.resolved) ? {id:f.c.user_id, full_name:f.c.user_name, email:f.c.user_email} : null;
+    $('apptSearch').value = ''; $('apptCand').style.display = 'none'; showPicked();
+    $('apptFrom').value = f ? f.c.from.slice(0,10) : ''; $('apptUntil').value = f ? f.c.until.slice(0,10) : '';
+    $('apptNote').value = f ? f.c.note : ''; $('apptSource').value = f ? f.c.source : '';
+    $('apptDel').style.display = aid ? '' : 'none';
+    show('ovAppt'); $('apptName').focus();
+  }
+  $('apptSave').onclick = async () => {
+    const body = {unit_id:curAppt.uid, role_id:+$('apptRole').value, person_name:$('apptName').value, user_id: apptUser ? apptUser.id : null, valid_from:$('apptFrom').value, valid_until:$('apptUntil').value, note:$('apptNote').value, source:$('apptSource').value};
+    if (!apptUser && $('apptName').value.trim() && !confirm('ユーザに紐づけずに，氏名だけの発令として保存します．よろしいですか')) return;
+    try{ if (curAppt.aid) await api(`${API}/appointments/${curAppt.aid}`, 'PUT', body); else await api(`${API}/appointments`, 'POST', body); hide('ovAppt'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
+  };
+  $('apptDel').onclick = async () => { if (!confirm('この発令を削除しますか')) return; try{ await api(`${API}/appointments/${curAppt.aid}`, 'DELETE'); hide('ovAppt'); toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+
+  // 単位
+  let curUnit = null;
+  function openUnit(uid){
+    const u = uid ? grid.rows.find(x => x.id===uid) : null;
+    curUnit = uid;
+    $('unitTitle').textContent = u ? '単位を編集' : `単位を追加（${grid.kind_label}）`;
+    $('unitParent').innerHTML = '<option value="">（最上位）</option>' + grid.rows.filter(x => !u || x.id!==u.id).map(x => `<option value="${x.id}" ${u && x.id===u.parent_id?'selected':''}>${'　'.repeat(x.depth)}${esc(x.name)}</option>`).join('');
+    $('unitName').value = u ? u.name : ''; $('unitSort').value = u ? u.sort_order : '';
+    $('unitFrom').value = u ? u.from.slice(0,10) : ''; $('unitUntil').value = u ? u.until.slice(0,10) : ''; $('unitNote').value = u ? u.note : '';
+    $('unitDel').style.display = u ? '' : 'none';
+    show('ovUnit'); $('unitName').focus();
+  }
+  $('unitSave').onclick = async () => {
+    const body = {kind, name:$('unitName').value, parent_id:$('unitParent').value?+$('unitParent').value:null, sort_order:$('unitSort').value?+$('unitSort').value:null, valid_from:$('unitFrom').value, valid_until:$('unitUntil').value, note:$('unitNote').value};
+    try{ if (curUnit) await api(`${API}/units/${curUnit}`, 'PUT', body); else await api(`${API}/units`, 'POST', body); hide('ovUnit'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
+  };
+  $('unitDel').onclick = async () => { if (!confirm('この単位と配下の単位・発令をすべて削除しますか')) return; try{ const r = await api(`${API}/units/${curUnit}`, 'DELETE'); hide('ovUnit'); toast(`単位 ${r.deleted_units}・発令 ${r.deleted_appointments} を削除`); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+
+  // 役割
+  let curRole = null;
+  function openRole(rid){
+    const r = rid ? grid.roles.find(x => x.id===rid) : null;
+    curRole = rid;
+    $('roleTitle').textContent = r ? '役割を編集' : `役割を追加（${grid.kind_label}）`;
+    $('roleName').value = r ? r.name : ''; $('roleRank').value = r ? r.rank : ''; $('roleNote').value = r ? r.note : '';
+    $('roleDel').style.display = r ? '' : 'none';
+    show('ovRole'); $('roleName').focus();
+  }
+  $('roleSave').onclick = async () => {
+    const body = {kind, name:$('roleName').value, rank:$('roleRank').value?+$('roleRank').value:null, note:$('roleNote').value};
+    try{ if (curRole) await api(`${API}/roles/${curRole}`, 'PUT', body); else await api(`${API}/roles`, 'POST', body); hide('ovRole'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
+  };
+  $('roleDel').onclick = async () => { if (!confirm('この役割を削除しますか')) return; try{ await api(`${API}/roles/${curRole}`, 'DELETE'); hide('ovRole'); toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+
+  // 取込
+  async function runImport(mode){
+    const f = $('impFile').files[0]; if (!f){ toast('ファイルを選んでください'); return; }
+    const fd = new FormData(); fd.append('file', f); fd.append('mode', mode); fd.append('replace_source', $('impReplace').checked ? '1' : '0');
+    $('impOut').style.display='block'; $('impOut').textContent = mode==='check' ? '検証中…' : '適用中…';
+    try{
+      const r = await api(`${API}/import`, 'POST', null, fd); const s = r.summary;
+      let t = `[${mode==='check'?'検証':'適用'}] 単位 ${s.units}行・役割 ${s.roles}行・人 ${s.persons}行・発令 ${s.appointments}件\n`;
+      t += `氏名の照合：users と一致 ${s.resolved}（完全一致 ${s.resolved_by.exact}・名簿経由 ${s.resolved_by.person}）・対象外 ${s.resolved_by.ignore}・充て職 ${s.resolved_by.post}・一致なし ${s.unresolved}・空席 ${s.vacant}\n`;
+      if (s.unresolved_names && s.unresolved_names.length) t += `未解決のまま入る氏名（名寄せ画面で選んでください）：${s.unresolved_names.join('，')}\n`;
+      for (const x of s.sources) t += `出典「${x.source || '（なし）'}」：新規 ${x.new}件` + (s.replace_source ? `（既存 ${x.existing}件を置き換え）` : `（既存 ${x.existing}件に追加）`) + '\n';
+      if (s.admin_kept && s.admin_kept.length) t += `admin のまま入る人（このサイトの admin と一致）：${s.admin_kept.join('，')}\n`;
+      if (s.admin_demoted && s.admin_demoted.length) t += `admin → regular に格下げして入る人：${s.admin_demoted.join('，')}\n`;
+      if (s.roles_auto_created.length) t += `役割シートに無く自動作成される役割：${s.roles_auto_created.join('，')}\n`;
+      if (mode==='apply'){ t += `作成した単位 ${s.units_created.length}件・削除した発令 ${s.appointments_deleted}件\n`; }
+      if (s.warnings.length) t += '\n注意：\n' + s.warnings.map(w => '・'+w).join('\n');
+      $('impOut').textContent = t;
+      if (mode==='check') $('impApply').disabled = false; else { $('impApply').disabled = true; toast('取り込みました'); load(); }
+    }catch(e){ $('impOut').textContent = '失敗：' + e.message; }
+  }
+  // 名寄せ
+  $('btnNames').onclick = () => { show('ovNames'); loadNames(); };
+  const HOW = {exact:'完全一致', alias:'別名（旧）', person:'名簿経由', ignore:'対象外', post:'充て職'};
+  async function loadNames(){
+    $('namesList').innerHTML = '読み込み中…';
+    try{
+      const r = await api(`${API}/names?show_ignored=${$('namesShowIgnored').checked ? 1 : 0}`);
+      namesUsers = r.users;
+      const total = r.unresolved.reduce((a,x)=>a+x.count,0);
+      const autoN = r.unresolved.filter(x=>x.auto && x.auto!=='ignore' && x.auto!=='post').length;
+      $('namesSummary').textContent = `未解決 ${r.unresolved.length} 名（発令 ${total} 件）｜うち自動判定できるもの ${autoN} 名` + (r.ignored_hidden ? `｜対象外 ${r.ignored_hidden} 名は非表示` : '');
+      const userOpts = r.users.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
+      if (!r.unresolved.length) $('namesList').innerHTML = '<div class="empty">未解決の氏名はありません</div>';
+      else $('namesList').innerHTML = '<table class="nm-table"><tr><th>氏名</th><th>件数</th><th>種別</th><th>自動判定</th><th>ユーザ</th><th></th></tr>' +
+        r.unresolved.map(x => {
+          const cand = x.candidates.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
+          const sel = `<select data-name="${esc(x.name)}"><option value="">（選択）</option>${cand ? `<optgroup label="候補">${cand}</optgroup>` : ''}<optgroup label="全ユーザ">${userOpts}</optgroup></select>`;
+          const auto = x.auto ? `${HOW[x.auto]}${x.auto_user ? '→'+esc(x.auto_user) : ''}` : '<span style="color:var(--sub)">なし</span>';
+          return `<tr><td><b>${esc(x.name)}</b></td><td>${x.count}</td><td>${esc(x.kinds.join('・'))}</td><td>${auto}</td><td>${sel}</td>` +
+                 `<td style="white-space:nowrap"><button class="btn pri" data-link="${esc(x.name)}">紐づけ</button> <button class="btn" data-ignore="${esc(x.name)}">対象外</button></td></tr>`;
+        }).join('') + '</table>';
+      $('exclList').innerHTML = r.excluded.length ? '<table class="nm-table"><tr><th>氏名</th><th>備考</th><th></th></tr>' +
+        r.excluded.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.note)}</td><td><button class="btn" data-exdel="${a.id}">対象外を解除</button></td></tr>`).join('') + '</table>'
+        : '<div style="color:var(--sub);font-size:12px">ありません</div>';
+    }catch(e){ $('namesList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_person_aliases が未作成なら，先に作成してください．</small>'; }
+  }
+  $('namesShowIgnored').onchange = loadNames;
+  $('namesAuto').onclick = async () => { try{ const r = await api(`${API}/names/auto`, 'POST', {}); toast(`${r.checked}件を点検，${r.resolved}件を紐づけ（完全一致 ${r.by.exact}・別名 ${r.by.alias}・先頭一致 ${r.by.prefix}）`, 4000); loadNames(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+  $('ovNames').addEventListener('click', async ev => {
+    const t = ev.target;
+    try{
+      if (t.dataset.link !== undefined){
+        const sel = $('ovNames').querySelector(`select[data-name="${CSS.escape(t.dataset.link)}"]`);
+        if (!sel.value){ toast('ユーザを選んでください'); return; }
+        const u = namesUsers.find(x => x.id == sel.value);
+        if (!confirm(`「${t.dataset.link}」の発令を users #${sel.value} ${u ? u.full_name : ''} に紐づけます．よろしいですか`)) return;
+        const r = await api(`${API}/names/link`, 'POST', {name:t.dataset.link, user_id:+sel.value}); toast(`${r.linked}件を紐づけました`); loadNames(); load();
+      } else if (t.dataset.ignore !== undefined){
+        await api(`${API}/exclusions`, 'POST', {name:t.dataset.ignore, note:'対象外'}); toast(`「${t.dataset.ignore}」を対象外に`); loadNames();
+      } else if (t.dataset.exdel !== undefined){
+        await api(`${API}/exclusions/${t.dataset.exdel}`, 'DELETE'); toast('対象外を解除しました'); loadNames();
+      }
+    }catch(e){ toast('失敗：'+e.message, 4000); }
+  });
+
+  // 名簿
+  let rosterItems = [], rosterUnreg = [];
+  $('btnRoster').onclick = () => { show('ovRoster'); loadRoster(); };
+  let rosterSort = {key:'default', dir:1};
+  function renderRoster(){
+    const q = $('rosterFilter').value.trim().toLowerCase();
+    const ORD2 = i => (!i.email ? 0 : 1);
+    const ORD = {'教員':0,'事務職員':1,'特命':2,'客員':3,'名誉':4,'教職員':5,'役員・委員':6,'福知山市':7,'学外':8,'学生':9,'テスト用':10};
+    const cmp = {
+      default: (a,b) => (ORD2(a) - ORD2(b)) || ((ORD[a.affiliation] ?? 8) - (ORD[b.affiliation] ?? 8)) || a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
+      name:    (a,b) => a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
+      email:   (a,b) => a.email.localeCompare(b.email) || a.full_name.localeCompare(b.full_name,'ja'),
+      user:    (a,b) => ((a.user_id ?? Infinity) - (b.user_id ?? Infinity)) || a.full_name.localeCompare(b.full_name,'ja'),
+    }[rosterSort.key];
+    const rows = rosterItems.filter(i => !q || (i.full_name+' '+i.email+' '+i.affiliation+' '+i.note).toLowerCase().includes(q))
+      .sort((a,b) => cmp(a,b) * rosterSort.dir);
+    const arrow = k => rosterSort.key===k ? (rosterSort.dir===1 ? ' ▲' : ' ▼') : '';
+    const th = (k,label) => `<th data-sort="${k}" style="cursor:pointer;white-space:nowrap" title="クリックで並べ替え">${label}${arrow(k)}</th>`;
+    const st = i => !i.email ? '<span style="color:var(--bad)">メール未記入</span>' : !i.active ? '<span style="color:var(--sub)">期限外</span>' : i.user_id ? (i.user_inactive ? '<span style="color:var(--bad)">users（停止中）</span>' : `<span style="color:var(--acc)">users #${i.user_id}</span>${i.has_password ? '' : '<small style="color:var(--sub)">（パスワード未設定）</small>'}`) : i.approved ? '発行済（初回ログイン待ち）' : '<span style="color:var(--warn)">未発行</span>';
+    const uq = rosterUnreg.filter(u => !q || (u.full_name+' '+u.email+' '+u.affiliation).toLowerCase().includes(q));
+    const unregHtml = uq.length ? `<div style="border:1px solid var(--warn);background:#fff7ed;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="color:var(--warn)">台帳未登録のアカウント ${uq.length} 件</b><span style="font-size:12px;color:var(--sub)">users にあって名簿に無い人です．台帳が正なので，台帳登録してください（users の氏名・メール・区分・所属をそのまま名簿に写します．users は変わりません）．</span><span style="flex:1"></span>${uq.length > 1 ? `<button class="btn pri" data-padoptall="1">すべて台帳登録</button>` : ''}</div>
+      <table class="nm-table">${uq.map(u => `<tr><td><b>${esc(u.full_name)}</b></td><td>${esc(u.email) || '<span style="color:var(--bad)">メール空（登録不可）</span>'}</td><td>${esc(u.category)}</td><td>${esc(u.affiliation)}</td><td><span style="color:var(--acc)">users #${u.user_id}</span>${u.inactive ? '<small style="color:var(--bad)">（停止中）</small>' : ''}</td><td style="white-space:nowrap">${u.email ? `<button class="btn pri" data-padopt="${u.user_id}">台帳登録</button>` : ''}</td></tr>`).join('')}</table></div>` : '';
+    $('rosterList').innerHTML = unregHtml + (rows.length ? `<table class="nm-table"><tr>${th('name','氏名')}${th('email','メール')}<th>区分</th><th>所属</th><th>期間</th>${th('user','状態（users ID）')}<th>備考</th><th></th></tr>` +
+      rows.map(i => `<tr><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${esc(i.from)}〜${esc(i.until)}</td><td>${st(i)}</td><td>${esc(i.note)}</td><td style="white-space:nowrap"><button class="btn" data-pedit="${i.id}" title="この行を編集（氏名・メール・区分・所属・期間・備考）">編集</button> ${i.user_id && !i.user_inactive ? `<button class="btn" data-pmail="${i.id}" title="パスワード設定メールを送る">🔑</button> ` : ''}<button class="btn" data-pdel="${i.id}">削除</button></td></tr>`).join('') + '</table>'
+      : '<div class="empty">名簿が空です．Excel の「人」シートから取り込んでください．</div>');
+    $('rosterList').querySelectorAll('th[data-sort]').forEach(h => h.onclick = () => {
+      const k = h.dataset.sort;
+      if (rosterSort.key === k) rosterSort.dir = -rosterSort.dir; else rosterSort = {key:k, dir:1};
+      renderRoster();
+    });
+  }
+  async function loadRoster(){
+    $('rosterList').innerHTML = '読み込み中…';
+    try{ const r = await api(`${API}/roster`); rosterItems = r.items; rosterUnreg = r.unregistered || []; const c = r.counts;
+      $('rosterSummary').textContent = `名簿 ${c.total} 人（有効 ${c.active}）｜users あり ${c.users}・発行済 ${c.approved}・未発行 ${c.pending}・メール未記入 ${c.no_email}` + (c.unregistered ? `｜台帳未登録 ${c.unregistered}` : ''); renderRoster();
+    }catch(e){ $('rosterList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_persons が未作成なら，先に作成してください．</small>'; }
+  }
+  $('rosterFilter').oninput = renderRoster;
+  $('rosterSortReset').onclick = () => { rosterSort = {key:'default', dir:1}; renderRoster(); };
+  $('rosterPublish').onclick = async () => { const cu = $('rosterCreateUsers').checked;
+    if (!confirm('台帳を正として発行します．users にある人は 氏名・区分・所属 を名簿に合わせ' + (cu ? '，無い人は users を作り' : '，無い人は approved_users に写し') + '，期限切れの人は approved_users から外し' + ($('rosterDeactivate').checked ? '，その users を無効化し' : '') + 'ます．よろしいですか')) return;
+    try{ const r = await api(`${API}/roster/publish`, 'POST', {create_users: cu, deactivate_expired: $('rosterDeactivate').checked});
+      toast(`発行：users作成 ${r.users_created}・users更新 ${r.users_updated}・無効化 ${r.users_deactivated}・approved追加 ${r.added}・更新 ${r.updated}・削除 ${r.removed}｜名寄せ ${r.linked}件` + (r.warnings.length ? '｜' + r.warnings.join('，') : ''), 8000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+  $('ovRoster').addEventListener('click', async ev => { const t = ev.target;
+    if (t.dataset.padopt !== undefined || t.dataset.padoptall !== undefined){
+      const ids = t.dataset.padopt !== undefined ? [Number(t.dataset.padopt)] : rosterUnreg.filter(u => u.email).map(u => u.user_id);
+      const who = ids.length === 1 ? (() => { const u = rosterUnreg.find(x => x.user_id === ids[0]); return `${u.full_name}（${u.email}，${u.category}）`; })() : `${ids.length} 人`;
+      if (!confirm(`${who} を台帳（名簿）に登録します．よろしいですか`)) return;
+      try{ const r = await api(`${API}/roster/adopt`, 'POST', {user_ids: ids}); toast(`台帳登録 ${r.adopted.length} 件` + (r.skipped.length ? `・見送り ${r.skipped.length} 件` : '') + (r.linked ? `｜名寄せ ${r.linked}件` : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+      return; }
+    if (t.dataset.pedit !== undefined){ openPerson(rosterItems.find(x => x.id == t.dataset.pedit)); return; }
+    if (t.dataset.pmail !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pmail); if (!confirm(`${i.full_name}（${i.email}）にパスワード設定メールを送りますか`)) return; try{ await api(`${API}/roster/${t.dataset.pmail}/password_mail`, 'POST', {}); toast('送信しました'); }catch(e){ toast('失敗：'+e.message, 5000); } return; }
+    if (t.dataset.pdel !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pdel);
+      let withUser = false;
+      if (i.user_id){ withUser = confirm(`${i.full_name} を名簿から消します．users #${i.user_id} も削除（論理削除・ログイン不可）しますか？\nOK＝users も削除　キャンセル＝名簿だけ`); }
+      else if (!confirm(`${i.full_name} を名簿から消しますか`)) return;
+      try{ const r = await api(`${API}/roster/${t.dataset.pdel}?with_user=${withUser?1:0}`, 'DELETE'); toast(r.user_action==='deleted' ? 'users も削除しました' : '名簿から消しました'); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); } } });
+  // グループ定義
+  let grpTab = 'list', grpList = [], grpProp = [];
+  $('btnGroups').onclick = () => { show('ovGrp'); loadGrp(); };
+  document.querySelectorAll('#grpTabs button[data-t]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#grpTabs button[data-t]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    grpTab = b.dataset.t; $('grpGen').style.display = grpTab==='prop' ? '' : 'none'; loadGrp();
+  });
+  async function loadGrp(){
+    $('grpBody').innerHTML = '読み込み中…';
+    try{
+      if (grpTab === 'list'){
+        const r = await api(`${API}/groups`); grpList = r.items;
+        document.querySelector('#grpTabs button[data-t=list] span').textContent = r.items.length;
+        $('grpBody').innerHTML = '<table class="nm-table"><tr><th>グループ</th><th>ルール（台帳から導く）</th><th>直接メンバー</th><th>いまの構成員</th></tr>' +
+          r.items.map(g => `<tr><td><b>${esc(g.name)}</b><br><small style="color:var(--sub)">${esc(g.description)}</small></td>
+            <td>${g.rules.length ? g.rules.map(x => `<div><span class="chip res">${esc(x.kind)}：${esc(x.unit)}／${esc(x.role)}${x.recurse?'（配下も）':''}${x.mode==='exclude'?'（除外）':''}</span> <button class="btn" data-rdel="${x.id}" style="padding:1px 6px">×</button></div>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
+            <td>${g.direct_names.length ? g.direct_names.map(n => `<span class="chip">${esc(n)}</span>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
+            <td><b>${g.members.length}</b>名 ${g.member_names.slice(0,8).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${g.member_names.length>8 ? ` <small>ほか${g.member_names.length-8}名</small>` : ''}</td></tr>`).join('') + '</table>';
+      } else {
+        const r = await api(`${API}/groups/proposals`); grpProp = r.items;
+        document.querySelector('#grpTabs button[data-t=prop] span').textContent = r.items.filter(x=>!x.done).length;
+        $('grpBody').innerHTML = '<table class="nm-table"><tr><th><input type="checkbox" id="grpAll"></th><th>作るグループ名</th><th>種別</th><th>もとの単位／役割</th><th>いまの構成員</th><th>状態</th></tr>' +
+          r.items.map((x,i) => `<tr><td>${x.done ? '' : `<input type="checkbox" class="grpChk" data-n="${esc(x.group_name)}" ${x.members.length?'checked':''}>`}</td>
+            <td><b>${esc(x.group_name)}</b></td><td>${esc(x.kind)}</td><td>${esc(x.unit)}／${esc(x.role_label)}${x.recurse?'（配下も）':''}</td>
+            <td><b>${x.members.length}</b>名 ${x.member_names.slice(0,6).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${x.member_names.length>6 ? ` <small>ほか${x.member_names.length-6}名</small>` : ''}</td>
+            <td>${x.done ? '<span style="color:var(--acc)">作成済</span>' : x.exists ? '同名のグループあり（ルールを足します）' : ''}</td></tr>`).join('') + '</table>';
+        const all = $('grpAll'); if (all) all.onchange = () => document.querySelectorAll('.grpChk').forEach(c => c.checked = all.checked);
+      }
+    }catch(e){ $('grpBody').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_group_rules が未作成なら，先に作成してください．</small>'; }
+  }
+  $('grpBody').addEventListener('click', async ev => {
+    const t = ev.target; if (t.dataset.rdel === undefined) return;
+    if (!confirm('このルールを外しますか（グループと直接メンバーは残ります）')) return;
+    try{ await api(`${API}/groups/rules/${t.dataset.rdel}`, 'DELETE'); toast('外しました'); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
+  $('grpGen').onclick = async () => {
+    const names = [...document.querySelectorAll('.grpChk')].filter(c => c.checked).map(c => c.dataset.n);
+    if (!names.length){ toast('作るグループを選んでください'); return; }
+    if (!confirm(`${names.length} 件のグループを作り，台帳からのルールを足します．よろしいですか`)) return;
+    try{ const r = await api(`${API}/groups/generate`, 'POST', {names}); toast(`グループ ${r.groups_created} 件・ルール ${r.rules_added} 本を追加`, 5000); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+  $('grpSync').onclick = async () => {
+    if (!confirm('台帳を users・user_groups 等に反映します．\n・名簿の人を users に作る／氏名・区分・所属を合わせる\n・名寄せを掛け直す\n・台帳の単位ごとに user_groups とルールを揃える\n既にあるものは壊しません．よろしいですか')) return;
+    try{ const r = await api(`${API}/groups/sync`, 'POST', {});
+      const u = r.roster || {};
+      let msg = `users：作成 ${u.users_created||0}・更新 ${u.users_updated||0}｜名寄せ ${u.linked||0}件｜グループ：台帳の ${r.from_ledger} 件に対して新規 ${r.groups_created}・ルール追加 ${r.rules_added}`;
+      if (r.pids_linked && (r.pids_linked.person || r.pids_linked.group)) msg += `｜永続IDの付け直し 人 ${r.pids_linked.person}・グループ ${r.pids_linked.group}`;
+      if (r.extras.length) msg += `｜台帳に対応の無いグループ ${r.extras.length} 件（${r.extras.slice(0,5).map(x=>x.name).join('，')}${r.extras.length>5?' ほか':''}）`;
+      toast(msg, 9000); loadGrp();
+    }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+  $('grpSnap').onclick = async () => { if (!confirm('いまの全グループの構成員を控えます（前の控えは消えます）．よろしいですか')) return;
+    try{ const r = await api(`${API}/groups/snapshot`, 'POST', {}); toast(`控えました（${r.rows} 行 ${r.taken_at}）`, 5000); }catch(e){ toast('失敗：'+e.message, 5000); } };
+  $('grpCmp').onclick = async () => {
+    try{ const r = await api(`${API}/groups/compare`);
+      if (r.identical){ toast(`控え（${r.taken_at}）と完全に一致．グループ ${r.groups} 件`, 6000); return; }
+      $('grpBody').innerHTML = `<div style="margin-bottom:8px">控え（${esc(r.taken_at)}）との差：${r.diffs.length} グループ${r.groups_gone.length ? `，消えたグループ ${esc(r.groups_gone.join('，'))}` : ''}</div>` +
+        '<table class="nm-table"><tr><th>グループ</th><th>増えた人</th><th>減った人</th></tr>' +
+        r.diffs.map(d => `<tr><td><b>${esc(d.group)}</b></td><td>${d.added.map(n=>`<span class="chip res">${esc(n)}</span>`).join('')}</td><td>${d.removed.map(n=>`<span class="chip">${esc(n)}</span>`).join('')}</td></tr>`).join('') + '</table>';
+    }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+
+  // 登録申請
+  let reqItems = [], reqSt = 'pending';
+  let namesUsers = [];
+  $('btnReq').onclick = () => { show('ovReq'); loadReq(); };
+  async function loadReq(){
+    $('reqList').innerHTML = '読み込み中…';
+    try{ const r = await api(`${API}/requests`); reqItems = r.items;
+      document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.querySelector('span').textContent = r.counts[b.dataset.st] || 0);
+      renderReq();
+    }catch(e){ $('reqList').innerHTML = '失敗：' + esc(e.message); }
+  }
+  function renderReq(){
+    const rows = reqItems.filter(i => i.status === reqSt);
+    const acts = i => reqSt==='pending' ? `<select data-cat="${i.id}"><option value="regular" ${i.category==='regular'?'selected':''}>regular</option><option value="guest" ${i.category==='guest'?'selected':''}>guest</option><option value="admin" ${i.category==='admin'?'selected':''}>admin</option></select> <button class="btn pri" data-act="approve" data-id="${i.id}">承認</button> <button class="btn" data-act="reject" data-id="${i.id}">却下</button> <button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`
+      : reqSt==='blacklisted' ? `<button class="btn" data-act="unblock" data-id="${i.id}">解除</button>`
+      : `<button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`;
+    $('reqList').innerHTML = rows.length ? '<table class="nm-table"><tr><th>申請日</th><th>氏名</th><th>メール</th><th>区分</th><th>所属</th><th>状態</th><th>メモ</th><th></th></tr>' +
+      rows.map(i => `<tr><td>${esc(i.requested_at)}</td><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${i.in_users ? '<span style="color:var(--acc)">users あり</span>' : i.in_roster ? '名簿あり' : ''}</td><td>${esc(i.note)}</td><td style="white-space:nowrap">${acts(i)}</td></tr>`).join('') + '</table>'
+      : '<div class="empty">ありません</div>';
+  }
+  document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.onclick = () => { document.querySelectorAll('#reqTabs button[data-st]').forEach(x => x.classList.remove('on')); b.classList.add('on'); reqSt = b.dataset.st; renderReq(); });
+  $('reqList').addEventListener('click', async ev => {
+    const t = ev.target; if (!t.dataset.act) return;
+    const i = reqItems.find(x => x.id == t.dataset.id);
+    const msg = {approve:`${i.full_name}（${i.email}）を承認し，名簿に載せて users を作りますか`, reject:`${i.full_name} の申請を却下しますか`, blacklist:`${i.email} をブラックリストに載せますか（users があれば無効化）`, unblock:`${i.email} のブラックリストを解除しますか（却下に戻ります）`}[t.dataset.act];
+    if (!confirm(msg)) return;
+    const body = {}; if (t.dataset.act==='approve'){ const sel = $('reqList').querySelector(`select[data-cat="${i.id}"]`); if (sel) body.category = sel.value; }
+    try{ const r = await api(`${API}/requests/${i.id}/${t.dataset.act}`, 'POST', body); toast((r.user_action ? `users を${r.user_action==='created'?'作成':r.user_action==='revived'?'復活':'更新'}` : '更新しました') + (r.warning ? '｜'+r.warning : '')); loadReq(); loadRosterSilently(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
+  $('blAdd').onclick = async () => { const em = prompt('ブラックリストに載せるメールアドレス'); if (!em) return; const note = prompt('理由（任意）') || ''; try{ await api(`${API}/requests/blacklist`, 'POST', {email: em, note}); toast('登録しました'); loadReq(); }catch(e){ toast('失敗：'+e.message, 5000); } };
+  async function loadRosterSilently(){ try{ const r = await api(`${API}/requests`); const n = r.counts.pending || 0; $('reqBadge').style.display = n ? '' : 'none'; $('reqBadge').textContent = n; }catch(e){} }
+  loadRosterSilently();
+
+  let curPerson = null;
+  function openPerson(i){
+    curPerson = i ? i.id : null;
+    $('personTitle').textContent = i ? '人を編集' : '人を追加';
+    $('pName').value = i ? i.full_name : ''; $('pEmail').value = i ? i.email : ''; $('pCat').value = i ? i.category : 'regular';
+    $('pAff').value = i ? i.affiliation : ''; $('pFrom').value = i ? i.from.slice(0,10) : ''; $('pUntil').value = i ? i.until.slice(0,10) : ''; $('pNote').value = i ? i.note : '';
+    show('ovPerson'); $('pName').focus();
+  }
+  $('rosterAdd').onclick = () => openPerson(null);
+  $('pSave').onclick = async () => {
+    const body = {full_name:$('pName').value, email:$('pEmail').value, category:$('pCat').value, affiliation:$('pAff').value, valid_from:$('pFrom').value, valid_until:$('pUntil').value, note:$('pNote').value};
+    try{ const r = curPerson ? await api(`${API}/roster/${curPerson}`, 'PUT', body) : await api(`${API}/roster`, 'POST', body);
+      hide('ovPerson'); toast((r.user_action==='created' ? 'users を作成' : r.user_action==='revived' ? 'users を復活' : r.user_action==='updated' ? 'users を更新' : '保存') + (r.warning ? '｜' + r.warning : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+
+  $('impCheck').onclick = () => runImport('check');
+  $('impApply').onclick = () => { if (confirm('DBに書き込みます．よろしいですか')) runImport('apply'); };
+  $('impFile').onchange = () => { $('impApply').disabled = true; $('impOut').style.display='none'; };
+}
+
+function fitWrap(){ const w = $('wrap'); const top = w.getBoundingClientRect().top + window.scrollY; w.style.height = Math.max(200, window.innerHeight - top - 8) + 'px'; }
+window.addEventListener('resize', fitWrap);
+new ResizeObserver(fitWrap).observe(document.querySelector('.bar'));
+new ResizeObserver(fitWrap).observe($('summary'));
+new ResizeObserver(fitWrap).observe($('personBox'));
+fitWrap();
+load();
+</script>
+</body>
+</html>

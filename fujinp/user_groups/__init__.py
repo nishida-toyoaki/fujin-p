@@ -17,19 +17,33 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 User_groups Blueprint
 ユーザによるユーザグループ管理
 """
+import os
+
 from flask import Blueprint
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 user_groups_bp = Blueprint(
     'user_groups',
     __name__,
-    template_folder='user_groups_templates'
+    template_folder='templates'
 )
+
+# テンプレートは templates/ を正とする．アプシャのエクスポータが templates/ しか
+# 拾わないため，この位置に置いたものだけがパッケージに載る．
+# 移行の途中で user_groups_templates/ に残っていても描画できるよう，両方を見る．
+_HERE = os.path.dirname(os.path.abspath(__file__))
+user_groups_bp.jinja_loader = ChoiceLoader([
+    FileSystemLoader(os.path.join(_HERE, 'templates')),
+    FileSystemLoader(os.path.join(_HERE, 'user_groups_templates')),
+])
 
 # routes.pyをインポート（循環インポート回避のため最後に）
 from . import routes
+from . import ledger   # 発令台帳（段階1，2026-09-07）
+from . import pids     # 永続ID（サイト間の突合，2026-09-14）
