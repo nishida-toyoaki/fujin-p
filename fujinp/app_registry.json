@@ -1,7 +1,7 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-23 09:48:37",
-  "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
+  "generated_at": "2026-09-23 11:38:25",
+  "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
       "app_name": "_platform",
@@ -46,19 +46,19 @@
           "label": "ユーザ管理",
           "groups": [],
           "params": "",
-          "section": "system",
+          "section": "legacy",
           "endpoint": "admin.unified_dashboard",
           "dashboards": [
             "admin"
           ],
-          "sort_order": 10,
+          "sort_order": 890,
           "visibility": "private",
-          "description": "アカウントの管理",
+          "description": "アカウント",
           "extra_class": ""
         }
       ],
-      "version_id": "v20260902.171806-e5e5ee",
-      "version_confirmed_at": "2026-09-02 17:18:06"
+      "version_id": "v20260917.153900-9233f3",
+      "version_confirmed_at": "2026-09-17 15:39:01"
     },
     {
       "app_name": "table_cycle",
@@ -1433,6 +1433,9 @@
       "key": "system",
       "title": "⚙️ システム管理",
       "css_class": "admin-function",
+      "color_from": "#4c0519",
+      "color_to": "#1e1b4b",
+      "text_color": "#ffffff",
       "sort_order": 10.0,
       "show_admin": true,
       "show_guest": true,
@@ -1443,6 +1446,9 @@
       "key": "sommelier",
       "title": "🧑‍🍳 FUJIN-Pソムリエ用アプリ",
       "css_class": "sommelier",
+      "color_from": "#7c3aed",
+      "color_to": "#5b21b6",
+      "text_color": "#ffffff",
       "sort_order": 20.0,
       "show_admin": true,
       "show_guest": true,
@@ -1453,6 +1459,9 @@
       "key": "admin_support",
       "title": "👨‍✈️ 管理支援",
       "css_class": "admin-support",
+      "color_from": "#f59e0b",
+      "color_to": "#d97706",
+      "text_color": "#ffffff",
       "sort_order": 30.0,
       "show_admin": true,
       "show_guest": true,
@@ -1463,6 +1472,9 @@
       "key": "internal",
       "title": "🏫 機関内向け",
       "css_class": "highlight",
+      "color_from": "#10b981",
+      "color_to": "#059669",
+      "text_color": "#ffffff",
       "sort_order": 40.0,
       "show_admin": true,
       "show_guest": true,
@@ -1473,11 +1485,37 @@
       "key": "guest",
       "title": "📌 ゲスト向け",
       "css_class": "open-sky",
+      "color_from": "#38bdf8",
+      "color_to": "#0ea5e9",
+      "text_color": "#ffffff",
       "sort_order": 50.0,
       "show_admin": true,
       "show_guest": true,
       "require_groups": [],
       "require_categories": []
+    },
+    {
+      "key": "legacy",
+      "title": "🏚  レガシー",
+      "css_class": "open-sky",
+      "color_from": "#b9babb",
+      "color_to": "#e7e8e9",
+      "text_color": "#ffffff",
+      "sort_order": 60.0,
+      "show_admin": true,
+      "show_guest": true,
+      "require_groups": [],
+      "require_categories": []
     }
-  ]
+  ],
+  "dashboards": {
+    "admin": {
+      "bg_from": "#dc2626",
+      "bg_to": "#991b1b"
+    },
+    "guest": {
+      "bg_from": "#667eea",
+      "bg_to": "#764ba2"
+    }
+  }
 }

@@ -61,7 +61,8 @@ API（すべて admin．routes.py の before_request が既定で admin 必須�
   GET  /app_share/api/publish/status                     未発行の変更があるか
   POST /app_share/api/publish                            発行（＋任意で Reload）
   GET  /app_share/api/summary                            一覧用の要約（open件数など）
-  GET  /app_share/api/sections / POST /app_share/api/sections
+  GET  /app_share/api/sections / POST /app_share/api/sections  区画（見出し・色・順）と
+                                          ダッシュボードの背景（2026-09-23）
 """
 
 import os
@@ -85,6 +86,37 @@ from config import Config
 from db import DatabaseConfig
 from decorators import login_required
 from fujinp import registry as _reg
+
+# 旧いカーネル（2026-09-23 より前の registry.py）でも区画ページとパッケージの輸出入が
+# 動くように，区画の色の関数が無ければここで補う．カーネル取り込みで registry.py を
+# 新しくすれば，この補いは使われなくなる．
+if not hasattr(_reg, 'section_colors'):
+    _CLASS_COLORS = {
+        'admin-function': ('#4c0519', '#1e1b4b', '#ffffff'), 'sommelier': ('#7c3aed', '#5b21b6', '#ffffff'),
+        'admin-support': ('#f59e0b', '#d97706', '#ffffff'), 'highlight': ('#10b981', '#059669', '#ffffff'),
+        'open-sky': ('#38bdf8', '#0ea5e9', '#ffffff'), 'legacy': ('#9ca3af', '#6b7280', '#ffffff'),
+        'feature-app': ('#7fb3d5', '#6a9cc2', '#ffffff'), 'dev-app': ('#94a3b8', '#64748b', '#ffffff')}
+    _COLOR_RE_COMPAT = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
+
+    def _clean_color_compat(v):
+        v = (v or '').strip()
+        return v.lower() if _COLOR_RE_COMPAT.match(v) else ''
+
+    def _section_colors_compat(sec):
+        sec = sec or {}
+        f, t = _clean_color_compat(sec.get('color_from')), _clean_color_compat(sec.get('color_to'))
+        fg = _clean_color_compat(sec.get('text_color'))
+        if f and t:
+            return f, t, fg or '#ffffff'
+        b = _CLASS_COLORS.get((sec.get('css_class') or '').strip(), _reg_fallback)
+        return b[0], b[1], fg or b[2]
+
+    _reg_fallback = ('#9ca3af', '#6b7280', '#ffffff')
+    _reg.CLASS_COLORS = _CLASS_COLORS
+    _reg.FALLBACK_SECTION_COLORS = _reg_fallback
+    _reg.DASHBOARD_DEFAULTS = {'admin': ('#dc2626', '#991b1b'), 'guest': ('#667eea', '#764ba2')}
+    _reg.clean_color = _clean_color_compat
+    _reg.section_colors = _section_colors_compat
 
 BASE_DIR = _routes.BASE_DIR                # fujinp/
 SITE_CODE_ROOT = _routes.SITE_CODE_ROOT    # ホーム
@@ -561,17 +593,58 @@ def api_launchers_check(app_name):
     return _ok(results=out)
 
 
+def _style_ready(cur):
+    """区画の色の列と背景の表（2026-09-23 追加）があるか．(色の列, 背景の表)"""
+    cols = tbl = False
+    try:
+        cur.execute("SHOW COLUMNS FROM app_share_sections LIKE 'color_from'")
+        cols = bool(cur.fetchall())
+    except Exception:
+        cols = False
+    try:
+        cur.execute("SHOW TABLES LIKE 'app_share_dashboards'")
+        tbl = bool(cur.fetchall())
+    except Exception:
+        tbl = False
+    return cols, tbl
+
+
+def _load_dashboards(cur, tbl_ready):
+    """{'admin': {...}, 'guest': {...}}．explicit=表に行があるか"""
+    rows = {}
+    if tbl_ready:
+        cur.execute("SELECT dashboard, bg_from, bg_to FROM app_share_dashboards")
+        for r in cur.fetchall():
+            rows[r['dashboard']] = r
+    out = {}
+    for name in ('admin', 'guest'):
+        r = rows.get(name) or {}
+        f, t = _reg.clean_color(r.get('bg_from')), _reg.clean_color(r.get('bg_to'))
+        explicit = bool(f and t)
+        if not explicit:
+            f, t = _reg.DASHBOARD_DEFAULTS[name]
+        out[name] = {'bg_from': f, 'bg_to': t, 'explicit': explicit}
+    return out
+
+
 @app_share_bp.route('/api/sections', methods=['GET'])
 @login_required
 def api_sections_get():
+    """区画と背景．色が空の区画は実効色（css_class からの読み替え）を入れて返す"""
     with _db() as (cur, conn):
+        cols_ready, tbl_ready = _style_ready(cur)
         cur.execute("SELECT * FROM app_share_sections ORDER BY sort_order")
         rows = cur.fetchall()
+        dashboards = _load_dashboards(cur, tbl_ready)
     for r in rows:
         r['require_groups'] = _jload(r.get('require_groups'), [])
         r['require_categories'] = _jload(r.get('require_categories'), [])
         r['sort_order'] = float(r.get('sort_order') or 0)
-    return _ok(sections=rows)
+        explicit = bool(_reg.clean_color(r.get('color_from')) and _reg.clean_color(r.get('color_to')))
+        f, t, fg = _reg.section_colors(r)
+        r.update({'color_from': f, 'color_to': t, 'text_color': fg, 'color_explicit': explicit})
+    return _ok(sections=rows, dashboards=dashboards,
+               style_ready={'section_colors': cols_ready, 'dashboards': tbl_ready})
 
 
 @app_share_bp.route('/api/sections', methods=['POST'])
@@ -579,29 +652,63 @@ def api_sections_get():
 def api_sections_save():
     d = request.get_json(silent=True) or {}
     secs = d.get('sections') or []
+    dbs_in = d.get('dashboards') or {}
+    warnings = []
     with _db() as (cur, conn):
+        cols_ready, tbl_ready = _style_ready(cur)
         keep = []
         for s in secs:
             key = (s.get('section_key') or '').strip()
             if not re.match(r'^[a-z0-9_]+$', key):
                 return _err(f'section_key は英小文字・数字・_ のみ: {key!r}')
+            if key in keep:
+                return _err(f'section_key が重複しています: {key!r}')
             keep.append(key)
+            title = (s.get('title') or key).strip()
+            css = (s.get('css_class') or '').strip()
+            order = float(s.get('sort_order') or 0)
             # ★2026-08-27 区画側の表示条件は廃止（見出し・色・順だけ）．
             #   列は互換のため残し，常に「制限なし」で書く
-            cur.execute("""INSERT INTO app_share_sections
-                (section_key, title, css_class, sort_order, show_admin, show_guest,
-                 require_groups, require_categories)
-                VALUES (%s,%s,%s,%s,1,1,'[]','[]')
-                ON DUPLICATE KEY UPDATE title=VALUES(title), css_class=VALUES(css_class),
-                    sort_order=VALUES(sort_order), show_admin=1, show_guest=1,
-                    require_groups='[]', require_categories='[]'""",
-                (key, (s.get('title') or key).strip(), (s.get('css_class') or '').strip(),
-                 float(s.get('sort_order') or 0)))
+            if cols_ready:
+                cf = _reg.clean_color(s.get('color_from'))
+                ct = _reg.clean_color(s.get('color_to'))
+                fg = _reg.clean_color(s.get('text_color'))
+                cur.execute("""INSERT INTO app_share_sections
+                    (section_key, title, css_class, color_from, color_to, text_color, sort_order,
+                     show_admin, show_guest, require_groups, require_categories)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,1,1,'[]','[]')
+                    ON DUPLICATE KEY UPDATE title=VALUES(title), css_class=VALUES(css_class),
+                        color_from=VALUES(color_from), color_to=VALUES(color_to),
+                        text_color=VALUES(text_color), sort_order=VALUES(sort_order),
+                        show_admin=1, show_guest=1, require_groups='[]', require_categories='[]'""",
+                    (key, title, css, cf, ct, fg, order))
+            else:
+                cur.execute("""INSERT INTO app_share_sections
+                    (section_key, title, css_class, sort_order, show_admin, show_guest,
+                     require_groups, require_categories)
+                    VALUES (%s,%s,%s,%s,1,1,'[]','[]')
+                    ON DUPLICATE KEY UPDATE title=VALUES(title), css_class=VALUES(css_class),
+                        sort_order=VALUES(sort_order), show_admin=1, show_guest=1,
+                        require_groups='[]', require_categories='[]'""",
+                    (key, title, css, order))
+        if not cols_ready:
+            warnings.append('区画の色の列がまだ無いため，色は保存していません（アプシャのテーブル改訂を先に）')
         if keep:
             fmt = ','.join(['%s'] * len(keep))
             cur.execute(f"DELETE FROM app_share_sections WHERE section_key NOT IN ({fmt})", tuple(keep))
+        if tbl_ready:
+            for name in ('admin', 'guest'):
+                v = dbs_in.get(name) or {}
+                f, t = _reg.clean_color(v.get('bg_from')), _reg.clean_color(v.get('bg_to'))
+                if f and t:
+                    cur.execute("""INSERT INTO app_share_dashboards (dashboard, bg_from, bg_to)
+                        VALUES (%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE bg_from=VALUES(bg_from), bg_to=VALUES(bg_to)""",
+                        (name, f, t))
+        elif dbs_in:
+            warnings.append('背景の表（app_share_dashboards）がまだ無いため，背景は保存していません')
         conn.commit()
-    return _ok()
+    return _ok(warnings=warnings)
 
 
 # ============================================================

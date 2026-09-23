@@ -27,6 +27,12 @@ th{background:#f3f4f6;font-size:.75rem;white-space:nowrap}
 input[type=text],input[type=number]{width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;font-size:.8rem}
 .toast{position:fixed;top:14px;right:14px;padding:10px 16px;border-radius:8px;color:#fff;background:#10b981;opacity:0;transition:.3s;z-index:100;pointer-events:none}
 .toast.show{opacity:1}.toast.err{background:#ef4444}
+.sw{display:flex;gap:4px;align-items:center}
+input[type=color]{width:34px;height:26px;padding:0;border:1px solid #d1d5db;border-radius:4px;background:#fff;cursor:pointer}
+.sample{display:inline-block;min-width:110px;padding:6px 10px;border-radius:6px;font-size:.78rem;font-weight:600;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.bgsample{display:inline-block;width:160px;height:34px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+h2{font-size:1rem;color:#333;margin:18px 0 8px}
+.warn{background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:6px;padding:8px 12px;font-size:.8rem;margin-bottom:10px;display:none}
 </style>
 </head>
 <body>
@@ -36,30 +42,53 @@ input[type=text],input[type=number]{width:100%;padding:4px 6px;border:1px solid 
     <h1>🗂 ダッシュボードの区画</h1>
   </div>
   <div class="panel">
-    <div class="hint">区画はカードの置き場所（見出し・色クラス・順序）です．誰に見せるかはカード側の「使用区分」で決まり，区画側の表示条件は廃止しました（2026-08-27）．カードが1枚も見えない区画は表示されません．css_class は admin-function／sommelier／admin-support／highlight／open-sky のいずれか（ダッシュボードのCSSに定義済み）．保存後に「発行」で反映されます．</div>
-    <table><thead><tr><th>key</th><th>見出し</th><th>css_class</th><th>順</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+    <div class="warn" id="warn"></div>
+    <div class="hint">区画はカードの置き場所で，見出し・色・順序を持ちます．カードの色は区画の色で自動的に決まり，誰に見せるかはカード側の「使用区分」で決まります．カードが1枚も見えない区画は表示されません．色はグラデーションの2色（左上→右下）と文字色で指定します．クラスは旧来の色クラス名で，色が未指定のときの読み替えと，ホバー時の縁取りに使います．保存後に「発行」で反映されます．</div>
+    <table><thead><tr><th>key</th><th>見出し</th><th>色（2色・文字）</th><th>見本</th><th>クラス</th><th>順</th><th></th></tr></thead><tbody id="rows"></tbody></table>
     <button class="btn sm gray" onclick="add()">＋ 区画を足す</button>
+
+    <h2>ダッシュボードの背景</h2>
+    <div class="hint">admin ダッシュボードと guest ダッシュボードの背景をグラデーションの2色で指定します．アプリを他サイトへ移すとき，移設先に設定が無ければこの色が運ばれます．</div>
+    <table><thead><tr><th style="width:130px">ダッシュボード</th><th style="width:140px">色（2色）</th><th>見本</th></tr></thead><tbody id="bgrows"></tbody></table>
+
     <button class="btn green" onclick="save()">💾 保存</button>
     <a class="btn" href="{{ url_for('app_share.dashboard') }}#publish">📢 発行はアプシャから</a>
   </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
-let S=[];
+let S=[],D={};
+const BGLABEL={admin:'🔑 admin',guest:'👤 guest'};
 function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('err',!!e);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+function grad(a,b){return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`}
+function hex6(c){c=(c||'').trim();if(/^#[0-9a-fA-F]{3}$/.test(c))c='#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];return /^#[0-9a-fA-F]{6}$/.test(c)?c.toLowerCase():'#9ca3af'}
+function sample(s){return `<span class="sample" style="background:${grad(hex6(s.color_from),hex6(s.color_to))};color:${hex6(s.text_color)}">${esc(s.title||s.section_key||'見本')}</span>`}
 function render(){const tb=document.getElementById('rows');tb.innerHTML='';S.forEach((s,i)=>tb.insertAdjacentHTML('beforeend',`<tr>
   <td style="width:110px"><input type="text" data-k="section_key" data-i="${i}" value="${esc(s.section_key)}"></td>
   <td><input type="text" data-k="title" data-i="${i}" value="${esc(s.title)}"></td>
-  <td style="width:130px"><input type="text" data-k="css_class" data-i="${i}" value="${esc(s.css_class)}"></td>
+  <td style="width:130px"><div class="sw"><input type="color" data-k="color_from" data-i="${i}" value="${hex6(s.color_from)}" title="色1（左上）"><input type="color" data-k="color_to" data-i="${i}" value="${hex6(s.color_to)}" title="色2（右下）"><input type="color" data-k="text_color" data-i="${i}" value="${hex6(s.text_color)}" title="文字色"></div></td>
+  <td style="width:140px" id="sm${i}">${sample(s)}</td>
+  <td style="width:120px"><input type="text" data-k="css_class" data-i="${i}" value="${esc(s.css_class)}"></td>
   <td style="width:60px"><input type="number" data-k="sort_order" data-i="${i}" value="${esc(s.sort_order)}"></td>
   <td><button class="btn sm red" onclick="del(${i})">✕</button></td></tr>`));
-  tb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{const s=S[+el.dataset.i],k=el.dataset.k;
-    if(el.type==='checkbox')s[k]=el.checked;else if(k==='require_groups'||k==='require_categories')s[k]=el.value.split(',').map(x=>x.trim()).filter(Boolean);else s[k]=el.value}))}
-function add(){S.push({section_key:'',title:'',css_class:'open-sky',sort_order:(S.length+1)*10});render()}
+  tb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{const i=+el.dataset.i,s=S[i],k=el.dataset.k;s[k]=el.value;
+    document.getElementById('sm'+i).innerHTML=sample(s)}))}
+function renderBg(){const tb=document.getElementById('bgrows');tb.innerHTML='';['admin','guest'].forEach(n=>{const d=D[n]||{};tb.insertAdjacentHTML('beforeend',`<tr>
+  <td>${BGLABEL[n]}${d.explicit?'':' <span style="color:#94a3b8;font-size:.72rem">（既定）</span>'}</td>
+  <td><div class="sw"><input type="color" data-n="${n}" data-k="bg_from" value="${hex6(d.bg_from)}"><input type="color" data-n="${n}" data-k="bg_to" value="${hex6(d.bg_to)}"></div></td>
+  <td><span class="bgsample" id="bg_${n}" style="background:${grad(hex6(d.bg_from),hex6(d.bg_to))}"></span></td></tr>`)});
+  tb.querySelectorAll('input').forEach(el=>el.addEventListener('input',()=>{const d=D[el.dataset.n];d[el.dataset.k]=el.value;
+    document.getElementById('bg_'+el.dataset.n).style.background=grad(hex6(d.bg_from),hex6(d.bg_to))}))}
+function add(){S.push({section_key:'',title:'',css_class:'',color_from:'#9ca3af',color_to:'#6b7280',text_color:'#ffffff',sort_order:(S.length+1)*10});render()}
 function del(i){if(!confirm('区画を消すと，その区画のカードは表示されなくなります（カードの定義は残ります）'))return;S.splice(i,1);render()}
-async function load(){const r=await (await fetch('/app_share/api/sections')).json();if(!r.success){toast(r.error,true);return}S=r.sections;render()}
-async function save(){const r=await (await fetch('/app_share/api/sections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sections:S})})).json();if(r.success){toast('保存しました（発行で反映）');load()}else toast('保存失敗: '+r.error,true)}
+function warn(list){const w=document.getElementById('warn');if(list&&list.length){w.textContent=list.join(' ／ ');w.style.display='block'}else w.style.display='none'}
+async function load(){const r=await (await fetch('/app_share/api/sections')).json();if(!r.success){toast(r.error,true);return}
+  S=r.sections;D=r.dashboards||{};render();renderBg();
+  const w=[];if(r.style_ready&&!r.style_ready.section_colors)w.push('区画の色の列がまだありません．色は保存されません');
+  if(r.style_ready&&!r.style_ready.dashboards)w.push('背景の表がまだありません．背景は保存されません');warn(w)}
+async function save(){const r=await (await fetch('/app_share/api/sections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sections:S,dashboards:D})})).json();
+  if(r.success){toast((r.warnings&&r.warnings.length)?'保存しました（一部は未保存．上の注意を参照）':'保存しました（発行で反映）');load()}else toast('保存失敗: '+r.error,true)}
 load();
 </script>
 </body>

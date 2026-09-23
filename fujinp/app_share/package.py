@@ -31,7 +31,7 @@ app_info.json／version.json／manifest.json は含めない（情報は正本�
   POST /app_share/api/app/<app_name>/docs/attach  Claude が書いたマニュアル・仕様書を保存（ゲートの「完了」）
   GET  /app_share/package/import                取り込み画面（?app=<name> で対象を指定可）
   POST /app_share/package/check                 検証（JSON を受けて差分等を返す）
-  POST /app_share/package/apply                 適用（ファイル・正本・文書・台帳・テーブル・不具合・発行）
+  POST /app_share/package/apply                 適用（ファイル・正本・文書・台帳・テーブル・不具合・区画と背景・発行）
   POST /app_share/api/app/<app_name>/delete     レジストリ行と付随データ（文書・台帳・不具合）の削除
   GET  /app_share/package/export_all            全アプリの文書の点検ページ（1本ずつ確認してから書き出す）
   POST /app_share/package/export_all            確認済みの選択を受けて全アプリパッケージ（fujinp_apps_overview）を返す
@@ -167,7 +167,8 @@ def build_package(cur, app_name, generated_by=None, site_url=None, docs_choice=N
             'FUJIN-P アプリパッケージ v3．registry=正本（起動・ランチャ・ライブラリ目録・定数目録），'
             'tables=所有テーブルとDDL，documents=マニュアル／仕様書（叙述），issues=既知の不具合(open)，'
             'files=アプリ本体（*.py／templates/／data_for_distribution/／直下の .sql .md .txt .json．'
-            'app_info.json・version.json は含まない）．')
+            'app_info.json・version.json は含まない），site_style=ランチャが使う区画の定義とダッシュボードの背景'
+            '（取り込み先に無いものだけ足す）．')
     return {
         'export_type': EXPORT_TYPE,
         'format_version': FORMAT_VERSION,
@@ -189,6 +190,8 @@ def build_package(cur, app_name, generated_by=None, site_url=None, docs_choice=N
         'tables': tables,
         'documents': docs,
         'issues': issues,
+        # 2026-09-23 ランチャが使う区画の定義とダッシュボードの背景（取り込み先に無ければ足す）
+        'site_style': _site_style_for(cur, _m._jload(row.get('launchers'), [])),
         'file_count': len(files),
         'files': files,
         'doc_update': doc_update,
@@ -198,6 +201,123 @@ def build_package(cur, app_name, generated_by=None, site_url=None, docs_choice=N
         'generated_by': generated_by,
         'package_note': note,
     }
+
+
+# ============================================================
+# 区画と背景の持ち運び（2026-09-23）
+# ============================================================
+# パッケージには，そのアプリのランチャが使う区画の定義（見出し・色・順）と，
+# ダッシュボードの背景（表に行があるものだけ）を site_style として載せる．
+# 取り込み先に無い区画は追加し，ある区画は取り込み先の設定を残す．背景も同じ．
+
+def _site_style_for(cur, launchers):
+    keys = []
+    for c in launchers or []:
+        k = (c or {}).get('section') if isinstance(c, dict) else None
+        if k and k not in keys:
+            keys.append(k)
+    cols_ready, tbl_ready = _m._style_ready(cur)
+    sections = []
+    if keys:
+        fmt = ','.join(['%s'] * len(keys))
+        color_cols = 'color_from, color_to, text_color' if cols_ready else \
+            "'' AS color_from, '' AS color_to, '' AS text_color"
+        cur.execute(f"""SELECT section_key, title, css_class, {color_cols}, sort_order
+                        FROM app_share_sections WHERE section_key IN ({fmt})""", tuple(keys))
+        for r in cur.fetchall():
+            f, t, fg = _reg.section_colors(r)
+            sections.append({'key': r['section_key'], 'title': r['title'] or r['section_key'],
+                             'css_class': r['css_class'] or '', 'color_from': f, 'color_to': t,
+                             'text_color': fg, 'sort_order': float(r['sort_order'] or 0)})
+    dashboards = {}
+    if tbl_ready:
+        cur.execute("SELECT dashboard, bg_from, bg_to FROM app_share_dashboards")
+        for r in cur.fetchall():
+            f, t = _reg.clean_color(r.get('bg_from')), _reg.clean_color(r.get('bg_to'))
+            if r.get('dashboard') in ('admin', 'guest') and f and t:
+                dashboards[r['dashboard']] = {'bg_from': f, 'bg_to': t}
+    return {'sections': sections, 'dashboards': dashboards}
+
+
+def _site_style_plan(cur, pkg):
+    """取り込み先に足すもの．{'sections': [...], 'dashboards': {...}}．
+    ランチャが使うのに定義が無い区画（旧パッケージ）は見出し＝キー・既定色で足す．"""
+    st = pkg.get('site_style') if isinstance(pkg.get('site_style'), dict) else {}
+    defs = {}
+    for d in st.get('sections') or []:
+        if isinstance(d, dict) and re.match(r'^[a-z0-9_]+$', d.get('key') or ''):
+            defs[d['key']] = d
+    used = []
+    for c in (pkg.get('registry') or {}).get('launchers') or []:
+        k = c.get('section') if isinstance(c, dict) else None
+        if k and re.match(r'^[a-z0-9_]+$', k) and k not in used:
+            used.append(k)
+    cur.execute("SELECT section_key FROM app_share_sections")
+    have = {r['section_key'] for r in cur.fetchall()}
+    add = []
+    for k in used:
+        if k in have:
+            continue
+        d = defs.get(k)
+        if d:
+            f, t, fg = _reg.section_colors(d)
+            add.append({'key': k, 'title': (d.get('title') or k)[:100], 'css_class': (d.get('css_class') or '')[:50],
+                        'color_from': f, 'color_to': t, 'text_color': fg,
+                        'sort_order': d.get('sort_order'), 'from_package': True})
+        else:
+            f, t, fg = _reg.FALLBACK_SECTION_COLORS
+            add.append({'key': k, 'title': k, 'css_class': '', 'color_from': f, 'color_to': t,
+                        'text_color': fg, 'sort_order': None, 'from_package': False})
+    dash_add = {}
+    cols_ready, tbl_ready = _m._style_ready(cur)
+    if tbl_ready:
+        cur.execute("SELECT dashboard FROM app_share_dashboards")
+        have_d = {r['dashboard'] for r in cur.fetchall()}
+    else:
+        have_d = set()
+    for name, v in (st.get('dashboards') or {}).items():
+        if name not in ('admin', 'guest') or name in have_d or not isinstance(v, dict):
+            continue
+        f, t = _reg.clean_color(v.get('bg_from')), _reg.clean_color(v.get('bg_to'))
+        if f and t:
+            dash_add[name] = {'bg_from': f, 'bg_to': t}
+    return {'sections': add, 'dashboards': dash_add}
+
+
+def _apply_site_style(cur, pkg):
+    """取り込み先に無い区画と背景だけを足す（ある物は触らない）"""
+    plan = _site_style_plan(cur, pkg)
+    cols_ready, tbl_ready = _m._style_ready(cur)
+    added = []
+    if plan['sections']:
+        cur.execute("SELECT COALESCE(MAX(sort_order),0) AS m FROM app_share_sections")
+        nxt = float(cur.fetchone()['m'] or 0) + 10
+    for d in plan['sections']:
+        order = d['sort_order']
+        if order is None:
+            order, nxt = nxt, nxt + 10
+        if cols_ready:
+            cur.execute("""INSERT IGNORE INTO app_share_sections
+                (section_key, title, css_class, color_from, color_to, text_color, sort_order,
+                 show_admin, show_guest, require_groups, require_categories)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,1,1,'[]','[]')""",
+                (d['key'], d['title'], d['css_class'], d['color_from'], d['color_to'],
+                 d['text_color'], float(order)))
+        else:
+            cur.execute("""INSERT IGNORE INTO app_share_sections
+                (section_key, title, css_class, sort_order, show_admin, show_guest,
+                 require_groups, require_categories)
+                VALUES (%s,%s,%s,%s,1,1,'[]','[]')""",
+                (d['key'], d['title'], d['css_class'] or 'legacy', float(order)))
+        added.append(d['key'])
+    dash_added = []
+    if tbl_ready:
+        for name, v in plan['dashboards'].items():
+            cur.execute("""INSERT IGNORE INTO app_share_dashboards (dashboard, bg_from, bg_to)
+                           VALUES (%s,%s,%s)""", (name, v['bg_from'], v['bg_to']))
+            dash_added.append(name)
+    return {'sections_added': added, 'dashboards_added': dash_added}
+
 
 
 # ============================================================
@@ -656,6 +776,7 @@ def _check(cur, pkg):
         'documents': {k: {'title': v.get('title'), 'length': len(v.get('content') or ''),
                           'updated_at': v.get('updated_at')} for k, v in (pkg.get('documents') or {}).items()},
         'issues': issues,
+        'site_style': _site_style_plan(cur, pkg),
         'site': {'site_name': pkg.get('site_name'), 'site_url': pkg.get('site_url'),
                  'generated_at': pkg.get('generated_at'), 'generated_by': pkg.get('generated_by')},
     }
@@ -832,6 +953,14 @@ def package_apply():
             finally:
                 conn2.close()
     result['tables_executed'] = executed
+    # 3.5) 区画と背景（取り込み先に無いものだけ足す．2026-09-23）
+    #      色の列や背景の表はテーブルの改訂（3）で作られるので，その後に行う
+    try:
+        with _m._db() as (cur, conn):
+            result['site_style'] = _apply_site_style(cur, pkg)
+            conn.commit()
+    except Exception as e:
+        result['site_style'] = {'error': str(e)}
     # 4) 発行
     with _m._db() as (cur, conn):
         data = _reg.publish(cur)

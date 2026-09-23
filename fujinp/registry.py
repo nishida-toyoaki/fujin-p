@@ -30,6 +30,7 @@ fujinp.registry — アプリ正本（app_registry.json）の読み書き
     load_registry()                     JSON を dict で返す（壊れていれば空）
     register_blueprints(app)            enabled かつ kind='app' の Blueprint を登録
     launcher_sections(dashboard, ...)   ダッシュボードの区画とカードを返す
+    dashboard_background(dashboard)     ダッシュボードの背景（CSS の background 値）
     public_cards()                      ログイン不要で使えるカード（ログイン画面用）
 
   使用コントローラー（2026-08-27，format_version 2）
@@ -48,6 +49,10 @@ fujinp.registry — アプリ正本（app_registry.json）の読み書き
     開発中でサービスとして提供していないアプリを利用者の目に触れさせないための
     表示制御で，使用区分の上に重ねる減算．アプシャの「非公開→公開」ボタンで切り替える．
     区画（sections）は置き場所の見出しだけになり，区画側の表示条件は廃止した．
+    区画の色（2026-09-23）：カードの色は区画が決める．区画表の color_from／color_to
+    （グラデーションの2色）と text_color（文字色）を使い，空なら css_class から
+    CLASS_COLORS で読み替える（改修前と同じ見た目）．ダッシュボードの背景は
+    dashboards（admin／guest）に持ち，無ければ DASHBOARD_DEFAULTS を使う．
     旧形式（require_groups / require_categories / 区画条件）のカードは
     derive_visibility() で読み替えるので，移行前の JSON でも同じ表示になる．
 
@@ -59,6 +64,7 @@ fujinp.registry — アプリ正本（app_registry.json）の読み書き
 """
 
 import os
+import re
 import json
 import datetime
 import importlib
@@ -73,7 +79,72 @@ JST = datetime.timezone(datetime.timedelta(hours=9))
 _log = logging.getLogger('fujinp.registry')
 _cache = {'mtime': None, 'data': None}
 
-EMPTY = {'format_version': FORMAT_VERSION, 'generated_at': None, 'apps': [], 'sections': []}
+EMPTY = {'format_version': FORMAT_VERSION, 'generated_at': None, 'apps': [], 'sections': [],
+         'dashboards': {}}
+
+# ------------------------------------------------------------
+# 区画の色とダッシュボードの背景（2026-09-23）
+# ------------------------------------------------------------
+# css_class から色への読み替え表．値はダッシュボードの CSS に定義されていた色と同じ．
+# 区画表の色が空のときだけ使う（改修前と同じ見た目を保つため）．
+CLASS_COLORS = {
+    'admin-function': ('#4c0519', '#1e1b4b', '#ffffff'),
+    'sommelier':      ('#7c3aed', '#5b21b6', '#ffffff'),
+    'admin-support':  ('#f59e0b', '#d97706', '#ffffff'),
+    'highlight':      ('#10b981', '#059669', '#ffffff'),
+    'open-sky':       ('#38bdf8', '#0ea5e9', '#ffffff'),
+    'legacy':         ('#9ca3af', '#6b7280', '#ffffff'),
+    'feature-app':    ('#7fb3d5', '#6a9cc2', '#ffffff'),
+    'dev-app':        ('#94a3b8', '#64748b', '#ffffff'),
+}
+# 色の定義が何も無い区画（移設時に定義なしで作られた区画など）の既定色
+FALLBACK_SECTION_COLORS = ('#9ca3af', '#6b7280', '#ffffff')
+# ダッシュボードの背景の既定（改修前の CSS の値）
+DASHBOARD_DEFAULTS = {
+    'admin': ('#dc2626', '#991b1b'),
+    'guest': ('#667eea', '#764ba2'),
+}
+_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
+
+
+def clean_color(v):
+    """'#rgb' か '#rrggbb' だけを通す（CSS への差し込み対策）．それ以外は ''"""
+    v = (v or '').strip()
+    return v.lower() if _COLOR_RE.match(v) else ''
+
+
+def section_colors(sec):
+    """区画の実効色 (color_from, color_to, text_color)．
+    区画表の色 → css_class の読み替え → 既定色，の順に決める．"""
+    sec = sec or {}
+    f, t = clean_color(sec.get('color_from')), clean_color(sec.get('color_to'))
+    fg = clean_color(sec.get('text_color'))
+    if f and t:
+        return f, t, fg or '#ffffff'
+    base = CLASS_COLORS.get((sec.get('css_class') or '').strip(), FALLBACK_SECTION_COLORS)
+    return base[0], base[1], fg or base[2]
+
+
+def section_card_style(sec):
+    """カードに付ける style 属性の値"""
+    f, t, fg = section_colors(sec)
+    return f'background: linear-gradient(135deg, {f} 0%, {t} 100%); --card-fg: {fg};'
+
+
+def dashboard_colors(dashboard, reg=None):
+    """ダッシュボードの背景色 (bg_from, bg_to)．未設定なら既定"""
+    reg = reg if reg is not None else load_registry()
+    d = (reg.get('dashboards') or {}).get(dashboard) or {}
+    f, t = clean_color(d.get('bg_from')), clean_color(d.get('bg_to'))
+    if f and t:
+        return f, t
+    return DASHBOARD_DEFAULTS.get(dashboard, DASHBOARD_DEFAULTS['guest'])
+
+
+def dashboard_background(dashboard):
+    """ダッシュボードの body に付ける background の値"""
+    f, t = dashboard_colors(dashboard)
+    return f'linear-gradient(135deg, {f} 0%, {t} 100%)'
 
 
 # ============================================================
@@ -97,6 +168,7 @@ def load_registry(force=False):
             raise ValueError('top-level is not an object')
         data.setdefault('apps', [])
         data.setdefault('sections', [])
+        data.setdefault('dashboards', {})
     except Exception as e:
         _log.error('registry: %s の読み込みに失敗（%s）．空の正本で続行', REGISTRY_FILE, e)
         return dict(EMPTY)
@@ -287,7 +359,9 @@ def launcher_sections(dashboard, user_category=None, group_names=()):
       public - 使用区分が open のカード（ログイン不要．ログイン画面用．配置は無視）
     disclosed=0（非公開）のアプリは admin 以外に出さない．
     区画は見出しと色だけで，カードが1枚も無い区画は出さない．
-    戻り値: [{'key','title','css_class','cards':[...]}]"""
+    戻り値: [{'key','title','css_class','color_from','color_to','text_color',
+             'card_style','cards':[...]}]
+    card_style はカードの style 属性にそのまま入れる値（区画の色）．"""
     reg = load_registry()
     group_names = list(group_names or [])
     sec_map = {s.get('key'): s for s in reg.get('sections', [])}
@@ -324,8 +398,12 @@ def launcher_sections(dashboard, user_category=None, group_names=()):
                 cards.append(d)
         if cards:
             cards.sort(key=lambda c: c['sort_order'])
+            f, t, fg = section_colors(sec)
             out.append({'key': sec.get('key'), 'title': sec.get('title'),
-                        'css_class': sec.get('css_class', ''), 'cards': cards})
+                        'css_class': sec.get('css_class', ''),
+                        'color_from': f, 'color_to': t, 'text_color': fg,
+                        'card_style': section_card_style(sec) if sec.get('key') is not None else '',
+                        'cards': cards})
     return out
 
 
@@ -405,30 +483,55 @@ def build_registry_from_db(cursor):
             'version_confirmed_at': (r['version_confirmed_at'].strftime('%Y-%m-%d %H:%M:%S')
                                      if r['version_confirmed_at'] else None),
         })
-    cursor.execute("""
-        SELECT section_key, title, css_class, sort_order, show_admin, show_guest,
-               require_groups, require_categories
-        FROM app_share_sections ORDER BY sort_order
-    """)
+    # 色の列（color_from / color_to / text_color）は 2026-09-23 追加．無いサイトでは空
+    try:
+        cursor.execute("""
+            SELECT section_key, title, css_class, color_from, color_to, text_color,
+                   sort_order, show_admin, show_guest, require_groups, require_categories
+            FROM app_share_sections ORDER BY sort_order
+        """)
+        srows = cursor.fetchall()
+    except Exception:
+        cursor.execute("""
+            SELECT section_key, title, css_class, '' AS color_from, '' AS color_to,
+                   '' AS text_color, sort_order, show_admin, show_guest,
+                   require_groups, require_categories
+            FROM app_share_sections ORDER BY sort_order
+        """)
+        srows = cursor.fetchall()
     sections = []
-    for r in cursor.fetchall():
+    for r in srows:
         sections.append({
             'key': r['section_key'],
             'title': r['title'],
             'css_class': r['css_class'] or '',
+            'color_from': clean_color(r.get('color_from')),
+            'color_to': clean_color(r.get('color_to')),
+            'text_color': clean_color(r.get('text_color')),
             'sort_order': float(r['sort_order'] or 0),
             'show_admin': bool(r['show_admin']),
             'show_guest': bool(r['show_guest']),
             'require_groups': _jload(r['require_groups'], []),
             'require_categories': _jload(r['require_categories'], []),
         })
+    # ダッシュボードの背景（app_share_dashboards．2026-09-23 追加．無ければ既定）
+    dashboards = {}
+    try:
+        cursor.execute("SELECT dashboard, bg_from, bg_to FROM app_share_dashboards")
+        for r in cursor.fetchall():
+            f, t = clean_color(r.get('bg_from')), clean_color(r.get('bg_to'))
+            if r.get('dashboard') and f and t:
+                dashboards[r['dashboard']] = {'bg_from': f, 'bg_to': t}
+    except Exception:
+        dashboards = {}
     return {
         'format_version': FORMAT_VERSION,
         'generated_at': datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S'),
-        'note': 'FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections（アプシャ）．'
+        'note': 'FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．'
                 '手で編集せず，アプシャの「発行」で再生成する．',
         'apps': apps,
         'sections': sections,
+        'dashboards': dashboards,
     }
 
 

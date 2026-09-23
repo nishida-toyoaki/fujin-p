@@ -1,0 +1,112 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>カーネル取り込み - アプシャ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1100px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.header h1{font-size:1.3rem;color:#333}
+.hdr-btns{float:right;display:flex;gap:8px}
+a.btn,button.btn{display:inline-block;padding:8px 16px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.85rem;font-weight:600;color:#fff;background:#6366f1}
+.btn.gray{background:#64748b}.btn.green{background:#10b981}.btn.orange{background:#f59e0b}
+button.btn:disabled{background:#cbd5e1;cursor:not-allowed}
+.panel{background:#fff;padding:20px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:12px}
+.hint{font-size:.82rem;color:#475569;margin-bottom:10px;line-height:1.6}
+h2{font-size:1rem;color:#333;margin-bottom:10px}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.pill{padding:4px 12px;border-radius:14px;font-size:.8rem;font-weight:600;background:#f1f5f9;color:#334155}
+.pill.new{background:#dbeafe;color:#1e40af}.pill.changed{background:#fef3c7;color:#92400e}.pill.same{background:#dcfce7;color:#166534}
+.pill.excluded,.pill.skipped,.pill.invalid{background:#f1f5f9;color:#64748b}
+.box{border-radius:6px;padding:10px 14px;font-size:.82rem;margin:8px 0;line-height:1.6}
+.box.err{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+.box.warn{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.box.info{background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe}
+.box.ok{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th,td{border:1px solid #e5e7eb;padding:4px 8px;text-align:left}
+th{background:#f3f4f6}
+code{font-family:Menlo,Consolas,monospace;font-size:.8rem;background:#f1f5f9;padding:2px 6px;border-radius:4px;user-select:all}
+details summary{cursor:pointer;font-size:.85rem;color:#334155;margin:8px 0}
+#result,#check{display:none}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a></div>
+    <h1>⚙ カーネル取り込み</h1>
+  </div>
+
+  <div class="panel">
+    <div class="hint">カーネルパッケージ（⚙カーネルエクスポートで書き出した JSON）を読み込み，このサイト（{{ local_site }}）のカーネルを入れ替えます．パッケージにあるファイルは全部書き込みます．fujinp/app_registry.json と config.py は書き込みません．書き込む前に元のファイルを ~/kernel_backups/ に保存し，元に戻すためのコマンドを表示します．取り込み後は Reload し，アプシャで「発行」してください．</div>
+    <input type="file" id="file" accept=".json,application/json">
+  </div>
+
+  <div class="panel" id="check">
+    <h2>検証の結果</h2>
+    <div id="pkginfo" class="hint"></div>
+    <div class="pills" id="pills"></div>
+    <div id="notes"></div>
+    <details><summary>ファイルの一覧</summary><table><thead><tr><th>ファイル</th><th>状態</th><th>備考</th></tr></thead><tbody id="rows"></tbody></table></details>
+    <div style="margin-top:14px;display:flex;gap:12px;align-items:center">
+      <button class="btn green" id="apply" onclick="apply()">⚙ 取り込む</button>
+      <label style="font-size:.85rem"><input type="checkbox" id="reload" checked> 取り込み後に Reload する</label>
+    </div>
+  </div>
+
+  <div class="panel" id="result"></div>
+</div>
+<script>
+let PKG=null;
+const LABEL={new:'新規',changed:'変更',same:'同じ',excluded:'取り込まない',skipped:'内容なし',invalid:'不正なパス'};
+function esc(t){return (t==null?'':String(t)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+document.getElementById('file').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  document.getElementById('result').style.display='none';
+  try{PKG=JSON.parse(await f.text())}catch(err){alert('JSON を読めません: '+err);return}
+  const r=await (await fetch('/app_share/kernel/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({package:PKG})})).json();
+  if(!r.success){alert(r.error);return}
+  show(r.result);
+});
+function show(x){
+  const p=x.package;
+  document.getElementById('pkginfo').innerHTML=`送り元：${esc(p.site_name)}（${esc(p.site_url)}）　書き出し：${esc(p.generated_at)}　${esc(p.generated_by||'')}　内容ハッシュ：${esc(p.content_hash||'—')}${p.public_download?'　<b>公開用の絞り込み版</b>':''}`;
+  document.getElementById('pills').innerHTML=Object.entries(x.counts).filter(([k,v])=>v>0).map(([k,v])=>`<span class="pill ${k}">${LABEL[k]} ${v}</span>`).join('');
+  let n='';
+  if(x.syntax_errors.length) n+=`<div class="box err">構文エラーがあるため取り込めません．${x.syntax_errors.map(s=>esc(s.path)+(s.line?'（'+s.line+'行）':'')+'：'+esc(s.message)).join('／')}</div>`;
+  if(!x.syntax_errors.length && !(x.counts.new+x.counts.changed)) n+=`<div class="box ok">手元のカーネルと同じです．取り込むものはありません．</div>`;
+  if(x.site_notes.length) n+=`<div class="box warn">送り元のサイトの場所（/home/…/）が書かれている箇所があります．このサイトで動かないときはここを確かめてください．${x.site_notes.slice(0,8).map(s=>esc(s.path)+' '+s.line+'行（'+esc(s.user)+'）').join('，')}${x.site_notes.length>8?' ほか':''}</div>`;
+  if(x.missing_config_keys.length) n+=`<div class="box warn">このサイトの config.py に無い設定があります：${x.missing_config_keys.map(esc).join('，')}</div>`;
+  if(x.missing_apps.length) n+=`<div class="box warn">app.py が登録するのに手元に無いものがあります：${x.missing_apps.map(a=>esc(a.module)).join('，')}</div>`;
+  if(p.public_download) n+=`<div class="box info">公開用の絞り込み版です．含まれないファイルは手元のまま残ります．</div>`;
+  document.getElementById('notes').innerHTML=n;
+  document.getElementById('rows').innerHTML=x.files.map(f=>`<tr><td>${esc(f.path)}</td><td>${LABEL[f.status]||f.status}</td><td>${esc(f.reason||'')}</td></tr>`).join('');
+  document.getElementById('apply').disabled=!x.can_apply;
+  document.getElementById('check').style.display='block';
+}
+async function apply(){
+  const b=document.getElementById('apply'); b.disabled=true; b.textContent='取り込み中…';
+  const r=await (await fetch('/app_share/kernel/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({package:PKG,options:{reload:document.getElementById('reload').checked}})})).json();
+  b.textContent='⚙ 取り込む';
+  const el=document.getElementById('result'); el.style.display='block';
+  if(!r.success){el.innerHTML=`<div class="box err">${esc(r.error)}</div>`;b.disabled=false;return}
+  const x=r.result;
+  if(!x.written){el.innerHTML=`<div class="box ok">${esc(x.message)}</div>`;return}
+  el.innerHTML=`<h2>取り込みました（${x.written} ファイル）</h2>
+   ${x.errors.length?`<div class="box err">書き込めなかったファイル：${x.errors.map(esc).join('／')}</div>`:''}
+   <div class="box ${x.reloaded?'ok':'info'}">${x.reloaded?'Reload しました．':'Reload はまだです．PythonAnywhere の Web タブか，アプシャの「発行＋Reload」で行ってください．'}再起動の後，アプシャで「📢 発行」を押してください．</div>
+   <div class="box info">元に戻すときは，Bash コンソールで次のコマンドを実行します（サイトが開けなくなった場合も使えます）．<br><code>${esc(x.restore_command)}</code></div>`;
+}
+</script>
+</body>
+</html>

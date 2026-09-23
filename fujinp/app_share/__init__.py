@@ -39,3 +39,4 @@ from . import manage   # 段階6a：正本の管理画面・発行・診断
 from . import gitsync  # 段階6b：関所への写し・commit・push
 from . import package  # 段階6c：パッケージ輸出入（v3）
 from . import tidy     # 2026-09-17：整形とコードの指紋
+from . import kernel   # 2026-09-23：カーネル取り込み

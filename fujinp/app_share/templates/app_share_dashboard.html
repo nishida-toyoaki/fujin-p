@@ -188,6 +188,7 @@
             <span style="float:right;display:inline-flex;gap:8px">
                 {% if is_admin %}
                 <button class="btn-import" onclick="location.href='{{ url_for('app_share.package_import_page') }}'">📦 新規アプリ取り込み</button>
+                <button class="btn-import" onclick="location.href='{{ url_for('app_share.kernel_import_page') }}'" title="カーネルパッケージでこのサイトのカーネルを入れ替える">⚙ カーネル取り込み</button>
                 <button class="success" onclick="publishRegistry(false)" title="正本（DB）を fujinp/app_registry.json に写す">📢 発行</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.sections_page') }}'" title="ダッシュボードの区画">🗂 区画</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.api_diag_site') }}'" title="Claude向けのサイト診断JSON">🩺 サイト診断</button>
