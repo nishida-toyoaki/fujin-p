@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 from flask import render_template, request, session, flash, redirect, url_for, jsonify
 from decorators import admin_required
@@ -66,7 +66,13 @@ def dashboard():
     # アプリのランチャは正本（fujinp/app_registry.json）から組み立てる．
     # 管理者ダッシュボードでは表示条件（グループ・カテゴリ）を評価しない．
     from fujinp.registry import launcher_sections
+    try:  # 旧いカーネル（registry.py）には無い．その場合は CSS の既定の背景
+        from fujinp.registry import dashboard_background
+        dashboard_bg = dashboard_background('admin')
+    except ImportError:
+        dashboard_bg = None
     return render_template('admin/admin_dashboard.html',
+                        dashboard_bg=dashboard_bg,
                         user_name=session.get('user_name'),
                         user_email=session.get('user_email'),
                         site_url=Config.BASE_URL,
@@ -903,3 +909,28 @@ def delete_app_permission_label(app_id, perm_id):
 def return_to_fujin():
     """FUJIN-Pダッシュボードに戻る"""
     return redirect_to_dashboard()
+
+@admin_bp.app_template_global('user_category_counts')
+def user_category_counts():
+    """管理者ダッシュボード用：登録ユーザ数（論理削除を除く）の合計とカテゴリ別内訳"""
+    counts = {'total': 0, 'admin': 0, 'regular': 0, 'guest': 0}
+    try:
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("""
+                SELECT category, COUNT(*) AS n
+                FROM users
+                WHERE deleted_at IS NULL
+                GROUP BY category
+            """)
+            for row in cursor.fetchall():
+                if isinstance(row, dict):
+                    cat, n = row['category'], row['n']
+                else:
+                    cat, n = row[0], row[1]
+                n = int(n or 0)
+                counts['total'] += n
+                if cat in counts:
+                    counts[cat] += n
+    except Exception as e:
+        print(f"[admin] user_category_counts error: {e}")
+    return counts

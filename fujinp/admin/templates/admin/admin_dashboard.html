@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/nishida-toyoaki/fujin-p
+  Source: https://github.com/u-fukuchiyama/fujin-p
 #}
 
 <!DOCTYPE html>
@@ -151,6 +151,14 @@
         .app-card.feature-app:hover { border-color: #aed6f1; }
         .app-card.feature-app h3, .app-card.feature-app p { color: white; }
 
+        /* ===== レガシー（廃止予定）：グレー ===== */
+        .app-card.legacy {
+            background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+            color: white; border: 2px solid transparent;
+        }
+        .app-card.legacy:hover { border-color: #e5e7eb; box-shadow: 0 4px 12px rgba(107,114,128,0.4); }
+        .app-card.legacy h3, .app-card.legacy p { color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
         /* ===== 開発中：グレー ===== */
         .app-card.dev-app {
             background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
@@ -168,10 +176,24 @@
             display: block; text-align: center; margin-top: 3px;
             font-size: 0.5rem; color: rgba(255,255,255,0.9); opacity: .85;
         }
-        .app-card:not(.admin-function):not(.sommelier):not(.admin-support):not(.highlight):not(.open-sky) .vis-badge { color: #666; }
+        /* ★2026-09-17 登録申請状況：4枚並び・アイコン左揃え・登録ユーザの内訳は右カラム */
+        .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @media (max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 500px) { .stats-grid { grid-template-columns: 1fr; } }
+        .stat-card { justify-content: flex-start; gap: 10px; }
+        .stat-icon { flex-shrink: 0; }
+        .stat-users .stat-icon { background: #dbeafe; color: #1e40af; }
+        .stat-breakdown {
+            margin-left: auto; display: grid; grid-template-columns: auto auto;
+            column-gap: 6px; row-gap: 1px; font-size: 0.55rem; color: #666;
+        }
+        .stat-breakdown .v { text-align: right; font-weight: 600; color: #333; }
+        /* 区画の色（2026-09-23）：カードの背景は区画の色（style 属性），文字色は --card-fg */
+        .app-card.sec-colored h3, .app-card.sec-colored p { color: var(--card-fg, #ffffff) !important; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .app-card.sec-colored:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     </style>
 </head>
-<body>
+<body{% if dashboard_bg %} style="background: {{ dashboard_bg }};"{% endif %}>
     <div class="container">
         <div class="header">
             <div class="user-actions">
@@ -194,28 +216,38 @@
         <!-- 登録申請統計 -->
         <h3 class="section-separator">📊 登録申請状況</h3>
         <div class="stats-grid">
+            {% set uc = user_category_counts() %}
+            <div class="stat-card stat-users">
+                <div class="stat-icon">👤</div>
+                <div class="stat-info"><h3>登録ユーザ</h3><div class="number">{{ uc.total }}</div></div>
+                <div class="stat-breakdown">
+                    <span>admin</span><span class="v">{{ uc.admin }}</span>
+                    <span>regular</span><span class="v">{{ uc.regular }}</span>
+                    <span>guest</span><span class="v">{{ uc.guest }}</span>
+                </div>
+            </div>
             <a href="{{ url_for('admin.pending_requests') }}" class="stat-card stat-pending">
-                <div class="stat-info"><h3>承認待ち</h3><div class="number">{{ statistics.pending_count if statistics else 0 }}</div></div>
                 <div class="stat-icon">⏳</div>
+                <div class="stat-info"><h3>承認待ち</h3><div class="number">{{ statistics.pending_count if statistics else 0 }}</div></div>
             </a>
             <a href="{{ url_for('admin.approved_users_list') }}" class="stat-card stat-approved">
-                <div class="stat-info"><h3>承認済み（未設定）</h3><div class="number">{{ statistics.approved_count if statistics else 0 }}</div></div>
                 <div class="stat-icon">✓</div>
+                <div class="stat-info"><h3>承認済み（未設定）</h3><div class="number">{{ statistics.approved_count if statistics else 0 }}</div></div>
             </a>
             <a href="{{ url_for('admin.blacklisted_users') }}" class="stat-card stat-blacklist">
-                <div class="stat-info"><h3>ブラックリスト</h3><div class="number">{{ statistics.blacklisted_count if statistics else 0 }}</div></div>
                 <div class="stat-icon">🚫</div>
+                <div class="stat-info"><h3>ブラックリスト</h3><div class="number">{{ statistics.blacklisted_count if statistics else 0 }}</div></div>
             </a>
         </div>
 
         {# ── アプリのランチャ（正本 fujinp/app_registry.json から描画）──
-           区画・カード・表示条件はアプシャの管理画面で編集し，「発行」で反映する．
+           区画・カード・表示条件・色（区画の色と背景）はアプシャの管理画面で編集し，「発行」で反映する．
            この部分は手で編集しない． #}
         {% for sec in launcher_sections %}
         <h3 class="section-separator">{{ sec.title }}</h3>
         <div class="apps-grid">
             {% for c in sec.cards %}
-            <a href="{{ c.href }}" class="app-card {{ sec.css_class }}{% if c.extra_class %} {{ c.extra_class }}{% endif %}">
+            <a href="{{ c.href }}" class="app-card {{ sec.css_class }}{% if sec.card_style %} sec-colored{% endif %}{% if c.extra_class %} {{ c.extra_class }}{% endif %}"{% if sec.card_style %} style="{{ sec.card_style }}"{% endif %}>
                 <div class="app-title"><span class="app-icon">{{ c.icon }}</span><h3>{{ c.label }}</h3></div>
                 <p>{{ c.description }}</p>
                 <span class="vis-badge" title="使用区分（アプシャのランチャで変更）">{{ c.visibility_icon }} {{ c.visibility_label }}{% if c.groups %}：{{ c.groups|join('・') }}{% endif %}</span>

@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 # guest.py
 from flask import Blueprint, render_template, session, redirect, url_for, flash, request, current_app, abort
@@ -37,14 +37,40 @@ guest_bp = Blueprint('guest', __name__, template_folder='templates')
 
 # ── グループ取得ヘルパー ──────────────────────────────────────────────────
 
+# 構成員の判定はまいぐる（user_groups）の公開APIに任せる。台帳のルールから
+# 作られたグループ（総務課など）は user_group_memberships に行を持たないため、
+# このテーブルを直接引くと構成員が0人になる。取り込みは初回の呼び出し時に行う
+# （起動時の読み込み順に左右されないようにするため）。
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す。無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
+
 def get_user_group_names(user_id):
     """
     ユーザが現在有効なメンバーとして所属しているグループ名のリストを返す。
-    valid_from / valid_until の期間チェック（JSTベース）を行う。
+    まいぐるに委ねる（直接メンバー ∪ 台帳のルール由来）。
+    まいぐるが使えないときは、従来どおり user_group_memberships を直接引く。
     テンプレート側で  {% if 'グループ名' in user_group_names %}  の形で使う。
     """
     if not user_id:
         return []
+    _fn = _ug('get_user_group_names')
+    if _fn is not None:
+        try:
+            return list(_fn(user_id))
+        except Exception as e:
+            current_app.logger.error(f'user_groups.get_user_group_names error: {e}')
     JST = timezone(timedelta(hours=9), 'JST')
     now_jst = datetime.now(JST).replace(tzinfo=None)
     try:
@@ -92,6 +118,11 @@ def dashboard():
     # 区画・カードの表示条件（require_groups / require_categories）はここで評価される．
     from fujinp.registry import launcher_sections
     sections = launcher_sections('guest', user_category, user_group_names)
+    try:  # 旧いカーネル（registry.py）には無い．その場合は CSS の既定の背景
+        from fujinp.registry import dashboard_background
+        dashboard_bg = dashboard_background('guest')
+    except ImportError:
+        dashboard_bg = None
 
     return render_template('admin/guest_dashboard.html',
                             user_name=user_name,
@@ -99,6 +130,7 @@ def dashboard():
                             # feature_codes=feature_codes,
                             user_group_names=user_group_names,
                             launcher_sections=sections,
+                            dashboard_bg=dashboard_bg,
                             site_url=Config.BASE_URL,
                             user_category=user_category)
 
