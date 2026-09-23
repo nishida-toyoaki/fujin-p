@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 app_share.manage — アプリ正本の管理画面（段階6a）
@@ -55,7 +55,7 @@ API（すべて admin．routes.py の before_request が既定で admin 必須�
   GET  /app_share/api/app/<app_name>/config_keys/detect  ツリーから候補検出
   POST /app_share/api/app/<app_name>/issues/add          不具合の登録
   POST /app_share/api/app/<app_name>/issues/<int:id>     不具合の更新
-  POST /app_share/api/app/<app_name>/version/confirm     版確定
+  POST /app_share/api/app/<app_name>/version/confirm     版確定（直前に整形）
   GET  /app_share/api/diag/<app_name>                    診断 JSON（アプリ）
   GET  /app_share/api/diag_site                          診断 JSON（サイト）
   GET  /app_share/api/publish/status                     未発行の変更があるか
@@ -1169,6 +1169,8 @@ def api_version_confirm(app_name):
     同じ内容をファイルにも書く．"""
     if not _valid_app(app_name):
         return _err('アプリ名が不正です')
+    from . import tidy as _t
+    tidied = _t.tidy_app(app_name)          # 版の計算の前に必ず整形する（2026-09-17）
     now = _now()
     version_id = 'v{}-{}'.format(now.strftime('%Y%m%d.%H%M%S'), _content_hash6(app_name))
     with _db() as (cur, conn):
@@ -1179,7 +1181,8 @@ def api_version_confirm(app_name):
                        SET version_id=%s, version_confirmed_at=%s, version_confirmed_by=%s
                        WHERE app_name=%s""", (version_id, now, by, app_name))
         conn.commit()
-    return _ok(version_id=version_id, confirmed_at=_fmt(now), confirmed_by=by)
+    return _ok(version_id=version_id, confirmed_at=_fmt(now), confirmed_by=by,
+               tidied=len(tidied['changed']))
 
 
 # ============================================================

@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 App Share (アプシャ) - FUJIN-Pアプリケーション共有システム
@@ -28,7 +28,8 @@ App Share (アプシャ) - FUJIN-Pアプリケーション共有システム
 - ユーザマニュアル・技術仕様書の閲覧・編集
 - App Info: 技術情報のフィールド編集 / JSONテキスト編集
 - 全アプリ情報JSONエクスポート / インポート（インポートはadmin専用・管理タブ）
-- アプリ単位のエクスポートパッケージ（JSON）作成（admin専用）
+- アプリ単位・全アプリ・カーネルのパッケージ（JSON）の書き出し
+  （ログインした全員．admin 以外は文書の点検を省いた「そのまま」の書き出し）
 - アプリ単位パッケージの取り込み（admin専用・専用ダッシュボードで検証つき）
 - アプリ説明のバージョン（更新日時）記録
 
@@ -121,6 +122,10 @@ _NON_ADMIN_ENDPOINTS = frozenset({
     'get_document',       # マニュアル本文（doc_type='note' は関数内で admin 判定）
     'manual_page',        # マニュアル単独ページ
     'return_to_fujin',    # FUJIN-Pダッシュボードへ戻る
+    # パッケージのダウンロード（読み出しのみ）．FUJIN-P はオープンソースなので，
+    # ほかのサイトのオーナーが自分のサイトに組み込めるよう，ログインした全員に開く．
+    # 取り込み・適用・削除・文書の保存は admin のまま．
+    'export_kernel_package',      # カーネル（admin 以外は公開用の絞り込み版）
 })
 
 @app_share_bp.before_request
@@ -545,6 +550,11 @@ def save_document(app_name, doc_type):
                 title = VALUES(title), content = VALUES(content),
                 updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP
         """, (app_name, doc_type, title, content, user_id))
+        # マニュアル／仕様書は，保存した時点のコードの指紋を記録する（2026-09-17）
+        if doc_type in ('manual', 'spec'):
+            from . import tidy as _t
+            _t.tidy_app(app_name)
+            _t.record_fp(cursor, app_name, (doc_type,), _t.fingerprint(app_name))
         conn.commit()
         # アプリ説明のバージョン（更新日時）を記録
         touch_registry_timestamp(app_name)
@@ -715,7 +725,8 @@ _SECRET_PATTERNS = [
                 r'(?:password|passwd|secret|token|api_?key|credential|private_key)'
                 r'[A-Za-z0-9_]*[\'"]?\s*[:=]\s*[\'"][\x21-\x7e]{4,}[\'"]'),
      '資格情報らしき代入'),
-    (re.compile(r'mysql\.pythonanywhere-services\.com'), 'DBホスト名の直書き'),
+    # 雛形の '<アカウント名>.mysql…' は資格情報ではないので拾わない（直前が '>'）
+    (re.compile(r'(?<!>)\.mysql\.pythonanywhere-services\.com'), 'DBホスト名の直書き'),
     (re.compile(r'GOCSPX-'), 'Google クライアントシークレット'),
     (re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----'), '秘密鍵'),
 ]
@@ -817,8 +828,32 @@ def _kernel_required_modules(app_py_text):
         out.append({'blueprint': bp, 'module': mod, 'app': top})
     return out
 
-def _build_kernel_package(generated_by=None, site_url=None):
-    """カーネルのエクスポートパッケージを組み立てる。"""
+# admin 以外に渡すカーネルに入れてよいホーム直下のファイル．
+# 関所（GitHub の手前）があればそこで追跡中のものを正とし，無ければこの一覧を使う．
+KERNEL_PUBLIC_ROOT_FILES = frozenset({
+    'app.py', 'auth.py', 'config_template.py', 'db.py', 'decorators.py',
+    'utils.py', 'markdown_converter.py', 'profile.py', 'requirements.txt',
+    'LICENSE', 'README.md', 'NOTICE',
+})
+
+def _kernel_public_root_files():
+    """公開用カーネルに入れるホーム直下のファイル名の集合"""
+    try:
+        from . import gitsync as _g
+        if _g._repo_ok():
+            tracked = {t for t in _g._repo_tracked('.')
+                       if '/' not in t.rstrip('/') and not t.startswith('.')}
+            if tracked:
+                return frozenset(tracked - {'config.py'})
+    except Exception as e:
+        logging.warning(f"_kernel_public_root_files: {e}")
+    return KERNEL_PUBLIC_ROOT_FILES
+
+def _build_kernel_package(generated_by=None, site_url=None, public=False):
+    """カーネルのエクスポートパッケージを組み立てる。
+    public=True（admin 以外の書き出し）では，ホーム直下は公開用の一覧にあるファイルだけにし，
+    資格情報らしき記述を含むファイルは .py も含めて中身を出さない。
+    設定名の一覧（config_keys）はこのサイトの config.py の中身に当たるので載せない。"""
     files = []
     warnings = []
     latest_mtime = None
@@ -871,6 +906,8 @@ def _build_kernel_package(generated_by=None, site_url=None):
                 entry['content'] = base64.b64encode(f.read()).decode('ascii')
         files.append(entry)
 
+    public_root = _kernel_public_root_files() if public else frozenset()
+
     # 1) ホーム直下のファイル
     for name in sorted(os.listdir(SITE_CODE_ROOT)):
         p = os.path.join(SITE_CODE_ROOT, name)
@@ -882,9 +919,12 @@ def _build_kernel_package(generated_by=None, site_url=None):
             continue
         if not name.endswith(KERNEL_FILE_EXTS):
             continue
+        if public and name not in public_root:
+            continue
         # ホーム直下の .py はカーネル本体。config.py だけ名前で完全除外し
         # （KERNEL_EXCLUDE_FILES）、残りは誤検出で落とさず警告のみとする。
-        _add(p, name, block_on_secret=not name.endswith('.py'))
+        # 公開用では .py も疑わしければ中身を出さない。
+        _add(p, name, block_on_secret=public or not name.endswith('.py'))
 
     # 2) 指定ディレクトリ（再帰）
     for d in KERNEL_INCLUDE_DIRS:
@@ -903,7 +943,7 @@ def _build_kernel_package(generated_by=None, site_url=None):
     for kf in ('__init__.py', 'registry.py', 'app_registry.json'):
         ap = os.path.join(BASE_DIR, kf)
         if os.path.isfile(ap):
-            _add(ap, 'fujinp/' + kf, block_on_secret=False)
+            _add(ap, 'fujinp/' + kf, block_on_secret=public)
 
     # static は配布対象外（投稿データが混在するため）。必要なファイルは
     # 送り手の admin が個別に渡す。ここには件数だけ残す。
@@ -915,7 +955,7 @@ def _build_kernel_package(generated_by=None, site_url=None):
              'file_count': sum(len(fs) for _r, _d, fs in os.walk(_sd))})
 
     # 3) 設定名（値は含めない）
-    config_keys = _config_keys(os.path.join(SITE_CODE_ROOT, 'config.py'))
+    config_keys = [] if public else _config_keys(os.path.join(SITE_CODE_ROOT, 'config.py'))
     config_keys_used = _config_keys_used(files)
 
     # 4) app.py が要求するアプリ（受け入れ側の事前チェック用）
@@ -946,6 +986,7 @@ def _build_kernel_package(generated_by=None, site_url=None):
         'display_name': 'FUJIN-P カーネル',
         'description': 'プラットフォーム共通部（ホーム直下のコードと templates/）。'
                        'アプリは含まない。config.py は同梱せず、設定名のみ config_keys に載せる。',
+        'public_download': bool(public),
         'site_name': os.path.basename(SITE_CODE_ROOT),
         'site_url': site_url or '',
         'generated_at': _now_jst().strftime('%Y-%m-%d %H:%M:%S'),
@@ -978,7 +1019,7 @@ def _build_kernel_package(generated_by=None, site_url=None):
 @login_required
 def export_kernel_package():
     """カーネルのエクスポートパッケージ(JSON)を生成してダウンロード
-    ※admin限定（_app_share_authorize による）"""
+    ログインした全員が使える．admin 以外には公開用の絞り込み版を返す．"""
     conn = None
     try:
         generated_by = None
@@ -994,7 +1035,9 @@ def export_kernel_package():
             pass
 
         site_url = request.host_url.rstrip('/') if request else ''
-        package = _build_kernel_package(generated_by=generated_by, site_url=site_url)
+        public = not check_admin_permission(session.get('user_id'))
+        package = _build_kernel_package(generated_by=generated_by, site_url=site_url,
+                                        public=public)
 
         json_text = json.dumps(package, ensure_ascii=False, indent=2, default=str)
         filename = "fujinp_kernel_{}.json".format(_now_jst().strftime('%Y%m%d_%H%M%S'))

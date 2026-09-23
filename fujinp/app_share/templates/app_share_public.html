@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/nishida-toyoaki/fujin-p
+  Source: https://github.com/u-fukuchiyama/fujin-p
 #}
 
 <!DOCTYPE html>
@@ -10,7 +10,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アプシャ - アプリマニュアル</title>
+    <title>アプシャ - アプリのマニュアルとパッケージ</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -40,6 +40,12 @@
         .app-card .card-actions{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid #e5e7eb;padding-top:10px}
         .app-card .card-actions button{padding:5px 10px;font-size:.78rem;border-radius:4px}
         .btn-manual{background:#0ea5e9;color:#fff}.btn-manual:hover{background:#0284c7}
+        .btn-pkg{background:#10b981;color:#fff}.btn-pkg:hover{background:#059669}
+        .dl-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:15px;color:#374151;font-size:.88rem;line-height:1.7}
+        .dl-box .dl-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+        .dl-box .dl-btns button{background:#10b981;color:#fff}.dl-box .dl-btns button:hover{background:#059669}
+        .dl-box .dl-btns button.kernel{background:#64748b}.dl-box .dl-btns button.kernel:hover{background:#475569}
+        .dl-msg{font-size:.8rem;color:#6b7280;margin-top:6px;min-height:1.2em}
         .empty-msg{text-align:center;padding:40px;color:#9ca3af}
         /* モーダル */
         .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;overflow-y:auto}
@@ -75,14 +81,23 @@
 <div class="container">
     <div class="header">
         <div class="hdr-btns">
-            <a href="{{ url_for('guest.dashboard') }}">← ダッシュボードに戻る</a>
+            <a href="{{ url_for('app_share.return_to_fujin') }}">🏠 FUJINダッシュボードに戻る</a>
         </div>
-        <h1>📦 アプシャ（App Share）<span class="role-badge">マニュアル閲覧</span></h1>
-        <p class="subtitle">FUJIN-P アプリのユーザーズマニュアル</p>
+        <h1>📦 アプシャ（App Share）<span class="role-badge">マニュアルとパッケージ</span></h1>
+        <p class="subtitle">FUJIN-P アプリのユーザーズマニュアルを読み，アプリのパッケージを持ち帰れます</p>
     </div>
     <div class="panel">
+        <div class="dl-box">
+            FUJIN-P はオープンソース（AGPL v3）です．ここにあるアプリは，パッケージ（JSON）として持ち帰り，自分の FUJIN-P サイトに組み込めます．
+            持ち帰ったパッケージは，自分のサイトのアプシャで admin が取り込みます（全アプリパッケージは「🛠 管理」タブ，アプリ1本は「📦 新規アプリ取り込み」）．
+            <div class="dl-btns">
+                <button onclick="download('{{ url_for('app_share.package_export_all_public') }}','全アプリパッケージ')">⬇ 全アプリパッケージ</button>
+                <button class="kernel" onclick="download('{{ url_for('app_share.export_kernel_package') }}','カーネル')">⚙ カーネル</button>
+            </div>
+            <div class="dl-msg" id="dl-msg"></div>
+        </div>
         <h2>📖 アプリ一覧</h2>
-        <p style="margin-bottom:15px;color:#666">各アプリの「📖 マニュアル」ボタンでユーザーズマニュアルを表示します。</p>
+        <p style="margin-bottom:15px;color:#666">「📖 マニュアル」でユーザーズマニュアルを表示し，「📦 パッケージ」でそのアプリのパッケージをダウンロードします。</p>
         <div id="app-list" class="app-list">
             <div class="empty-msg">読み込み中...</div>
         </div>
@@ -126,10 +141,19 @@ function loadApps(){
                 <div class="card-desc">${esc(a.description||'')}</div>
                 <div class="card-actions">
                     <button class="btn-manual" onclick="openManual('${a.app_name}','${esc(a.display_name||a.app_name)}')">📖 マニュアル</button>
+                    ${a.app_name==='_platform'?'':`<button class="btn-pkg" onclick="download('/app_share/package/export/'+encodeURIComponent('${a.app_name}'),'${a.app_name}')">📦 パッケージ</button>`}
                 </div>
             </div>`);
         });
     },error(){$('#app-list').html('<div class="empty-msg">読み込みエラー</div>')}});
+}
+
+// ========== パッケージのダウンロード ==========
+// ファイルとして保存されるので画面は移らない．大きいものは作成に時間がかかる．
+function download(url,label){
+    $('#dl-msg').text(label+' のパッケージを作っています．ダウンロードが始まるまでお待ちください…');
+    const a=document.createElement('a');a.href=url;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>$('#dl-msg').text(''),15000);
 }
 
 // ========== マニュアル閲覧モーダル ==========

@@ -1,0 +1,245 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/u-fukuchiyama/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全アプリパッケージのエクスポート - 点検</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1100px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+h1{color:#333;font-size:1.3rem;margin-bottom:5px}
+.subtitle{color:#666;font-size:.85rem}
+.hdr-btns{float:right;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btns a{padding:8px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#64748b}
+.hdr-btns a.home{background:#ef4444}
+.panel{background:#fff;padding:20px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:15px}
+.lead{font-size:.88rem;color:#555;line-height:1.8;margin-bottom:12px}
+.excl{font-size:.85rem;color:#495057;line-height:1.75;background:#f1f3f5;border-left:4px solid #868e96;border-radius:4px;padding:10px 12px;margin-bottom:12px}
+.excl .names{display:block;margin-top:4px;color:#6b7280;font-size:.8rem}
+.sum .note{color:#888;font-weight:400;font-size:.8rem;margin-left:4px}
+.sum{display:flex;gap:18px;flex-wrap:wrap;font-size:.86rem;margin:10px 0 14px;align-items:center}
+.sum b{font-size:1.1rem}
+.pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.78rem;font-weight:600}
+.p-ok{background:#d1fae5;color:#065f46}.p-warn{background:#fef3c7;color:#92400e}.p-todo{background:#fee2e2;color:#991b1b}.p-gray{background:#e5e7eb;color:#374151}
+table{border-collapse:collapse;width:100%;font-size:.83rem}
+th,td{border:1px solid #e2e8f0;padding:7px 9px;text-align:left;vertical-align:middle}
+th{background:#f3f4f6;white-space:nowrap;font-weight:600}
+tr.stale td{background:#fffdf5}
+tr.todo td{background:#fff5f5}
+td.app{white-space:nowrap;font-weight:600}
+td.app .dir{display:block;font-weight:400;font-size:.75rem;color:#888}
+td.dt{white-space:nowrap;color:#444}
+td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
+.btn{display:inline-block;padding:6px 11px;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:.8rem;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap}
+.btn.attach{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+.btn.later{background:#f8fafc;color:#334155;border-color:#e2e8f0}
+.btn.later.on{background:#334155;color:#fff;border-color:#334155}
+.btn.big{padding:12px 22px;font-size:.95rem;color:#fff;background:#4f46e5;border:none}
+.btn.big:disabled{opacity:.4;cursor:default}
+.btn.gray{background:#64748b;color:#fff;border:none}
+.btn + .btn{margin-left:6px}
+.foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.hint{font-size:.8rem;color:#777;line-height:1.7}
+#status{display:none;margin-top:14px;padding:12px 16px;border-radius:8px;font-size:.88rem;line-height:1.7;align-items:center;gap:12px}
+#status.show{display:flex}
+#status.run{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+#status.done{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+#status.late{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.spin{width:18px;height:18px;border:3px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:sp .8s linear infinite;flex:0 0 auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+#status .msg{flex:1 1 auto}
+#status .fn{display:block;font-size:.78rem;opacity:.85;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="hdr-btns">
+      <a href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+      <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
+    </div>
+    <h1>⬇ 全アプリパッケージのエクスポート — 文書の点検</h1>
+    <div class="subtitle">kind=app の全アプリ（アプシャとカーネルは対象外）．点検 {{ checked_at }}</div>
+  </div>
+
+  <div class="panel">
+    <div class="lead">
+      アプリごとに，マニュアルと仕様書がいまのコードと一致しているかを，文書を保存したときに記録したコードの指紋（.py とテンプレートの本数とサイズ）で確かめます．
+      表示の前に各アプリの整形（改行を LF に，BOM 除去，末尾改行）を済ませています．
+      一致しているものはそのまま通ります．コードが変わった，照合の記録が無い，または未登録のものは，「作成して添付」で個別のページに移って文書を揃えるか，
+      「今は更新不要」を選んで古いまま出すかを，1本ずつ決めてください．全部が決まるまで書き出せません．
+    </div>
+
+    <div class="excl">
+      📦 <b>アプシャ（app_share）自身とカーネルは，この一覧に含めません．</b>
+      書き出しと取り込みを担うアプリを一括で入れ替えると，作業の足場が途中で崩れるためです．
+      アプシャを配布するときは，アプシャのカードから個別に 📦 エクスポートしてください．
+      書き出した JSON にも，この除外を記録します．
+      {%- if excluded %}
+      <span class="names">対象外：{% for e in excluded %}{{ e.icon }} {{ e.display_name }}（{{ e.app_name }}）{% if not loop.last %}，{% endif %}{% endfor %}</span>
+      {%- endif %}
+    </div>
+
+    <div class="sum" id="sum"></div>
+
+    <table id="tbl">
+      <thead><tr>
+        <th>アプリ</th><th>コード</th><th>マニュアル</th><th>仕様書</th><th>判定</th><th>選択</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="foot">
+      <button type="button" class="btn big" id="btn-go" disabled>⬇ 全アプリパッケージを書き出す</button>
+      <button type="button" class="btn gray" id="btn-refresh">🔄 状態を再確認</button>
+      <span class="hint">別のタブで文書を揃えたあとは「状態を再確認」を押すと，その行が「一致」に変わります．</span>
+    </div>
+
+    <div id="status">
+      <span class="spin" id="st-spin"></span>
+      <span class="msg"><span id="st-msg"></span><span class="fn" id="st-fn"></span></span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var APPS = {{ apps|tojson }};
+  var LATER = {};          // app_name -> true（人が「今は更新不要」を選んだ）
+  var rows = document.getElementById('rows');
+  var sum = document.getElementById('sum');
+  var go = document.getElementById('btn-go');
+  var box = document.getElementById('status');
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function show(kind, text, sub) {
+    box.className = 'show ' + kind;
+    document.getElementById('st-spin').style.display = (kind === 'run') ? '' : 'none';
+    document.getElementById('st-msg').textContent = text;
+    document.getElementById('st-fn').textContent = sub || '';
+  }
+  function docCell(d) {
+    if (!d.exists) { return '<span class="pill p-gray">未登録</span>'; }
+    var label = { match: '一致', changed: '変更あり', unchecked: '未照合' }[d.state] || (d.stale ? '要更新' : '一致');
+    var pill = d.stale ? '<span class="pill p-warn">' + label + '</span>' : '<span class="pill p-ok">' + label + '</span>';
+    return esc(d.updated_at) + ' <span class="c">' + d.chars + '字</span> ' + pill;
+  }
+  function decision(a) {
+    if (!a.stale) { return 'ok'; }
+    return LATER[a.app_name] ? 'later' : '';
+  }
+  function render() {
+    var h = '', nOk = 0, nLater = 0, nTodo = 0;
+    APPS.forEach(function (a) {
+      var d = decision(a);
+      if (d === 'ok') { nOk++; } else if (d === 'later') { nLater++; } else { nTodo++; }
+      var cls = a.stale ? (d ? 'stale' : 'todo') : '';
+      var verdict = !a.stale ? '<span class="pill p-ok">✅ 一致</span>'
+                  : (d === 'later' ? '<span class="pill p-warn">⏳ 古いまま出す</span>' : '<span class="pill p-todo">要確認</span>');
+      var sel = '';
+      if (a.stale) {
+        var gate = '/app_share/package/export/' + encodeURIComponent(a.app_name) + '?attach=1';
+        sel = '<a class="btn attach" href="' + gate + '" target="_blank" rel="noopener">📝 作成して添付</a>'
+            + '<button type="button" class="btn later' + (d === 'later' ? ' on' : '') + '" data-app="' + esc(a.app_name) + '">'
+            + (d === 'later' ? '✔ 今は更新不要' : '⏳ 今は更新不要') + '</button>'
+            + (a.diff_count ? '<div class="hint">変わったファイル ' + a.diff_count + ' 本</div>' : '');
+      } else {
+        sel = '<span class="hint">そのまま通ります</span>';
+      }
+      h += '<tr class="' + cls + '">'
+        + '<td class="app">' + esc(a.icon) + ' ' + esc(a.display_name) + '<span class="dir">' + esc(a.app_name) + (a.enabled ? '' : '　（無効）') + '</span></td>'
+        + '<td class="dt">' + (a.code_files ? a.code_files + ' 本' : '（対象なし）') + '</td>'
+        + '<td class="dt">' + docCell(a.manual) + '</td>'
+        + '<td class="dt">' + docCell(a.spec) + '</td>'
+        + '<td>' + verdict + '</td>'
+        + '<td>' + sel + '</td></tr>';
+    });
+    rows.innerHTML = h;
+    sum.innerHTML = '<span><b>' + APPS.length + '</b> 本<span class="note">（アプシャ・カーネルを除く）</span></span>'
+      + '<span class="pill p-ok">一致 ' + nOk + '</span>'
+      + '<span class="pill p-warn">古いまま出す ' + nLater + '</span>'
+      + '<span class="pill p-todo">要確認 ' + nTodo + '</span>';
+    go.disabled = (nTodo > 0) || APPS.length === 0;
+    Array.prototype.forEach.call(rows.querySelectorAll('button.later'), function (b) {
+      b.addEventListener('click', function () {
+        var n = b.getAttribute('data-app');
+        LATER[n] = !LATER[n];
+        render();
+      });
+    });
+  }
+
+  function refresh() {
+    show('run', '状態を確認しています…');
+    return fetch('/app_share/api/docs/status_all', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.success) { throw new Error(j.error || '失敗'); }
+        APPS = j.apps || [];
+        // 一致になったものは「今は更新不要」の印を外す
+        APPS.forEach(function (a) { if (!a.stale) { delete LATER[a.app_name]; } });
+        render();
+        box.className = '';
+      })
+      ['catch'](function (e) { show('late', '再確認に失敗しました（' + (e && e.message ? e.message : e) + '）'); });
+  }
+  document.getElementById('btn-refresh').addEventListener('click', refresh);
+
+  function kb(n) { return (n >= 1048576) ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
+  function nameFrom(cd, fb) {
+    var m = /filename="?([^";]+)"?/i.exec(cd || '');
+    return m ? m[1] : fb;
+  }
+  go.addEventListener('click', function () {
+    var decisions = {};
+    APPS.forEach(function (a) { var d = decision(a); if (d) { decisions[a.app_name] = d; } });
+    go.disabled = true;
+    show('run', '全アプリパッケージを生成しています…（' + APPS.length + ' 本．しばらくかかります）');
+    var fname = 'fujinp_apps_overview.json';
+    fetch('/app_share/package/export_all', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decisions: decisions })
+    })
+    .then(function (r) {
+      if (r.status === 409) {
+        return r.json().then(function (j) {
+          var list = (j.problems || []).map(function (p) { return p.app_name + '（' + p.reason + '）'; }).join('，');
+          throw new Error((j.error || '点検が済んでいません') + '：' + list);
+        });
+      }
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      fname = nameFrom(r.headers.get('Content-Disposition'), fname);
+      return r.blob();
+    })
+    .then(function (blob) {
+      var u = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = u; a.download = fname;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(u); a.parentNode.removeChild(a); }, 2000);
+      show('done', '✅ 完了しました．ダウンロードを確認してください．', fname + '　' + kb(blob.size));
+      go.disabled = false;
+    })
+    ['catch'](function (e) {
+      show('late', '書き出せませんでした．' + (e && e.message ? e.message : e));
+      go.disabled = false;
+      refresh();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

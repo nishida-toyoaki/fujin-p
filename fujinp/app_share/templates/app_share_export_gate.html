@@ -1,0 +1,483 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/u-fukuchiyama/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ display_name }} - エクスポート</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:860px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+h1{color:#333;font-size:1.3rem;margin-bottom:5px}
+.subtitle{color:#666;font-size:.85rem}
+.hdr-btns{float:right;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btns a{padding:8px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#64748b}
+.hdr-btns a.home{background:#ef4444}
+.panel{background:#fff;padding:24px 28px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:15px}
+.q{font-size:1.08rem;font-weight:700;color:#1e40af;margin-bottom:6px}
+.lead{font-size:.88rem;color:#555;line-height:1.8;margin-bottom:14px}
+table.st{border-collapse:collapse;width:100%;margin:10px 0 4px;font-size:.85rem}
+table.st th,table.st td{border:1px solid #d1d5db;padding:7px 10px;text-align:left;vertical-align:top}
+table.st th{background:#f3f4f6;white-space:nowrap;width:8em}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600;margin-left:6px}
+.b-ok{background:#d1fae5;color:#065f46}.b-warn{background:#fef3c7;color:#92400e}.b-gray{background:#e5e7eb;color:#374151}
+.note{font-size:.78rem;color:#888;margin-top:6px;line-height:1.7}
+table.st.diff td{font-size:.8rem;line-height:1.7}
+table.st.diff td div{word-break:break-all}
+.verdict{margin:16px 0;padding:14px 18px;border-radius:8px;font-size:.95rem;font-weight:700;line-height:1.7}
+.v-ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+.v-need{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.verdict .sub{display:block;font-weight:400;font-size:.84rem;margin-top:4px;opacity:.9}
+.choices{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.choice{display:block;text-decoration:none;border-radius:9px;padding:16px 20px;border:2px solid transparent;transition:.12s;cursor:pointer;text-align:left;font-family:inherit;width:100%}
+.choice .t{font-size:1rem;font-weight:700;margin-bottom:4px}
+.choice .d{font-size:.82rem;line-height:1.7;opacity:.92}
+.c-main{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+.c-main:hover{background:#e0e7ff;border-color:#818cf8}
+.c-sub{background:#f8fafc;color:#334155;border-color:#e2e8f0}
+.c-sub:hover{background:#f1f5f9;border-color:#94a3b8}
+.choices.busy .choice{pointer-events:none;opacity:.45}
+.links{margin-top:18px;font-size:.82rem}
+.links a{color:#4338ca;text-decoration:none;margin-right:16px;cursor:pointer}
+.links a:hover{text-decoration:underline}
+
+/* 状態表示 */
+#status{display:none;margin-top:16px;padding:14px 18px;border-radius:8px;font-size:.9rem;line-height:1.8;align-items:center;gap:12px}
+#status.show{display:flex}
+#status.run{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+#status.done{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+#status.late{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.spin{width:18px;height:18px;border:3px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:sp .8s linear infinite;flex:0 0 auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.mark{font-size:1.15rem;flex:0 0 auto}
+#status .msg{flex:1 1 auto}
+#status .fn{display:block;font-size:.8rem;opacity:.85;margin-top:2px;word-break:break-all}
+
+/* 作成の段取り */
+#attach{display:none;margin-top:8px}
+#attach.show{display:block}
+.step{border:1px solid #e2e8f0;border-radius:9px;padding:14px 18px;margin-top:12px;background:#fff}
+.step .sh{font-weight:700;color:#1e40af;font-size:.95rem;margin-bottom:6px}
+.step .sh .n{display:inline-block;width:1.6em;height:1.6em;line-height:1.6em;text-align:center;border-radius:50%;background:#4f46e5;color:#fff;font-size:.8rem;margin-right:8px}
+.step p{font-size:.85rem;color:#555;line-height:1.8}
+.btn{display:inline-block;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.86rem;font-weight:600;color:#fff;background:#4f46e5;font-family:inherit}
+.btn.gray{background:#64748b}.btn.green{background:#059669}.btn:disabled{opacity:.45;cursor:default}
+.btn + .btn{margin-left:8px}
+pre.prompt{background:#1e293b;color:#e2e8f0;padding:12px 14px;border-radius:8px;font-size:.78rem;line-height:1.6;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0}
+textarea{width:100%;font-family:Consolas,Monaco,monospace;font-size:.8rem;line-height:1.5;padding:8px 10px;border:1px solid #cbd5e0;border-radius:6px;resize:vertical}
+textarea.big{min-height:160px}
+textarea.doc{min-height:200px}
+input.title{width:100%;padding:7px 10px;border:1px solid #cbd5e0;border-radius:6px;font-size:.86rem;margin:6px 0 4px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+.cnt{font-size:.75rem;color:#888;text-align:right;margin-top:2px}
+.ok-mark{color:#059669;font-weight:600;font-size:.82rem;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="hdr-btns">
+      <a href="{{ url_for('app_share.dashboard') }}">📦 アプシャへ</a>
+      <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
+    </div>
+    <h1>{{ icon }} {{ display_name }} のエクスポート</h1>
+    <div class="subtitle">
+      {{ app_name }}
+      {% if version_id %}／版 {{ version_id }}（{{ version_confirmed_at }} 確定）{% else %}／版は未確定{% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="q">文書の状態</div>
+
+    <table class="st">
+      <tr>
+        <th>コード</th>
+        <td>.py とテンプレート {{ st.code_files }} 本
+          {% if st.latest_file_mtime %}<span style="color:#888">　最終更新 {{ st.latest_file_mtime }}</span>{% endif %}
+        </td>
+      </tr>
+      {% for key in ['manual', 'spec'] %}
+      {% set d = st.docs[key] %}
+      <tr>
+        <th>{{ d.label }}</th>
+        <td>
+          {% if d.exists %}
+            {{ d.updated_at }}　<span style="color:#888">{{ d.chars }}文字</span>
+            {% if d.state == 'match' %}<span class="badge b-ok">{{ d.verdict }}</span>
+            {% elif d.state == 'unchecked' %}<span class="badge b-gray">{{ d.verdict }}</span>
+            {% else %}<span class="badge b-warn">{{ d.verdict }}</span>{% endif %}
+            {% if d.checked_at %}<span style="color:#888;font-size:.78rem">　照合 {{ d.checked_at }}</span>{% endif %}
+          {% else %}
+            <span style="color:#999">登録なし</span><span class="badge b-gray">未登録</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if st.diff and not st.diff.same %}
+    <table class="st diff">
+      <tr><th>変わったファイル</th><td>
+        {% for c in st.diff.changed %}<div>✏️ {{ c.path }}　<span style="color:#888">{{ c.before }} → {{ c.after }} バイト</span></div>{% endfor %}
+        {% for x in st.diff.added %}<div>➕ {{ x }}　<span style="color:#888">追加</span></div>{% endfor %}
+        {% for x in st.diff.removed %}<div>➖ {{ x }}　<span style="color:#888">削除</span></div>{% endfor %}
+      </td></tr>
+    </table>
+    {% endif %}
+    <div class="note">
+      {% if st.judged_by == 'fingerprint' %}
+      判定は，文書を保存したときに記録したコードの指紋（.py とテンプレートの本数とサイズ）と，いまのコードを比べたものです．
+      {% else %}
+      code_fingerprint 列が無いため，文書の更新日時とファイルの最終更新日時を比べています（旧方式）．
+      {% endif %}
+      表示の前に整形（改行を LF に，先頭の BOM を除去，末尾に改行）を済ませています{% if tidied and tidied.changed %}（今回 {{ tidied.changed|length }} 本を整形：{{ tidied.changed|join('，') }}）{% endif %}．
+    </div>
+
+    {% if not st.any_stale %}
+    {# ---------- 更新不要 ---------- #}
+    <div class="verdict v-ok">✅ 更新の必要はありません
+      <span class="sub">マニュアルと仕様書はいまのコードと一致しています．このまま書き出せます．</span>
+    </div>
+    <div class="choices" id="choices">
+      <a class="choice c-main" data-docs="ok"
+         href="{{ url_for('app_share.package_export', app_name=app_name, docs='ok') }}">
+        <div class="t">📦 ダウンロード</div>
+        <div class="d">文書を含んだ最新のパッケージを書き出します．</div>
+      </a>
+    </div>
+    <div class="links">
+      <a id="force-attach">それでもマニュアルと仕様書を作り直す</a>
+    </div>
+
+    {% else %}
+    {# ---------- 更新が必要 ---------- #}
+    <div class="verdict v-need">⚠️
+      {% if st.missing %}{{ st.missing }}が未登録です
+      {% elif st.any_changed %}文書を書いた後にコードが変わっています
+      {% else %}文書とコードを照合した記録がありません{% endif %}
+      <span class="sub">生成AIでマニュアルと仕様書を更新してから書き出してください．改修の途中なら，文書はそのままで書き出せます．</span>
+    </div>
+    <div class="choices" id="choices">
+      <button type="button" class="choice c-main" id="btn-attach">
+        <div class="t">📝 マニュアルと仕様書を作成して添付する</div>
+        <div class="d">
+          暫定パッケージとプロンプトを Claude に渡し，返ってきた文書を貼り込みます．完了を押すと，文書がこのサイトに保存され，
+          それを含んだ最終版のパッケージが書き出されます．
+        </div>
+      </button>
+      <a class="choice c-sub" data-docs="later"
+         href="{{ url_for('app_share.package_export', app_name=app_name, docs='later') }}">
+        <div class="t">⏳ 今は更新不要 — 文書はそのまま書き出す</div>
+        <div class="d">改修の途中のときに選びます．パッケージには「改修の途中」と記録されます．</div>
+      </a>
+      {% if st.both_exist and st.judged_by == 'fingerprint' %}
+      <button type="button" class="choice c-sub" id="btn-mark">
+        <div class="t">✔ 文書は現行コードと照合済み — 指紋だけ記録する</div>
+        <div class="d">文書を読み比べて，いまのコードと合っていると確かめた場合に選びます．文書は書き換えず，いまのコードの指紋を記録して，この画面を開き直します．</div>
+      </button>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# ---------- 作成の段取り（両状態で共通．初期は非表示） ---------- #}
+    <div id="attach">
+      <div class="step">
+        <div class="sh"><span class="n">1</span>暫定パッケージをダウンロードする</div>
+        <p>いまの状態のパッケージです．Claude に渡す材料になります．現行の文書があれば中に入っているので，Claude はそれを改訂します．</p>
+        <a class="btn" id="btn-draft" data-docs="draft"
+           href="{{ url_for('app_share.package_export', app_name=app_name, docs='draft') }}">⬇ 暫定パッケージ（_draft.json）</a>
+        <span class="ok-mark" id="draft-ok" style="display:none">✔ ダウンロード済み</span>
+      </div>
+
+      <div class="step">
+        <div class="sh"><span class="n">2</span>プロンプトをコピーして，パッケージと一緒に Claude に渡す</div>
+        <p>出どころ：{{ prompt_source }}．アプリ直下の <code>docgen_prompt.md</code> を書き換えると，ここに出る文面が変わります．</p>
+        <pre class="prompt" id="prompt-text">{{ prompt_text }}</pre>
+        <button type="button" class="btn" id="btn-copy">📋 プロンプトをコピー</button>
+        <span class="ok-mark" id="copy-ok" style="display:none">✔ コピーしました</span>
+      </div>
+
+      <div class="step">
+        <div class="sh"><span class="n">3</span>Claude の出力を貼り込む</div>
+        <p>出力を丸ごと下の欄に貼ると，<code>&lt;&lt;&lt;MANUAL&gt;&gt;&gt;</code> と <code>&lt;&lt;&lt;SPEC&gt;&gt;&gt;</code> の区切りで自動的に2つに分けます．分かれなければ，それぞれの欄に直接貼ってください．</p>
+        <textarea class="big" id="paste-all" placeholder="ここに Claude の出力を丸ごと貼る"></textarea>
+        <div class="two" style="margin-top:12px">
+          <div>
+            <div style="font-weight:600;font-size:.85rem">📖 ユーザマニュアル</div>
+            <input class="title" id="manual-title" value="{{ display_name }} ユーザマニュアル">
+            <textarea class="doc" id="manual-body" placeholder="マニュアルの Markdown 本文"></textarea>
+            <div class="cnt" id="manual-cnt">0 文字</div>
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:.85rem">📋 技術仕様書</div>
+            <input class="title" id="spec-title" value="{{ display_name }} 技術仕様書">
+            <textarea class="doc" id="spec-body" placeholder="仕様書の Markdown 本文"></textarea>
+            <div class="cnt" id="spec-cnt">0 文字</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="sh"><span class="n">4</span>完了する</div>
+        <p>2つの文書をこのサイトに保存し，それを含んだ最終版のパッケージ（_docs.json）を書き出します．</p>
+        <button type="button" class="btn green" id="btn-finish" disabled>✅ 完了 — 保存して最終版を書き出す</button>
+        <button type="button" class="btn gray" id="btn-cancel">戻る</button>
+      </div>
+    </div>
+
+    <div id="status">
+      <span class="spin" id="st-spin"></span>
+      <span class="mark" id="st-mark" style="display:none"></span>
+      <span class="msg"><span id="st-msg"></span><span class="fn" id="st-fn"></span></span>
+    </div>
+
+    <div class="links">
+      <a href="{{ url_for('app_share.manage_page', app_name=app_name) }}#doc">📝 文書タブを開く</a>
+      <a href="{{ url_for('app_share.manage_page', app_name=app_name) }}#ver">🏷 版タブを開く</a>
+      <a href="{{ url_for('app_share.dashboard') }}">← 戻る</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var APP = {{ app_name|tojson }};
+  var GATE_FP = {{ st.fingerprint|tojson }};   // この画面を開いた時点のコードの指紋
+  var DRAFT_FP = null;                         // 暫定パッケージを書き出した時点の指紋
+  var box = document.getElementById('status');
+  var spin = document.getElementById('st-spin');
+  var mark = document.getElementById('st-mark');
+  var msg = document.getElementById('st-msg');
+  var fnEl = document.getElementById('st-fn');
+  var choices = document.getElementById('choices');
+  var attach = document.getElementById('attach');
+  var timer = null, giveUp = null;
+
+  function $(id) { return document.getElementById(id); }
+  function show(kind, icon, text, sub) {
+    box.className = 'show ' + kind;
+    spin.style.display = (kind === 'run') ? '' : 'none';
+    mark.style.display = (kind === 'run') ? 'none' : '';
+    mark.textContent = icon || '';
+    msg.textContent = text;
+    fnEl.textContent = sub || '';
+  }
+  function hide() { box.className = ''; }
+  function busy(on) { if (on) { choices.classList.add('busy'); } else { choices.classList.remove('busy'); } }
+  function kb(n) { return (n >= 1048576) ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
+  function nameFrom(cd, fb) {
+    var m = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
+    if (m) { try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; } }
+    m = /filename="?([^";]+)"?/i.exec(cd || '');
+    return m ? m[1] : fb;
+  }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (giveUp) { clearTimeout(giveUp); giveUp = null; }
+  }
+
+  // ---- ダウンロード（fetch で受け取り切ってから保存．完了が確定する） ----
+  function download(url, label) {
+    var token = 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    var full = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + token;
+    var fallback = APP + '_package.json';
+    show('run', '', (label || 'パッケージ') + 'を生成しています…（ファイルが大きいので少しかかります）');
+    if (window.fetch && window.URL && window.URL.createObjectURL) {
+      var fname = fallback;
+      return fetch(full, { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) { throw new Error('HTTP ' + r.status); }
+          fname = nameFrom(r.headers.get('Content-Disposition'), fallback);
+          return r.blob();
+        })
+        .then(function (blob) {
+          var u = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = u; a.download = fname;
+          document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(u); a.parentNode.removeChild(a); }, 2000);
+          show('done', '✅', '完了しました．ダウンロードを確認してください．', fname + '　' + kb(blob.size));
+          return fname;
+        });
+    }
+    // 控え：fetch が使えない環境
+    return new Promise(function (resolve, reject) {
+      stop();
+      document.cookie = 'fujinp_export=; Max-Age=0; path=/';
+      var f = document.createElement('iframe');
+      f.style.display = 'none'; f.src = full; document.body.appendChild(f);
+      timer = setInterval(function () {
+        var m = document.cookie.match(/(?:^|;\s*)fujinp_export=([^;]*)/);
+        if (!m) { return; }
+        var v = decodeURIComponent(m[1]).replace(/^"|"$/g, '').split('|');
+        if (v[0] !== token) { return; }
+        stop();
+        document.cookie = 'fujinp_export=; Max-Age=0; path=/';
+        show('done', '✅', '完了しました．ダウンロードを確認してください．', v[1] || '');
+        resolve(v[1] || fallback);
+      }, 300);
+      giveUp = setTimeout(function () {
+        stop();
+        show('late', '⚠️', 'ダウンロードは進んでいるはずですが，完了を確認できませんでした．ダウンロードフォルダを見てください．');
+        reject(new Error('timeout'));
+      }, 90000);
+    });
+  }
+
+  // ---- 単純な選択肢（ok／later） ----
+  Array.prototype.forEach.call(document.querySelectorAll('.choice[data-docs]'), function (a) {
+    a.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      busy(true);
+      download(a.getAttribute('href')).then(function () { busy(false); })
+        ['catch'](function (e) { busy(false); show('late', '⚠️', '生成に失敗しました（' + (e && e.message ? e.message : e) + '）．もう一度選んでください．'); });
+    });
+  });
+
+  // ---- 作成の段取りを開く／閉じる ----
+  function openAttach() {
+    attach.classList.add('show');
+    choices.style.display = 'none';
+    hide();
+    attach.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function closeAttach() {
+    attach.classList.remove('show');
+    choices.style.display = '';
+    hide();
+  }
+  if ($('btn-attach')) { $('btn-attach').addEventListener('click', openAttach); }
+  if ($('force-attach')) { $('force-attach').addEventListener('click', openAttach); }
+  $('btn-cancel').addEventListener('click', closeAttach);
+
+  // 照合済みとして指紋だけ記録する
+  if ($('btn-mark')) {
+    $('btn-mark').addEventListener('click', function () {
+      if (!confirm('マニュアルと仕様書は，いまのコードと合っていると確かめましたか？\n文書は書き換えず，いまのコードの指紋だけを記録します．')) { return; }
+      busy(true);
+      show('run', '', '指紋を記録しています…');
+      fetch('/app_share/api/app/' + encodeURIComponent(APP) + '/docs/mark_checked', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.success) { throw new Error(j.error || ('HTTP ' + r.status)); } return j; }); })
+      .then(function () { location.reload(); })
+      ['catch'](function (e) { busy(false); show('late', '⚠️', '記録できませんでした（' + (e && e.message ? e.message : e) + '）'); });
+    });
+  }
+  // 全アプリの点検ページから来たときは，段取りを最初から開く
+  if (/[?&]attach=1(&|$)/.test(location.search)) { openAttach(); }
+
+  // 1) 暫定パッケージ
+  $('btn-draft').addEventListener('click', function (ev) {
+    ev.preventDefault();
+    var b = $('btn-draft'); b.style.pointerEvents = 'none'; b.style.opacity = '.6';
+    download(b.getAttribute('href'), '暫定パッケージ').then(function () {
+      $('draft-ok').style.display = '';
+      // 文書が対応するコードとして，書き出した時点の指紋を控える
+      return fetch('/app_share/api/app/' + encodeURIComponent(APP) + '/fingerprint', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (j.success) { DRAFT_FP = j.fingerprint; } });
+    })['catch'](function () {})
+    .then(function () { b.style.pointerEvents = ''; b.style.opacity = ''; });
+  });
+
+  // 2) プロンプトのコピー
+  $('btn-copy').addEventListener('click', function () {
+    var t = $('prompt-text').textContent;
+    var done = function () { $('copy-ok').style.display = ''; setTimeout(function () { $('copy-ok').style.display = 'none'; }, 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(done, function () { legacyCopy(t); done(); });
+    } else { legacyCopy(t); done(); }
+  });
+  function legacyCopy(t) {
+    var ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  // 3) 貼り込みの自動分割
+  function splitAll(text) {
+    var mM = text.indexOf('<<<MANUAL>>>');
+    var mS = text.indexOf('<<<SPEC>>>');
+    if (mM < 0 || mS < 0 || mS < mM) { return null; }
+    var mE = text.indexOf('<<<END>>>', mS);
+    var manual = text.slice(mM + '<<<MANUAL>>>'.length, mS);
+    var spec = text.slice(mS + '<<<SPEC>>>'.length, mE >= 0 ? mE : text.length);
+    // 出力が ``` で囲まれていたら外す
+    var strip = function (s) {
+      s = s.replace(/^\s*```[a-zA-Z]*\s*\n?/, '').replace(/\n?```\s*$/, '');
+      return s.trim();
+    };
+    return { manual: strip(manual), spec: strip(spec) };
+  }
+  function refresh() {
+    var m = $('manual-body').value.trim(), s = $('spec-body').value.trim();
+    $('manual-cnt').textContent = m.length + ' 文字';
+    $('spec-cnt').textContent = s.length + ' 文字';
+    $('btn-finish').disabled = !(m && s);
+  }
+  $('paste-all').addEventListener('input', function () {
+    var r = splitAll($('paste-all').value);
+    if (r) {
+      $('manual-body').value = r.manual;
+      $('spec-body').value = r.spec;
+      refresh();
+    }
+  });
+  $('manual-body').addEventListener('input', refresh);
+  $('spec-body').addEventListener('input', refresh);
+
+  // 4) 完了：保存 → 最終版を書き出す
+  $('btn-finish').addEventListener('click', function () {
+    var payload = {
+      manual_title: $('manual-title').value.trim(),
+      manual: $('manual-body').value.trim(),
+      spec_title: $('spec-title').value.trim(),
+      spec: $('spec-body').value.trim(),
+      fingerprint: DRAFT_FP || GATE_FP
+    };
+    if (!payload.manual || !payload.spec) { return; }
+    var b = $('btn-finish'); b.disabled = true;
+    show('run', '', 'マニュアルと仕様書を保存しています…');
+    fetch('/app_share/api/app/' + encodeURIComponent(APP) + '/docs/attach', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.success) { throw new Error(j.error || ('HTTP ' + r.status)); } return j; }); })
+    .then(function (j) {
+      var saved = (j.saved || []).map(function (x) { return (x.doc_type === 'manual' ? 'マニュアル ' : '仕様書 ') + x.chars + '文字'; }).join('，');
+      var cs = j.changed_since_draft;
+      if (cs) {
+        var names = [].concat(cs.changed.map(function (c) { return c.path; }), cs.added, cs.removed).join('，');
+        alert('暫定パッケージを書き出した後に，次のファイルが変わっています．\n' + names
+              + '\n\n文書は暫定パッケージ時点のコードに対応するものとして記録しました．次に開くと「コードが変わっています」と表示されます．');
+      }
+      show('done', '✅', '保存しました（' + saved + '）．続けて最終版を書き出します．');
+      return download('/app_share/package/export/' + encodeURIComponent(APP) + '?docs=final', '最終版パッケージ');
+    })
+    .then(function () {
+      // 状態表示は次回開いたときに反映される．ここではボタンを戻すだけ
+      b.disabled = false;
+    })
+    ['catch'](function (e) {
+      b.disabled = false;
+      show('late', '⚠️', '失敗しました（' + (e && e.message ? e.message : e) + '）．文書は文書タブから確認してください．');
+    });
+  });
+})();
+</script>
+</body>
+</html>

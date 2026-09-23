@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/nishida-toyoaki/fujin-p
+  Source: https://github.com/u-fukuchiyama/fujin-p
 #}
 <!DOCTYPE html>
 <html lang="ja">
@@ -177,6 +177,7 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
     <h2>版</h2>
     <div id="ver-body"></div>
     <div class="row" style="margin-top:10px">
+      <button class="btn gray" onclick="tidyApp()">🧹 整形</button>
       <button class="btn green" onclick="confirmVersion()">🏷 版確定</button>
       <a class="btn sky" href="{{ url_for('app_share.package_export', app_name=app_name) }}">📦 エクスポート</a>
       <a class="btn amber" href="{{ url_for('app_share.package_import_page', app=app_name) }}">📥 取り込み（パッケージ）</a>
@@ -446,9 +447,13 @@ function renderDoc(){
 function renderVer(){
   document.getElementById('ver-body').innerHTML=`<div class="box">現在の版 <code>${esc(D.version_id||'未確定')}</code>　確定 ${esc(D.version_confirmed_at||'-')}　${esc(D.version_confirmed_by||'')}</div>
   <div class="box">GitHub commit <code>${esc(D.git_commit||'-')}</code>　${esc(D.git_committed_at||'')}</div>
-  <div class="hint">版確定は「ソース・仕様書・マニュアルが揃った」と判断した時点で押します．エクスポートやファイル変更では版は変わりません．</div>`;
+  <div class="hint">版確定は「ソース・仕様書・マニュアルが揃った」と判断した時点で押します．エクスポートやファイル変更では版は変わりません．整形（改行を LF に，BOM 除去，末尾改行）は，エクスポートの点検・版確定・GitHubへの commit の直前に自動で行います．</div>`;
 }
-async function confirmVersion(){if(!confirm('版を確定します．ソース・技術仕様書・マニュアルの整合を確認済みですか？'))return;try{const r=await POST(API+'/version/confirm',{});toast('版を確定しました: '+r.version_id);loadAll()}catch(e){toast(e.message,true)}}
+async function confirmVersion(){if(!confirm('版を確定します．ソース・技術仕様書・マニュアルの整合を確認済みですか？\n（確定の前にファイルを整形します）'))return;try{const r=await POST(API+'/version/confirm',{});toast('版を確定しました: '+r.version_id+(r.tidied?'（整形 '+r.tidied+' 本）':''));loadAll()}catch(e){toast(e.message,true)}}
+async function tidyApp(){try{const r=await POST(API+'/tidy',{});const el=document.getElementById('git-out');
+  let h='<h3>整形の結果</h3><div class="box">'+(r.changed.length?'<span class="badge b-warn">整形 '+r.changed.length+' 本</span> '+r.changed.map(esc).join(', '):'<span class="badge b-ok">整形済み</span> 変更なし')+'　点検 '+r.checked+' 本';
+  if(r.errors&&r.errors.length)h+='<div style="font-size:.8rem;color:#991b1b;margin-top:4px">'+r.errors.map(x=>esc(x.path+': '+x.error)).join('<br>')+'</div>';
+  if(el)el.innerHTML=h+'</div>';toast(r.changed.length?'整形しました（'+r.changed.length+' 本）':'整形済みでした')}catch(e){toast(e.message,true)}}
 
 // ---- GitHub（6b） ----
 async function gitStatus(){

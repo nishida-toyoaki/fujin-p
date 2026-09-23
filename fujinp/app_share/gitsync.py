@@ -17,13 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 app_share.gitsync — 関所（ローカル git リポジトリ）への写しと GitHub 連携（段階6b）
 
 稼働ツリー → 関所（既定 ~/fujin-p-repo）→ GitHub の二段．
-  写し：アプリの許可リスト内ファイルを関所へコピー（CRLF→LF），消えたものは git rm
+  写し：アプリの許可リスト内ファイルを稼働側で整形（tidy）してから関所へコピー，消えたものは git rm
   commit：アプリ単位・パス限定（他アプリの未整理な変更は巻き込まない）
   push：GITHUB_TOKEN（config.py）があればアプシャが実行．ボタンは必ず人が押す
 
@@ -51,6 +51,7 @@ from flask import request, jsonify, session
 
 from . import app_share_bp
 from . import manage as _m
+from . import tidy as _t
 from config import Config
 from db import DatabaseConfig
 from decorators import login_required
@@ -130,7 +131,10 @@ def _is_text(path):
 
 
 def _norm_bytes(path, raw):
-    """テキストは CRLF→LF（関所は LF で統一）．バイナリはそのまま"""
+    """関所へ写すときの正規化．整形の対象は整形と同じ規則（LF・BOM除去・末尾改行），
+    それ以外のテキスト（CSV など）は CRLF→LF だけ．バイナリはそのまま"""
+    if _t.is_tidy_target(path):
+        return _t.normalize_bytes(path, raw)
     if _is_text(path):
         return raw.replace(b'\r\n', b'\n')
     return raw
@@ -366,8 +370,12 @@ def api_git_commit(app_name):
                     (app_name,))
         open_issues = cur.fetchall()
     version_id = row.get('version_id') or '未確定'
+    tidied = _t.tidy_app(app_name)          # 写す前に稼働側を整形する（2026-09-17）
     written, removed, add_paths = _copy_scope(app_name)
     steps = []
+    if tidied['changed']:
+        steps.append({'cmd': '（アプシャの整形）', 'rc': 0,
+                      'out': '整形したファイル: ' + ', '.join(tidied['changed'])})
     rc, out, err = _git(['add', '-A', '--'] + add_paths)
     steps.append({'cmd': 'git add -A -- ' + ' '.join(add_paths), 'rc': rc, 'out': (out + err).strip()})
     if rc != 0:

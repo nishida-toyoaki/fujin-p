@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 App Share (アプシェア) - FUJIN-Pアプリケーション共有システム
@@ -38,3 +38,4 @@ from . import routes
 from . import manage   # 段階6a：正本の管理画面・発行・診断
 from . import gitsync  # 段階6b：関所への写し・commit・push
 from . import package  # 段階6c：パッケージ輸出入（v3）
+from . import tidy     # 2026-09-17：整形とコードの指紋
