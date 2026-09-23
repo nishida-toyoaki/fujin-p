@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 まいあし (MaiAshi) Blueprint
@@ -29,9 +29,10 @@ migration_assistant = Blueprint(
     'migration_assistant',
     __name__,
     url_prefix='/migration_assistant',
-    template_folder='migration_assistant_templates',
+    template_folder='templates',
     static_folder='static',
     static_url_path='static'         # ← 追加
 )
 
 from . import migration_assistant_routes
+from . import install_guide   # 別サイトへのインストール（配布物と手引き）

@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 まいあし (MaiAshi) Routes v2 - マルチユーザー・師弟制度対応
@@ -207,8 +207,8 @@ def index():
     """まいあしメインページ（コース未選択）"""
     user_id = session.get('user_id')
     if not user_id:
-        return render_template('error.html', error='ログインが必要です')
-    return render_template('migration_assistant_index.html', initial_system_id=None)
+        return render_template('migration_assistant/error.html', error='ログインが必要です')
+    return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
 
 
 @migration_assistant.route('/course/<int:course_id>')
@@ -222,7 +222,7 @@ def course_view(course_id):
     """
     user_id = session.get('user_id')
     if not user_id:
-        return render_template('error.html', error='ログインが必要です')
+        return render_template('migration_assistant/error.html', error='ログインが必要です')
 
     conn = None
     try:
@@ -239,14 +239,14 @@ def course_view(course_id):
 
         if not enrollment:
             # 未受講、または存在しないコース → メインページへ
-            return render_template('migration_assistant_index.html', initial_system_id=None)
+            return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
 
         # フロントは enrollment_id（＝/api/systems の id）で照合するため、それを渡す
-        return render_template('migration_assistant_index.html',
+        return render_template('migration_assistant/migration_assistant_index.html',
                                initial_system_id=enrollment['id'])
     except Exception as e:
         logging.error(f"course_view error: {e}")
-        return render_template('migration_assistant_index.html', initial_system_id=None)
+        return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
     finally:
         if conn and conn.is_connected():
             conn.close()
@@ -256,8 +256,8 @@ def mentor_dashboard():
     """師匠ダッシュボード"""
     user_id = session.get('user_id')
     if not user_id:
-        return render_template('error.html', error='ログインが必要です')
-    return render_template('migration_assistant_mentor_dashboard.html')
+        return render_template('migration_assistant/error.html', error='ログインが必要です')
+    return render_template('migration_assistant/migration_assistant_mentor_dashboard.html')
 
 @migration_assistant.route('/mentor_content_editor/<int:course_id>')
 def mentor_content_editor(course_id):
@@ -267,7 +267,7 @@ def mentor_content_editor(course_id):
     """
     user_id = session.get('user_id')
     if not user_id:
-        return render_template('error.html', error='ログインが必要です')
+        return render_template('migration_assistant/error.html', error='ログインが必要です')
 
     conn = None
     try:
@@ -279,7 +279,7 @@ def mentor_content_editor(course_id):
         course = cursor.fetchone()
 
         if not course:
-            return render_template('error.html', error='指定された教材が見つかりません')
+            return render_template('migration_assistant/error.html', error='指定された教材が見つかりません')
 
         # 2. 所有権のチェック
         # 自分が作成したコースであれば、師匠テーブルの有無に関わらず編集を許可する
@@ -289,7 +289,7 @@ def mentor_content_editor(course_id):
         is_admin = check_is_admin(user_id)
 
         if not is_creator and not is_admin:
-            return render_template('error.html', error='この教材の編集権限がありません（作成者本人のみ編集可能です）')
+            return render_template('migration_assistant/error.html', error='この教材の編集権限がありません（作成者本人のみ編集可能です）')
 
         # 3. 師匠としての記録を（未登録なら）自動で作成、または更新する
         # これにより「コンテンツを書いた＝師匠になった」という事実をDBに刻みます
@@ -302,13 +302,13 @@ def mentor_content_editor(course_id):
 
         conn.commit()
 
-        return render_template('migration_assistant_mentor_content_editor.html',
+        return render_template('migration_assistant/migration_assistant_mentor_content_editor.html',
                                course_id=course_id,
                                course_title=course['course_title'])
 
     except Exception as e:
         logging.error(f"Editor Access Error: {e}")
-        return render_template('error.html', error='アクセス権限の確認中にエラーが発生しました')
+        return render_template('migration_assistant/error.html', error='アクセス権限の確認中にエラーが発生しました')
     finally:
         if conn:
             conn.close()
@@ -318,8 +318,8 @@ def admin_panel():
     """管理者パネル（師匠承認）"""
     user_id = session.get('user_id')
     if not user_id or not check_is_admin(user_id):
-        return render_template('error.html', error='管理者権限が必要です')
-    return render_template('migration_assistant_admin_panel.html')
+        return render_template('migration_assistant/error.html', error='管理者権限が必要です')
+    return render_template('migration_assistant/migration_assistant_admin_panel.html')
 
 @migration_assistant.route('/return_to_fujin')
 def return_to_fujin():
@@ -1467,7 +1467,7 @@ def admin_migrationNG():
     user_id = session.get('user_id')
     if not user_id or not check_is_admin(user_id):
         return "❌ 管理者権限が必要です", 403
-    return render_template('migration_assistant_admin_migration.html')
+    return render_template('migration_assistant/migration_assistant_admin_migration.html')
 
 
 @migration_assistant.route('/api/admin/migrate_to_coursesNG', methods=['POST'])
