@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-09-23 15:54:49",
+  "generated_at": "2026-10-01 10:10:51",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -97,117 +97,6 @@
       ],
       "version_id": "v20260923.154116-f2c97d",
       "version_confirmed_at": "2026-09-23 15:41:16"
-    },
-    {
-      "app_name": "table_master",
-      "display_name": "テーブルマスター",
-      "icon": "🗂️",
-      "description": "データベーステーブルの閲覧・編集・管理システム",
-      "sort_order": 30.0,
-      "kind": "app",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "table_master_bp",
-          "name": "table_master",
-          "module": "fujinp.table_master",
-          "url_prefix": null
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "🗂️️",
-          "label": "テーブルマスター",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "table_master.dashboard",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 30,
-          "visibility": "private",
-          "description": "SQLテーブルの管理",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260731.133950-0df1eb",
-      "version_confirmed_at": "2026-07-31 13:39:50"
-    },
-    {
-      "app_name": "sql_saver",
-      "display_name": "SQL Saver",
-      "icon": "💾",
-      "description": "データベースを丸っとzipに保存・復元（管理者専用）",
-      "sort_order": 35.0,
-      "kind": "app",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "sql_saver_bp",
-          "name": "sql_saver",
-          "module": "fujinp.sql_saver",
-          "url_prefix": null
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "💾",
-          "label": "SQL Saver",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "sql_saver.index",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 40,
-          "visibility": "private",
-          "description": "プラットフォーム DB の簡易バックアップと復元",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260731.134922-69dca2",
-      "version_confirmed_at": "2026-07-31 13:49:22"
-    },
-    {
-      "app_name": "strm",
-      "display_name": "時空資源管理",
-      "icon": "📦",
-      "description": "部屋や公用車のような時空資源の予約・使用状況閲覧",
-      "sort_order": 37.5,
-      "kind": "app",
-      "enabled": true,
-      "disclosed": true,
-      "blueprints": [
-        {
-          "attr": "strm_bp",
-          "name": "strm",
-          "module": "fujinp.strm",
-          "url_prefix": null
-        }
-      ],
-      "launchers": [
-        {
-          "icon": "📅",
-          "label": "時空資源管理（デモ用）",
-          "groups": [],
-          "params": "",
-          "section": "system",
-          "endpoint": "strm.index",
-          "dashboards": [
-            "admin"
-          ],
-          "sort_order": 50,
-          "visibility": "private",
-          "description": "会議室・公用車の予約管理",
-          "extra_class": ""
-        }
-      ],
-      "version_id": "v20260731.140501-f92cbd",
-      "version_confirmed_at": "2026-07-31 14:05:01"
     },
     {
       "app_name": "user_groups",
@@ -474,6 +363,80 @@
       "version_confirmed_at": "2026-07-31 14:05:16"
     },
     {
+      "app_name": "table_master",
+      "display_name": "テーブルマスター",
+      "icon": "🗂️",
+      "description": "データベーステーブルの閲覧・編集・管理システム",
+      "sort_order": 50.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "table_master_bp",
+          "name": "table_master",
+          "module": "fujinp.table_master",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "🗂️️",
+          "label": "テーブルマスター",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "table_master.dashboard",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 30,
+          "visibility": "private",
+          "description": "SQLテーブルの管理",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260731.133950-0df1eb",
+      "version_confirmed_at": "2026-07-31 13:39:50"
+    },
+    {
+      "app_name": "sql_saver",
+      "display_name": "SQL Saver",
+      "icon": "💾",
+      "description": "データベースを丸っとzipに保存・復元（管理者専用）",
+      "sort_order": 55.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "sql_saver_bp",
+          "name": "sql_saver",
+          "module": "fujinp.sql_saver",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "💾",
+          "label": "SQL Saver",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "sql_saver.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 40,
+          "visibility": "private",
+          "description": "プラットフォーム DB の簡易バックアップと復元",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260731.134922-69dca2",
+      "version_confirmed_at": "2026-07-31 13:49:22"
+    },
+    {
       "app_name": "user_migration",
       "display_name": "ゆーまい",
       "icon": "🛳️",
@@ -567,6 +530,43 @@
       ],
       "version_id": "v20260731.140524-e84ca5",
       "version_confirmed_at": "2026-07-31 14:05:24"
+    },
+    {
+      "app_name": "strm",
+      "display_name": "時空資源管理",
+      "icon": "📦",
+      "description": "部屋や公用車のような時空資源の予約・使用状況閲覧",
+      "sort_order": 70.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "strm_bp",
+          "name": "strm",
+          "module": "fujinp.strm",
+          "url_prefix": null
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📅",
+          "label": "時空資源管理（デモ用）",
+          "groups": [],
+          "params": "",
+          "section": "system",
+          "endpoint": "strm.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 50,
+          "visibility": "private",
+          "description": "会議室・公用車の予約管理",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20260731.140501-f92cbd",
+      "version_confirmed_at": "2026-07-31 14:05:01"
     },
     {
       "app_name": "my_md_notes",
@@ -1345,7 +1345,7 @@
             "guest"
           ],
           "sort_order": 25,
-          "visibility": "private",
+          "visibility": "public",
           "description": "フォーラム：MD記事の投稿・返信・リアクション",
           "extra_class": ""
         }

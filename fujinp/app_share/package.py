@@ -844,8 +844,10 @@ def _apply_registry(cur, app_name, pkg, user_id):
                 kind=reg.get('kind') if reg.get('kind') in ('app', 'kernel') else 'app',
                 blueprints=_m._jdump(reg.get('blueprints') or []),
                 # ★2026-08-27 旧形式（require_*）のカードは使用区分に読み替えて取り込む
-                launchers=_m._jdump([_reg.normalize_launcher(c) for c in (reg.get('launchers') or [])
-                                     if isinstance(c, dict)]),
+                # ★2026-10-01 カードの見出しは基本の表示名にそろえる（ラベル欄は廃止）
+                launchers=_m._jdump([dict(_reg.normalize_launcher(c),
+                                          label=(pkg.get('display_name') or app_name).strip())
+                                     for c in (reg.get('launchers') or []) if isinstance(c, dict)]),
                 libraries=_m._jdump(reg.get('libraries') or []),
                 config_keys=_m._jdump(reg.get('config_keys') or []),
                 version_id=pkg.get('version_id'),

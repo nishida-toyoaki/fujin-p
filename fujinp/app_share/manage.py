@@ -432,6 +432,7 @@ def api_basic(app_name):
                     ((d.get('display_name') or app_name).strip(), (d.get('icon') or '📦').strip(),
                      d.get('description') or '', kind, 1 if d.get('enabled', True) else 0,
                      sort_order, app_name))
+        _sync_launcher_labels(cur, app_name)
         conn.commit()
     return _ok()
 
@@ -500,6 +501,32 @@ def api_bp_save(app_name):
     return _ok(blueprints=items)
 
 
+def _sync_launcher_labels(cur, app_name=None):
+    """★2026-10-01 カードの見出し（launchers[].label）を基本の表示名にそろえる．
+    ランチャのラベル欄は廃止し，見出しは常に app_share_registry.display_name から作る．
+    app_name を省くと全アプリが対象．書き換えた行数を返す．"""
+    if app_name:
+        cur.execute("SELECT app_name, display_name, launchers FROM app_share_registry WHERE app_name=%s",
+                    (app_name,))
+    else:
+        cur.execute("SELECT app_name, display_name, launchers FROM app_share_registry")
+    changed = 0
+    for row in cur.fetchall():
+        name = (row.get('display_name') or row['app_name']).strip()
+        cards = _jload(row.get('launchers'), [])
+        if not isinstance(cards, list) or not cards:
+            continue
+        if all(isinstance(c, dict) and c.get('label') == name for c in cards):
+            continue
+        for c in cards:
+            if isinstance(c, dict):
+                c['label'] = name
+        cur.execute("UPDATE app_share_registry SET launchers=%s WHERE app_name=%s",
+                    (_jdump(cards), row['app_name']))
+        changed += 1
+    return changed
+
+
 # ============================================================
 # ランチャ
 # ============================================================
@@ -513,6 +540,10 @@ def api_launchers_save(app_name):
     if not _valid_app(app_name):
         return _err('アプリ名が不正です')
     d = request.get_json(silent=True) or {}
+    with _db() as (cur, conn):
+        cur.execute("SELECT display_name FROM app_share_registry WHERE app_name=%s", (app_name,))
+        r = cur.fetchone()
+    card_label = ((r or {}).get('display_name') or app_name).strip()
     items = []
     for i, c in enumerate(d.get('launchers') or []):
         ep = (c.get('endpoint') or '').strip()
@@ -522,20 +553,20 @@ def api_launchers_save(app_name):
         dashboards = [x for x in (c.get('dashboards') or []) if x in ('admin', 'guest')]
         vis = (c.get('visibility') or 'private').strip()
         if vis not in _reg.VISIBILITY_KEYS:
-            return _err(f'カード「{c.get("label")}」の使用区分が不正です: {vis!r}')
+            return _err(f'{i + 1}枚目のカードの使用区分が不正です: {vis!r}')
         if not dashboards and vis != 'open':
-            return _err(f'カード「{c.get("label")}」の配置（admin／guest）を1つ以上選んでください'
+            return _err(f'{i + 1}枚目のカードの配置（admin／guest）を1つ以上選んでください'
                         f'（配置なしでよいのは「公開（ログイン不要）」だけです）')
         groups = [g.strip() for g in (c.get('groups') or []) if g and g.strip()]
         if vis in ('group', 'domestic_group') and not groups:
-            return _err(f'カード「{c.get("label")}」はグループを1つ以上選んでください')
+            return _err(f'{i + 1}枚目のカードはグループを1つ以上選んでください')
         if vis not in ('group', 'domestic_group'):
             groups = []
         params = (c.get('params') or '').strip()
         if params and not re.match(r'^[\w]+=[^&]*(&[\w]+=[^&]*)*$', params):
-            return _err(f'カード「{c.get("label")}」の params は k=v&k=v の形です: {params!r}')
+            return _err(f'{i + 1}枚目のカードの params は k=v&k=v の形です: {params!r}')
         if ep == 'static' and 'filename=' not in params:
-            return _err(f'カード「{c.get("label")}」は static なので params に filename=… が必要です')
+            return _err(f'{i + 1}枚目のカードは static なので params に filename=… が必要です')
         try:
             so = int(c.get('sort_order') if c.get('sort_order') not in (None, '') else (i + 1) * 10)
         except (TypeError, ValueError):
@@ -545,7 +576,7 @@ def api_launchers_save(app_name):
             'section': (c.get('section') or 'guest').strip(),
             'endpoint': ep,
             'params': params,
-            'label': (c.get('label') or '').strip(),
+            'label': card_label,  # ★2026-10-01 見出しは基本の表示名（ラベル欄は廃止）
             'icon': (c.get('icon') or '').strip(),
             'description': (c.get('description') or '').strip(),
             'sort_order': so,
@@ -1329,6 +1360,7 @@ def api_publish():
     do_reload = bool(d.get('reload'))
     rt = _runtime_blueprints()
     with _db() as (cur, conn):
+        _sync_launcher_labels(cur)  # ★2026-10-01 旧データのラベルも表示名にそろえてから発行
         data = _reg.publish(cur)
         conn.commit()
     # 起動中と正本の Blueprint 集合の差（Reload が要るか）

@@ -121,8 +121,8 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
   <div class="panel" id="p-ln">
     <h2>ランチャ（ダッシュボードのカード）</h2>
     <div class="hint">1アプリが複数のカードを持てます．<b>admin／guest</b> はどのダッシュボードに置くかの配置，<b>使用区分</b> は誰に見せるか（使用コントローラー・減算方式＝表示だけを制御し，アプリ側の認可には関与しない）．
-      admin ダッシュボードでは区分を評価しません．「公開（ログイン不要）」はログイン画面にも並びます．params は url_for の引数（例 doc_id=8）．区画は置き場所の見出しだけです（<a href="{{ url_for('app_share.sections_page') }}">区画の編集</a>）．</div>
-    <table class="g"><thead><tr><th>admin</th><th>guest</th><th>区画</th><th>endpoint</th><th>params</th><th>ラベル</th><th>アイコン</th><th>説明</th><th>順</th><th>使用区分</th><th>グループ</th><th>class</th><th></th></tr></thead><tbody id="ln-rows"></tbody></table>
+      admin ダッシュボードでは区分を評価しません．「公開（ログイン不要）」はログイン画面にも並びます．params は url_for の引数（例 doc_id=8）．カードの見出しは「基本」の表示名がそのまま使われます．区画は置き場所の見出しだけです（<a href="{{ url_for('app_share.sections_page') }}">区画の編集</a>）．</div>
+    <table class="g"><thead><tr><th>admin</th><th>guest</th><th>区画</th><th>endpoint</th><th>params</th><th>アイコン</th><th>説明</th><th>順</th><th>使用区分</th><th>グループ</th><th>class</th><th></th></tr></thead><tbody id="ln-rows"></tbody></table>
     <div class="row"><button class="btn sm gray" onclick="lnAdd()">＋ カードを足す</button>
       <button class="btn sm sky" onclick="lnCheck()">🔗 endpoint 確認</button>
       <button class="btn green" onclick="saveLn()">💾 保存</button> <span class="dirty" id="ln-dirty"></span></div>
@@ -326,7 +326,6 @@ function renderLn(){
     <td><select data-k="section" data-i="${i}">${secOptions(c.section)}</select></td>
     <td><input type="text" data-k="endpoint" data-i="${i}" value="${esc(c.endpoint)}"></td>
     <td style="width:90px"><input type="text" data-k="params" data-i="${i}" value="${esc(c.params)}" placeholder="k=v"></td>
-    <td><input type="text" data-k="label" data-i="${i}" value="${esc(c.label)}"></td>
     <td style="width:60px"><input type="text" data-k="icon" data-i="${i}" value="${esc(c.icon)}"></td>
     <td><input type="text" data-k="description" data-i="${i}" value="${esc(c.description)}"></td>
     <td style="width:60px"><input type="number" data-k="sort_order" data-i="${i}" value="${esc(c.sort_order)}"></td>
