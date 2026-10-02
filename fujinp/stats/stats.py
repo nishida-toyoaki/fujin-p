@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 import os
 import time
@@ -31,7 +31,10 @@ from auth import redirect_to_dashboard
 
 
 # Blueprint設定
-stats_bp = Blueprint('stats', __name__, template_folder='stats_templates')
+# テンプレートは templates/ に置く（FUJIN-P の配布規則）。
+# アプシャ／関所の許可リストは アプリ直下の .py と templates/ 配下だけを写すため、
+# 以前の stats_templates/ ではテンプレートがパッケージにも関所にも入らなかった。
+stats_bp = Blueprint('stats', __name__, template_folder='templates')
 
 # ==========================================================================
 # アプリ規模スキャン関連
@@ -41,9 +44,16 @@ stats_bp = Blueprint('stats', __name__, template_folder='stats_templates')
 CODE_EXTENSIONS = ('.py', '.html')
 
 # スキャン時に除外するディレクトリ名
+# 後半は、アプリのコード本体ではなく作業用に生成される成果物置き場。
+# とくに import_backups は アプシャ（app_share）が取り込みのたびに
+# 対象アプリのディレクトリを丸ごと複写して残す退避先で、数えると
+# 取り込みのたびにアプシャの行数が増え続けてしまう。
+# アプシャ自身のスキャン（manage.SCAN_EXCLUDE_DIRS）と同じものを除く。
 EXCLUDED_DIR_NAMES = {
     '__pycache__', '.git', '.idea', '.vscode', 'node_modules',
     '.mypy_cache', '.pytest_cache', '.venv', 'venv', 'env',
+    'import_backups', 'import_staging', 'data_for_distribution',
+    'static',
 }
 
 # FUJINP プラットフォームのルートディレクトリ
