@@ -47,3 +47,4 @@ user_groups_bp.jinja_loader = ChoiceLoader([
 from . import routes
 from . import ledger   # 発令台帳（段階1，2026-09-07）
 from . import pids     # 永続ID（サイト間の突合，2026-09-14）
+from . import groups   # グループ管理（まいぐるの画面から移設，2026-09-24）

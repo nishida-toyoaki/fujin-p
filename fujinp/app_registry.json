@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-10-03 22:18:54",
+  "generated_at": "2026-10-03 22:58:12",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -117,18 +117,19 @@
       ],
       "launchers": [
         {
-          "icon": "🗄",
-          "label": "まいぐる（旧）",
+          "icon": "👥",
+          "label": "ユーザとグループ",
           "groups": [],
-          "params": "",
-          "section": "legacy",
-          "endpoint": "user_groups.index",
+          "params": "tab=groups",
+          "section": "admin_support",
+          "endpoint": "user_groups.ledger_page",
           "dashboards": [
-            "admin"
+            "admin",
+            "guest"
           ],
-          "sort_order": 990,
-          "visibility": "private",
-          "description": "グループ管理（旧）．「ユーザとグループ」に移行済み．やがて廃止",
+          "sort_order": 130,
+          "visibility": "public",
+          "description": "グループの作成と構成員・期間の管理（管理者は自分のグループを編集）",
           "extra_class": ""
         },
         {
@@ -148,7 +149,7 @@
         },
         {
           "icon": "🔗",
-          "label": "永続ID",
+          "label": "ユーザとグループ",
           "groups": [],
           "params": "",
           "section": "system",
@@ -932,8 +933,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20260731.140601-231f06",
-      "version_confirmed_at": "2026-07-31 14:06:01"
+      "version_id": "v20261003.221934-554e09",
+      "version_confirmed_at": "2026-10-03 22:19:35"
     },
     {
       "app_name": "document_archive",

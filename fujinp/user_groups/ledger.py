@@ -58,6 +58,10 @@ JST = timezone(timedelta(hours=9), 'JST')
 KINDS = [('org', '組織'), ('body', '会議体'), ('duty', '分担事務'), ('group', 'グループ')]
 KIND_LABEL = dict(KINDS)
 LABEL_KIND = {v: k for k, v in KINDS}
+# 台帳が扱う種別．group は 2026-09-24 に廃止（アドホックなグループはグループ画面＝groups.py で管理）．
+# 列挙値は既存データを読むために残してある．
+LEDGER_KINDS = [(k, v) for k, v in KINDS if k != 'group']
+GROUP_KIND_RETIRED = '種別「グループ」は台帳では扱いません（「グループ」タブで管理します）'
 
 MAX_DEPTH = 5           # Excel の階層列の本数
 DEFAULT_RANK = 99       # 未登録の役割を自動作成するときの序列
@@ -274,12 +278,15 @@ def _ensure_unit_path(cursor, kind, path, created):
 @user_groups_bp.route('/ledger')
 @login_required
 def ledger_page():
-    if not _is_admin():
-        from flask import url_for
-        return DENY_PAGE.format(back=url_for('user_groups.return_to_fujin')), 403
+    # 総管理者は台帳とグループ，それ以外はグループのタブだけを使う
+    is_admin = _is_admin()
+    tab = request.args.get('tab') or ''
+    if not is_admin or tab not in [k for k, _ in LEDGER_KINDS]:
+        tab = 'groups' if (not is_admin or tab == 'groups') else LEDGER_KINDS[0][0]
     return render_template('ledger.html',
-                           kinds=KINDS,
-                           is_admin=_is_admin(),
+                           kinds=LEDGER_KINDS,
+                           is_admin=is_admin,
+                           start_tab=tab,
                            today=_now().strftime('%Y-%m-%d'))
 
 
@@ -989,11 +996,7 @@ def _proposals(cursor):
         out.append({'group_name': '事務局', 'unit_id': r['id'], 'unit': '事務局', 'rules': [(None, 'include')],
                     'role_label': '所属する職員', 'recurse': True, 'kind': '組織'})
 
-    # グループ種別：台帳のグループ単位 → 同名のグループ（管理者・メンバーとも構成員）
-    cursor.execute("SELECT id, name FROM ug_units WHERE kind='group' ORDER BY sort_order, id")
-    for u in cursor.fetchall():
-        out.append({'group_name': u['name'], 'unit_id': u['id'], 'unit': u['name'],
-                    'rules': [(None, 'include')], 'role_label': '管理者・メンバー', 'recurse': False, 'kind': 'グループ'})
+    # グループ種別は 2026-09-24 に廃止（グループ画面の直接メンバーへ移す．groups.py の retire_group_kind）
 
     # 会議体：末端の単位ごとに「<名称>」（委員側）と「<名称>_事務」（事務職員）
     cursor.execute("SELECT id, name, parent_id FROM ug_units WHERE kind='body' ORDER BY sort_order, id")
@@ -2286,7 +2289,10 @@ def parse_workbook(file_obj):
             kind = LABEL_KIND.get(_s(d.get('種別')))
             name = _s(d.get('役割名'))
             if not kind:
-                warnings.append(f"役割 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明（{'／'.join(KIND_LABEL.values())}）")
+                warnings.append(f"役割 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明（{'／'.join(v for _k, v in LEDGER_KINDS)}）")
+                continue
+            if kind == 'group':
+                warnings.append(f"役割 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
                 continue
             if not name:
                 warnings.append(f"役割 {d['_row']}行: 役割名が空")
@@ -2304,6 +2310,9 @@ def parse_workbook(file_obj):
             path = _path_of(d)
             if not kind:
                 warnings.append(f"単位 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明")
+                continue
+            if kind == 'group':
+                warnings.append(f"単位 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
                 continue
             if not path:
                 warnings.append(f"単位 {d['_row']}行: 階層が空")
@@ -2351,6 +2360,9 @@ def parse_workbook(file_obj):
             role = _s(d.get('役割'))
             if not kind:
                 warnings.append(f"発令 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明")
+                continue
+            if kind == 'group':
+                warnings.append(f"発令 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
                 continue
             if not path:
                 warnings.append(f"発令 {d['_row']}行: 階層が空")

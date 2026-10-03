@@ -139,7 +139,9 @@ def check_group_permission(group_id, user_id):
 @user_groups_bp.route('/groups')
 @login_required
 def index():
-    return render_template('groups_manager.html')
+    # まいぐるの画面は 2026-09-24 に廃止．グループ管理は「ユーザとグループ」のグループタブへ移設
+    from flask import redirect, url_for
+    return redirect(url_for('user_groups.ledger_page', tab='groups'))
 
 @user_groups_bp.route('/api/admin/global_managers', methods=['GET'])
 @login_required

@@ -77,6 +77,26 @@
   .cand small { color:var(--sub); }
   .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
   .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  /* グループ（2026-09-24，まいぐるから移設） */
+  body.mode-groups #gridCtl, body.mode-groups #summary, body.mode-groups #personBox { display:none !important; }
+  body:not(.mode-groups) #groupCtl { display:none !important; }
+  .gm { display:flex; gap:12px; height:100%; }
+  .gm .lst { width:360px; flex:0 0 auto; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:6px; }
+  .gm .det { flex:1; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 16px; }
+  .gm .it { padding:6px 10px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .gm .it:hover { background:#f3f6fa; }
+  .gm .it.on { background:#e8f0fb; }
+  .gm .it small { color:var(--sub); }
+  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--sub); margin-left:4px; }
+  .tag.led { border-color:#9f7aea; color:#6b46c1; }
+  .tag.mine { border-color:var(--acc); color:var(--acc); }
+  .gm h3 { margin:0 0 4px; font-size:17px; }
+  .gm .meta { color:var(--sub); font-size:12px; margin-bottom:10px; }
+  .gm table { border-collapse:collapse; width:100%; }
+  .gm th, .gm td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; }
+  .gm tr.past td { color:#aab; }
+  .gm tr.future td { color:var(--warn); }
+  .gm .sec { margin:14px 0 6px; font-weight:600; font-size:13px; }
   .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
 </style>
 </head>
@@ -85,15 +105,15 @@
   <h1>👥 ユーザとグループ</h1>
   <span style="color:var(--sub);font-size:12px">単位 × 役割 × 人 × 期間</span>
   <nav style="margin-left:auto">
-    <a href="{{ url_for('user_groups.index') }}">グループ管理へ</a>
     <a href="{{ url_for('user_groups.return_to_fujin') }}">FUJINダッシュボードへ戻る</a>
   </nav>
 </header>
 
 <div class="bar">
   <span class="tabs" id="tabs">
-    {% for k, label in kinds %}<button data-kind="{{ k }}" {% if loop.first %}class="on"{% endif %}>{{ label }}</button>{% endfor %}
+    {% if is_admin %}{% for k, label in kinds %}<button data-kind="{{ k }}">{{ label }}</button>{% endfor %}{% endif %}<button data-kind="groups">グループ</button>
   </span>
+  <span id="gridCtl" style="display:contents">
   <span style="margin-left:12px">時点</span>
   <input type="date" id="asof" value="{{ today }}">
   <button class="btn" id="btnToday">今日</button>
@@ -102,19 +122,37 @@
   <label title="紐づいた人は users の氏名で表示（元の表記はツールチップ）"><input type="checkbox" id="useUserName" checked> 名寄せ後の氏名</label>
   <input type="search" id="filter" placeholder="表内を絞り込み（単位名・氏名）" style="width:240px;margin-left:12px">
   <span class="sp"></span>
-  <input type="search" id="person" placeholder="人から引く（全種別・全期間）" style="width:200px">
   {% if is_admin %}
+  <input type="search" id="person" placeholder="人から引く（全種別・全期間）" style="width:200px">
   <label class="btn"><input type="checkbox" id="editMode"> 編集</label>
   <button class="btn" id="btnAddUnit" style="display:none">＋単位</button>
   <button class="btn" id="btnAddRole" style="display:none">＋役割</button>
   <button class="btn" id="btnImport">Excel取込</button>
+  <a class="btn" href="{{ url_for('user_groups.ledger_export') }}">Excel出力</a>
+  <a class="btn" href="{{ url_for('user_groups.ledger_template') }}">雛形</a>
+  {% endif %}
+  </span>
+  <span id="groupCtl" style="display:contents">
+  <span style="margin-left:12px">時点</span>
+  <input type="date" id="gmAsof" value="{{ today }}">
+  <select id="gmScope" style="padding:5px">
+    <option value="all">すべてのグループ</option>
+    <option value="mine">自分が管理するグループ</option>
+    <option value="member">自分が属するグループ</option>
+    <option value="adhoc">台帳由来を除く</option>
+    <option value="ledger">台帳由来のみ</option>
+  </select>
+  <input type="search" id="gmFilter" placeholder="グループ名で絞り込み" style="width:200px">
+  <span class="sp"></span>
+  <button class="btn pri" id="gmNew" style="display:none">＋グループ</button>
+  {% if is_admin %}<button class="btn" id="gmCreators" title="グループを新しく作れる人（総管理者以外）">作成権限</button>{% endif %}
+  </span>
+  {% if is_admin %}
   <button class="btn" id="btnNames">名寄せ</button>
   <button class="btn" id="btnRoster">名簿</button>
   <button class="btn" id="btnGroups">グループ定義</button>
   <button class="btn" id="btnReq">申請<span id="reqBadge" style="display:none;background:var(--bad);color:#fff;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px"></span></button>
   {% endif %}
-  <a class="btn" href="{{ url_for('user_groups.ledger_export') }}">Excel出力</a>
-  <a class="btn" href="{{ url_for('user_groups.ledger_template') }}">雛形</a>
 </div>
 <div class="summary" id="summary"></div>
 <div class="person" id="personBox" style="display:none"></div>
@@ -202,7 +240,7 @@
 <!-- グループ定義 -->
 <div class="ov" id="ovGrp"><div class="md" style="width:980px">
   <h2>グループ定義（台帳 → user_groups）</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．「台帳を users・user_groups 等に反映する」を押すと，名簿から users と approved_users を揃え，名寄せを掛け直し，台帳の全単位について user_groups とルールを揃えます．何度押しても同じ結果になり，既にあるグループは名前も直接メンバーもそのままで，不足しているルールだけを足します．「候補」から作ると，台帳のグループ種別はその名前のまま，組織の学部等は「◯◯教員」，事務局の課・係はその名前，会議体は「◯◯」（委員側）と「◯◯_事務」（事務職員）の2つができます．同名のグループが既にあれば，そこにルールを足すだけです．</p>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．「台帳を users・user_groups 等に反映する」を押すと，名簿から users と approved_users を揃え，名寄せを掛け直し，台帳の全単位について user_groups とルールを揃えます．何度押しても同じ結果になり，既にあるグループは名前も直接メンバーもそのままで，不足しているルールだけを足します．「候補」から作ると，組織の学部等は「◯◯教員」，事務局の課・係はその名前，会議体は「◯◯」（委員側）と「◯◯_事務」（事務職員）の2つができます．同名のグループが既にあれば，そこにルールを足すだけです．アドホックなグループは「グループ」タブで管理します．「グループ種別を移す」は，以前に台帳へ写したグループ種別を同名グループの直接メンバーへ戻す移行操作です（試算を見てから実行します）．</p>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="grpTabs">
     <button class="btn on" data-t="list">いまのグループ <span></span></button>
     <button class="btn" data-t="prop">候補 <span></span></button>
@@ -211,6 +249,7 @@
     <button class="btn" id="grpSnap" title="ルールを入れる前の構成員を控えます">控えを取る</button>
     <button class="btn" id="grpCmp" title="控えといまを突き合わせます">控えと照合</button>
     <button class="btn pri" id="grpGen" style="display:none">選んだ候補を作る</button>
+    <button class="btn" id="grpRetire" title="台帳のグループ種別（旧まいぐるから写したもの）を，同名グループの直接メンバーに戻します">グループ種別を移す</button>
   </div>
   <div id="grpBody" style="max-height:60vh;overflow:auto"></div>
   <div class="foot"><button class="btn" onclick="hide('ovGrp')">閉じる</button></div>
@@ -243,12 +282,52 @@
   <div class="foot"><button class="btn" onclick="hide('ovPerson')">閉じる</button><button class="btn pri" id="pSave">保存（users にも反映）</button></div>
 </div></div>
 
+<!-- グループ（作成・編集） -->
+<div class="ov" id="ovGM"><div class="md">
+  <h2 id="gmTitle">グループ</h2>
+  <label>グループ名</label><input type="text" id="gmName">
+  <div id="gmNameNote" style="font-size:12px;color:var(--sub)"></div>
+  <label>説明</label><input type="text" id="gmDesc">
+  <label>管理者（ID・氏名の一部で検索）</label>
+  <input type="text" id="gmMgrSearch" placeholder="例：34 / 西田" autocomplete="off">
+  <div id="gmMgrCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="gmMgrPicked" style="margin-top:6px;font-size:13px"></div>
+  <label id="gmSelfRow"><input type="checkbox" id="gmSelf" checked> 管理者を今日からメンバーにも入れる</label>
+  <div class="foot"><button class="btn warn left" id="gmDel">削除</button><button class="btn" onclick="hide('ovGM')">閉じる</button><button class="btn pri" id="gmSave">保存</button></div>
+</div></div>
+
+<!-- 構成員（追加・期間の変更） -->
+<div class="ov" id="ovMem"><div class="md">
+  <h2 id="memTitle">構成員</h2>
+  <div id="memWho"></div>
+  <div id="memPickBox">
+    <label>人（ID・氏名の一部で検索．続けて何人でも選べます）</label>
+    <input type="text" id="memSearch" placeholder="例：34 / 西田" autocomplete="off">
+    <div id="memCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+    <div id="memPicked" style="margin-top:6px;font-size:13px"></div>
+  </div>
+  <div class="row"><div><label>開始（空なら最初から）</label><input type="date" id="memFrom"></div><div><label>終了（空なら無期限）</label><input type="date" id="memUntil"></div></div>
+  <div class="foot"><button class="btn warn left" id="memDel" title="行ごと消します（誤登録の取り消し用．履歴を残すなら「今日で外す」）">行を削除</button><button class="btn" onclick="hide('ovMem')">閉じる</button><button class="btn pri" id="memSave">保存</button></div>
+</div></div>
+
+<!-- 作成権限 -->
+<div class="ov" id="ovCre"><div class="md" style="width:640px">
+  <h2>グループの作成権限</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">総管理者のほかに，グループを新しく作れる人です．作った人がそのグループの管理者になります．</p>
+  <div id="creList"></div>
+  <label>追加する人</label>
+  <input type="text" id="creSearch" placeholder="例：34 / 西田" autocomplete="off">
+  <div id="creCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div class="row"><div><label>開始</label><input type="date" id="creFrom"></div><div><label>終了</label><input type="date" id="creUntil"></div></div>
+  <div class="foot"><button class="btn" onclick="hide('ovCre')">閉じる</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
 const API = '{{ url_for("user_groups.ledger_grid") }}'.replace(/\/grid$/, '');
-let kind = document.querySelector('#tabs button.on').dataset.kind;
+let kind = '{{ start_tab }}';
 let grid = null;
 let editing = false;
 
@@ -267,6 +346,10 @@ async function api(url, method='GET', body=null, form=null){
 function asOfParam(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
 
 async function load(){
+  document.body.classList.toggle('mode-groups', kind === 'groups');
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.kind === kind));
+  fitWrap();
+  if (kind === 'groups') return loadGM();
   try{
     grid = await api(`${API}/grid?kind=${kind}&as_of=${encodeURIComponent(asOfParam())}`);
     render(); loadSummary();
@@ -330,16 +413,14 @@ function applyFilter(){
 }
 
 // ── イベント ──
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); kind=b.dataset.kind; load();
-});
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { kind = b.dataset.kind; load(); });
 $('asof').onchange = load;
 $('btnToday').onclick = () => { $('asof').value = '{{ today }}'; $('allPeriod').checked=false; load(); };
 $('allPeriod').onchange = load;
 $('hideEmpty').onchange = render;
 $('useUserName').onchange = render;
 $('filter').oninput = applyFilter;
-$('person').onchange = async () => {
+if ($('person')) $('person').onchange = async () => {
   const q = $('person').value.trim(); const box = $('personBox');
   if (!q){ box.style.display='none'; return; }
   const r = await api(`${API}/persons?q=${encodeURIComponent(q)}`);
@@ -357,7 +438,7 @@ if (IS_ADMIN){
   $('btnAddRole').onclick = () => openRole(null);
 
   $('wrap').addEventListener('click', ev => {
-    if (!editing) return;
+    if (!editing || kind === 'groups') return;
     const t = ev.target;
     if (t.classList.contains('chip')) openAppt(+t.dataset.aid, t.closest('td').dataset.uid, t.closest('td').dataset.rid);
     else if (t.classList.contains('add')) openAppt(null, t.dataset.uid, t.dataset.rid);
@@ -681,6 +762,175 @@ if (IS_ADMIN){
   $('impCheck').onclick = () => runImport('check');
   $('impApply').onclick = () => { if (confirm('DBに書き込みます．よろしいですか')) runImport('apply'); };
   $('impFile').onchange = () => { $('impApply').disabled = true; $('impOut').style.display='none'; };
+}
+
+// ── グループ（2026-09-24，まいぐるから移設） ──
+const GM = API.replace(/\/api\/ledger$/, '/api/gm');
+let gmList = [], gmCan = {}, gmCur = null, gmDet = null;
+function gmAsOf(){ return $('gmAsof').value || 'today'; }
+async function loadGM(keep){
+  if (!keep) $('wrap').innerHTML = '<div class="empty">読み込み中…</div>';
+  try{
+    const r = await api(`${GM}/groups?as_of=${encodeURIComponent(gmAsOf())}`);
+    gmList = r.items; gmCan = r;
+    $('gmNew').style.display = r.can_create ? '' : 'none';
+    if (!$('gmPane')) $('wrap').innerHTML = '<div class="gm" id="gmPane"><div class="lst" id="gmLst"></div><div class="det" id="gmDet"><div class="empty">左からグループを選んでください</div></div></div>';
+    renderGMList();
+    if (gmCur && gmList.some(g => g.id === gmCur)) loadGMDetail(gmCur);
+    else if (!r.is_admin && !gmCur){ const m = gmList.find(g => g.mine) || gmList.find(g => g.member); if (m) loadGMDetail(m.id); }
+  }catch(e){ $('wrap').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}</div>`; }
+}
+function renderGMList(){
+  const sc = $('gmScope').value, q = $('gmFilter').value.trim().toLowerCase();
+  const rows = gmList.filter(g => (sc==='all' || (sc==='mine' && g.mine) || (sc==='member' && g.member) || (sc==='adhoc' && !g.ledger) || (sc==='ledger' && g.ledger))
+                                  && (!q || g.name.toLowerCase().includes(q)));
+  $('gmLst').innerHTML = `<div class="it" style="cursor:default;background:#f7f9fb"><small>${rows.length} / ${gmList.length} グループ</small></div>` +
+    rows.map(g => `<div class="it ${g.id===gmCur?'on':''}" data-gid="${g.id}"><b>${esc(g.name)}</b>${g.ledger?'<span class="tag led">台帳</span>':''}${g.mine?'<span class="tag mine">管理</span>':''}${g.member?'<span class="tag">所属</span>':''}<br><small>${g.count}名・管理者 ${esc(g.manager)}</small></div>`).join('');
+}
+$('wrap').addEventListener('click', ev => { const it = ev.target.closest('.it[data-gid]'); if (it) loadGMDetail(+it.dataset.gid); });
+$('gmScope').onchange = renderGMList;
+$('gmFilter').oninput = renderGMList;
+$('gmAsof').onchange = () => loadGM(true);
+async function loadGMDetail(gid){
+  gmCur = gid; renderGMList();
+  try{
+    const r = await api(`${GM}/groups/${gid}?as_of=${encodeURIComponent(gmAsOf())}`); gmDet = r;
+    const g = r.group, ed = r.can_edit;
+    const st = {current:'', future:'これから', past:'終了'};
+    let h = `<h3>${esc(g.name)}${g.ledger?'<span class="tag led">台帳由来</span>':''}</h3>
+      <div class="meta">${esc(g.description)}${g.description?'<br>':''}管理者：${esc(g.manager)}｜時点 ${esc(r.as_of)} の構成員 <b>${r.count}</b>名
+      ${ed ? ` <button class="btn" id="gmEdit" style="margin-left:8px">グループを編集</button>` : ''}</div>`;
+    if (r.rules.length){
+      h += `<div class="sec">台帳から導かれる構成員（${r.derived.length}名）</div><div style="font-size:12px;color:var(--sub);margin-bottom:4px">${r.rules.map(x => `${esc(x.kind)}：${esc(x.unit)}／${esc(x.role)}${x.recurse?'（配下も）':''}${x.mode==='exclude'?'（除外）':''}`).join('，')}．変えるときは台帳の発令を直します．</div>` +
+        (r.derived.map(n => `<span class="chip res">${esc(n)}</span>`).join('') || '<span style="color:var(--sub)">なし</span>');
+    }
+    h += `<div class="sec">${r.rules.length ? '直接メンバー（台帳に加えて入れる人）' : 'メンバー'}${ed ? ` <button class="btn pri" id="memAdd" style="margin-left:8px;padding:3px 10px">＋人</button>` : ''}</div>`;
+    h += r.members.length ? '<table><tr><th>氏名</th><th>開始</th><th>終了</th><th>状態</th>' + (ed ? '<th></th>' : '') + '</tr>' +
+      r.members.map(m => `<tr class="${m.state}"><td>${esc(m.name)}${m.dropped?' <small style="color:var(--bad)">（除外ルールで外れています）</small>':''}</td><td>${esc(m.from)}</td><td>${esc(m.until)}</td><td>${st[m.state]}</td>` +
+        (ed ? `<td style="white-space:nowrap"><button class="btn" data-medit="${m.id}" style="padding:2px 8px">期間</button> ${m.state==='current' ? `<button class="btn" data-mend="${m.id}" style="padding:2px 8px">今日で外す</button>` : ''}</td>` : '') + '</tr>').join('') + '</table>'
+      : '<div style="color:var(--sub)">いません</div>';
+    $('gmDet').innerHTML = h;
+  }catch(e){ $('gmDet').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}</div>`; }
+}
+
+// 人を検索して選ぶ（管理者・構成員・作成権限で共用）
+function picker(input, box, onPick){
+  let t = null;
+  input.oninput = () => { clearTimeout(t); const q = input.value.trim(); if (!q){ box.style.display='none'; return; }
+    t = setTimeout(async () => { try{ const r = await api(`${GM}/users?q=${encodeURIComponent(q)}`);
+      box.innerHTML = r.items.length ? r.items.map(u => `<div class="cand" data-uid="${u.id}" data-name="${esc(u.full_name)}">#${u.id} <b>${esc(u.full_name)}</b> <small>${esc(u.email)}${u.inactive?'（停止中）':''}</small></div>`).join('') + (r.more ? `<div class="cand"><small>ほか ${r.more} 件．絞り込んでください</small></div>` : '')
+        : '<div class="cand"><small>該当なし</small></div>'; box.style.display='block'; }catch(e){} }, 250); };
+  box.onclick = ev => { const c = ev.target.closest('.cand[data-uid]'); if (!c) return; onPick({id:+c.dataset.uid, name:c.dataset.name}); box.style.display='none'; input.value=''; input.focus(); };
+}
+
+// グループの作成・編集
+let gmMgr = null;
+function showMgr(){ $('gmMgrPicked').innerHTML = gmMgr ? `<span class="picked">#${gmMgr.id} ${esc(gmMgr.name)}</span>` : ''; }
+picker($('gmMgrSearch'), $('gmMgrCand'), u => { gmMgr = u; showMgr(); });
+function openGM(isNew){
+  const g = isNew ? null : gmDet.group;
+  $('gmTitle').textContent = isNew ? 'グループを作る' : 'グループを編集';
+  $('gmName').value = g ? g.name : ''; $('gmName').disabled = !!(g && g.ledger);
+  $('gmNameNote').textContent = g && g.ledger ? '台帳由来のグループは台帳の単位名で決まるので，ここでは改名できません' : '';
+  $('gmDesc').value = g ? g.description : '';
+  gmMgr = g ? {id:g.manager_id, name:g.manager} : null; showMgr();
+  $('gmSelfRow').style.display = isNew ? '' : 'none';
+  $('gmDel').style.display = (g && !g.ledger) ? '' : 'none';
+  $('gmSave').dataset.new = isNew ? '1' : '';
+  show('ovGM'); $('gmName').focus();
+}
+$('gmNew').onclick = () => openGM(true);
+$('wrap').addEventListener('click', ev => { if (ev.target.id === 'gmEdit') openGM(false); });
+$('gmSave').onclick = async () => {
+  const body = {name:$('gmName').value.trim(), description:$('gmDesc').value};
+  if (gmMgr) body.manager_user_id = gmMgr.id;
+  try{
+    if ($('gmSave').dataset.new){ body.manager_is_member = $('gmSelf').checked; const r = await api(`${GM}/groups`, 'POST', body); gmCur = r.id; toast('作りました'); }
+    else { if (gmDet.group.ledger) delete body.name; await api(`${GM}/groups/${gmCur}`, 'PUT', body); toast('保存しました'); }
+    hide('ovGM'); loadGM(true);
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('gmDel').onclick = async () => {
+  const g = gmDet.group;
+  if (!confirm(`グループ「${g.name}」を削除します．メンバーの記録も消え，このグループで閲覧を絞っているアプリでは誰も見られなくなります．よろしいですか`)) return;
+  try{ await api(`${GM}/groups/${g.id}`, 'DELETE'); hide('ovGM'); gmCur = null; $('gmDet').innerHTML = '<div class="empty">削除しました</div>'; loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 構成員
+let memEdit = null, memPick = [];
+function showMemPick(){ $('memPicked').innerHTML = memPick.map((u,i) => `<span class="picked" style="margin:2px">#${u.id} ${esc(u.name)}<span class="x" data-i="${i}">✕</span></span>`).join(''); }
+picker($('memSearch'), $('memCand'), u => { if (!memPick.some(x => x.id === u.id)) memPick.push(u); showMemPick(); });
+$('memPicked').onclick = ev => { if (ev.target.dataset.i !== undefined){ memPick.splice(+ev.target.dataset.i, 1); showMemPick(); } };
+function openMem(m){
+  memEdit = m; memPick = []; showMemPick();
+  $('memTitle').textContent = m ? '期間を変える' : `メンバーを加える（${gmDet.group.name}）`;
+  $('memWho').innerHTML = m ? `<b>${esc(m.name)}</b>` : '';
+  $('memPickBox').style.display = m ? 'none' : '';
+  $('memFrom').value = m ? m.from.slice(0,10) : '{{ today }}'; $('memUntil').value = m ? m.until.slice(0,10) : '';
+  $('memDel').style.display = m ? '' : 'none';
+  show('ovMem'); if (!m) $('memSearch').focus();
+}
+$('wrap').addEventListener('click', async ev => {
+  const t = ev.target;
+  if (t.id === 'memAdd') openMem(null);
+  else if (t.dataset.medit) openMem(gmDet.members.find(m => m.id === +t.dataset.medit));
+  else if (t.dataset.mend){ const m = gmDet.members.find(x => x.id === +t.dataset.mend);
+    if (!confirm(`${m.name} を今日で外します（記録は残ります）．よろしいですか`)) return;
+    try{ await api(`${GM}/members/${m.id}`, 'PUT', {end_now:true}); toast('外しました'); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); } }
+});
+$('memSave').onclick = async () => {
+  const per = {valid_from:$('memFrom').value, valid_until:$('memUntil').value};
+  try{
+    if (memEdit){ await api(`${GM}/members/${memEdit.id}`, 'PUT', per); toast('保存しました'); }
+    else { if (!memPick.length){ toast('人を選んでください'); return; }
+      const r = await api(`${GM}/groups/${gmCur}/members`, 'POST', {user_ids: memPick.map(u => u.id), ...per});
+      toast(`${r.added}名を加えました` + (r.skipped ? `｜期間が重なるため見送り：${r.skipped.join('，')}` : ''), r.skipped ? 6000 : 2200); }
+    hide('ovMem'); loadGM(true);
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('memDel').onclick = async () => {
+  if (!confirm(`${memEdit.name} のこの行を削除します（誤登録の取り消し用です）．よろしいですか`)) return;
+  try{ await api(`${GM}/members/${memEdit.id}`, 'DELETE'); hide('ovMem'); toast('削除しました'); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 作成権限（総管理者のみ）
+if (IS_ADMIN){
+  async function loadCre(){
+    try{ const r = await api(`${GM}/creators`);
+      $('creList').innerHTML = r.items.length ? '<table class="nm-table"><tr><th>氏名</th><th>開始</th><th>終了</th><th></th></tr>' +
+        r.items.map(i => `<tr style="${i.state==='past'?'color:#aab':''}"><td>${esc(i.name)}</td><td>${esc(i.from)}</td><td>${esc(i.until)}</td><td><button class="btn" data-cdel="${i.id}">外す</button></td></tr>`).join('') + '</table>'
+        : '<div style="color:var(--sub)">いません（総管理者だけが作れます）</div>';
+    }catch(e){ $('creList').textContent = '失敗：' + e.message; }
+  }
+  $('gmCreators').onclick = () => { show('ovCre'); loadCre(); };
+  picker($('creSearch'), $('creCand'), async u => {
+    if (!confirm(`${u.name} にグループの作成権限を与えますか`)) return;
+    try{ const r = await api(`${GM}/creators`, 'POST', {user_id:u.id, valid_from:$('creFrom').value, valid_until:$('creUntil').value}); toast(r.updated ? '期間を書き換えました' : '与えました'); loadCre(); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
+  $('creList').onclick = async ev => { const id = ev.target.dataset.cdel; if (!id) return; if (!confirm('作成権限を外しますか（作ったグループはそのまま残ります）')) return;
+    try{ await api(`${GM}/creators/${id}`, 'DELETE'); loadCre(); }catch(e){ toast('失敗：'+e.message, 5000); } };
+
+  // 台帳のグループ種別 → 直接メンバー（移行）
+  $('grpRetire').onclick = async () => {
+    try{
+      const r = await api(`${GM}/retire_group_kind`, 'POST', {dry:true});
+      if (!r.units){ toast('台帳にグループ種別の単位はありません（移行済み）', 5000); return; }
+      let h = `<div style="margin-bottom:8px">試算：グループ種別の単位 ${r.units} 件のうち，移せるもの ${r.moved.length} 件（直接メンバーを ${r.rows_added} 行追加・管理者の付け替え ${r.managers_set} 件・グループ新規 ${r.groups_created} 件）．残るもの ${r.kept.length} 件．</div>`;
+      h += r.diffs.length ? `<div style="color:var(--bad);margin-bottom:6px">いまの構成員が変わるグループが ${r.diffs.length} 件あります</div><table class="nm-table"><tr><th>グループ</th><th>増える人</th><th>減る人</th></tr>` + r.diffs.map(d => `<tr><td>${esc(d.group)}</td><td>${esc(d.added.join('，'))}</td><td>${esc(d.removed.join('，'))}</td></tr>`).join('') + '</table>'
+        : '<div style="color:var(--acc);margin-bottom:6px">いまの構成員は全グループで変わりません</div>';
+      if (r.kept.length) h += '<div class="sec" style="margin-top:8px">移さずに残るもの</div><table class="nm-table">' + r.kept.map(k => `<tr><td>${esc(k.name)}</td><td>${esc(k.reason)}</td></tr>`).join('') + '</table>';
+      if (r.moved.length) h += `<div style="margin-top:10px"><button class="btn pri" id="grpRetireGo">この内容で移す（${r.moved.length} 件）</button></div>`;
+      $('grpBody').innerHTML = h;
+    }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+  $('grpBody').addEventListener('click', async ev => {
+    if (ev.target.id !== 'grpRetireGo') return;
+    if (!confirm('台帳のグループ種別を直接メンバーに移し，移した単位を台帳から消します．よろしいですか')) return;
+    try{ const r = await api(`${GM}/retire_group_kind`, 'POST', {dry:false});
+      toast(`移しました：${r.moved.length} 件（直接メンバー ${r.rows_added} 行）${r.kept.length ? `｜残り ${r.kept.length} 件` : ''}${r.diffs.length ? `｜構成員が変わったグループ ${r.diffs.length} 件` : ''}`, 8000);
+      $('grpBody').innerHTML = ''; loadGrp();
+    }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
 }
 
 function fitWrap(){ const w = $('wrap'); const top = w.getBoundingClientRect().top + window.scrollY; w.style.height = Math.max(200, window.innerHeight - top - 8) + 'px'; }
