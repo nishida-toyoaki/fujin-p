@@ -1,0 +1,200 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スケルトンに基づく文書生成 - あわみ</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+       background: #f4f6f8; color: #2b3440; line-height: 1.75; padding: 18px 20px 28px; }
+h1 { font-size: 1.2em; margin-bottom: 2px; }
+.sub { color: #7a8694; font-size: .82em; margin-bottom: 12px; }
+.intro { font-size: .92em; margin-bottom: 14px; }
+.conn { border-radius: 6px; padding: 7px 12px; font-size: .84em; margin-bottom: 14px; }
+.conn.ok { background: #e4f3e8; color: #21663a; }
+.conn.ng { background: #fdecea; color: #9b2c1f; }
+.step { background: #fff; border: 1px solid #dde3ea; border-radius: 8px;
+        padding: 12px 16px 14px; margin-bottom: 12px; display: flex; gap: 14px; }
+.step .no { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%;
+            background: #35618f; color: #fff; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.step .body { flex: 1 1 auto; }
+.step h2 { font-size: 1em; margin-bottom: 4px; }
+.step p { font-size: .9em; margin-bottom: 4px; }
+.step .act { margin-top: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { padding: 7px 16px; border: none; border-radius: 6px; color: #fff; font-size: .9em;
+       cursor: pointer; font-family: inherit; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.req { background: #8a5a2b; }
+.btn.run { background: #2f7a6a; }
+.msg { font-size: .84em; color: #5a6672; }
+.msg.ok { color: #21663a; }
+.msg.bad { color: #9b2c1f; }
+code { background: #eef2f6; border-radius: 3px; padding: 0 4px; font-size: .9em; }
+.notes { font-size: .84em; color: #5a6672; margin-top: 16px; }
+.notes h3 { font-size: .95em; color: #2b3440; margin-bottom: 4px; }
+.notes p { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1>📑 スケルトンに基づく文書生成</h1>
+<div class="sub">キャンバス「{{ canvas.name }}」</div>
+
+<p class="intro">キャンバスのノードを素材に，構成をClaudeに考えてもらい，各ノードの文書を流し込んで一つのHTML文書に仕上げます．
+下の1から4の順に進めてください．</p>
+
+<div class="conn" id="conn"></div>
+
+<div class="step">
+  <div class="no">1</div>
+  <div class="body">
+    <h2>スケルトン依頼をダウンロードする</h2>
+    <p>依頼文にこのキャンバスの全ダンプ（ノードと結合子のすべて）を付けた .md ファイルが1本ダウンロードされます．</p>
+    <div class="act">
+      <button class="btn req" id="btnReq">🧠 スケルトン依頼</button>
+      <span class="msg" id="msgReq"></span>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="no">2</div>
+  <div class="body">
+    <h2>Claudeに渡して，作りたい文書を伝える</h2>
+    <p>ダウンロードした .md をClaudeのチャットにアップロードし，作りたい文書の狙い・読者・構成の希望を書き添えて送ります．</p>
+    <p>例：「この文書からFUJIN-Pに関わる情報を取り出し構造化して，スケルトン依頼に従ってスケルトンを生成してください．」</p>
+    <p>Claudeは <code>awami_skeleton.json</code> を返し，採用しなかったノードと確かめたい点をチャットで報告します．構成に注文があれば，そのままチャットで直してもらいます．</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="no">3</div>
+  <div class="body">
+    <h2>スケルトンで展開する</h2>
+    <p>Claudeから受け取った <code>awami_skeleton.json</code> を選ぶと，各ノードの文書を取得してスケルトンに流し込み，一つのHTMLとしてダウンロードさせます．</p>
+    <p>文書の数によっては数十秒かかります．進み具合はボタンの横に出ます．</p>
+    <div class="act">
+      <button class="btn run" id="btnRun">📂 スケルトンで展開</button>
+      <input type="file" id="skeletonFile" accept=".json,.md,.txt,application/json" style="display:none;">
+      <span class="msg" id="msgRun"></span>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="no">4</div>
+  <div class="body">
+    <h2>仕上がりを確かめる</h2>
+    <p>ダウンロードしたHTMLをブラウザで開きます．目次は節番号と文書番号の二系統で，各文書には原文へのリンクが付きます．</p>
+    <p>取得できなかった文書やラベルの食い違いは，文書の冒頭とボタンの横に表示されます．ブラウザの印刷でPDFにもできます．</p>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>知っておくと便利なこと</h3>
+  <p>このページはキャンバスの画面と組になって動きます．展開が終わるまで，キャンバスの画面を閉じたり別のキャンバスに移ったりしないでください．</p>
+  <p>同じサイトの文書は，いまのログイン状態のまま取得します．他サイトの文書は，ログインなしで読める範囲だけを取得します．</p>
+  <p>スケルトンは何度でも使えます．ノードの文書を書き直したあとは，同じ <code>awami_skeleton.json</code> で3をやり直せば最新の中身で作り直せます．</p>
+  <p>ノードを足したり結合子を変えたりして構成から見直したいときは，1からやり直します．</p>
+</div>
+
+<script>
+const CANVAS_ID = {{ canvas.id }};
+
+function host() {
+    try {
+        const w = window.opener;
+        if (w && !w.closed && w.awamiSkeleton && w.awamiSkeleton.canvasId === CANVAS_ID) return w.awamiSkeleton;
+    } catch (e) {}
+    return null;
+}
+function setMsg(id, text, kind) {
+    const el = document.getElementById(id);
+    el.textContent = text || '';
+    el.className = 'msg' + (kind ? ' ' + kind : '');
+}
+function checkConn() {
+    const h = host();
+    const el = document.getElementById('conn');
+    if (h) {
+        el.className = 'conn ok';
+        el.textContent = '✅ キャンバス「' + h.canvasName + '」の画面とつながっています．';
+    } else {
+        el.className = 'conn ng';
+        el.textContent = '⚠ キャンバスの画面が見つかりません．キャンバスを開き，🧩ノード統合文書生成のパネルにある「📑 スケルトンに基づく文書生成」からこのページを開き直してください．';
+    }
+    const busy = !!(h && h.isBusy());
+    document.getElementById('btnReq').disabled = !h;
+    document.getElementById('btnRun').disabled = !h || busy;
+    return h;
+}
+function download(content, filename, type) {
+    const blob = new Blob([content], { type: type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+// 1. スケルトン依頼
+document.getElementById('btnReq').addEventListener('click', async function() {
+    const h = checkConn();
+    if (!h) return;
+    setMsg('msgReq', '⏳ 依頼文を用意しています…');
+    try {
+        const r = await h.requestText();
+        download(r.text, r.filename, 'text/markdown;charset=utf-8');
+        setMsg('msgReq', '✅ ' + r.filename + ' をダウンロードしました（ノード' + r.nodeCount +
+               '，結合子' + r.edgeCount + '）．2へ進んでください．', 'ok');
+    } catch (e) {
+        setMsg('msgReq', '⚠ ' + (e && e.message || e), 'bad');
+    }
+});
+
+// 3. スケルトンで展開
+document.getElementById('btnRun').addEventListener('click', function() {
+    if (!checkConn()) return;
+    document.getElementById('skeletonFile').click();
+});
+document.getElementById('skeletonFile').addEventListener('change', function() {
+    const f = this.files && this.files[0];
+    this.value = '';
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = async function() {
+        let sk;
+        const raw = String(reader.result).replace(/^\uFEFF/, '');
+        try { sk = JSON.parse(raw); }
+        catch (e) {
+            // ```json … ``` で囲まれた返答をそのまま保存した場合も読む
+            const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+            try { sk = m ? JSON.parse(m[1]) : null; } catch (e2) { sk = null; }
+            if (!sk) { setMsg('msgRun', '⚠ スケルトンをJSONとして読めませんでした：' + e, 'bad'); return; }
+        }
+        const h = checkConn();
+        if (!h) return;
+        document.getElementById('btnRun').disabled = true;
+        setMsg('msgRun', '⏳ 「' + (sk.title || f.name) + '」を展開しています…');
+        await h.expand(sk, {
+            status: t => setMsg('msgRun', t),
+            result: (m, err) => setMsg('msgRun', (err ? '⚠ ' : '✅ ') + m + (err ? '' : '．4へ進んでください．'), err ? 'bad' : 'ok'),
+            download: download
+        });
+        checkConn();
+    };
+    reader.readAsText(f, 'utf-8');
+});
+
+checkConn();
+setInterval(checkConn, 2000);
+</script>
+</body>
+</html>

@@ -285,6 +285,10 @@ body {
                    placeholder="統合文書名（CoRePoプロジェクト名）">
             <button class="btn danger" id="mergeDoneDelete">選択したノードを消去して完了</button>
             <button class="btn" id="mergeDoneKeep">そのまま完了</button>
+            <button class="btn" id="mergeExpand" style="background:#35618f;"
+                    title="選択したノード（選択なしならキャンバス全体）の文書を一つのHTMLにしてダウンロード">📥 種文書を展開</button>
+            <button class="btn" id="mergeSkelGuide" style="background:#8a5a2b;"
+                    title="作業の手引きと「スケルトン依頼」「スケルトンで展開」のボタンが付いたページを開く">📑 スケルトンに基づく文書生成</button>
             <button class="btn secondary" id="mergeCancel">キャンセル</button>
         </div>
     </div>
@@ -1242,7 +1246,8 @@ function updateMergeHighlights() {
         layer.appendChild(c); layer.appendChild(t);
     });
     $('#mergeStatus').text('🧩 選択：' + mergeMode.order.length +
-        '個（クリックで選択順に番号づけ／再クリックで解除）');
+        '個（クリックで選択順に番号づけ／再クリックで解除）' +
+        (mergeMode.order.length ? '' : '．未選択のまま「種文書を展開」でキャンバス全体'));
     $('#mergePanel').show();
 }
 function pad2(v) { return (v < 10 ? '0' : '') + v; }
@@ -1265,7 +1270,7 @@ $('#mergeCancel').on('click', function() {
     mergeMode = null; updateMergeHighlights();
 });
 function setMergeBusy(busy) {
-    $('#mergeDoneDelete, #mergeDoneKeep, #mergeCancel').prop('disabled', busy);
+    $('#mergeDoneDelete, #mergeDoneKeep, #mergeCancel, #mergeExpand, #mergeSkelGuide').prop('disabled', busy);
     if (busy) $('#mergeStatus').text('⏳ CoRePoに統合文書を作成中…');
 }
 // 選択順に「1. [ラベル](URL)」の並びを作る（URL無しノードはリンクなしの行）
@@ -1394,6 +1399,509 @@ $('#mergeDoneDelete').on('click', function() {
 $('#mergeDoneKeep').on('click', function() {
     finishMerge(false);
 });
+// =============== 種文書を展開（ダウンロード） ===============
+// 選択したノード（選択なしならキャンバス全体を構造順に）の実体URLが指す文書を
+// 取得し，目次つきの一つのHTMLにまとめてダウンロードする。
+//  ・同一サイトの文書：閲覧者のログイン状態のままブラウザで取得し，隠しiframeで
+//    描画させてから中身を写す（mermaid等ブラウザ側で描く図も描画後の姿で残る）。
+//    画像とスタイルシートはファイルに埋め込むので，手元でそのまま読める。
+//  ・他サイトの文書：サーバの中継口（seed_fetch）で取得する（ログインなしで読める範囲）。
+//  ・各文書は宣言型Shadow DOMに入れ，文書ごとのCSSが互いに干渉しないようにする。
+const SEED_FETCH_URL = API_BASE + 'canvas/' + CANVAS_ID + '/seed_fetch';
+const SEED_IMG_MAX = 8 * 1024 * 1024;           // 埋め込む画像1枚の上限
+const SEED_EMBED_TOTAL_MAX = 120 * 1024 * 1024; // 埋め込み総量の上限（超えたら参照のまま）
+const SEED_SETTLE_MS = 1500;                    // iframe読込後，ブラウザ側の描画を待つ時間
+const SEED_LOAD_TIMEOUT_MS = 30000;
+const SEED_WORKERS = 3;
+
+function seedByPos(a, b) {
+    // ほぼ同じ高さ（60px以内）なら左から，そうでなければ上から
+    const p = state.nodes[a], q = state.nodes[b];
+    return Math.abs(p.y - q.y) < 60 ? (p.x - q.x) : (p.y - q.y);
+}
+// キャンバス全体の構造順：どの結合子の出力側にも立たないノード（根）を上から順に，
+// 結合子の入力→出力を深さ優先でたどる。複数の親を持つノードは最初に到達した位置に置く。
+function seedStructureOrder() {
+    const ids = Object.keys(state.nodes).map(Number);
+    const isOutput = {}, childEdges = {};
+    state.edges.forEach(function(e) {
+        e.outputs.forEach(o => isOutput[o] = true);
+        e.inputs.forEach(i => (childEdges[i] = childEdges[i] || []).push(e));
+    });
+    const lead = e => e.outputs.filter(o => state.nodes[o]).sort(seedByPos)[0];
+    const seen = {}, out = [];
+    function visit(id, depth, rel) {
+        seen[id] = true;
+        out.push({ id: id, depth: depth, rel: rel });
+        (childEdges[id] || []).filter(e => lead(e) !== undefined)
+            .sort((a, b) => seedByPos(lead(a), lead(b)))
+            .forEach(function(e) {
+                e.outputs.filter(o => state.nodes[o]).sort(seedByPos).forEach(function(o) {
+                    if (!seen[o]) visit(o, depth + 1, e.type_name);
+                });
+            });
+    }
+    ids.filter(id => !isOutput[id]).sort(seedByPos).forEach(id => { if (!seen[id]) visit(id, 0, null); });
+    ids.sort(seedByPos).forEach(id => { if (!seen[id]) visit(id, 0, null); });  // 循環だけの部分
+    return out;
+}
+function seedEsc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function seedLooksLogin(u) {
+    try { return /\/(login|signin)(\/|$)/i.test(new URL(u).pathname); } catch (e) { return false; }
+}
+function seedAbs(v, base) {
+    if (!v || /^(data:|blob:|mailto:|tel:|javascript:|#)/i.test(v.trim())) return v;
+    try { return new URL(v.trim(), base).href; } catch (e) { return v; }
+}
+function seedCssAbs(css, base) {
+    return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, function(m, q, u) {
+        return 'url("' + seedAbs(u, base) + '")';
+    });
+}
+// 文書のスタイルシートを Shadow DOM 内で効くように読み替える
+// （:root・html → :host，body → 本文の器 .seed-root）
+function seedScopeCss(css) {
+    return css.replace(/(^|[\s,{}>+~(])(:root|html|body)(?=[\s,{.:#\[>+~)]|$)/gm, function(m, pre, sel) {
+        return pre + (sel === 'body' ? '.seed-root' : ':host');
+    });
+}
+function seedBlobToDataUrl(blob) {
+    return new Promise(function(res, rej) {
+        const r = new FileReader();
+        r.onload = () => res(r.result); r.onerror = rej;
+        r.readAsDataURL(blob);
+    });
+}
+let seedEmbedded = 0;
+async function seedEmbedImage(url) {
+    if (seedEmbedded > SEED_EMBED_TOTAL_MAX) return null;
+    try {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        if (!r.ok) return null;
+        const b = await r.blob();
+        if (b.size > SEED_IMG_MAX || !/^image\//.test(b.type)) return null;
+        seedEmbedded += b.size;
+        return await seedBlobToDataUrl(b);
+    } catch (e) { return null; }
+}
+// iframeで描画させ，描画後の文書を返す（同一サイトのみ）
+function seedRenderInIframe(url) {
+    return new Promise(function(resolve, reject) {
+        const f = document.createElement('iframe');
+        f.style.cssText = 'position:absolute;left:-12000px;top:0;width:1100px;height:900px;border:0;';
+        let done = false;
+        const finish = function(fn, v) { if (done) return; done = true; clearTimeout(timer); fn(v); };
+        const timer = setTimeout(() => { finish(reject, new Error('timeout')); f.remove(); }, SEED_LOAD_TIMEOUT_MS);
+        f.onload = function() {
+            setTimeout(function() {
+                try {
+                    const href = f.contentWindow.location.href;
+                    const doc = f.contentDocument;
+                    finish(resolve, { href: href, doc: doc, frame: f });
+                } catch (e) { finish(reject, e); f.remove(); }
+            }, SEED_SETTLE_MS);
+        };
+        f.src = url;
+        document.body.appendChild(f);
+    });
+}
+// 文書（live でも DOMParser 産でもよい）から，スタイルと本文を写し取って
+// Shadow DOM に入れる中身（HTML文字列）を作る
+async function seedHarvest(doc, base, sameOrigin) {
+    const styles = [];
+    for (const el of Array.from(doc.querySelectorAll('style, link[rel~="stylesheet"]'))) {
+        if (el.tagName === 'STYLE') {
+            styles.push('<style>' + seedScopeCss(seedCssAbs(el.textContent, base)) + '</style>');
+            continue;
+        }
+        const href = seedAbs(el.getAttribute('href'), base);
+        let inlined = false;
+        if (sameOrigin && new URL(href, location.href).origin === location.origin) {
+            try {
+                const r = await fetch(href, { credentials: 'same-origin' });
+                if (r.ok) { styles.push('<style>' + seedScopeCss(seedCssAbs(await r.text(), href)) + '</style>'); inlined = true; }
+            } catch (e) {}
+        }
+        if (!inlined) styles.push('<link rel="stylesheet" href="' + seedEsc(href) + '">');
+    }
+    const body = (doc.body || doc.documentElement).cloneNode(true);
+    body.querySelectorAll('script, noscript, base, meta, link, style').forEach(el => el.remove());
+    // 本文中の <style> も上の走査（文書全体）で拾い済みなので，ここでは除くだけ
+    for (const el of Array.from(body.querySelectorAll('*'))) {
+        for (const a of Array.from(el.attributes)) {
+            if (/^on/i.test(a.name)) el.removeAttribute(a.name);
+        }
+        ['src', 'href', 'poster', 'data', 'action'].forEach(function(n) {
+            if (el.hasAttribute(n)) el.setAttribute(n, seedAbs(el.getAttribute(n), base));
+        });
+        if (el.hasAttribute('srcset')) {
+            el.setAttribute('srcset', el.getAttribute('srcset').split(',').map(function(p) {
+                const t = p.trim().split(/\s+/); t[0] = seedAbs(t[0], base); return t.join(' ');
+            }).join(', '));
+        }
+        if (el.hasAttribute('style')) el.setAttribute('style', seedCssAbs(el.getAttribute('style'), base));
+        if (el.tagName === 'A' && el.getAttribute('href') && !/^#/.test(el.getAttribute('href'))) {
+            el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener');
+        }
+    }
+    if (sameOrigin) {
+        for (const img of Array.from(body.querySelectorAll('img[src]'))) {
+            const src = img.getAttribute('src');
+            if (/^data:/i.test(src)) continue;
+            let o; try { o = new URL(src).origin; } catch (e) { continue; }
+            if (o !== location.origin) continue;
+            const d = await seedEmbedImage(src);
+            if (d) { img.setAttribute('src', d); img.removeAttribute('srcset'); }
+        }
+    }
+    const cls = doc.body ? (doc.body.getAttribute('class') || '') : '';
+    const sty = doc.body ? (doc.body.getAttribute('style') || '') : '';
+    return '<style>:host{display:block;contain:layout paint;}' +
+           '.seed-root{max-width:100%;overflow-x:auto;}</style>' + styles.join('') +
+           '<div class="seed-root ' + seedEsc(cls) + '" style="' + seedEsc(seedCssAbs(sty, base)) + '">' +
+           body.innerHTML + '</div>';
+}
+// 1つのURLを取得して {kind, html?, note?} を返す
+async function seedLoad(absUrl, sameOrigin) {
+    if (sameOrigin) {
+        let r;
+        try { r = await fetch(absUrl, { credentials: 'same-origin' }); }
+        catch (e) { return { kind: 'error', note: '取得できませんでした' }; }
+        if (seedLooksLogin(r.url)) return { kind: 'error', note: 'ログインが必要なページに転送されました' };
+        if (!r.ok) return { kind: 'error', note: 'HTTP ' + r.status };
+        const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+        if (ct.startsWith('image/')) {
+            const d = await seedEmbedImage(absUrl);
+            return d ? { kind: 'html', html: '<img src="' + d + '" style="max-width:100%">' }
+                     : { kind: 'link', note: '画像（大きいため参照のみ）' };
+        }
+        if (ct.includes('pdf')) return { kind: 'link', note: 'PDF文書（原文リンクから開いてください）' };
+        if (!ct.includes('html')) return { kind: 'link', note: 'HTML以外の文書（' + ct + '）' };
+        try {
+            const v = await seedRenderInIframe(absUrl);
+            if (seedLooksLogin(v.href)) { v.frame.remove(); return { kind: 'error', note: 'ログインが必要なページに転送されました' }; }
+            const html = await seedHarvest(v.doc, v.doc.baseURI || absUrl, true);
+            v.frame.remove();
+            return { kind: 'html', html: html };
+        } catch (e) {
+            // 描画に失敗したら，取得済みのHTMLをそのまま使う
+            try {
+                const doc = new DOMParser().parseFromString(await r.clone().text(), 'text/html');
+                return { kind: 'html', html: await seedHarvest(doc, r.url, true),
+                         note: '描画前のHTMLから取り込みました' };
+            } catch (e2) { return { kind: 'error', note: '本文を読み取れませんでした' }; }
+        }
+    }
+    let resp;
+    try {
+        resp = await $.ajax({ url: SEED_FETCH_URL, method: 'POST', contentType: 'application/json',
+                              data: JSON.stringify({ url: absUrl }) });
+    } catch (xhr) {
+        let m = null; try { m = JSON.parse(xhr.responseText).error; } catch (e) {}
+        return { kind: 'error', note: m || ('中継取得に失敗（HTTP ' + (xhr.status || '応答なし') + '）') };
+    }
+    if (!resp || !resp.success) return { kind: 'error', note: (resp && resp.error) || '中継取得に失敗' };
+    if (seedLooksLogin(resp.final_url)) return { kind: 'error', note: '他サイトの文書で，ログインが必要です' };
+    if (resp.status && resp.status >= 400) return { kind: 'error', note: 'HTTP ' + resp.status };
+    if (resp.too_large) return { kind: 'link', note: '大きすぎるため参照のみ' };
+    const ct = (resp.content_type || '').toLowerCase();
+    if (ct.startsWith('image/')) return { kind: 'html', html: '<img src="' + seedEsc(absUrl) + '" style="max-width:100%">' };
+    if (!resp.html) return { kind: 'link', note: ct.includes('pdf') ? 'PDF文書（原文リンクから開いてください）'
+                                                                    : 'HTML以外の文書（' + ct + '）' };
+    const doc = new DOMParser().parseFromString(resp.html, 'text/html');
+    const b = doc.querySelector('base[href]');
+    return { kind: 'html', html: await seedHarvest(doc, b ? seedAbs(b.getAttribute('href'), resp.final_url) : resp.final_url, false) };
+}
+// ---- 地の文（Markdown）の描画：marked を必要になったときだけ cdnjs から読む ----
+let seedMarkedPromise = null;
+function seedLoadMarked() {
+    if (window.marked) return Promise.resolve(window.marked);
+    if (!seedMarkedPromise) {
+        seedMarkedPromise = new Promise(function(res) {
+            const sc = document.createElement('script');
+            sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js';
+            sc.onload = () => res(window.marked || null);
+            sc.onerror = () => res(null);
+            document.head.appendChild(sc);
+        });
+    }
+    return seedMarkedPromise;
+}
+function seedMd(text, mk) {
+    if (!text) return '';
+    let html;
+    if (mk) html = mk.parse(String(text));
+    else html = String(text).split(/\n{2,}/).map(p => '<p>' + seedEsc(p).replace(/\n/g, '<br>') + '</p>').join('');
+    return html.replace(/<script[\s\S]*?<\/script>/gi, '');
+}
+// ---- 文書の組み立て ----
+// blocks：{type:'sec', level, num, heading, html} と {type:'seed', it, level} の並び
+function seedBuildDocument(doc) {
+    const now = new Date();
+    const stamp = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) +
+                  ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+    const seeds = doc.blocks.filter(b => b.type === 'seed');
+    const nFail = seeds.filter(b => b.it.res && b.it.res.kind === 'error').length +
+                  seeds.filter(b => b.it.missing).length;
+    let toc = '', body = '';
+    doc.blocks.forEach(function(blk) {
+        if (blk.type === 'sec') {
+            const sid = 'sec-' + blk.num.replace(/\./g, '-');
+            toc += '<li class="t-sec lv' + blk.level + '" style="margin-left:' + ((blk.level - 1) * 1.4) + 'em">' +
+                   '<span class="no">' + blk.num + '</span><a href="#' + sid + '">' + seedEsc(blk.heading) + '</a></li>';
+            const h = 'h' + Math.min(6, blk.level + 1);
+            body += '<section class="sec lv' + blk.level + '" id="' + sid + '"><' + h + ' class="sec-h">' +
+                    '<span class="no">' + blk.num + '</span>' + seedEsc(blk.heading) + '</' + h + '>' +
+                    (blk.html ? '<div class="prose">' + blk.html + '</div>' : '') + '</section>';
+            return;
+        }
+        const it = blk.it, k = it.k, n = it.node;
+        const label = it.title || n.label;
+        const flag = it.missing ? '<span class="flag bad">キャンバスに見当たらない</span>' :
+                     !n.url ? '<span class="flag">URLなし</span>' :
+                     it.dupOf ? '<span class="flag">文書' + it.dupOf + 'と同じ</span>' :
+                     it.res.kind === 'error' ? '<span class="flag bad">取得できず</span>' :
+                     it.res.kind === 'link' ? '<span class="flag">参照のみ</span>' : '';
+        const rel = it.rel ? '<span class="rel">' + seedEsc(it.rel) + '</span>' : '';
+        const indent = (blk.level * 1.4) + (it.depth || 0) * 1.4;
+        toc += '<li style="margin-left:' + indent + 'em"><span class="no">' + k + '</span>' + rel +
+               '<a href="#seed-' + k + '">' + seedEsc(label) + '</a>' + flag + '</li>';
+        let inner;
+        if (it.missing) inner = '<p class="msg bad">スケルトンが指すノード（' + seedEsc(it.missing) + '）がこのキャンバスに見当たりません．</p>';
+        else if (!n.url) inner = '<p class="msg">このノードには実体URLがありません．</p>';
+        else if (it.dupOf) inner = '<p class="msg"><a href="#seed-' + it.dupOf + '">文書' + it.dupOf + '</a>と同じです．</p>';
+        else if (it.res.kind === 'html') inner = (it.res.note ? '<p class="msg">' + seedEsc(it.res.note) + '</p>' : '') +
+            '<div class="seed-body"><template shadowrootmode="open">' + it.res.html + '</template></div>';
+        else inner = '<p class="msg' + (it.res.kind === 'error' ? ' bad' : '') + '">' + seedEsc(it.res.note || '') + '</p>';
+        const h = 'h' + Math.min(6, blk.level + 2);
+        body += '<section class="seed" id="seed-' + k + '"><div class="seed-head">' +
+            '<span class="no">' + k + '</span>' + rel + '<' + h + ' class="ttl">' + seedEsc(label) + '</' + h + '>' +
+            (n.url && !it.missing ? '<a class="src" href="' + seedEsc(it.abs) + '" target="_blank" rel="noopener">原文</a>' : '') +
+            '<a class="top" href="#toc">目次へ</a></div>' +
+            (it.commentHtml ? '<div class="prose comment">' + it.commentHtml + '</div>' : '') +
+            (n.note && !it.missing ? '<p class="note">' + seedEsc(n.note).replace(/\n/g, '<br>') + '</p>' : '') +
+            inner + '</section>';
+    });
+    const css =
+        ':root{--ink:#1f2933;--sub:#616e7c;--line:#cbd2d9;--accent:#6a4fa3;--bg:#ffffff;--band:#f3f0f8;}' +
+        '@media (prefers-color-scheme:dark){:root{--ink:#e4e7eb;--sub:#9aa5b1;--line:#3e4c59;--accent:#b49be0;--bg:#16191d;--band:#221e2b;}}' +
+        'body{margin:0;background:var(--bg);color:var(--ink);font-family:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75;}' +
+        'header,nav,section{max-width:1100px;margin:0 auto;padding:0 1.2rem;}' +
+        'header{padding-top:2rem;border-bottom:3px solid var(--accent);padding-bottom:1rem;}' +
+        'header h1{margin:0 0 .3rem;font-size:1.9rem;}header .sub{margin:0 0 .4rem;font-size:1.15rem;color:var(--sub);}' +
+        'header .meta{margin:.4rem 0 0;color:var(--sub);font-size:.85rem;}header .meta.bad{color:#b4232c;}' +
+        '.prose{max-width:46rem;}.prose p{margin:.5rem 0;}header .prose{margin-top:.8rem;}' +
+        'nav h2{font-size:1.2rem;margin:1.6rem 0 .5rem;}nav ol{list-style:none;padding:0;margin:0 0 2rem;}' +
+        'nav li{padding:.12rem 0;}nav li.t-sec{font-weight:700;margin-top:.5rem;}nav li.t-sec.lv1{font-size:1.05rem;}' +
+        '.no{display:inline-block;min-width:2.4em;color:var(--sub);font-variant-numeric:tabular-nums;font-weight:400;}' +
+        '.rel{display:inline-block;font-size:.72rem;padding:.05rem .4rem;margin-right:.4rem;border-radius:3px;background:var(--band);color:var(--accent);}' +
+        '.flag{font-size:.75rem;margin-left:.5rem;color:var(--sub);border:1px solid var(--line);border-radius:3px;padding:0 .3rem;}' +
+        '.flag.bad,.msg.bad{color:#b4232c;border-color:#b4232c;}' +
+        'section.sec{margin-top:3rem;}section.sec.lv2,section.sec.lv3{margin-top:2rem;}' +
+        '.sec-h{border-bottom:1px solid var(--line);padding-bottom:.3rem;margin:0 0 .6rem;}' +
+        'h2.sec-h{font-size:1.6rem;}h3.sec-h{font-size:1.3rem;}h4.sec-h{font-size:1.12rem;}' +
+        'section.seed{margin-top:2rem;padding-bottom:1rem;}' +
+        '.seed-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem .5rem;background:var(--band);padding:.6rem .9rem;border-left:5px solid var(--accent);position:sticky;top:0;z-index:5;}' +
+        '.seed-head .ttl{margin:0;font-size:1.2rem;flex:1 1 auto;}.seed-head a{font-size:.85rem;color:var(--accent);}' +
+        '.comment{margin:.6rem .9rem;}.note,.msg{color:var(--sub);font-size:.92rem;margin:.6rem .9rem;}' +
+        '.seed-body{margin-top:.8rem;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#fff;color:#1f2933;}' +
+        'footer{max-width:1100px;margin:3rem auto 2rem;padding:0 1.2rem;}' +
+        '@media print{.seed-head{position:static;}section.seed{break-before:page;}a.top{display:none;}}';
+    const shim = '<script>document.querySelectorAll("template[shadowrootmode]").forEach(function(t){' +
+        'var h=t.parentNode;if(h.shadowRoot)return;h.attachShadow({mode:"open"}).appendChild(t.content);t.remove();});</' + 'script>';
+    return '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<title>' + seedEsc(doc.title) + '</title><style>' + css + '</style></head><body>' +
+        '<header><h1>' + seedEsc(doc.title) + '</h1>' +
+        (doc.subtitle ? '<p class="sub">' + seedEsc(doc.subtitle) + '</p>' : '') +
+        (doc.leadHtml ? '<div class="prose">' + doc.leadHtml + '</div>' : '') +
+        '<p class="meta">キャンバス「' + seedEsc(CANVAS_NAME) + '」の' + doc.how + '展開（' + stamp + '）．文書' +
+        seeds.length + '件' + (nFail ? '，うち取得できなかったもの' + nFail + '件' : '') + '．</p>' +
+        (doc.warn ? '<p class="meta bad">' + seedEsc(doc.warn) + '</p>' : '') +
+        '</header><nav id="toc"><h2>目次</h2><ol>' + toc + '</ol></nav>' + body +
+        (doc.closingHtml ? '<footer class="prose">' + doc.closingHtml + '</footer>' : '') +
+        shim + '</body></html>';
+}
+// ---- 取得と書き出し（共通） ----
+async function seedRun(doc) {
+    const items = doc.blocks.filter(b => b.type === 'seed').map(b => b.it);
+    const rep = doc.reporter || null;   // スケルトンのページから呼ばれたときの報告先
+    const say = (m, err) => rep ? rep.result(m, err) : showResult(m, err);
+    if (!items.length) { say('展開する文書がありません', true); return; }
+    const firstAt = {}, jobs = [];
+    items.forEach(function(it, i) {
+        it.k = i + 1;
+        if (it.missing || !it.node.url) return;
+        it.abs = seedAbs(it.node.url, location.href);
+        if (firstAt[it.abs]) { it.dupOf = firstAt[it.abs]; return; }
+        firstAt[it.abs] = it.k;
+        jobs.push(it);
+    });
+    $('#mergeDoneDelete, #mergeDoneKeep, #mergeCancel, #mergeExpand, #mergeSkelGuide').prop('disabled', true);
+    seedEmbedded = 0;
+    let doneCount = 0, next = 0;
+    const status = function() {
+        const t = '⏳ 種文書を展開中 ' + doneCount + '/' + jobs.length;
+        $('#mergeStatus').text(t);
+        if (rep) rep.status(t);
+    };
+    status();
+    async function worker() {
+        while (next < jobs.length) {
+            const it = jobs[next++];
+            let same = false;
+            try { same = new URL(it.abs).origin === location.origin; } catch (e) {}
+            if (!same && !it.onCanvas) {
+                it.res = { kind: 'error', note: 'キャンバスに無い他サイトのURLは取得しません' };
+            } else {
+                try { it.res = await seedLoad(it.abs, same); }
+                catch (e) { it.res = { kind: 'error', note: '取得中にエラー：' + (e && e.message || e) }; }
+            }
+            doneCount++; status();
+        }
+    }
+    try {
+        await Promise.all(Array.from({ length: Math.min(SEED_WORKERS, jobs.length) }, worker));
+        const html = seedBuildDocument(doc);
+        const fname = doc.title.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120) + '.html';
+        if (rep && rep.download) rep.download(html, fname, 'text/html;charset=utf-8');
+        else {
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fname;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        }
+        const nFail = jobs.filter(it => it.res.kind === 'error').length + items.filter(it => it.missing).length;
+        say('文書を展開してダウンロードしました（文書' + items.length + '件' +
+                   (nFail ? '，取得できなかったもの' + nFail + '件' : '') + '）' +
+                   (doc.warn ? '．' + doc.warn : ''), !!(nFail || doc.warn));
+    } finally {
+        $('#mergeDoneDelete, #mergeDoneKeep, #mergeCancel, #mergeExpand, #mergeSkelGuide').prop('disabled', false);
+        updateMergeHighlights();
+    }
+}
+// ---- 📥 種文書を展開：選択順，または未選択ならキャンバス全体を構造順に ----
+async function expandSeeds() {
+    if (!mergeMode) return;
+    const sel = mergeMode.order.filter(id => state.nodes[id]);
+    const order = sel.length ? sel.map(id => ({ id: id, depth: 0, rel: null })) : seedStructureOrder();
+    if (!order.length) { showResult('展開するノードがありません', true); return; }
+    await seedRun({
+        title: $('#mergeName').val().trim() || CANVAS_NAME,
+        how: sel.length ? '選択した' + sel.length + '個のノードを選択順に' : '全ノードを構造順に',
+        blocks: order.map(o => ({ type: 'seed', level: 0,
+                                  it: { node: state.nodes[o.id], depth: o.depth, rel: o.rel, onCanvas: true } }))
+    });
+}
+$('#mergeExpand').on('click', function() { expandSeeds(); });
+// ---- 📑 スケルトンに基づく文書生成：手引きページ（canvas/<id>/skeleton）を開く ----
+// 手引きページは window.opener.awamiSkeleton を通じてこの画面の state と展開機構を使う。
+$('#mergeSkelGuide').on('click', function() {
+    window.open('/awami/canvas/' + CANVAS_ID + '/skeleton',
+                'awamiSkeleton' + CANVAS_ID, 'width=820,height=900');
+});
+// 🧠 スケルトン依頼：依頼文＋キャンバスの全ダンプを1本の .md の中身として返す
+function skeletonRequestText() {
+    return new Promise(function(resolve, reject) {
+        $.getJSON(API_BASE + 'skeleton_prompt', function(resp) {
+            if (!resp || !resp.success) { reject((resp && resp.error) || '依頼文を読めませんでした'); return; }
+            const dump = buildExportJson();
+            resolve({
+                text: resp.text.replace(/\s+$/, '') + '\n\n## 作りたい文書\n\n' +
+                    '（ここに文書の狙い・読者・構成の希望を書くか，チャットで伝えてください）\n\n' +
+                    '## あわみキャンバスの全ダンプ\n\n```json\n' + JSON.stringify(dump, null, 1) + '\n```\n',
+                filename: 'スケルトン依頼_' + exportFileName().replace(/^awami_/, '').replace(/\.json$/, '.md'),
+                nodeCount: Object.keys(state.nodes).length,
+                edgeCount: (state.edges || []).length
+            });
+        }).fail(() => reject('依頼文を読めませんでした'));
+    });
+}
+// ---- 📂 スケルトンで展開：Claudeが作った awami-skeleton を読み込んで文書にする ----
+function seedNormUrl(u) {
+    return (u || '').trim().replace(/\/+$/, '').replace(/^https?:\/\/[^\/]+/i, '').toLowerCase();
+}
+function seedResolveRef(ref) {
+    const byId = state.nodes[Number(ref.id)];
+    if (ref.url) {
+        const want = seedNormUrl(ref.url);
+        if (byId && seedNormUrl(byId.url) === want) return byId;
+        const hit = Object.values(state.nodes).find(n => n.url && seedNormUrl(n.url) === want);
+        if (hit) return hit;
+    }
+    if (byId) return byId;
+    if (ref.label) {
+        const hit = Object.values(state.nodes).find(n => n.label === ref.label);
+        if (hit) return hit;
+    }
+    return null;
+}
+async function expandSkeleton(sk, reporter) {
+    if (!sk || sk.format !== 'awami-skeleton' || !Array.isArray(sk.sections)) {
+        (reporter ? reporter.result : showResult)('awami-skeleton 形式のJSONではありません', true); return;
+    }
+    const mk = await seedLoadMarked();
+    const warns = [];
+    if (sk.canvas_id && Number(sk.canvas_id) !== CANVAS_ID) {
+        warns.push('スケルトンはキャンバス#' + sk.canvas_id + '用です（ここは#' + CANVAS_ID + '）．ラベルとURLで照合しました');
+    }
+    let relabeled = 0;
+    const blocks = [];
+    function walk(secs, level, prefix) {
+        (secs || []).forEach(function(sec, i) {
+            const num = prefix + (i + 1);
+            blocks.push({ type: 'sec', level: level, num: num,
+                          heading: sec.heading || '（見出しなし）', html: seedMd(sec.text, mk) });
+            (sec.nodes || []).forEach(function(ref) {
+                const n = seedResolveRef(ref || {});
+                const it = { depth: Math.max(0, Math.min(6, parseInt(ref && ref.depth) || 0)),
+                             rel: (ref && ref.rel) || null, title: (ref && ref.title) || null,
+                             commentHtml: seedMd(ref && ref.comment, mk), onCanvas: !!n };
+                if (n) {
+                    it.node = n;
+                    if (ref.label && ref.label !== n.label) relabeled++;
+                } else {
+                    it.node = { label: (ref && (ref.label || ref.url)) || '（不明なノード）', url: null };
+                    it.missing = 'id ' + (ref && ref.id) + (ref && ref.label ? '「' + ref.label + '」' : '');
+                }
+                blocks.push({ type: 'seed', level: level, it: it });
+            });
+            if (level < 3) walk(sec.sections, level + 1, num + '.');
+        });
+    }
+    walk(sk.sections, 1, '');
+    if (relabeled) warns.push('ラベルがキャンバスと食い違うノード' + relabeled + '件はキャンバス側のラベルで表示しました');
+    await seedRun({
+        title: sk.title || $('#mergeName').val().trim() || CANVAS_NAME,
+        subtitle: sk.subtitle || '',
+        leadHtml: seedMd(sk.lead, mk),
+        closingHtml: seedMd(sk.closing, mk),
+        how: 'ノードをスケルトンに沿って',
+        warn: warns.join('．'),
+        blocks: blocks,
+        reporter: reporter || null
+    });
+}
+// 手引きページ（別窓）への公開口
+let skeletonBusy = false;
+window.awamiSkeleton = {
+    canvasId: CANVAS_ID,
+    canvasName: CANVAS_NAME,
+    requestText: skeletonRequestText,
+    isBusy: () => skeletonBusy,
+    expand: async function(sk, reporter) {
+        if (skeletonBusy) { reporter.result('いま展開中です．終わるまでお待ちください', true); return; }
+        skeletonBusy = true;
+        try { await expandSkeleton(sk, reporter); }
+        catch (e) { reporter.result('展開中にエラー：' + (e && e.message || e), true); }
+        finally { skeletonBusy = false; }
+    }
+};
 // =============== 詳細表示 ===============
 function esc(s) { return $('<div>').text(s || '').html(); }
 function showNodeDetail(n) {

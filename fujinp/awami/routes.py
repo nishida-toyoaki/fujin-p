@@ -2620,3 +2620,106 @@ def api_plans_detail(canvas_id):
     finally:
         cursor.close()
         conn.close()
+
+
+# =========================================================
+# 種文書を展開（ノード統合文書生成パネルから）
+# キャンバスのノードが指す文書の本文を集めて一つのHTMLにまとめる機能のうち，
+# 他サイト（別ホスト）のURLだけをサーバ側で取得する中継口．同一サイトの文書は
+# ブラウザが閲覧者のログイン状態のまま直接取得するので，ここは通らない．
+# 乱用を避けるため，キャンバスのowner本人が，そのキャンバスのノードに
+# 登録済みのURLだけを取得できる．
+# =========================================================
+import urllib.request
+import urllib.error
+import urllib.parse
+
+SEED_FETCH_MAX_BYTES = 10 * 1024 * 1024
+SEED_FETCH_TIMEOUT = 20
+
+
+def _decode_html(raw, content_type):
+    """Content-Type → <meta charset> → utf-8 の順で文字コードを決めて復号する。"""
+    m = re.search(r'charset=([\w\-]+)', content_type or '', re.IGNORECASE)
+    enc = m.group(1) if m else None
+    if not enc:
+        m = re.search(rb'<meta[^>]+charset=["\']?([\w\-]+)', raw[:4096], re.IGNORECASE)
+        enc = m.group(1).decode('ascii', 'ignore') if m else 'utf-8'
+    try:
+        return raw.decode(enc, errors='replace')
+    except LookupError:
+        return raw.decode('utf-8', errors='replace')
+
+
+@our_meeting_bp.route('/api/canvas/<int:canvas_id>/seed_fetch', methods=['POST'])
+@login_required
+def api_seed_fetch(canvas_id):
+    data = request.json or {}
+    url = (data.get('url') or '').strip()
+    if not re.match(r'^https?://', url, re.IGNORECASE):
+        return jsonify({'success': False, 'error': 'http(s) の絶対URLのみ取得できます'}), 400
+    conn = _connect()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        canvas, err = _require_owner(cursor, canvas_id, session.get('user_id'))
+        if err:
+            return err
+        cursor.execute("SELECT COUNT(*) AS n FROM awami_nodes WHERE canvas_id = %s AND url = %s",
+                       (canvas_id, url))
+        if not cursor.fetchone()['n']:
+            return jsonify({'success': False,
+                            'error': 'このキャンバスのノードに登録されたURLではありません'}), 403
+    finally:
+        cursor.close()
+        conn.close()
+
+    req = urllib.request.Request(url, headers={
+        'User-Agent': 'FUJIN-P awami seed_fetch',
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8'})
+    try:
+        with urllib.request.urlopen(req, timeout=SEED_FETCH_TIMEOUT) as res:
+            final_url = res.geturl()
+            status = res.status
+            ctype = res.headers.get('Content-Type', '')
+            raw = res.read(SEED_FETCH_MAX_BYTES + 1)
+    except urllib.error.HTTPError as e:
+        return jsonify({'success': True, 'status': e.code, 'final_url': url,
+                        'content_type': '', 'html': None})
+    except Exception as e:
+        logging.warning("awami seed_fetch error %s: %s", url, e)
+        return jsonify({'success': False, 'error': '取得に失敗しました（' + str(e)[:120] + '）'}), 502
+    if len(raw) > SEED_FETCH_MAX_BYTES:
+        return jsonify({'success': True, 'status': status, 'final_url': final_url,
+                        'content_type': ctype, 'html': None, 'too_large': True})
+    html = None
+    if 'html' in ctype.lower() or (not ctype and raw.lstrip()[:1] == b'<'):
+        html = _decode_html(raw, ctype)
+    return jsonify({'success': True, 'status': status, 'final_url': final_url,
+                    'content_type': ctype, 'html': html})
+
+
+SKELETON_PROMPT_FILE = 'skeleton_prompt.md'
+
+
+@our_meeting_bp.route('/canvas/<int:canvas_id>/skeleton')
+@login_required
+def canvas_skeleton(canvas_id):
+    """スケルトンに基づく文書生成（作業の手引き＋スケルトン依頼／スケルトンで展開，講師／司会者のみ）"""
+    canvas = _canvas_owner_or_none(canvas_id, session.get('user_id'))
+    if canvas is None:
+        return "スケルトンに基づく文書生成は講師／司会者（キャンバス作成者）のみ開けます", 403
+    return render_template('awami/canvas_skeleton.html', canvas=canvas)
+
+
+@our_meeting_bp.route('/api/skeleton_prompt')
+@login_required
+def api_skeleton_prompt():
+    """スケルトン作成の依頼文（アプリ直下の skeleton_prompt.md）を返す。"""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), SKELETON_PROMPT_FILE)
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except OSError:
+        return jsonify({'success': False, 'error': SKELETON_PROMPT_FILE + ' が見つかりません'}), 404
+    return jsonify({'success': True, 'text': text})
