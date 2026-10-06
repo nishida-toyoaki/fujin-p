@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-10-03 22:58:12",
+  "generated_at": "2026-10-06 15:48:26",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -43,7 +43,7 @@
       "launchers": [
         {
           "icon": "👥",
-          "label": "ユーザ管理",
+          "label": "admin",
           "groups": [],
           "params": "",
           "section": "legacy",
@@ -117,19 +117,18 @@
       ],
       "launchers": [
         {
-          "icon": "👥",
+          "icon": "🗄",
           "label": "ユーザとグループ",
           "groups": [],
-          "params": "tab=groups",
-          "section": "admin_support",
+          "params": "k=v",
+          "section": "legacy",
           "endpoint": "user_groups.ledger_page",
           "dashboards": [
-            "admin",
-            "guest"
+            "admin"
           ],
-          "sort_order": 130,
-          "visibility": "public",
-          "description": "グループの作成と構成員・期間の管理（管理者は自分のグループを編集）",
+          "sort_order": 990,
+          "visibility": "private",
+          "description": "グループ管理（旧）．「ユーザとグループ」に移行済み．やがて廃止",
           "extra_class": ""
         },
         {
@@ -159,12 +158,12 @@
           ],
           "sort_order": 6,
           "visibility": "private",
-          "description": "サイトをまたぐアカウント・グループの識別子．発番（源泉サイトのみ）とXLSXの書き出し・取り込み",
+          "description": "付録：永続ID．サイトをまたぐアカウント・グループの識別子．発番（源泉サイトのみ）とXLSXの書き出し・取り込み",
           "extra_class": ""
         }
       ],
-      "version_id": "v20260921.233710-29dacc",
-      "version_confirmed_at": "2026-09-21 23:37:11"
+      "version_id": "v20261003.225918-62da75",
+      "version_confirmed_at": "2026-10-03 22:59:18"
     },
     {
       "app_name": "slack_minutes",
@@ -291,7 +290,7 @@
         },
         {
           "icon": "🚚",
-          "label": "別サイトへのインストール",
+          "label": "まいあし",
           "groups": [],
           "params": "",
           "section": "sommelier",
@@ -306,7 +305,7 @@
         },
         {
           "icon": "🚚",
-          "label": "別サイトへのインストール",
+          "label": "まいあし",
           "groups": [],
           "params": "",
           "section": "sommelier",
@@ -552,7 +551,7 @@
       "launchers": [
         {
           "icon": "📅",
-          "label": "時空資源管理（デモ用）",
+          "label": "時空資源管理",
           "groups": [],
           "params": "",
           "section": "system",
@@ -629,7 +628,7 @@
       "launchers": [
         {
           "icon": "🔃",
-          "label": "テーブルサイクル",
+          "label": "テーブル サイクル",
           "groups": [],
           "params": "",
           "section": "system",
@@ -672,7 +671,7 @@
       "launchers": [
         {
           "icon": "🏀",
-          "label": "コレポ管理",
+          "label": "コレポ",
           "groups": [
             "コレポ管理者"
           ],
@@ -690,7 +689,7 @@
         },
         {
           "icon": "🏀",
-          "label": "コレポ執筆",
+          "label": "コレポ",
           "groups": [],
           "params": "",
           "section": "guest",
@@ -766,7 +765,7 @@
       "launchers": [
         {
           "icon": "📚",
-          "label": "公式データ集(DRAFT)",
+          "label": "公式データ集",
           "groups": [],
           "params": "",
           "section": "internal",
@@ -1032,7 +1031,7 @@
       "launchers": [
         {
           "icon": "😮‍💨",
-          "label": "巡回セールスマン問題ソルバー",
+          "label": "巡回セールスマンソルバー",
           "groups": [],
           "params": "",
           "section": "guest",
@@ -1146,7 +1145,7 @@
       "launchers": [
         {
           "icon": "🛍️",
-          "label": "ウィンドウショッピング3D",
+          "label": "ウィンドウショッピング",
           "groups": [],
           "params": "",
           "section": "guest",
@@ -1184,7 +1183,7 @@
       "launchers": [
         {
           "icon": "👹",
-          "label": "鬼ごっこ3D",
+          "label": "鬼ごっこ",
           "groups": [],
           "params": "",
           "section": "guest",

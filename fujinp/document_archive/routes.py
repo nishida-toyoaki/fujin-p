@@ -70,6 +70,7 @@ import requests
 from bs4 import BeautifulSoup
 from flask import (Response, flash, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from auth import redirect_to_dashboard
@@ -232,6 +233,32 @@ _PATH_SEGMENT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 # DBカラムの上限（public_documents.file_path は varchar(500)）
 FILE_PATH_MAX_LENGTH = 500
 TITLE_MAX_LENGTH = 255          # public_documents.title は varchar(255)
+
+# アップロードの上限（フォームでも先に検査する）．config.py の ARCHIVE_UPLOAD_MAX_BYTES で変えられる
+UPLOAD_MAX_BYTES = int(getattr(Config, 'ARCHIVE_UPLOAD_MAX_BYTES', 0) or 100 * 1024 * 1024)
+# HTMLをDBの content 列に入れる上限．これを超えるHTMLはバイナリと同じくファイルとして保存する．
+# MySQL の max_allowed_packet を超える1行は送れず，接続ごと切られる
+# （2055: Lost connection ... Broken pipe）ため，十分に小さい値にしておく．
+HTML_DB_MAX_BYTES = int(getattr(Config, 'ARCHIVE_HTML_DB_MAX_BYTES', 0) or 4 * 1024 * 1024)
+
+
+def fmt_bytes(n):
+    """バイト数を 12.3MB のような表記にする"""
+    n = float(n or 0)
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if n < 1024 or unit == 'GB':
+            return f"{n:.0f}{unit}" if unit == 'B' else f"{n:.1f}{unit}"
+        n /= 1024
+
+
+def friendly_db_error(e):
+    """DBの例外を利用者向けの説明に直す（大きすぎる行で接続が切れた場合など）"""
+    text = str(e)
+    if any(k in text for k in ('2055', '2006', '2013', 'max_allowed_packet', 'Broken pipe', '1153')):
+        return ('データが大きすぎてデータベースに書き込めませんでした'
+                f'（{text[:120]}）．大きな文書はファイルとして保存されるはずなので，'
+                '管理者に設定（ARCHIVE_HTML_DB_MAX_BYTES）を確認してもらってください')
+    return text
 
 
 def storage_path(file_path):
@@ -557,7 +584,7 @@ def save_document_to_db(title, public_description, owner_memo, content,
 
     except Exception as e:
         logger.error(f"保存エラー: {e}", exc_info=True)
-        return False, str(e), None
+        return False, friendly_db_error(e), None
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1011,7 +1038,9 @@ def new_document():
     if not can_create_document():
         flash('文書作成権限がありません', 'error')
         return redirect(url_for('document_archive.dashboard'))
-    return render_template('document_archive_form.html', groups=get_all_groups())
+    return render_template('document_archive_form.html', groups=get_all_groups(),
+                           upload_max_bytes=UPLOAD_MAX_BYTES,
+                           upload_max_label=fmt_bytes(UPLOAD_MAX_BYTES))
 
 
 @document_archive_bp.route('/edit/<int:doc_id>')
@@ -1029,13 +1058,20 @@ def edit_document(doc_id):
         return redirect(url_for('document_archive.dashboard'))
 
     return render_template('document_archive_form.html',
-                           document=document, groups=get_all_groups())
+                           document=document, groups=get_all_groups(),
+                           upload_max_bytes=UPLOAD_MAX_BYTES,
+                           upload_max_label=fmt_bytes(UPLOAD_MAX_BYTES))
 
 
 @document_archive_bp.route('/save', methods=['POST'])
 @login_required
 def save_document():
     """保存（新規・更新共用）"""
+    # 受け取る前に大きさを見る（フォーム側でも検査しているが，すり抜けた場合の保険）
+    if request.content_length and request.content_length > UPLOAD_MAX_BYTES + 1024 * 1024:
+        flash(f'ファイルが大きすぎます（{fmt_bytes(request.content_length)}）．'
+              f'アップロードできるのは {fmt_bytes(UPLOAD_MAX_BYTES)} までです', 'error')
+        return redirect(request.referrer or url_for('document_archive.dashboard'))
     try:
         raw_id = request.form.get('id')
         doc_id = None
@@ -1127,12 +1163,24 @@ def save_document():
                     # 空のHTMLで既存の内容を消してしまわないよう明示的に弾く
                     flash('アップロードされたHTMLファイルが空です', 'error')
                     return redirect(request.referrer or url_for('document_archive.dashboard'))
-                content = text
-                file_type = None
-                file_path = None
                 upload_applied = True
+                if len(text.encode('utf-8')) > HTML_DB_MAX_BYTES:
+                    # 大きなHTML（画像・動画を埋め込んだプレゼンなど）はDBに入らないので，
+                    # バイナリと同じくファイルとして保存し，プレーン表示でそのまま配信する
+                    unique_name = f"{uuid.uuid4().hex}.html"
+                    with open(storage_path(unique_name), 'w', encoding='utf-8', newline='') as f:
+                        f.write(text)
+                    content = None
+                    file_type = MIME_TYPES['html']
+                    file_path = unique_name
+                    flash(f'HTMLが大きい（{fmt_bytes(len(text.encode("utf-8")))}）ため，'
+                          'ファイルとして保存しました．本文はキーワード検索の対象になりません', 'info')
+                else:
+                    content = text
+                    file_type = None
+                    file_path = None
                 if existing and existing.get('file_path'):
-                    # HTMLで置き換えるので旧バイナリは不要になる
+                    # 新しい内容で置き換えるので旧ファイルは不要になる
                     replaced_file_path = existing.get('file_path')
 
         # ── P0-3: ファイルを差し替えない更新では既存の内容を引き継ぐ ──
@@ -1155,10 +1203,15 @@ def save_document():
 
         if success and replaced_file_path and replaced_file_path != file_path:
             delete_stored_file(replaced_file_path)
+        if not success and upload_applied and file_path and (not existing or file_path != existing.get('file_path')):
+            delete_stored_file(file_path)          # DBに書けなかったので，いま置いたファイルを残さない
 
         flash(msg, 'success' if success else 'error')
         return redirect(url_for('document_archive.dashboard'))
 
+    except RequestEntityTooLarge:
+        flash(f'ファイルが大きすぎます．アップロードできるのは {fmt_bytes(UPLOAD_MAX_BYTES)} までです', 'error')
+        return redirect(request.referrer or url_for('document_archive.dashboard'))
     except Exception as e:
         logger.error(f"保存処理でエラー: {e}", exc_info=True)
         flash("保存中にエラーが発生しました。管理者にお問い合わせください。", 'error')

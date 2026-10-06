@@ -110,13 +110,13 @@
                         accept=".html,.htm,.pdf,.svg,.png,.jpg,.jpeg,.gif,.webp,.bmp,.ico,.txt,.mp4,video/mp4">
                     <div class="form-text text-muted mb-2">
                         <i class="fas fa-info-circle"></i>
-                        アップロード可能: HTML / PDF / SVG / 画像（PNG・JPG・GIF・WebP・BMP・ICO）/ テキスト / 動画（MP4）
+                        アップロード可能: HTML / PDF / SVG / 画像（PNG・JPG・GIF・WebP・BMP・ICO）/ テキスト / 動画（MP4）．1ファイル {{ upload_max_label }} まで
                     </div>
                     {% else %}
                     <input type="file" name="html_file" class="form-control mb-2" accept=".html,.htm">
                     <div class="form-text text-muted mb-2">
                         <i class="fas fa-info-circle"></i>
-                        アップロード可能: HTML のみ
+                        アップロード可能: HTML のみ．1ファイル {{ upload_max_label }} まで
                     </div>
                     {% endif %}
                     <textarea name="content" class="form-control" rows="10">{{ document.content if document else '' }}</textarea>
@@ -146,5 +146,33 @@
     }
     // 初期表示時の実行
     toggleGroupSelect();
+
+    // アップロードの大きさを送る前に確かめる（大きなファイルを送り切ってから断られるのを避ける）
+    (function () {
+        const MAX = {{ upload_max_bytes|default(104857600) }};
+        const LABEL = {{ (upload_max_label|default('100.0MB'))|tojson }};
+        const input = document.querySelector('input[name="html_file"]');
+        const form = input && input.form;
+        if (!input || !form) return;
+        const mb = n => (n / 1048576).toFixed(1) + 'MB';
+        function tooBig() {
+            const f = input.files && input.files[0];
+            return f && f.size > MAX ? f : null;
+        }
+        input.addEventListener('change', function () {
+            const f = tooBig();
+            if (f) {
+                alert('「' + f.name + '」は ' + mb(f.size) + ' あります．アップロードできるのは ' + LABEL + ' までです．');
+                input.value = '';
+            }
+        });
+        form.addEventListener('submit', function (e) {
+            const f = tooBig();
+            if (f) {
+                e.preventDefault();
+                alert('「' + f.name + '」は ' + mb(f.size) + ' あります．アップロードできるのは ' + LABEL + ' までです．');
+            }
+        });
+    })();
 </script>
 {% endblock %}
