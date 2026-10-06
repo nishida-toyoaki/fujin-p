@@ -48,6 +48,18 @@
         const GET_URL = '{{ url_for("kataribe.api_get", pres_id=pres_id) }}';
         KtbPlayer.init(document.getElementById('player'));
         KtbPlayer.bindKeys();
+        // 個別のシーンへの直接アクセス：?scene=＃番号（エディタのシーン一覧の左端の番号）．
+        // 指定があればそのシーンの完成形から始める（&step=n で途中の歩から）．
+        // 見ている間もアドレス欄をいまのシーンに合わせるので，そのままコピーすれば共有できる．
+        const q = new URLSearchParams(location.search);
+        const startScene = parseInt(q.get('scene'), 10);
+        const startStep = parseInt(q.get('step'), 10);
+        function syncAddress(i) {
+            try {
+                const want = location.pathname + (i > 0 ? '?scene=' + (i + 1) : '');
+                if (location.pathname + location.search !== want) history.replaceState(null, '', want);
+            } catch (e) {}
+        }
         $.get(GET_URL, resp => {
             if (!resp.success) {
                 document.getElementById('presTitle').textContent = '読み込みに失敗しました';
@@ -55,7 +67,18 @@
             }
             document.title = resp.presentation.title + ' - かたりべ';
             document.getElementById('presTitle').textContent = resp.presentation.title;
-            KtbPlayer.load(resp.presentation.spec);
+            const spec = resp.presentation.spec;
+            KtbPlayer.load(spec);
+            const n = (spec.scenes || []).length;
+            if (startScene >= 1 && n) {
+                KtbPlayer.goScene(Math.min(startScene, n) - 1);
+                if (startStep >= 0) KtbPlayer.setStep(startStep);
+            }
+            KtbPlayer.onSceneChange(syncAddress);
+            syncAddress(KtbPlayer.getScene());
+        }).fail(xhr => {
+            document.getElementById('presTitle').textContent =
+                (xhr.responseJSON && xhr.responseJSON.error) || '読み込みに失敗しました';
         });
     </script>
 </body>

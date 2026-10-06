@@ -32,7 +32,7 @@ from pytz import timezone
 
 from flask import (
     render_template, request, jsonify, session,
-    redirect, url_for, send_from_directory
+    redirect, url_for, send_from_directory, current_app
 )
 import mysql.connector
 
@@ -698,6 +698,151 @@ def api_sample():
     except Exception as e:
         logging.error("kataribe api_sample error: %s", e)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ── 文書アーカイブへの格納 ──
+# エディタが組み立てたプレゼンHTML（1ファイルで再生できる形）を，文書アーカイブ
+# （document_archive）の public_documents に新しい文書として登録する．
+# マイノート・コレポの「アーカイブに保存」と同じテーブルだが，開示先（access_policy と
+# 許可グループ）はいつも非公開で入れるのではなく，格納する時点で利用者が決める．
+#   access_policy の値は文書アーカイブと同じ：
+#     private / public（一般公開．文書アーカイブでは未ログインでも読める）/
+#     domestic / group / domestic_group
+#   許可グループは fujinp DB の document_access_groups(doc_id, group_id) に入れる．
+ARCHIVE_POLICIES = ('private', 'public', 'domestic', 'group', 'domestic_group')
+# 文書アーカイブと同じ規則：大きなHTMLはDBの content 列に入れず，文書アーカイブの
+# ファイル置き場にファイルとして置く（MySQL の max_allowed_packet を超えると接続ごと切られるため）．
+# 置き場と上限は文書アーカイブと同じ設定値（config.py）を読む．
+ARCHIVE_HTML_DB_MAX_BYTES = int(getattr(Config, 'ARCHIVE_HTML_DB_MAX_BYTES', 0) or 4 * 1024 * 1024)
+ARCHIVE_FILE_STORAGE_DIR = os.path.realpath(
+    getattr(Config, 'ARCHIVE_FILE_STORAGE_DIR', None)
+    or os.path.expanduser('~/fujinp_file_uploads'))
+ARCHIVE_POLICY_LABELS = {
+    'private': '🔒 非公開',
+    'public': '🌐 一般公開',
+    'domestic': '🏢 構成員だけ',
+    'group': '👥 グループ',
+    'domestic_group': '🏢＋👥 構成員＋グループ',
+}
+
+
+def _archive_doc_url(doc_id):
+    """文書アーカイブ側で格納した文書を開くURL（見つからなければ一覧，それも無ければ None）．
+
+    文書アーカイブのエンドポイント名に依存しないよう，URL規則から探す．"""
+    try:
+        view_ep = list_ep = None
+        for rule in current_app.url_map.iter_rules():
+            ep = rule.endpoint or ''
+            if not ep.startswith('document_archive.') or 'GET' not in (rule.methods or ()):
+                continue
+            args = list(rule.arguments)
+            if view_ep is None and len(args) == 1 and 'view' in ep and 'api' not in ep:
+                view_ep = (ep, args[0])
+            if list_ep is None and not args and ('dashboard' in ep or ep.endswith('.index')):
+                list_ep = ep
+        if view_ep:
+            return url_for(view_ep[0], **{view_ep[1]: doc_id})
+        if list_ep:
+            return url_for(list_ep)
+    except Exception as e:
+        logging.warning("kataribe _archive_doc_url: %s", e)
+    return None
+
+
+@kataribe_bp.route('/api/archive', methods=['POST'])
+@edit_required
+def api_archive():
+    """プレゼンHTMLを文書アーカイブに格納する（開示先は要求で指定する）"""
+    data = request.get_json(silent=True) or {}
+    title = str(data.get('title') or '').strip()[:255]
+    html_text = data.get('html')
+    if not title:
+        return jsonify({'success': False, 'error': 'アーカイブタイトルは必須です'}), 400
+    if not isinstance(html_text, str) or '<html' not in html_text[:2000].lower():
+        return jsonify({'success': False, 'error': 'プレゼンHTMLがありません'}), 400
+    policy = data.get('access_policy')
+    if policy not in ARCHIVE_POLICIES:
+        return jsonify({'success': False, 'error': '開示先の指定が正しくありません'}), 400
+    group_ids = []
+    for g in (data.get('access_groups') or []):
+        try:
+            group_ids.append(int(g))
+        except (TypeError, ValueError):
+            pass
+    group_ids = sorted(set(group_ids))
+    if policy in ('group', 'domestic_group') and not group_ids:
+        return jsonify({'success': False,
+                        'error': 'グループを開示先にするときは，グループを1つ以上選んでください'}), 400
+    if policy not in ('group', 'domestic_group'):
+        group_ids = []
+
+    # 指定グループが実在するか（user_groups は default DB）
+    if group_ids:
+        known = {g['id'] for g in get_all_user_groups()}
+        unknown = [g for g in group_ids if g not in known]
+        if unknown:
+            return jsonify({'success': False,
+                            'error': '存在しないグループが指定されました：' + ', '.join(map(str, unknown))}), 400
+
+    owner_memo = str(data.get('owner_memo') or '')
+    pres_id = data.get('pres_id')
+    if pres_id:
+        note = f'かたりべ プレゼンID:{pres_id} から格納'
+        owner_memo = (owner_memo.rstrip() + '\n\n' + note) if owner_memo.strip() else note
+
+    conn = None
+    stored_path = None
+    try:
+        content, file_type, file_name = html_text, None, None
+        size = len(html_text.encode('utf-8'))
+        if size > ARCHIVE_HTML_DB_MAX_BYTES:
+            os.makedirs(ARCHIVE_FILE_STORAGE_DIR, exist_ok=True)
+            file_name = f"{uuid.uuid4().hex}.html"
+            stored_path = os.path.join(ARCHIVE_FILE_STORAGE_DIR, file_name)
+            with open(stored_path, 'w', encoding='utf-8', newline='') as f:
+                f.write(html_text)
+            content, file_type = None, 'text/html; charset=utf-8'
+        conn = mysql.connector.connect(**DatabaseConfig.fujinp())
+        cursor = conn.cursor()
+        now = get_jst_now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute("""
+            INSERT INTO public_documents
+                (title, public_description, owner_memo, content,
+                 created_by, created_at, updated_at, access_policy, file_type, file_path)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (title, str(data.get('public_description') or ''), owner_memo, content,
+              session.get('user_id'), now, now, policy, file_type, file_name))
+        doc_id = cursor.lastrowid
+        for gid in group_ids:
+            cursor.execute("""
+                INSERT INTO document_access_groups (doc_id, group_id) VALUES (%s, %s)
+            """, (doc_id, gid))
+        conn.commit()
+        cursor.close()
+        logging.info("kataribe: プレゼンを文書アーカイブに格納しました (doc_id=%s, policy=%s): %s",
+                     doc_id, policy, title)
+        stored_path = None                     # 書けたのでファイルは残す
+        return jsonify({'success': True, 'doc_id': doc_id, 'access_policy': policy,
+                        'policy_label': ARCHIVE_POLICY_LABELS[policy],
+                        'as_file': bool(file_name), 'size': size,
+                        'doc_url': _archive_doc_url(doc_id)})
+    except Exception as e:
+        logging.error("kataribe api_archive error: %s", e)
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if stored_path and os.path.exists(stored_path):
+            try:
+                os.remove(stored_path)             # DBに書けなかったので，置いたファイルを残さない
+            except OSError:
+                pass
+        if conn is not None and conn.is_connected():
+            conn.close()
 
 
 # ── 画像アップロード ──

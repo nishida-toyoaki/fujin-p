@@ -25,6 +25,18 @@
         .header h1 { font-size:19px; font-weight:700; letter-spacing:.04em; }
         .headtitle { font-size:15px; color:#cfe8e3; white-space:nowrap; }
         .headtitle .dirty { color:#f7c948; margin-left:4px; }
+        /* 元に戻す／やり直す：編集中の作品全体に効くので，題名と未保存●の隣に置く */
+        .headtitle { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+        .histbtns { display:flex; gap:6px; flex-shrink:0; }
+        .histbtns button {
+            background:#f7c948; color:#1c2733; border:1px solid #f7c948; font-weight:700;
+            border-radius:999px; padding:4px 14px; font-size:13px; white-space:nowrap;
+        }
+        .histbtns button:hover:not(:disabled) { border-color:#10b5a0; background:#10b5a0; color:#fff; }
+        .histbtns button:disabled { background:transparent; color:#9fb3bd; border-color:#5d7280; opacity:1; font-weight:400; }
+        .urlrow { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+        .urlrow .lbl { flex:0 0 7.5em; font-size:12.5px; color:#41525b; white-space:nowrap; }
+        .urlrow input { flex:1; font-family:ui-monospace,Consolas,monospace; font-size:12.5px; }
         .back-btn {
             color:#d9f3ef; text-decoration:none; font-size:13px;
             border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:5px 14px;
@@ -226,6 +238,10 @@
         <a href="{{ url_for('kataribe.return_to_fujin') }}" class="back-btn" id="btnHome">🏠 FUJINダッシュボードに戻る</a>
         <h1>🗣 かたりべ — タイルで組むプレゼン</h1>
         <span class="headtitle" id="headTitle"></span>
+        <span class="histbtns">
+            <button id="btnUndo" type="button" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
+            <button id="btnRedo" type="button" title="やり直す（Ctrl+Shift+Z / Ctrl+Y）">↷ やり直す</button>
+        </span>
         <button id="btnFull" class="ghost" style="margin-left:auto;">⛶ 全コンテンツ表示</button>
     </div>
     <div id="result"></div>
@@ -318,11 +334,12 @@
                 <div class="toolbar">
                     <button id="btnSave">💾 保存</button>
                     <button id="btnSaveAs" class="ghost">📄 別名で保存</button>
-                    <button id="btnUndo" class="ghost" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
-                    <button id="btnRedo" class="ghost" title="やり直す（Ctrl+Shift+Z / Ctrl+Y）">↷ やり直す</button>
                     <button id="btnLoadIn" class="ghost">📂 作品JSONを取り込む</button>
                     <button id="btnExport" class="ghost">⬇ 作品JSONを書き出す</button>
-                    <button id="btnExportHtml" class="ghost">🎞 プレゼンHTML</button>
+                    <button id="btnExportHtml" class="ghost" title="画像・動画はURLで参照します（軽いが，サイトの外やオフラインでは表示されないものがあります）">🎞 プレゼンHTML</button>
+                    <button id="btnExportHtmlAll" class="ghost" title="このサイトの画像と動画をすべて文書の中に埋め込みます．1ファイルでオフラインでも上映できます（埋め込みHTMLは参照のまま）">🎞 プレゼンHTML（全部埋め込み）</button>
+                    <button id="btnArchive" class="ghost" title="画像・動画をURLで参照するプレゼンHTMLを文書アーカイブへ格納します．開示先はここで決めます">🗄 アーカイブに格納</button>
+                    <button id="btnArchiveAll" class="ghost" title="画像と動画をすべて埋め込んだプレゼンHTMLを文書アーカイブへ格納します．開示先はここで決めます">🗄 アーカイブに格納（全部埋め込み）</button>
                     <button id="btnPlayUrl" class="ghost" title="再生専用ページ（公開範囲で許された利用者が見られる）のURLを表示・コピー">🔗 このコンテンツのURL</button>
                     <button id="btnJson" class="ghost">{ } JSON</button>
                 </div>
@@ -368,16 +385,89 @@
 
     <!-- コンテンツURLモーダル -->
     <div class="modal-bg" id="urlModal">
-        <div class="modal" style="width:min(640px,94vw);">
+        <div class="modal" style="width:min(680px,94vw);">
             <h3>🔗 このコンテンツのURL</h3>
-            <div class="toolbar" style="margin-bottom:6px;">
-                <input type="text" id="urlText" readonly style="flex:1; font-family:ui-monospace,Consolas,monospace; font-size:13px;">
+            <div class="urlrow">
+                <span class="lbl">プレゼン全体</span>
+                <input type="text" id="urlText" readonly>
+                <button class="ghost mini" data-url="urlText" data-act="open">▶ 開く</button>
+                <button class="mini" data-url="urlText" data-act="copy">📋 コピー</button>
             </div>
-            <div class="hint">再生専用ページのURLです．このサイトにログインしている人なら誰でも開けます（編集はできません）．</div>
+            <div class="urlrow">
+                <span class="lbl" id="urlSceneLbl">このシーン</span>
+                <input type="text" id="urlSceneText" readonly>
+                <button class="ghost mini" data-url="urlSceneText" data-act="open">▶ 開く</button>
+                <button class="mini" data-url="urlSceneText" data-act="copy">📋 コピー</button>
+            </div>
+            <div class="urlrow">
+                <span class="lbl">編集画面</span>
+                <input type="text" id="urlEditText" readonly>
+                <button class="mini" data-url="urlEditText" data-act="copy">📋 コピー</button>
+            </div>
+            <div class="hint">再生専用ページのURLは，公開範囲で許された人が開けます（編集はできません）．
+                「このシーン」は ?scene=＃番号（シーン一覧の左端の番号）で，そのシーンの完成形から始まります．
+                シーンの並びを変えると番号も変わります．編集画面のURLは作成者（admin）用で，そのプレゼンをそのシーンで開きます．</div>
             <div class="modal-btns">
                 <button class="ghost" id="btnUrlClose">閉じる</button>
-                <button class="ghost" id="btnUrlOpen">▶ 開く</button>
-                <button id="btnUrlCopy">📋 コピー</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- アーカイブ格納モーダル -->
+    <div class="modal-bg" id="archiveModal">
+        <div class="modal" style="width:min(680px,94vw); max-height:92vh; overflow-y:auto;">
+            <h3>🗄 文書アーカイブに格納</h3>
+            <p class="hint" style="margin-bottom:8px;">いま編集中の内容をプレゼンHTML（1ファイルで再生できる形）にして，文書アーカイブに新しい文書として格納します．
+                開示先は格納と同時に決まります（あとで文書アーカイブ側で変えることもできます）．</p>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:12.5px; font-weight:700;">アーカイブタイトル <span style="color:#b23a52;">*</span></label>
+                <input type="text" id="arcTitle">
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:12.5px; font-weight:700;">パブリック説明</label>
+                <textarea id="arcDesc" style="height:60px;"></textarea>
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:12.5px; font-weight:700;">オーナーメモ</label>
+                <textarea id="arcMemo" style="height:48px;"></textarea>
+            </div>
+            <div class="share-section">
+                <h3>開示先（文書アーカイブでの公開範囲）</h3>
+                <div class="share-option">
+                    <label><input type="radio" name="arc_policy" value="private" checked><strong>🔒 非公開</strong></label>
+                    <span class="share-description">自分とadminだけ</span>
+                </div>
+                <div class="share-option">
+                    <label><input type="radio" name="arc_policy" value="public"><strong>🌐 一般公開</strong></label>
+                    <span class="share-description">文書アーカイブの一般公開（ログインしていない人も読めます）</span>
+                </div>
+                <div class="share-option">
+                    <label><input type="radio" name="arc_policy" value="domestic"><strong>🏢 構成員だけ</strong></label>
+                    <span class="share-description">ログイン済みの構成員</span>
+                </div>
+                <div class="share-option">
+                    <label><input type="radio" name="arc_policy" value="group"><strong>👥 グループ</strong></label>
+                    <span class="share-description">指定グループの所属者</span>
+                </div>
+                <div class="share-option">
+                    <label><input type="radio" name="arc_policy" value="domestic_group"><strong>🏢＋👥 構成員＋グループ</strong></label>
+                    <span class="share-description">構成員と指定グループの所属者</span>
+                </div>
+                <div id="arcGroupList" class="group-list" style="display:none;">
+                    <h4>開示するグループを選択</h4>
+                    {% for group in all_groups %}
+                    <label><input type="checkbox" name="arc_groups" value="{{ group.id }}"> {{ group.name }}</label>
+                    {% endfor %}
+                    {% if not all_groups %}
+                    <div style="color:#718096;">（ユーザーグループが未登録です）</div>
+                    {% endif %}
+                </div>
+            </div>
+            <p class="hint" id="arcMode" style="font-weight:700; color:#0b6c60;"></p>
+            <p class="hint" id="arcNote"></p>
+            <div class="modal-btns">
+                <button class="ghost" id="btnArcCancel">閉じる</button>
+                <button id="btnArcGo">🗄 格納する</button>
             </div>
         </div>
     </div>
@@ -452,8 +542,12 @@
             uploadPub: '{{ url_for("kataribe.api_upload_image_public") }}',
             handout: '{{ url_for("kataribe.handout", pres_id=0) }}'.replace('/0', '/'),
             images: '{{ url_for("kataribe.api_images") }}',
-            play:   '{{ url_for("kataribe.play", pres_id=0) }}'.replace('/0', '/')
+            play:   '{{ url_for("kataribe.play", pres_id=0) }}'.replace('/0', '/'),
+            archive: '{{ url_for("kataribe.api_archive") }}',
+            index:  '{{ url_for("kataribe.index") }}'
         };
+        // 起動時のアドレス（?id=作品&scene=＃番号）．初期描画でアドレス欄を書き換える前に控えておく
+        const START_QUERY = new URLSearchParams(location.search);
 
         // ── 状態 ──
         let spec = { title: '無題のプレゼン', scenes: [] };
@@ -619,6 +713,20 @@
             // 「シーン一覧」タブの間は，チェックしたシーンが選んだシーン．
             if (sceneTab === 'edit') scenePick = spec.scenes.map((_, k) => k === curScene);
             if (sceneTab === 'list') renderScenePane();
+            syncAddress();
+        }
+
+        // ── 編集画面のアドレス欄を「いま開いている作品とシーン」に合わせる ──
+        //   /kataribe/?id=作品&scene=＃番号．再読み込みやブックマークで同じ所に戻れる．
+        function editUrl(id, sceneNo) {
+            if (!id) return API.index;
+            return API.index + '?id=' + id + (sceneNo ? '&scene=' + sceneNo : '');
+        }
+        function syncAddress() {
+            try {
+                const want = editUrl(presId, presId ? curScene + 1 : 0);
+                if (location.pathname + location.search !== want) window.history.replaceState(null, '', want);   // history は元に戻す用の配列名なので window. を付ける
+            } catch (e) {}
         }
 
         // ── モード1：タイル編集（一覧から1枚を選んで編集） ──
@@ -1429,7 +1537,7 @@
             });
         }
 
-        function openPres(id) {
+        function openPres(id, sceneNo) {
             $.get(API.get + id, resp => {
                 if (!resp.success) return showResult('読み込みに失敗: ' + resp.error, true);
                 presId = resp.presentation.id;
@@ -1437,8 +1545,9 @@
                 spec.title = resp.presentation.title;
                 setShare({ key: resp.presentation.share_key, groups: resp.presentation.access_groups });
                 const moved = migrateSpec(spec);
-                curScene = 0; curCmd = 0;
+                curScene = (sceneNo >= 1 && sceneNo <= spec.scenes.length) ? sceneNo - 1 : 0; curCmd = 0;
                 renderEditor(); refreshPreview(false); syncJson();
+                if (curScene) KtbPlayer.goScene(curScene);
                 markSaved(); resetHistory();
                 showResult('「' + spec.title + '」を開きました'
                     + (moved ? '（旧形式の' + moved + 'シーンを手続きに移しました．保存するまでDBは変わりません）' : ''), false);
@@ -1459,6 +1568,7 @@
                     if (resp && resp.success) {
                         presId = resp.id;
                         markSaved();
+                        syncAddress();
                         showResult('保存しました（公開範囲：' + (SHARE_ICONS[sh.key] || '') + ' '
                             + (resp.share_label || SHARE_LABELS[sh.key] || '') + '）', false);
                         loadList();
@@ -1539,8 +1649,11 @@
             showResult('やり直しました', false);
         }
         function paintHistoryButtons() {
-            $('#btnUndo').prop('disabled', hIndex <= 0);
-            $('#btnRedo').prop('disabled', hIndex >= history.length - 1);
+            const back = Math.max(0, hIndex), fwd = Math.max(0, history.length - 1 - hIndex);
+            $('#btnUndo').prop('disabled', back === 0)
+                .attr('title', '元に戻す（Ctrl+Z）' + (back ? '．あと' + back + '手戻せます' : ''));
+            $('#btnRedo').prop('disabled', fwd === 0)
+                .attr('title', 'やり直す（Ctrl+Shift+Z / Ctrl+Y）' + (fwd ? '．' + fwd + '手やり直せます' : ''));
             paintSaveButton();
         }
         // 保存ボタンは未保存の変更があるときだけ押せる（変更がなければ薄く表示して無効化）
@@ -1606,9 +1719,13 @@
             showResult('作品JSONを書き出しました', false);
         }
 
-        // ── 完成プレゼンHTMLの書き出し（自己完結・1ファイル） ──
-        function exportHtml() {
-            if (!spec.scenes || !spec.scenes.length) return showResult('シーンがありません', true);
+        // ── 完成プレゼンHTMLの組み立て（自己完結・1ファイル） ──
+        //   書き出し（ダウンロード）とアーカイブ格納で共用する．src は作品のコピー．
+        //   media は動画を埋め込むときの中身 [{mime, b64}]．部品の中では ktbmedia:番号 と書いておき，
+        //   ファイルを開いたときに一度だけブラウザ内の一時URL（Blob URL）に置き換える．
+        //   （数十MBの文字列を部品のHTMLに直接入れると，シーンを組み直すたびに重くなるため）
+        function buildPresentationHtml(src, media) {
+            media = media || [];
             // このページに読み込まれているプレイヤー部品のCSS・JSをそのまま流用する
             // プレイヤー本体のCSSだけを選ぶ（このページ自身のCSSにも .ktb-player の記述があるため，
             // プレイヤー固有のセレクタを複数条件にして取り違えを防ぐ）
@@ -1620,18 +1737,17 @@
                 .join('\n');
             const js = [...document.querySelectorAll('script')]
                 .map(e => e.textContent).find(t => t && t.indexOf('var KtbPlayer') !== -1);
-            if (!css || !js) return showResult('プレイヤー部品を取り出せませんでした', true);
+            if (!css || !js) throw new Error('プレイヤー部品を取り出せませんでした');
 
-            const title = spec.title || 'かたりべプレゼン';
+            const title = src.title || 'かたりべプレゼン';
             const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const abs = JSON.parse(JSON.stringify(spec));
+            const abs = JSON.parse(JSON.stringify(src));
             (abs.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
                 if (t.html) t.html = t.html.replace(/(src\s*=\s*["'])\/kataribe\/img\//g,
                                                     '$1' + location.origin + '/kataribe/img/');
             }));
             const specLiteral = JSON.stringify(abs).replace(/</g, '\\u003c');
-            const html =
-'<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
+            return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
 '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
 '<title>' + esc(title) + '</title>\n<style>\n' +
 '* { margin:0; padding:0; box-sizing:border-box; }\n' +
@@ -1639,22 +1755,219 @@
 'body { font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic Medium","Yu Gothic",sans-serif; }\n' +
 '#player { height:100%; }\n#player .ktb-player { height:100%; }\n' +
 css +
-'\n</style>\n</head>\n<body>\n<div id="player"></div>\n<script>\n' +
+'\n</style>\n</head>\n<body>\n<div id="player"></div>\n' +
+media.map((m, i) => '<script type="text/plain" data-ktb-media="' + i + '" data-mime="' + esc(m.mime) + '">'
+                     + m.b64 + '<\/script>\n').join('') +
+'<script>\n' +
 js +
 '\nvar KTB_SPEC = ' + specLiteral + ';\n' +
+(media.length ?
+'(function(){var m={};\n' +
+'[].forEach.call(document.querySelectorAll("script[data-ktb-media]"),function(e){\n' +
+'  var b=atob(e.textContent.replace(/\\s+/g,"")),u=new Uint8Array(b.length);\n' +
+'  for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);\n' +
+'  m[e.getAttribute("data-ktb-media")]=URL.createObjectURL(new Blob([u],{type:e.getAttribute("data-mime")}));\n' +
+'  e.textContent="";});\n' +
+'(KTB_SPEC.scenes||[]).forEach(function(sc){[].concat(sc.steps||[],sc.tiles||[]).forEach(function(t){\n' +
+'  if(t.html)t.html=t.html.replace(/ktbmedia:(\\d+)/g,function(a,n){return m[n]||a;});});});})();\n' : '') +
 'KtbPlayer.init(document.getElementById("player"));\n' +
 'KtbPlayer.bindKeys();\nKtbPlayer.load(KTB_SPEC);\n' +
 '<\/script>\n</body>\n</html>\n';
+        }
 
-            const name = title.replace(/[\\/:*?"<>|]/g, '_');
+        // ── プレゼンHTMLを作る（書き出しとアーカイブ格納で共用） ──
+        //   all=false：画像・動画はURLで参照する
+        //   all=true ：このサイトの画像（サイトローカル・公開置き場）と動画をすべて埋め込む
+        //   組み立てはすべてブラウザの中で行い，サーバは画像・動画を1回ずつ返すだけ（サーバに何も残らない）．
+        async function makePresentationHtml(all, $b) {
+            const copy = JSON.parse(JSON.stringify(spec));
+            copy.title = ($('#presTitle').val() || spec.title || '').trim() || copy.title;
+            let n = 0, media = [];
+            if (all) {
+                if ($b) $b.text('画像を埋め込んでいます…');
+                n = await inlineLocalImages(copy) + await inlinePublicImages(copy);
+                if ($b) $b.text('動画を埋め込んでいます…');
+                media = await extractVideos(copy);
+            }
+            return { html: buildPresentationHtml(copy, media), images: n, videos: media.length };
+        }
+
+        async function exportHtml(all) {
+            if (!spec.scenes || !spec.scenes.length) return showResult('シーンがありません', true);
+            let html, n = 0, media = [];
+            const $b = $(all ? '#btnExportHtmlAll' : '#btnExportHtml');
+            const label = $b.text();
+            $b.prop('disabled', true);
+            try {
+                const r = await makePresentationHtml(all, $b);
+                html = r.html; n = r.images; media = { length: r.videos };
+            } catch (e) {
+                return showResult('プレゼンHTMLを書き出せませんでした: ' + (e.message || e), true);
+            } finally {
+                $b.prop('disabled', false).text(label);
+            }
+            const frames = localAssetStats(spec).frames;
+            const name = (spec.title || 'かたりべプレゼン').replace(/[\\/:*?"<>|]/g, '_');
             const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = name + '.html';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-            showResult('プレゼンHTMLを書き出しました（1ファイルで再生できます）', false);
+            const mb = (blob.size / 1048576).toFixed(1);
+            showResult(all
+                ? 'プレゼンHTMLを書き出しました（' + mb + 'MB．画像 ' + n + ' 件・動画 ' + media.length + ' 件を埋め込み．'
+                  + (frames ? 'サイトローカルの埋め込みHTML ' + frames + ' 件は参照のままです' : '1ファイルで再生できます') + '）'
+                : 'プレゼンHTMLを書き出しました（' + mb + 'MB．画像・動画はURLで参照しています）', false);
         }
+
+        // ── 文書アーカイブへの格納 ──
+        //   「全部埋め込み」では画像を data: URI に，動画を別枠の中身にして文書に入れる．
+        //   埋め込みHTML（iframe）は埋め込めない．
+        const LOCAL_IMG_RE = /((?:src|poster)\s*=\s*["'])((?:https?:\/\/[^"'\/]+)?\/kataribe\/img\/[^"'?#]+\.(?:png|jpe?g|svg))(["'])/gi;
+        function localAssetStats(src) {
+            const imgs = new Set(); let frames = 0;
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                const h = t.html || '';
+                let m; LOCAL_IMG_RE.lastIndex = 0;
+                while ((m = LOCAL_IMG_RE.exec(h))) {
+                    if (!/^https?:/i.test(m[2]) || m[2].indexOf(location.origin + '/') === 0) imgs.add(m[2]);
+                }
+                frames += (h.match(/<iframe[^>]*src\s*=\s*["'](?:https?:\/\/[^"'\/]+)?\/kataribe\/img\//gi) || []).length;
+            }));
+            return { imgs: [...imgs], frames: frames };
+        }
+        function toDataUri(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(r => {
+                if (!r.ok) throw new Error(url + '（' + r.status + '）');
+                return r.blob();
+            }).then(b => new Promise((res, rej) => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = () => rej(new Error(url + ' を読めませんでした'));
+                fr.readAsDataURL(b);
+            }));
+        }
+        async function inlineLocalImages(src) {
+            const st = localAssetStats(src);
+            const map = {};
+            for (const u of st.imgs) map[u] = await toDataUri(u);
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                if (t.html) t.html = t.html.replace(LOCAL_IMG_RE, (all, pre, url, post) =>
+                    map[url] ? pre + map[url] + post : all);
+            }));
+            return st.imgs.length;
+        }
+        // このサイトの動画（公開置き場・サイトローカル）を取り出し，部品の中を ktbmedia:番号 に置き換える
+        const OWN_VIDEO_RE = /((?:src)\s*=\s*["'])((?:https?:\/\/[^"'\/]+)?\/(?:static\/mdimgs|kataribe\/img)\/[^"'?#]+\.(?:mp4|m4v|webm))(["'])/gi;
+        async function extractVideos(src) {
+            const own = u => !/^https?:/i.test(u) || u.indexOf(location.origin + '/') === 0;
+            const order = [];
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                let m; OWN_VIDEO_RE.lastIndex = 0;
+                while ((m = OWN_VIDEO_RE.exec(t.html || ''))) if (own(m[2]) && !order.includes(m[2])) order.push(m[2]);
+            }));
+            const media = [];
+            for (const u of order) {
+                const uri = await toDataUri(u);
+                const k = uri.indexOf(',');
+                let mime = uri.slice(5, k).replace(/;base64$/, '');
+                if (!/^video\//.test(mime)) mime = /\.webm$/i.test(u) ? 'video/webm' : 'video/mp4';
+                media.push({ mime: mime, b64: uri.slice(k + 1) });
+            }
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                if (t.html) t.html = t.html.replace(OWN_VIDEO_RE, (all, pre, url, post) => {
+                    const i = order.indexOf(url);
+                    return i >= 0 ? pre + 'ktbmedia:' + i + post : all;
+                });
+            }));
+            return media;
+        }
+        // 公開置き場（/static/mdimgs/）の画像．このサイトのものだけを埋め込む（動画は対象外）
+        const PUBLIC_IMG_RE = /((?:src|poster)\s*=\s*["'])((?:https?:\/\/[^"'\/]+)?\/static\/mdimgs\/[^"'?#]+\.(?:png|jpe?g|svg))(["'])/gi;
+        async function inlinePublicImages(src) {
+            const urls = new Set();
+            const own = u => !/^https?:/i.test(u) || u.indexOf(location.origin + '/') === 0;
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                let m; PUBLIC_IMG_RE.lastIndex = 0;
+                while ((m = PUBLIC_IMG_RE.exec(t.html || ''))) if (own(m[2])) urls.add(m[2]);
+            }));
+            const map = {};
+            for (const u of urls) map[u] = await toDataUri(u);
+            (src.scenes || []).forEach(sc => [].concat(sc.steps || [], sc.tiles || []).forEach(t => {
+                if (t.html) t.html = t.html.replace(PUBLIC_IMG_RE, (all, pre, url, post) =>
+                    map[url] ? pre + map[url] + post : all);
+            }));
+            return urls.size;
+        }
+        function getArcPolicy() {
+            return {
+                key: $('input[name="arc_policy"]:checked').val() || 'private',
+                groups: $('input[name="arc_groups"]:checked').map(function(){ return parseInt(this.value, 10); }).get()
+            };
+        }
+        function paintArcGroups() {
+            const k = $('input[name="arc_policy"]:checked').val();
+            $('#arcGroupList').toggle(k === 'group' || k === 'domestic_group');
+        }
+        $('input[name="arc_policy"]').on('change', paintArcGroups);
+        let arcAll = false;                     // いま開いている格納ダイアログが「全部埋め込み」か
+        function openArchive(all) {
+            if (!spec.scenes || !spec.scenes.length) return showResult('シーンがありません', true);
+            arcAll = all;
+            $('#arcMode').text(all
+                ? '格納の形：全部埋め込み（このサイトの画像と動画を文書の中に入れます．大きくなった文書は文書アーカイブがファイルとして保存します）'
+                : '格納の形：参照（画像・動画はURLで参照します．サイトローカルの画像は，ログインしていない読み手には表示されません）');
+            $('#arcTitle').val(($('#presTitle').val() || spec.title || '').trim());
+            $('#arcDesc').val(''); $('#arcMemo').val('');
+            // グループの候補はプレゼンの公開範囲で選んでいるものを初期値にする（開示先そのものは毎回ここで決める）
+            const sh = getShare();
+            $('input[name="arc_groups"]').each(function(){ this.checked = sh.groups.includes(parseInt(this.value, 10)); });
+            paintArcGroups();
+            const st = localAssetStats(spec);
+            const notes = [];
+            if (isDirty()) notes.push('未保存の変更も含めて，いま画面にある内容を格納します．');
+            if (st.imgs.length && !all) notes.push('サイトローカルの画像が ' + st.imgs.length + ' 件あります．');
+            if (st.frames) notes.push('サイトローカルの埋め込みHTMLが ' + st.frames + ' 件あります．これは文書に埋め込めないため，ログインしていない読み手には表示されません．');
+            $('#arcNote').text(notes.join(''));
+            $('#archiveModal').css('display', 'flex');
+            $('#arcTitle')[0].focus();
+        }
+        $('#btnArchive').on('click', () => openArchive(false));
+        $('#btnArchiveAll').on('click', () => openArchive(true));
+        $('#btnArcCancel').on('click', () => { $('#archiveModal').hide(); });
+        $('#btnArcGo').on('click', async () => {
+            const title = ($('#arcTitle').val() || '').trim();
+            if (!title) return showResult('アーカイブタイトルを入れてください', true);
+            const pol = getArcPolicy();
+            if ((pol.key === 'group' || pol.key === 'domestic_group') && !pol.groups.length)
+                return showResult('グループを開示先にするときは，グループを1つ以上選んでください', true);
+            const $go = $('#btnArcGo').prop('disabled', true).text('格納しています…');
+            try {
+                const made = await makePresentationHtml(arcAll, $go);
+                const html = made.html;
+                $go.text('格納しています…');
+                const resp = await $.ajax({
+                    url: API.archive, method: 'POST', contentType: 'application/json', dataType: 'json',
+                    data: JSON.stringify({ title: title, public_description: $('#arcDesc').val(),
+                                           owner_memo: $('#arcMemo').val(), html: html,
+                                           access_policy: pol.key, access_groups: pol.groups,
+                                           pres_id: presId })
+                });
+                if (!resp || !resp.success) throw new Error((resp && resp.error) || 'サーバーから想定外の応答がありました');
+                $('#archiveModal').hide();
+                showResult('文書アーカイブに格納しました（ID:' + resp.doc_id + '，開示先：' + resp.policy_label
+                    + (resp.as_file ? '，' + (resp.size / 1048576).toFixed(1) + 'MB のためファイルとして保存' : '') + '）'
+                    + (arcAll ? '．画像 ' + made.images + ' 件・動画 ' + made.videos + ' 件を埋め込みました' : ''), false);
+                if (resp.doc_url) $('#result').append(' ').append(
+                    $('<a target="_blank" rel="noopener">').attr('href', resp.doc_url).text('→ 文書アーカイブで開く'));
+            } catch (e) {
+                const msg = (e && e.responseJSON && e.responseJSON.error) || (e && e.status ? apiErrorMessage(e, '', '') : (e && e.message) || String(e));
+                showResult('アーカイブへの格納に失敗しました: ' + msg, true);
+            } finally {
+                $go.prop('disabled', false).text('🗄 格納する');
+            }
+        });
 
         // ── 作品JSONの取り込み ──
         function loadSpecFromText(text) {
@@ -1881,34 +2194,44 @@ js +
         $('#btnRedo').on('click', redo);
         $(document).on('keydown', e => {
             if (!(e.ctrlKey || e.metaKey)) return;
+            if ($('.modal-bg:visible').length) return;     // ダイアログの入力欄ではブラウザ本来の取り消しに任せる
             const k = (e.key || '').toLowerCase();
             if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
             else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
         });
         $('#btnSaveAs').on('click', saveAs);
         $('#btnExport').on('click', exportSpec);
-        $('#btnExportHtml').on('click', exportHtml);
+        $('#btnExportHtml').on('click', () => exportHtml(false));
+        $('#btnExportHtmlAll').on('click', () => exportHtml(true));
         // ── 再生専用ページのURL（保存済みの作品のみ） ──
-        function playUrl() { return location.origin + API.play + presId; }
-        function copyText(text) {
+        //   プレゼン全体：/kataribe/play/<id>　このシーン：/kataribe/play/<id>?scene=＃番号
+        function playUrl(sceneNo) {
+            return location.origin + API.play + presId + (sceneNo ? '?scene=' + sceneNo : '');
+        }
+        function copyText(text, inputId) {
             if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
             return new Promise((res, rej) => {                    // 旧ブラウザ／非HTTPS向けの退避
-                const $t = $('#urlText'); $t[0].focus(); $t[0].select();
+                const t = document.getElementById(inputId || 'urlText'); t.focus(); t.select();
                 try { document.execCommand('copy') ? res() : rej(new Error('copy failed')); }
                 catch (e) { rej(e); }
             });
         }
         $('#btnPlayUrl').on('click', () => {
             if (!presId) return showResult('URLは保存済みの作品で使えます．先に保存してください', true);
+            const no = curScene + 1;
             $('#urlText').val(playUrl());
+            $('#urlSceneText').val(playUrl(no));
+            $('#urlSceneLbl').text('＃' + no + ' ' + sceneLabel(curScene));
+            $('#urlEditText').val(location.origin + editUrl(presId, no));
             $('#urlModal').css('display', 'flex');
-            $('#urlText')[0].select();
+            $('#urlSceneText')[0].select();
         });
         $('#btnUrlClose').on('click', () => { $('#urlModal').hide(); });
-        $('#btnUrlOpen').on('click', () => { window.open(playUrl(), '_blank'); });
-        $('#btnUrlCopy').on('click', () => {
-            copyText(playUrl())
-                .then(() => showResult('URLをコピーしました：' + playUrl(), false))
+        $('#urlModal').on('click', 'button[data-url]', function(){
+            const id = $(this).data('url'), url = $('#' + id).val();
+            if ($(this).data('act') === 'open') return window.open(url, '_blank');
+            copyText(url, id)
+                .then(() => showResult('URLをコピーしました：' + url, false))
                 .catch(() => showResult('コピーできませんでした．欄の文字列を選択してコピーしてください', true));
         });
         $('#btnLoadIn').on('click', () => {
@@ -1951,6 +2274,11 @@ js +
         loadList();
         markSaved();          // 起動直後は「変更なし」から始める
         resetHistory();       // 履歴の起点
+        // アドレスに ?id=作品&scene=＃番号 があれば，その作品をそのシーンで開く
+        (function(){
+            const id = parseInt(START_QUERY.get('id'), 10);
+            if (id > 0) openPres(id, parseInt(START_QUERY.get('scene'), 10));
+        })();
     </script>
 </body>
 </html>
