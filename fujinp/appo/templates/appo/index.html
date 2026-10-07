@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あぽる - FUJIN-P</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif; line-height: 1.6; margin: 0; padding: 20px; background: #f4f5f7; color: #1f2937; }
+        .container { max-width: 1250px; margin: 0 auto; padding: 20px; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,.08); border-radius: 10px; }
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #eee; margin-bottom: 14px; }
+        .header h1 { margin: 0; font-size: 1.5rem; }
+        .header .sub { font-size: .85rem; color: #6b7280; }
+        .btn-return { display: inline-block; padding: 6px 14px; background: #e74c3c; border-radius: 20px; color: #fff !important; text-decoration: none; font-size: .82em; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+        .btn-return:hover { background: #c0392b; }
+        button { padding: 7px 14px; border: none; border-radius: 6px; cursor: pointer; background: #2563eb; color: #fff; font-size: .9em; }
+        button:hover { filter: brightness(.92); }
+        button:disabled { opacity: .5; cursor: default; }
+        .btn-gray { background: #6b7280; } .btn-green { background: #16a34a; } .btn-red { background: #dc2626; } .btn-amber { background: #d97706; }
+        .btn-small { padding: 3px 9px; font-size: .8em; }
+        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 2px solid #e5e7eb; }
+        .tab { padding: 8px 18px; cursor: pointer; border-radius: 8px 8px 0 0; color: #4b5563; font-weight: 600; }
+        .tab.active { background: #2563eb; color: #fff; }
+        .badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; background: #dc2626; color: #fff; border-radius: 10px; font-size: .78em; text-align: center; }
+        .week-nav { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+        .table-wrap { border: 1px solid #ddd; overflow-x: auto; max-height: 72vh; overflow-y: auto; }
+        table.cal { width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        table.cal th { position: sticky; top: 0; background: #f8f9fa; padding: 8px; z-index: 2; border-bottom: 1px solid #ddd; font-size: .9rem; }
+        table.cal td { border: 1px solid #eee; padding: 5px; vertical-align: top; height: 90px; }
+        table.cal td.hostcell, table.cal th.hostcell { position: sticky; left: 0; width: 130px; background: #f8f9fa; z-index: 1; font-weight: bold; }
+        table.cal th.hostcell { z-index: 3; }
+        table.cal tr.me td.hostcell { background: #ecfdf5; }
+        .today { background: #fef9e7; }
+        .sunday { color: #dc2626; } .saturday { color: #2563eb; }
+        .mtg { border-radius: 5px; padding: 3px 5px; margin: 2px 0; font-size: .78rem; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; border-left-width: 4px; }
+        .mtg:hover { box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+        .mtg .t { font-weight: bold; }
+        .mtg .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .st-free { border-left-color: #16a34a; background: #f0fdf4; }
+        .st-open { border-left-color: #0891b2; background: #ecfeff; }
+        .st-booked, .st-full { border-left-color: #64748b; background: #f1f5f9; }
+        .st-proposed, .st-inviting { border-left-color: #db2777; background: #fdf2f8; }
+        .st-canceled { border-left-color: #9ca3af; background: #f9fafb; color: #6b7280; }
+        .st-canceled .ttl { text-decoration: line-through; }
+        .role-host { outline: 2px solid #16a34a; outline-offset: -1px; }
+        .role-guest { outline: 2px solid #2563eb; outline-offset: -1px; }
+        .tp-past { opacity: .55; }
+        .tag { display: inline-block; padding: 0 5px; border-radius: 6px; font-size: .72rem; margin-right: 2px; }
+        .tag-late { background: #fef3c7; color: #92400e; font-weight: bold; }
+        .tag-mine { background: #dbeafe; color: #1e40af; }
+        .tag-pending { background: #fee2e2; color: #991b1b; }
+        .add-btn { padding: 1px 8px; font-size: .8em; background: #16a34a; margin-top: 4px; }
+        .legend { font-size: .78rem; color: #4b5563; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 12px; }
+        .legend span.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 3px; border: 1px solid #cbd5e1; }
+        .hint { font-size: .85rem; color: #6b7280; }
+        .list-section h3 { margin: 18px 0 6px; font-size: 1.05rem; }
+        .list-row { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; cursor: pointer; flex-wrap: wrap; }
+        .list-row:hover { background: #f8fafc; }
+        .list-row .when { font-weight: bold; min-width: 170px; }
+        .list-row .who { color: #374151; }
+        .empty { color: #9ca3af; font-size: .9rem; padding: 4px 0; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px 22px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.25); z-index: 1000; width: 92%; max-width: 560px; max-height: 88vh; overflow-y: auto; }
+        .modal h3 { margin-top: 0; }
+        .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 999; }
+        .modal-footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+        label { font-weight: 600; display: block; margin-top: 9px; font-size: .9rem; }
+        label.inline { display: inline-block; font-weight: normal; margin-right: 14px; }
+        input[type=text], input[type=date], input[type=time], input[type=number], input[type=url], select, textarea { width: 100%; padding: 7px; margin-top: 3px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font: inherit; }
+        textarea { min-height: 60px; }
+        .row2 { display: flex; gap: 10px; } .row2 > div { flex: 1; }
+        .picker { border: 1px solid #d1d5db; border-radius: 6px; max-height: 150px; overflow-y: auto; padding: 4px 8px; margin-top: 4px; }
+        .picker label { font-weight: normal; margin: 2px 0; display: block; }
+        .picker .aff { color: #9ca3af; font-size: .8em; margin-left: 4px; }
+        .note { font-size: .8rem; color: #6b7280; margin: 4px 0 0; }
+        .kv { margin: 3px 0; } .kv b { display: inline-block; min-width: 6.5em; color: #4b5563; }
+        .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+        .box h4 { margin: 0 0 6px; font-size: .95rem; }
+        .ptable { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        .ptable td { border-bottom: 1px solid #f1f5f9; padding: 4px; vertical-align: top; }
+        .msgs { max-height: 220px; overflow-y: auto; background: #f8fafc; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+        .msg { margin: 5px 0; font-size: .87rem; }
+        .msg .who { font-weight: bold; } .msg .at { color: #9ca3af; font-size: .78em; margin-left: 6px; }
+        .msg.mine .who { color: #2563eb; }
+        .msg .body { white-space: pre-wrap; }
+        .stamp { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .8rem; font-weight: bold; }
+        table.mcal { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.mcal th { background: #f8f9fa; padding: 6px; font-size: .9rem; border: 1px solid #e5e7eb; }
+        table.mcal td { border: 1px solid #e5e7eb; vertical-align: top; height: 110px; padding: 3px; }
+        table.mcal td.out { background: #fafafa; color: #9ca3af; }
+        table.mcal td.out .mtg { opacity: .6; }
+        .dnum { font-weight: bold; font-size: .85rem; display: inline-block; padding: 0 4px; border-radius: 4px; }
+        .dnum.can-add { cursor: pointer; }
+        .dnum.can-add:hover { background: #dcfce7; }
+        .dnum.today-num { background: #2563eb; color: #fff; }
+        .mday-items { max-height: 140px; overflow-y: auto; }
+        .mcal .mtg { padding: 1px 4px; margin: 1px 0; font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: .9rem; }
+        .filters input[type=date], .filters select, .filters input[type=text] { width: auto; margin: 0; padding: 4px 6px; }
+        .filters label.inline { margin: 0; }
+        table.ltable { width: 100%; min-width: 980px; border-collapse: collapse; font-size: .84rem; }
+        table.ltable th { position: sticky; top: 0; background: #f1f5f9; padding: 6px 8px; text-align: left; cursor: pointer; white-space: nowrap; border-bottom: 2px solid #cbd5e1; user-select: none; }
+        table.ltable th.sorted::after { content: attr(data-arrow); margin-left: 3px; color: #2563eb; }
+        table.ltable td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; white-space: nowrap; }
+        table.ltable td.wrap { white-space: normal; min-width: 140px; }
+        table.ltable tbody tr { cursor: pointer; }
+        table.ltable tbody tr:hover { background: #f8fafc; }
+        table.ltable tr.r-canceled td { color: #9ca3af; } table.ltable tr.r-canceled td.ttl { text-decoration: line-through; }
+        table.ltable tr.r-past { opacity: .6; }
+        table.ltable tr.day-break td { border-top: 2px solid #e2e8f0; }
+        .pill { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: .76rem; border: 1px solid #cbd5e1; }
+        .pill.st-free { background: #f0fdf4; border-color: #16a34a; } .pill.st-open { background: #ecfeff; border-color: #0891b2; }
+        .pill.st-booked, .pill.st-full { background: #f1f5f9; } .pill.st-proposed, .pill.st-inviting { background: #fdf2f8; border-color: #db2777; }
+        .pill.st-canceled { background: #f9fafb; color: #6b7280; }
+        table.ltable.pref td { cursor: default; }
+        table.ltable.pref tbody tr { cursor: default; }
+        table.ltable.pref td.c { text-align: center; }
+        table.ltable.pref td.aff-c { color: #6b7280; }
+        input.ord { width: 80px; padding: 3px 5px; margin: 0; text-align: right; }
+        .day-layout { display: flex; gap: 12px; align-items: flex-start; }
+        .tt-wrap { flex: 1; min-width: 0; overflow: auto; max-height: 76vh; border: 1px solid #ddd; border-radius: 6px; }
+        .tt { display: flex; position: relative; min-width: max-content; }
+        .tt-axis { flex: 0 0 60px; position: sticky; left: 0; z-index: 4; background: #f8f9fa; border-right: 1px solid #ddd; }
+        .tt-col { flex: 0 0 170px; border-right: 1px solid #eee; }
+        .tt-col.me { flex-basis: 200px; background: #f7fdf9; }
+        .tt-head { position: sticky; top: 0; z-index: 3; height: 44px; box-sizing: border-box; padding: 4px 6px; background: #f8f9fa; border-bottom: 1px solid #ddd; font-weight: bold; font-size: .85rem; overflow: hidden; }
+        .tt-head .aff { display: block; font-weight: normal; font-size: .72rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tt-col.me .tt-head { background: #ecfdf5; }
+        .tt-axis .tt-head { z-index: 5; }
+        .tt-body { position: relative; }
+        .tt-slot { position: absolute; left: 0; right: 0; border-top: 1px solid #f1f5f9; }
+        .tt-slot.hour { border-top-color: #e2e8f0; }
+        .tt-col:not(.past) .tt-body { cursor: copy; }
+        .tt-col .tt-body:hover .tt-hover { display: block; }
+        .tt-hover { display: none; position: absolute; left: 2px; right: 2px; background: rgba(37,99,235,.08); border: 1px dashed #93c5fd; border-radius: 4px; pointer-events: none; font-size: .72rem; color: #1d4ed8; padding: 0 4px; }
+        .tt-label { position: absolute; right: 4px; font-size: .72rem; color: #6b7280; transform: translateY(-50%); }
+        .tt-now { position: absolute; left: 0; right: 0; border-top: 2px solid #ef4444; z-index: 2; pointer-events: none; }
+        .tt .mtg { position: absolute; margin: 0; overflow: hidden; z-index: 1; box-sizing: border-box; cursor: pointer; }
+        .tt .mtg .ttl { white-space: nowrap; }
+        .tt-col.wide { flex: 1 1 auto; min-width: 700px; }
+        .tt-mark { position: absolute; left: 0; width: 5px; border-radius: 0 3px 3px 0; background: #94a3b8; }
+        .tt-mark.st-free { background: #16a34a; } .tt-mark.st-open { background: #0891b2; }
+        .tt-mark.st-proposed, .tt-mark.st-inviting { background: #db2777; } .tt-mark.st-canceled { background: #d1d5db; }
+        .tt-label-appo { color: #1d4ed8; font-weight: bold; }
+        .tt .mtg.dayblk { padding: 4px 8px; font-size: .82rem; line-height: 19px; overflow: hidden; }
+        .tt .mtg.dayblk:hover { z-index: 3; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+        .dl1 { display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; height: 19px; }
+        .dl1 > * { flex: 0 0 auto; }
+        .dl1 .d-title { flex: 0 1 auto; min-width: 4em; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
+        .dl1 .d-who, .dl1 .d-place { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; color: #374151; }
+        .dl1 .d-time { font-weight: bold; }
+        .dl1 .pill, .dl1 .tag { line-height: 16px; }
+        .dl1 .d-btn { padding: 0 8px; line-height: 17px; margin-left: auto; }
+        .dl2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4b5563; height: 19px; }
+        .d-url { color: #2563eb; }
+        .st-canceled .d-title { text-decoration: line-through; }
+        table.ltable tr.grp td { background: #eef2ff; font-weight: bold; cursor: pointer; border-top: 2px solid #c7d2fe; }
+        table.ltable tr.grp td .gsub { font-weight: normal; color: #4b5563; margin-left: 10px; font-size: .8rem; }
+        .ppl { white-space: normal; font-size: .8rem; }
+        .ppl span { display: inline-block; margin: 0 6px 2px 0; }
+        
+        #result { display: none; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 2000; padding: 10px 18px; border-radius: 8px; font-weight: bold; max-width: 90%; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+        #result.success { background: #ecfdf5; color: #065f46; border: 1px solid #10b981; }
+        #result.error { background: #fef2f2; color: #991b1b; border: 1px solid #ef4444; }
+    </style>
+</head>
+<body>
+<div id="result"></div>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>🤝 あぽる</h1>
+            <div class="sub">オフィスアワーを出す・会いたい人に請求する・招待する</div>
+        </div>
+        <a href="{{ url_for('appo.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="day">🕘 当日の時間割</div>
+        <div class="tab" data-tab="cal">📅 週カレンダー</div>
+        <div class="tab" data-tab="month">🗓 月カレンダー</div>
+        <div class="tab" data-tab="table">📋 一覧表</div>
+        <div class="tab" data-tab="mine">🙋 マイあぽ<span class="badge" id="todo-badge" {% if not todo_count %}style="display:none"{% endif %}>{{ todo_count }}</span></div>
+        <div class="tab" data-tab="prefs">⚙ マイ設定</div>
+    </div>
+
+    <div class="toolbar">
+        <span id="day-actions">
+            <button class="btn-green" id="btn-create">＋ 枠を出す／招待する</button>
+            <button id="btn-propose">📨 ミーティングを請求する</button>
+        </span>
+        <div class="week-nav" id="day-nav">
+            <button class="btn-gray" id="prevDay">&lt; 前日</button>
+            <span id="dayLabel"></span>
+            <input type="date" id="dayPicker" style="width:auto;margin:0;padding:4px 6px">
+            <button class="btn-gray" id="thisDay">今日</button>
+            <button class="btn-gray" id="nextDay">翌日 &gt;</button>
+        </div>
+        <div class="week-nav" id="week-nav" style="display:none">
+            <button class="btn-gray" id="prevWeek">&lt; 前週</button>
+            <span id="weekLabel"></span>
+            <button class="btn-gray" id="thisWeek">今週</button>
+            <button class="btn-gray" id="nextWeek">次週 &gt;</button>
+        </div>
+        <div class="week-nav" id="month-nav" style="display:none">
+            <button class="btn-gray" id="prevMonth">&lt; 前月</button>
+            <span id="monthLabel"></span>
+            <button class="btn-gray" id="thisMonth">今月</button>
+            <button class="btn-gray" id="nextMonth">次月 &gt;</button>
+        </div>
+    </div>
+
+    <div id="pane-day">
+        <div class="filters">
+            <label class="inline"><input type="checkbox" id="d-mine-only"> 自分が関わるアポだけ表示</label>
+        </div>
+        <div class="day-layout">
+            <div class="tt-wrap" id="tt-wrap">
+                <div class="tt" id="tt"></div>
+            </div>
+        </div>
+        <p class="hint">週・月カレンダーと同じく，あなたに見えるアポ（あなたがホスト・ゲストのもの，ほかの人が公開している枠）を時刻の位置に並べます．アポを押すと詳細（承諾・キャンセル・編集・サブチャンネル）が開きます．空いた時間を押すと，その時刻から新しい枠を出せます．</p>
+    </div>
+
+    <div id="pane-month" style="display:none">
+        <table class="mcal">
+            <thead><tr>
+                <th class="sunday">日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th class="saturday">土</th>
+            </tr></thead>
+            <tbody id="month-body"></tbody>
+        </table>
+        <p class="hint">すべてのホストの枠を日ごとに並べます．枠を押すと詳細が開きます．日付の数字を押すと，その日の時間割に移ります．</p>
+    </div>
+
+    <div id="pane-table" style="display:none">
+        <div class="filters">
+            <span>期間</span>
+            <input type="date" id="t-from"> 〜 <input type="date" id="t-to">
+            <button class="btn-small btn-gray" data-range="7">1週</button>
+            <button class="btn-small btn-gray" data-range="30">1か月</button>
+            <button class="btn-small btn-gray" data-range="90">3か月</button>
+            <button class="btn-small" id="t-load">表示</button>
+        </div>
+        <div class="filters">
+            <select id="t-scope">
+                <option value="all">すべての枠</option>
+                <option value="requestable">請求・参加できる枠</option>
+                <option value="guest">自分がゲストの枠</option>
+            </select>
+            <select id="t-kind"><option value="">種別：すべて</option><option value="exclusive">🔒 排他的</option><option value="open">👥 懇談</option></select>
+            <select id="t-mode"><option value="">場所：すべて</option><option value="office">🏢 オフィス</option><option value="online">💻 オンライン</option><option value="hybrid">🏢💻 両方</option></select>
+            <label class="inline"><input type="checkbox" id="t-canceled"> キャンセルも表示</label>
+            <label class="inline"><input type="checkbox" id="t-past"> 終わったものも表示</label>
+            <input type="text" id="t-q" placeholder="人・題目・場所で検索" style="width:200px">
+            <button class="btn-small btn-gray" id="t-open-all">すべて開く</button>
+            <button class="btn-small btn-gray" id="t-close-all">すべて閉じる</button>
+            <span id="t-count" class="hint"></span>
+        </div>
+        <div class="table-wrap">
+            <table class="ltable">
+                <thead><tr id="t-head"></tr></thead>
+                <tbody id="t-body"></tbody>
+            </table>
+        </div>
+        <p class="hint">自分以外の会員ごとに，出している枠をまとめて示します（自分の枠は「マイあぽ」へ）．人の見出しを押すと開閉，列見出しを押すと人ごとの中で並べ替え，行を押すと詳細が開きます．</p>
+    </div>
+
+    <div id="pane-cal" style="display:none">
+        <div class="table-wrap">
+            <table class="cal">
+                <thead id="cal-head"></thead>
+                <tbody id="cal-body"></tbody>
+            </table>
+        </div>
+        <div class="legend">
+            <span><span class="sw" style="background:#f0fdf4;border-left:4px solid #16a34a"></span>空き（排他的）</span>
+            <span><span class="sw" style="background:#ecfeff;border-left:4px solid #0891b2"></span>懇談（非排他的）</span>
+            <span><span class="sw" style="background:#f1f5f9;border-left:4px solid #64748b"></span>成立・満席</span>
+            <span><span class="sw" style="background:#fdf2f8;border-left:4px solid #db2777"></span>請求中・招待中</span>
+            <span><span class="sw" style="background:#f9fafb"></span>キャンセル</span>
+            <span><span class="sw" style="outline:2px solid #16a34a"></span>自分がホスト</span>
+            <span><span class="sw" style="outline:2px solid #2563eb"></span>自分がゲスト</span>
+            <span><span class="tag tag-late">⚡直前</span>開始{{ late_hours }}時間以内の成立・キャンセル</span>
+        </div>
+        <p class="hint">🏢＝オフィス　💻＝オンライン　🔒＝排他的（1対1）　👥＝非排他的（懇談）．枠をクリックすると詳細と請求・サブチャンネルが開きます．</p>
+    </div>
+
+    <div id="pane-prefs" style="display:none">
+        <p class="hint">ここでの設定はあなただけのものです．ほかの会員の画面には影響しません．</p>
+        <div class="box">
+            <h4>時間割に並べる人の順序</h4>
+            <div id="p-modes"></div>
+            <p class="note">「自分で決めた順」は下の表の順です．表の番号を書き換えると（例：2.50），小さい順に並べ替えて 1, 2, 3… と振り直します．</p>
+        </div>
+        <div class="box">
+            <h4>表示・非表示をまだ決めていない人</h4>
+            <div id="p-unset"></div>
+        </div>
+        <div class="box">
+            <h4>表示する人と順番</h4>
+            <div class="filters">
+                <input type="text" id="p-q" placeholder="名前・所属で絞り込み" style="width:220px">
+                <button class="btn-small btn-gray" id="p-sort-name">名前順に振り直す</button>
+                <button class="btn-small btn-gray" id="p-sort-aff">所属順に振り直す</button>
+                <span class="hint" id="p-total"></span>
+            </div>
+            <div class="table-wrap" style="max-height:56vh">
+                <table class="ltable pref" style="min-width:600px">
+                    <thead><tr><th>順番</th><th>名前</th><th>所属</th><th>表示</th><th>非表示</th><th>未設定</th></tr></thead>
+                    <tbody id="p-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="toolbar" style="margin-top:12px">
+            <button class="btn-green" id="p-save">設定を保存</button>
+            <button class="btn-gray" id="p-reset">保存した状態に戻す</button>
+            <span id="p-dirty" class="tag tag-late" style="display:none">未保存の変更があります</span>
+        </div>
+    </div>
+
+    <div id="pane-mine" style="display:none">
+        <div class="list-section"><h3>🔔 対応が必要</h3><div id="mine-todo"></div></div>
+        <div class="list-section"><h3>📨 ホスト：招待中（日付の新しい順）</h3><div id="mine-inviting"></div></div>
+        <div class="list-section"><h3>🗂 ホスト：記録（日付の新しい順）</h3>
+            <div class="filters"><label class="inline"><input type="checkbox" id="mine-hide-void" checked> 不成立の請求を隠す</label></div>
+            <div class="table-wrap" style="max-height:none"><table class="ltable" style="min-width:860px">
+                <thead><tr><th>日付</th><th>時間</th><th>題目</th><th>種別</th><th>場所</th><th>成り立ち</th><th>状態</th><th>ゲスト</th></tr></thead>
+                <tbody id="mine-records"></tbody></table></div>
+        </div>
+        <div class="list-section"><h3>🙋 ゲストとして（日付の新しい順）</h3><div id="mine-guest"></div></div>
+</div>
+</div>
+
+<!-- 枠を出す／招待する -->
+<div class="modal" id="m-create">
+    <h3>＋ 枠を出す／招待する</h3>
+    <p class="note">あなたがホストになります．会員に公開すれば，ほかの会員がカレンダーから請求できます．</p>
+    <label>題目</label>
+    <input type="text" id="c-title" maxlength="200" placeholder="例：オフィスアワー，研究相談">
+    <div class="row2">
+        <div><label>日付</label><input type="date" id="c-date"></div>
+        <div><label>開始</label><input type="time" id="c-start"></div>
+        <div><label>終了</label><input type="time" id="c-end"></div>
+    </div>
+    <label>種別</label>
+    <label class="inline"><input type="radio" name="c-kind" value="exclusive" checked> 🔒 排他的（1対1）</label>
+    <label class="inline"><input type="radio" name="c-kind" value="open"> 👥 非排他的（懇談）</label>
+    <div id="c-open-opts" style="display:none">
+        <div class="row2">
+            <div><label>定員（0は制限なし）</label><input type="number" id="c-capacity" min="0" value="0"></div>
+            <div><label>&nbsp;</label><label class="inline"><input type="checkbox" id="c-auto"> 申し込みを自動で承諾する</label></div>
+        </div>
+    </div>
+    <label>場所</label>
+    <select id="c-mode">
+        <option value="office">🏢 オフィス</option>
+        <option value="online">💻 オンライン</option>
+        <option value="hybrid">🏢💻 オフィス＋オンライン</option>
+    </select>
+    <input type="text" id="c-location" maxlength="200" placeholder="部屋・建物など（オフィスのとき）">
+    <input type="url" id="c-url" maxlength="500" placeholder="オンラインのURL（成立した参加者にだけ表示されます）">
+    <label>メモ</label>
+    <textarea id="c-note" placeholder="話題の目安，持ち物など"></textarea>
+    <label class="inline" style="margin-top:10px"><input type="checkbox" id="c-listed" checked> 会員に公開して請求を受け付ける</label>
+    <label>招待する人（任意）</label>
+    <input type="text" id="c-filter" placeholder="名前で絞り込み">
+    <div class="picker" id="c-picker"></div>
+    <p class="note">招待した人が承諾すると成立します．排他的の枠では最初に成立した1人で締め切ります．</p>
+    <div class="modal-footer">
+        <button class="btn-gray" onclick="closeModals()">閉じる</button>
+        <button class="btn-green" id="c-submit">作成する</button>
+    </div>
+</div>
+
+<!-- ミーティングを請求する -->
+<div class="modal" id="m-propose">
+    <h3>📨 ミーティングを請求する</h3>
+    <p class="note">相手の空き枠がカレンダーにあれば，その枠をクリックして請求するのが確実です．ここでは日時を指定して相手に請求します．相手の承諾で成立します．</p>
+    <label>相手（ホスト）</label>
+    <input type="text" id="p-filter" placeholder="名前で絞り込み">
+    <select id="p-host" size="5"></select>
+    <label>題目</label>
+    <input type="text" id="p-title" maxlength="200" placeholder="例：面会のお願い">
+    <div class="row2">
+        <div><label>日付</label><input type="date" id="p-date"></div>
+        <div><label>開始</label><input type="time" id="p-start"></div>
+        <div><label>終了</label><input type="time" id="p-end"></div>
+    </div>
+    <label>種別</label>
+    <label class="inline"><input type="radio" name="p-kind" value="exclusive" checked> 🔒 排他的（1対1）</label>
+    <label class="inline"><input type="radio" name="p-kind" value="open"> 👥 非排他的（ほかの人を交えた懇談でよい）</label>
+    <label>場所</label>
+    <select id="p-mode">
+        <option value="office">🏢 オフィス</option>
+        <option value="online">💻 オンライン</option>
+        <option value="hybrid">🏢💻 オフィス＋オンライン</option>
+    </select>
+    <label>ホストへのひとこと（ホストだけに表示）</label>
+    <textarea id="p-message" maxlength="1000"></textarea>
+    <label class="inline" style="margin-top:10px"><input type="checkbox" id="p-show"> 成立後，私の名前をほかの会員にも表示する</label>
+    <div class="modal-footer">
+        <button class="btn-gray" onclick="closeModals()">閉じる</button>
+        <button id="p-submit">請求する</button>
+    </div>
+</div>
+
+<!-- 詳細 -->
+<div class="modal" id="m-detail">
+    <div id="d-body"></div>
+    <div class="modal-footer"><button class="btn-gray" onclick="closeModals()">閉じる</button></div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<script>
+    function u(tpl, id) { return tpl.replace('/0/', '/' + id + '/'); }
+    const API = {
+        week:    '{{ url_for("appo.api_week") }}',
+        month:   '{{ url_for("appo.api_month") }}',
+        day:     '{{ url_for("appo.api_day") }}',
+        prefs:   '{{ url_for("appo.api_prefs_get") }}',
+        table:   '{{ url_for("appo.api_table") }}',
+        members: '{{ url_for("appo.api_members") }}',
+        mine:    '{{ url_for("appo.api_mine") }}',
+        create:  '{{ url_for("appo.api_meeting_create") }}',
+        propose: '{{ url_for("appo.api_proposal_create") }}',
+        detail:  id => u('{{ url_for("appo.api_meeting_detail", meeting_id=0) }}', id),
+        request: id => u('{{ url_for("appo.api_meeting_request", meeting_id=0) }}', id),
+        invite:  id => u('{{ url_for("appo.api_meeting_invite", meeting_id=0) }}', id),
+        update:  id => u('{{ url_for("appo.api_meeting_update", meeting_id=0) }}', id),
+        cancelM: id => u('{{ url_for("appo.api_meeting_cancel", meeting_id=0) }}', id),
+        post:    id => u('{{ url_for("appo.api_message_post", meeting_id=0) }}', id),
+        accept:  id => u('{{ url_for("appo.api_participant_accept", participant_id=0) }}', id),
+        decline: id => u('{{ url_for("appo.api_participant_decline", participant_id=0) }}', id),
+        cancelP: id => u('{{ url_for("appo.api_participant_cancel", participant_id=0) }}', id),
+        visible: id => u('{{ url_for("appo.api_participant_visibility", participant_id=0) }}', id)
+    };
+    const MODE_ICON = { office: '🏢', online: '💻', hybrid: '🏢💻' };
+    const KIND_ICON = { exclusive: '🔒', open: '👥' };
+
+    let currentStart = '';
+    let today = '';
+    let members = [];
+    let currentTab = 'day';
+    let openDetailId = null;
+
+    function showResult(message, isError) {
+        const $r = $('#result');
+        $r.text(message).removeClass('success error').addClass(isError ? 'error' : 'success').stop(true, true).show();
+        setTimeout(() => $r.fadeOut(), isError ? 7000 : 4000);
+    }
+    function closeModals() { $('.modal, #backdrop').hide(); openDetailId = null; }
+    function openModal(id) { $('.modal').hide(); $('#' + id + ', #backdrop').show(); }
+
+    function postJSON(url, payload, onOk) {
+        return $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(payload || {}) })
+            .done(r => { if (r.success) { showResult(r.message || '完了しました．', false); onOk && onOk(r); }
+                         else showResult(r.error || '処理に失敗しました．', true); })
+            .fail(x => showResult((x.responseJSON && x.responseJSON.error) || '通信エラーが発生しました．', true));
+    }
+    function refreshAll() {
+        if (currentTab === 'day') loadDay(currentDay);
+        if (currentTab === 'cal') loadWeek(currentStart);
+        if (currentTab === 'month') loadMonth(currentMonth);
+        if (currentTab === 'table') loadTable();
+        if (currentTab === 'mine') loadMine();
+        if (currentTab === 'prefs' && !pDirty) loadPrefs();
+        if (openDetailId) openDetail(openDetailId);
+    }
+    function setBadge(n) { $('#todo-badge').text(n).toggle(n > 0); }
+
+    // ---------------- 週カレンダー ----------------
+    function loadWeek(start) {
+        $.get(API.week, start ? { start: start } : {}, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            currentStart = resp.week_dates[0].date;
+            today = resp.today;
+            $('#weekLabel').text(resp.week_label);
+            $('#prevWeek').data('start', resp.prev_start);
+            $('#nextWeek').data('start', resp.next_start);
+            setBadge(resp.todo_count);
+            renderWeek(resp);
+        }).fail(() => showResult('カレンダーの取得に失敗しました．', true));
+    }
+
+    function renderWeek(resp) {
+        const $hr = $('<tr>').append($('<th>').addClass('hostcell').text('ホスト'));
+        resp.week_dates.forEach((d, i) => {
+            $hr.append($('<th>').addClass(i === 0 ? 'sunday' : (i === 6 ? 'saturday' : '')).text(d.label + '(' + d.weekday + ')'));
+        });
+        $('#cal-head').empty().append($hr);
+        const $body = $('#cal-body').empty();
+        resp.rows.forEach(row => {
+            const $tr = $('<tr>').toggleClass('me', row.is_me);
+            $tr.append($('<td>').addClass('hostcell').text(row.host_name + (row.is_me ? '（あなた）' : '')));
+            resp.week_dates.forEach(d => {
+                const $td = $('<td>').toggleClass('today', d.is_today);
+                (row.cells[d.date] || []).forEach(s => $td.append(buildBlock(s)));
+                if (row.is_me && !d.is_past) {
+                    $td.append($('<button>').addClass('add-btn').attr('title', 'この日の時間割を開く').text('🕘')
+                        .on('click', () => goDay(d.date)));
+                }
+                $tr.append($td);
+            });
+            $body.append($tr);
+        });
+        if (resp.rows.length === 1) {
+            $body.append($('<tr>').append($('<td>').attr('colspan', 8).addClass('hint')
+                .text('この週にほかの会員の公開枠はありません．週を移動するか，「ミーティングを請求する」から日時を指定して請求できます．')));
+        }
+    }
+
+    function buildBlock(s) {
+        const $d = $('<div>').addClass('mtg st-' + s.state + ' tp-' + s.time_state);
+        if (s.my_role === 'host') $d.addClass('role-host');
+        if (s.my_role === 'guest' && ['pending', 'accepted'].includes(s.my_status)) $d.addClass('role-guest');
+        $d.append($('<div>').addClass('t').text(s.start_time + '-' + s.end_time + ' ' + (MODE_ICON[s.mode] || '') + (KIND_ICON[s.kind] || '')));
+        $d.append($('<div>').addClass('ttl').text(s.title));
+        const $tags = $('<div>');
+        $tags.append($('<span>').text(s.state_label + ' '));
+        if (s.late_booked || s.late_cancel) $tags.append($('<span>').addClass('tag tag-late').text('⚡直前'));
+        if (s.pending_count) $tags.append($('<span>').addClass('tag tag-pending').text('請求' + s.pending_count));
+        if (s.my_role === 'guest' && s.my_status) $tags.append($('<span>').addClass('tag tag-mine').text(s.my_status_label));
+        $d.append($tags);
+        $d.on('click', () => openDetail(s.id));
+        return $d;
+    }
+
+    // ---------------- 月カレンダー ----------------
+    let currentMonth = '';
+    function loadMonth(month) {
+        $.get(API.month, month ? { month: month } : {}, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            currentMonth = resp.month; today = resp.today;
+            $('#monthLabel').text(resp.month_label);
+            $('#prevMonth').data('month', resp.prev_month);
+            $('#nextMonth').data('month', resp.next_month);
+            setBadge(resp.todo_count);
+            const $body = $('#month-body').empty();
+            resp.weeks.forEach(week => {
+                const $tr = $('<tr>');
+                week.forEach((d, i) => {
+                    const $td = $('<td>').toggleClass('out', !d.in_month).toggleClass('today', d.is_today);
+                    const $n = $('<span>').addClass('dnum').text(d.day)
+                        .addClass(i === 0 ? 'sunday' : (i === 6 ? 'saturday' : '')).toggleClass('today-num', d.is_today);
+                    $n.addClass('can-add').attr('title', 'この日の時間割を開く').on('click', () => goDay(d.date));
+                    $td.append($n);
+                    const $items = $('<div>').addClass('mday-items');
+                    d.items.forEach(s => $items.append(buildMonthItem(s)));
+                    $td.append($items);
+                    $tr.append($td);
+                });
+                $body.append($tr);
+            });
+        }).fail(() => showResult('月カレンダーの取得に失敗しました．', true));
+    }
+    function buildMonthItem(s) {
+        const $d = $('<div>').addClass('mtg st-' + s.state + ' tp-' + s.time_state);
+        if (s.my_role === 'host') $d.addClass('role-host');
+        if (s.my_role === 'guest' && ['pending', 'accepted'].includes(s.my_status)) $d.addClass('role-guest');
+        const late = (s.late_booked || s.late_cancel) ? '⚡' : '';
+        const text = s.start_time + ' ' + (KIND_ICON[s.kind] || '') + late + ' ' + s.host_name + '・' + s.state_label;
+        $d.append($('<span>').addClass('ttl').text(text));
+        $d.attr('title', s.start_time + '-' + s.end_time + ' ' + s.title + '（' + s.host_name + '，' + s.mode_label + '，' + s.state_label + '）');
+        $d.on('click', () => openDetail(s.id));
+        return $d;
+    }
+
+    // ---------------- 一覧表（自分以外の会員ごと） ----------------
+    const TCOLS = [
+        { key: 'date',   label: '日付',   val: s => s.date + ' ' + s.start_time },
+        { key: 'time',   label: '時間',   val: s => s.start_time },
+        { key: 'title',  label: '題目',   val: s => s.title },
+        { key: 'kind',   label: '種別',   val: s => s.kind },
+        { key: 'place',  label: '場所',   val: s => s.mode + s.location },
+        { key: 'state',  label: '状態',   val: s => s.state_label },
+        { key: 'people', label: '参加',   val: s => s.accepted_count },
+        { key: 'me',     label: '自分',   val: s => s.my_role ? '1' + s.my_status : '9' },
+        { key: 'op',     label: '',       val: s => s.can_request ? 0 : 1 }
+    ];
+    let tItems = [];
+    let tSort = { key: 'date', dir: 1 };
+    const tCollapsed = new Set();
+
+    function setRange(days) {
+        const base = $('#t-from').val() || today;
+        const d = new Date(base + 'T00:00:00');
+        d.setDate(d.getDate() + Number(days));
+        const pad = n => String(n).padStart(2, '0');
+        $('#t-to').val(d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()));
+    }
+    function loadTable() {
+        $.get(API.table, { from: $('#t-from').val(), to: $('#t-to').val() }, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            today = resp.today;
+            $('#t-from').val(resp.from); $('#t-to').val(resp.to);
+            setBadge(resp.todo_count);
+            tItems = resp.items.filter(s => s.my_role !== 'host');
+            renderTable();
+        }).fail(x => showResult((x.responseJSON && x.responseJSON.error) || '一覧の取得に失敗しました．', true));
+    }
+    function tFilter(s) {
+        const scope = $('#t-scope').val();
+        if (scope === 'requestable' && !s.can_request) return false;
+        if (scope === 'guest' && !(s.my_role === 'guest' && ['pending', 'accepted'].includes(s.my_status))) return false;
+        if ($('#t-kind').val() && s.kind !== $('#t-kind').val()) return false;
+        if ($('#t-mode').val() && s.mode !== $('#t-mode').val()) return false;
+        if (!$('#t-canceled').is(':checked') && s.status === 'canceled') return false;
+        if (!$('#t-past').is(':checked') && s.time_state === 'past') return false;
+        const q = $('#t-q').val().trim();
+        if (q && (s.host_name + ' ' + s.title + ' ' + s.location).indexOf(q) < 0) return false;
+        return true;
+    }
+    function tRow(s) {
+        const $tr = $('<tr>').toggleClass('r-canceled', s.status === 'canceled').toggleClass('r-past', s.time_state === 'past');
+        let people = String(s.accepted_count) + (s.kind === 'open' && s.capacity ? '/' + s.capacity : '');
+        const me = s.my_role === 'guest' ? s.my_status_label : '';
+        const $late = (s.late_booked || s.late_cancel) ? $('<span>').addClass('tag tag-late').text('⚡直前') : '';
+        const $op = $('<td>');
+        if (s.can_request) $op.append($('<button>').addClass('btn-small').text(s.kind === 'open' && s.auto_accept ? '参加' : '請求')
+            .on('click', e => { e.stopPropagation(); openDetail(s.id); }));
+        $tr.append($('<td>').text(s.date + '(' + s.weekday + ')'))
+           .append($('<td>').text(s.start_time + '-' + s.end_time))
+           .append($('<td>').addClass('wrap ttl').text(s.title))
+           .append($('<td>').text((KIND_ICON[s.kind] || '') + (s.kind === 'open' ? '懇談' : '1対1')))
+           .append($('<td>').addClass('wrap').text((MODE_ICON[s.mode] || '') + ' ' + s.mode_label + (s.location ? '　' + s.location : '')))
+           .append($('<td>').append($('<span>').addClass('pill st-' + s.state).text(s.state_label)).append(' ').append($late))
+           .append($('<td>').text(people))
+           .append($('<td>').text(me))
+           .append($op);
+        $tr.on('click', () => openDetail(s.id));
+        return $tr;
+    }
+    function renderTable() {
+        const $h = $('#t-head').empty();
+        TCOLS.forEach(c => {
+            const $th = $('<th>').text(c.label);
+            if (c.key === tSort.key) $th.addClass('sorted').attr('data-arrow', tSort.dir > 0 ? '▲' : '▼');
+            if (c.key !== 'op') $th.on('click', () => {
+                tSort = { key: c.key, dir: tSort.key === c.key ? -tSort.dir : 1 };
+                renderTable();
+            });
+            $h.append($th);
+        });
+        const col = TCOLS.find(c => c.key === tSort.key);
+        const cmp = (a, b) => {
+            const x = col.val(a), y = col.val(b);
+            if (x < y) return -tSort.dir;
+            if (x > y) return tSort.dir;
+            return (a.date + a.start_time) < (b.date + b.start_time) ? -1 : 1;
+        };
+        const groups = {};
+        const rows = tItems.filter(tFilter);
+        rows.forEach(s => { (groups[s.host_id] = groups[s.host_id] || { name: s.host_name, items: [] }).items.push(s); });
+        const ids = Object.keys(groups).sort((a, b) => groups[a].name.localeCompare(groups[b].name, 'ja'));
+        $('#t-count').text(ids.length + '人・' + rows.length + '件（期間内' + tItems.length + '件）');
+        const $b = $('#t-body').empty();
+        if (!rows.length) {
+            $b.append($('<tr>').append($('<td>').attr('colspan', TCOLS.length).addClass('hint').text('条件に合う枠はありません．')));
+            return;
+        }
+        ids.forEach(id => {
+            const g = groups[id];
+            const closed = tCollapsed.has(id);
+            const free = g.items.filter(s => s.can_request).length;
+            const nOpen = g.items.filter(s => s.kind === 'open').length;
+            const $g = $('<tr>').addClass('grp').append($('<td>').attr('colspan', TCOLS.length)
+                .text((closed ? '▶ ' : '▼ ') + g.name)
+                .append($('<span>').addClass('gsub').text('枠 ' + g.items.length + '件　うち請求・参加できる ' + free + '件　懇談 ' + nOpen + '件')));
+            $g.on('click', () => { closed ? tCollapsed.delete(id) : tCollapsed.add(id); renderTable(); });
+            $b.append($g);
+            if (!closed) g.items.slice().sort(cmp).forEach(s => $b.append(tRow(s)));
+        });
+    }
+    $('#t-load').on('click', loadTable);
+    $('.filters [data-range]').on('click', function() { setRange($(this).data('range')); loadTable(); });
+    $('#t-scope, #t-kind, #t-mode, #t-canceled, #t-past').on('change', renderTable);
+    $('#t-q').on('input', renderTable);
+    $('#t-open-all').on('click', () => { tCollapsed.clear(); renderTable(); });
+    $('#t-close-all').on('click', () => { tItems.forEach(s => tCollapsed.add(String(s.host_id))); renderTable(); });
+
+    // ---------------- マイあぽ ----------------
+    let mineRecords = [];
+    function loadMine() {
+        $.get(API.mine, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            setBadge(resp.todo_count);
+            const $t = $('#mine-todo').empty();
+            if (!resp.todo.length) $t.append($('<div>').addClass('empty').text('ありません．'));
+            resp.todo.forEach(x => $t.append(listRow(x.meeting, x.kind + '：' + x.from_name + (x.message ? '「' + x.message + '」' : ''))));
+            const $i = $('#mine-inviting').empty();
+            if (!resp.inviting.length) $i.append($('<div>').addClass('empty').text('返事待ちの招待はありません．'));
+            resp.inviting.forEach(s => $i.append(listRow(s, '返事待ち：' + s.waiting_names.join('，') + (s.accepted_count ? '　（成立 ' + s.accepted_count + '名）' : ''))));
+            mineRecords = resp.records;
+            renderRecords();
+            const $g = $('#mine-guest').empty();
+            if (!resp.as_guest.length) $g.append($('<div>').addClass('empty').text('記録はありません．'));
+            resp.as_guest.forEach(s => $g.append(listRow(s)));
+        });
+    }
+    function renderRecords() {
+        const hideVoid = $('#mine-hide-void').is(':checked');
+        const $b = $('#mine-records').empty();
+        const rows = mineRecords.filter(s => !(hideVoid && s.status === 'void'));
+        if (!rows.length) {
+            $b.append($('<tr>').append($('<td>').attr('colspan', 8).addClass('hint').text('ホストとしての記録はまだありません．')));
+            return;
+        }
+        rows.forEach(s => {
+            const $ppl = $('<td>').addClass('ppl wrap');
+            if (!s.people.length) $ppl.text('—');
+            s.people.forEach(p => $ppl.append($('<span>').text(p.name + '（' + p.origin_label + '・' + p.status_label + '）')));
+            const $late = (s.late_booked || s.late_cancel) ? $('<span>').addClass('tag tag-late').text('⚡直前') : '';
+            const $tr = $('<tr>').toggleClass('r-canceled', s.status === 'canceled' || s.status === 'void').toggleClass('r-past', s.time_state === 'past')
+                .append($('<td>').text(s.date + '(' + s.weekday + ')'))
+                .append($('<td>').text(s.start_time + '-' + s.end_time))
+                .append($('<td>').addClass('wrap ttl').text(s.title))
+                .append($('<td>').text((KIND_ICON[s.kind] || '') + (s.kind === 'open' ? '懇談' : '1対1')))
+                .append($('<td>').addClass('wrap').text((MODE_ICON[s.mode] || '') + ' ' + s.mode_label + (s.location ? '　' + s.location : '')))
+                .append($('<td>').text(s.origin_label))
+                .append($('<td>').append($('<span>').addClass('pill st-' + s.state).text(s.state_label)).append(' ').append($late))
+                .append($ppl);
+            $tr.on('click', () => openDetail(s.id));
+            $b.append($tr);
+        });
+    }
+    $('#mine-hide-void').on('change', renderRecords);
+
+    function listRow(s, extra) {
+        const role = s.my_role === 'host' ? 'ホスト' : 'ゲスト（' + (s.my_status_label || '') + '）';
+        const $r = $('<div>').addClass('list-row')
+            .append($('<span>').addClass('when').text(s.date + '(' + s.weekday + ') ' + s.start_time + '-' + s.end_time))
+            .append($('<span>').text((MODE_ICON[s.mode] || '') + (KIND_ICON[s.kind] || '') + ' ' + s.title))
+            .append($('<span>').addClass('who').text('ホスト：' + s.host_name))
+            .append($('<span>').addClass('tag tag-mine').text(role))
+            .append($('<span>').text(s.state_label));
+        if (s.late_booked || s.late_cancel) $r.append($('<span>').addClass('tag tag-late').text('⚡直前'));
+        if (extra) $r.append($('<div>').css({ width: '100%', color: '#b91c1c', 'font-size': '.85rem' }).text(extra));
+        $r.on('click', () => openDetail(s.id));
+        return $r;
+    }
+
+    // ---------------- 会員の選択 ----------------
+    function loadMembers(cb) {
+        if (members.length) { cb && cb(); return; }
+        $.get(API.members, r => { if (r.success) { members = r.members; } cb && cb(); });
+    }
+    function fillPicker($box, filter, prefix) {
+        const checked = new Set($box.find('input:checked').map(function() { return $(this).val(); }).get());
+        $box.empty();
+        const f = (filter || '').trim();
+        members.filter(m => !f || m.name.indexOf(f) >= 0 || m.affiliation.indexOf(f) >= 0).forEach(m => {
+            const $cb = $('<input>').attr({ type: 'checkbox', value: m.id }).prop('checked', checked.has(String(m.id)));
+            $box.append($('<label>').append($cb).append(document.createTextNode(' ' + m.name))
+                .append($('<span>').addClass('aff').text(m.affiliation)));
+        });
+        if (!$box.children().length) $box.append($('<div>').addClass('empty').text('該当する会員がいません．'));
+    }
+    function pickedIds($box) { return $box.find('input:checked').map(function() { return $(this).val(); }).get(); }
+
+    // ---------------- 枠を出す ----------------
+    function openCreate(date, st, et) {
+        loadMembers(() => {
+            $('#c-title, #c-location, #c-url, #c-note, #c-filter').val('');
+            $('#c-date').val(date || currentDay || today); $('#c-start').val(st || '10:00'); $('#c-end').val(et || '11:00');
+            $('input[name=c-kind][value=exclusive]').prop('checked', true).trigger('change');
+            $('#c-capacity').val(0); $('#c-auto').prop('checked', false); $('#c-mode').val('office');
+            $('#c-listed').prop('checked', true);
+            $('#c-picker').empty(); fillPicker($('#c-picker'), '');
+            openModal('m-create');
+        });
+    }
+    $('input[name=c-kind]').on('change', () => $('#c-open-opts').toggle($('input[name=c-kind]:checked').val() === 'open'));
+    $('#c-filter').on('input', function() { fillPicker($('#c-picker'), $(this).val()); });
+    $('#c-submit').on('click', function() {
+        const $b = $(this).prop('disabled', true);
+        postJSON(API.create, {
+            title: $('#c-title').val(), date: $('#c-date').val(), start_time: $('#c-start').val(), end_time: $('#c-end').val(),
+            kind: $('input[name=c-kind]:checked').val(), capacity: $('#c-capacity').val(), auto_accept: $('#c-auto').is(':checked'),
+            mode: $('#c-mode').val(), location: $('#c-location').val(), online_url: $('#c-url').val(), note: $('#c-note').val(),
+            listed: $('#c-listed').is(':checked'), invitee_ids: pickedIds($('#c-picker'))
+        }, () => { closeModals(); refreshAll(); }).always(() => $b.prop('disabled', false));
+    });
+
+    // ---------------- 請求する ----------------
+    function fillHostSelect(filter) {
+        const $s = $('#p-host'); const cur = $s.val(); $s.empty();
+        const f = (filter || '').trim();
+        members.filter(m => !f || m.name.indexOf(f) >= 0 || m.affiliation.indexOf(f) >= 0).forEach(m => {
+            $s.append($('<option>').val(m.id).text(m.name + (m.affiliation ? '（' + m.affiliation + '）' : '')));
+        });
+        if (cur) $s.val(cur);
+    }
+    function openPropose(hostId, date, st, et) {
+        loadMembers(() => {
+            $('#p-filter, #p-title, #p-message').val('');
+            fillHostSelect('');
+            if (hostId) $('#p-host').val(String(hostId));
+            $('#p-date').val(date || currentDay || today); $('#p-start').val(st || '10:00'); $('#p-end').val(et || '10:30');
+            $('input[name=p-kind][value=exclusive]').prop('checked', true);
+            $('#p-mode').val('office'); $('#p-show').prop('checked', false);
+            openModal('m-propose');
+        });
+    }
+    $('#p-filter').on('input', function() { fillHostSelect($(this).val()); });
+    $('#p-submit').on('click', function() {
+        const $b = $(this).prop('disabled', true);
+        postJSON(API.propose, {
+            host_id: $('#p-host').val(), title: $('#p-title').val(), date: $('#p-date').val(),
+            start_time: $('#p-start').val(), end_time: $('#p-end').val(), kind: $('input[name=p-kind]:checked').val(),
+            mode: $('#p-mode').val(), message: $('#p-message').val(), show_name: $('#p-show').is(':checked')
+        }, () => { closeModals(); refreshAll(); }).always(() => $b.prop('disabled', false));
+    });
+
+    // ---------------- 詳細 ----------------
+    function kv(k, v) { return $('<div>').addClass('kv').append($('<b>').text(k)).append(document.createTextNode(v)); }
+
+    function openDetail(id) {
+        $.get(API.detail(id), function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            renderDetail(resp.meeting);
+            openDetailId = id;
+            if (!$('#m-detail').is(':visible')) openModal('m-detail');
+            openDetailId = id;
+        }).fail(x => showResult((x.responseJSON && x.responseJSON.error) || '詳細の取得に失敗しました．', true));
+    }
+
+    function renderDetail(s) {
+        const $b = $('#d-body').empty();
+        $b.append($('<h3>').text((KIND_ICON[s.kind] || '') + ' ' + s.title + '　').append(
+            $('<span>').addClass('stamp mtg st-' + s.state).css({ display: 'inline-block', cursor: 'default' }).text(s.state_label)));
+        $b.append(kv('ホスト', s.host_name + (s.is_host ? '（あなた）' : '')));
+        $b.append(kv('日時', s.date + '(' + s.weekday + ') ' + s.start_time + '〜' + s.end_time));
+        $b.append(kv('種別', s.kind_label + (s.kind === 'open' ? (s.capacity ? '　定員' + s.capacity + '名' : '　定員なし') + (s.auto_accept ? '・自動承諾' : '') : '')));
+        $b.append(kv('場所', (MODE_ICON[s.mode] || '') + ' ' + s.mode_label + (s.location ? '　' + s.location : '')));
+        if (s.online_url) {
+            $b.append($('<div>').addClass('kv').append($('<b>').text('URL'))
+                .append($('<a>').attr({ href: s.online_url, target: '_blank', rel: 'noopener' }).text(s.online_url)));
+        } else if (s.online_url_hidden) {
+            $b.append(kv('URL', '（成立した参加者に表示されます）'));
+        }
+        if (s.note) $b.append(kv('メモ', s.note));
+        if (!s.listed && s.is_host) $b.append(kv('公開', '会員には公開していません（招待した人と請求者だけが見ます）'));
+        if (s.status === 'canceled') {
+            $b.append($('<div>').addClass('box').css({ background: '#fef2f2' })
+                .append($('<b>').text('ホストがキャンセルしました（' + s.canceled_at + '）'))
+                .append(s.late_cancel ? $('<span>').addClass('tag tag-late').css('margin-left', '6px').text('⚡直前') : '')
+                .append(s.cancel_reason ? $('<div>').text('理由：' + s.cancel_reason) : ''));
+        }
+        if (s.late_booked) $b.append($('<div>').append($('<span>').addClass('tag tag-late').text('⚡直前に成立')));
+        if (s.late_guest_cancels) $b.append($('<div>').append($('<span>').addClass('tag tag-late').text('⚡ゲストの直前キャンセル ' + s.late_guest_cancels + '件')));
+
+        // 参加者
+        const $p = $('<div>').addClass('box').append($('<h4>').text('参加者'));
+        if (s.is_host) {
+            if (!s.participants.length) $p.append($('<div>').addClass('empty').text('まだ請求・招待はありません．'));
+            const $t = $('<table>').addClass('ptable');
+            s.participants.forEach(p => {
+                const $ops = $('<td>');
+                if (p.can_accept) $ops.append($('<button>').addClass('btn-small btn-green').text('承諾').on('click', () => postJSON(API.accept(p.id), {}, refreshAll)));
+                if (p.can_decline) $ops.append(' ').append($('<button>').addClass('btn-small btn-red').text('お断り')
+                    .on('click', () => { if (confirm('この請求をお断りしますか？')) postJSON(API.decline(p.id), {}, refreshAll); }));
+                $t.append($('<tr>')
+                    .append($('<td>').text(p.name + (p.show_name ? '' : ' 🙈')))
+                    .append($('<td>').text(p.origin_label))
+                    .append($('<td>').text(p.status_label))
+                    .append($('<td>').css('color', '#4b5563').text(p.message))
+                    .append($ops));
+            });
+            $p.append($t);
+            $p.append($('<p>').addClass('note').text('🙈＝ほかの会員には名前を表示しない設定のゲスト（ホストには常に表示されます）．'));
+        } else {
+            const names = s.visible_guests.join('，');
+            let line = names || (s.accepted_count ? '' : 'まだいません');
+            if (s.hidden_count) line += (line ? '　' : '') + 'ほか' + s.hidden_count + '名（名前非表示）';
+            $p.append($('<div>').text('成立：' + line));
+        }
+        if (s.mine) {
+            const m = s.mine;
+            const $me = $('<div>').css({ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e5e7eb' });
+            $me.append($('<div>').text('あなた：' + m.origin_label + '・' + m.status_label + (m.message ? '　「' + m.message + '」' : '')));
+            const $show = $('<input>').attr('type', 'checkbox').prop('checked', m.show_name);
+            if (m.can_toggle_visibility || m.can_accept) {
+                $me.append($('<label>').addClass('inline').append($show).append(document.createTextNode(' 私の名前をほかの会員にも表示する')));
+                if (m.can_toggle_visibility && !m.can_accept) {
+                    $show.on('change', () => postJSON(API.visible(m.id), { show_name: $show.is(':checked') }, refreshAll));
+                }
+            }
+            const $ops = $('<div>').css('marginTop', '6px');
+            if (m.can_accept) $ops.append($('<button>').addClass('btn-green').text('招待を承諾する')
+                .on('click', () => postJSON(API.accept(m.id), { show_name: $show.is(':checked') }, refreshAll)));
+            if (m.can_decline) $ops.append(' ').append($('<button>').addClass('btn-red').text('辞退する')
+                .on('click', () => { if (confirm('この招待を辞退しますか？')) postJSON(API.decline(m.id), {}, refreshAll); }));
+            if (m.can_cancel && !m.can_accept) {
+                const word = m.status === 'pending' ? '請求を取り下げる' : '参加をキャンセルする';
+                $ops.append(' ').append($('<button>').addClass('btn-amber').text(word)
+                    .on('click', () => { if (confirm(word + '．よろしいですか？')) postJSON(API.cancelP(m.id), {}, refreshAll); }));
+            }
+            $me.append($ops);
+            $p.append($me);
+        }
+        $b.append($p);
+
+        // 請求（枠への申し込み）
+        if (s.can_request) {
+            const $r = $('<div>').addClass('box').append($('<h4>').text(s.kind === 'exclusive' ? '🔒 この枠で面会を請求する' : '👥 この懇談に参加を申し込む'));
+            const $msg = $('<textarea>').attr({ maxlength: 1000, placeholder: 'ホストへのひとこと（ホストだけに表示）' });
+            const $show = $('<input>').attr('type', 'checkbox');
+            $r.append($msg).append($('<label>').addClass('inline').append($show).append(document.createTextNode(' 私の名前をほかの会員にも表示する')));
+            const label = s.kind === 'open' && s.auto_accept ? '参加する' : '請求する';
+            $r.append($('<div>').css('marginTop', '6px').append($('<button>').text(label)
+                .on('click', () => postJSON(API.request(s.id), { message: $msg.val(), show_name: $show.is(':checked') }, refreshAll))));
+            $b.append($r);
+        }
+
+        // ホストの操作
+        if (s.is_host && (s.can_invite || s.can_edit || s.can_cancel_meeting)) {
+            const $h = $('<div>').addClass('box').append($('<h4>').text('ホストの操作'));
+            if (s.can_invite) {
+                const $flt = $('<input>').attr({ type: 'text', placeholder: '招待する人を名前で絞り込み' });
+                const $pk = $('<div>').addClass('picker');
+                $h.append($flt).append($pk).append($('<button>').addClass('btn-small').css('marginTop', '6px').text('選んだ人を招待する')
+                    .on('click', () => postJSON(API.invite(s.id), { guest_ids: pickedIds($pk) }, refreshAll)));
+                loadMembers(() => fillPicker($pk, ''));
+                $flt.on('input', () => fillPicker($pk, $flt.val()));
+            }
+            if (s.can_edit) {
+                const $ed = $('<div>').css({ display: 'none', marginTop: '8px' });
+                const $t = $('<input>').attr('type', 'text').val(s.title);
+                const $md = $('#c-mode').clone().removeAttr('id').val(s.mode);
+                const $lo = $('<input>').attr({ type: 'text', placeholder: '部屋・建物など' }).val(s.location);
+                const $ur = $('<input>').attr({ type: 'url', placeholder: 'オンラインのURL' }).val(s.online_url);
+                const $nt = $('<textarea>').val(s.note);
+                $ed.append($('<label>').text('題目')).append($t).append($('<label>').text('場所')).append($md).append($lo).append($ur)
+                   .append($('<label>').text('メモ')).append($nt)
+                   .append($('<button>').addClass('btn-small').css('marginTop', '6px').text('保存')
+                        .on('click', () => postJSON(API.update(s.id), { title: $t.val(), mode: $md.val(), location: $lo.val(), online_url: $ur.val(), note: $nt.val() }, refreshAll)));
+                $h.append($('<div>').css('marginTop', '8px').append($('<button>').addClass('btn-small btn-gray').text('場所・URL・メモを直す')
+                    .on('click', () => $ed.toggle())));
+                $h.append($ed);
+            }
+            if (s.can_cancel_meeting) {
+                $h.append($('<div>').css('marginTop', '8px').append($('<button>').addClass('btn-small btn-red').text('このミーティングをキャンセルする')
+                    .on('click', () => {
+                        const reason = prompt('キャンセルの理由（参加者に表示されます．空欄でも可）', '');
+                        if (reason === null) return;
+                        postJSON(API.cancelM(s.id), { reason: reason }, refreshAll);
+                    })));
+            }
+            $b.append($h);
+        }
+
+        // サブチャンネル
+        if (s.is_member) {
+            const $c = $('<div>').addClass('box').append($('<h4>').text('💬 サブチャンネル'))
+                .append($('<p>').addClass('note').text('ホストと参加者だけの連絡欄です．「明日は必ず行きます」「急用で遅れます」などをどうぞ．書き込むと，あなたの名前はこの欄の参加者に見えます（名前非表示のゲストは「参加者」と表示）．'));
+            const $list = $('<div>').addClass('msgs');
+            if (!s.messages.length) $list.append($('<div>').addClass('empty').text('まだ書き込みはありません．'));
+            s.messages.forEach(g => {
+                $list.append($('<div>').addClass('msg' + (g.is_mine ? ' mine' : ''))
+                    .append($('<span>').addClass('who').text(g.name)).append($('<span>').addClass('at').text(g.created_at))
+                    .append($('<div>').addClass('body').text(g.body)));
+            });
+            $c.append($list);
+            if (s.can_post) {
+                const $in = $('<textarea>').attr({ maxlength: 1000, placeholder: 'メッセージ' });
+                $c.append($in).append($('<div>').css('marginTop', '4px').append($('<button>').addClass('btn-small').text('書き込む')
+                    .on('click', () => postJSON(API.post(s.id), { body: $in.val() }, refreshAll))));
+            }
+            $b.append($c);
+            setTimeout(() => { $list.scrollTop($list[0].scrollHeight); }, 0);
+        }
+    }
+
+    // ---------------- 当日の時間割 ----------------
+    const PX = 1.6;                 // 1分あたりの高さ
+    const SNAP = 30;                // クリック時のきざみ（分）
+    let dayData = null;
+    let currentDay = '';
+
+    function t2m(t) { const p = (t || '0:0').split(':'); return Number(p[0]) * 60 + Number(p[1]); }
+    function m2t(m) { const h = Math.floor(m / 60), mm = m % 60; return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); }
+
+    function goDay(date) {
+        $('.tab[data-tab=day]').trigger('click', [date]);
+    }
+    function loadDay(date) {
+        $.get(API.day, date ? { date: date } : {}, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            const changed = !dayData || dayData.date !== resp.date;
+            dayData = resp; currentDay = resp.date; today = resp.today;
+            $('#dayLabel').text(resp.label + (resp.is_today ? '・今日' : ''));
+            $('#dayPicker').val(resp.date);
+            $('#prevDay').data('date', resp.prev_date); $('#nextDay').data('date', resp.next_date);
+            setBadge(resp.todo_count);
+            renderDay(changed);
+        }).fail(() => showResult('時間割の取得に失敗しました．', true));
+    }
+    function dayItems() {
+        if (!dayData) return [];
+        if (!$('#d-mine-only').is(':checked')) return dayData.items;
+        return dayData.items.filter(s => s.my_role === 'host' || (s.my_role === 'guest' && ['pending', 'accepted'].includes(s.my_status)));
+    }
+
+    function renderDay(scroll) {
+        if (!dayData) return;
+        const items = dayItems();
+        let start = 8 * 60, end = 20 * 60;
+        items.forEach(s => {
+            start = Math.min(start, Math.floor(t2m(s.start_time) / 60) * 60);
+            end = Math.max(end, Math.ceil(t2m(s.end_time) / 60) * 60);
+        });
+        start = Math.max(0, start - 60); end = Math.min(24 * 60, end + 60);
+        const H = (end - start) * PX;
+        const $tt = $('#tt').empty();
+
+        const $axis = $('<div>').addClass('tt-axis').append($('<div>').addClass('tt-head').text('時刻'));
+        const $ab = $('<div>').addClass('tt-body').css('height', H);
+        // アポのある時刻を軸に示す（開始・終了の時刻を青で出し，近い正時の目盛りは省く）
+        const marks = new Set();
+        items.forEach(s => {
+            const st = t2m(s.start_time), en = t2m(s.end_time);
+            $ab.append($('<div>').addClass('tt-mark st-' + s.state).css({ top: (st - start) * PX, height: Math.max((en - st) * PX, 4) }));
+            [st, en].forEach(m => {
+                if (marks.has(m)) return;
+                marks.add(m);
+                $ab.append($('<div>').addClass('tt-label tt-label-appo').css('top', (m - start) * PX).text(m2t(m)));
+            });
+        });
+        for (let m = start + 60; m <= end; m += 60) {
+            if ([...marks].some(x => Math.abs(x - m) < 15)) continue;
+            $ab.append($('<div>').addClass('tt-label').css('top', (m - start) * PX).text(m2t(m)));
+        }
+        $axis.append($ab);
+        $tt.append($axis);
+
+        const n = items.length;
+        const head = n ? 'この日のアポ ' + n + '件（空いた時間を押すと新しい枠を出せます）' : 'この日のアポはありません（空いた時間を押すと新しい枠を出せます）';
+        const $col = $('<div>').addClass('tt-col wide').toggleClass('past', dayData.is_past);
+        $col.append($('<div>').addClass('tt-head').text(head));
+        const $body = $('<div>').addClass('tt-body').css('height', H);
+        for (let m = start; m < end; m += SNAP) {
+            $body.append($('<div>').addClass('tt-slot').toggleClass('hour', m % 60 === 0).css({ top: (m - start) * PX, height: SNAP * PX }));
+        }
+        if (dayData.now_time) {
+            const nm = t2m(dayData.now_time);
+            if (nm >= start && nm <= end) $body.append($('<div>').addClass('tt-now').css('top', (nm - start) * PX));
+        }
+        // 重なりはレーンに分ける
+        const sorted = items.slice().sort((a, b) => t2m(a.start_time) - t2m(b.start_time));
+        const BLK = 46;                                   // 2行ぶんの高さ（px）
+        const drawnEnd = s => Math.max(t2m(s.end_time), t2m(s.start_time) + Math.ceil((BLK + 2) / PX));
+        // 重なり合うアポのかたまりごとにレーンを割り当て，幅はそのかたまりのレーン数で決める
+        const lanes = [], laneCount = [];
+        let laneEnd = [], members = [], clusterEnd = -1;
+        const closeCluster = () => { members.forEach(i => { laneCount[i] = Math.max(1, laneEnd.length); }); laneEnd = []; members = []; };
+        sorted.forEach((s, i) => {
+            const st = t2m(s.start_time);
+            if (st >= clusterEnd) closeCluster();
+            let k = laneEnd.findIndex(e => e <= st);
+            if (k < 0) { k = laneEnd.length; laneEnd.push(0); }
+            laneEnd[k] = drawnEnd(s);
+            lanes[i] = k; members.push(i);
+            clusterEnd = Math.max(clusterEnd, drawnEnd(s));
+        });
+        closeCluster();
+        sorted.forEach((s, i) => {
+            const st = t2m(s.start_time), en = t2m(s.end_time);
+            const nl = laneCount[i];
+            const $d = buildDayBlock(s).css({
+                top: (st - start) * PX, height: Math.max((en - st) * PX - 2, BLK),
+                left: 'calc(' + (100 * lanes[i] / nl) + '% + 3px)', width: 'calc(' + (100 / nl) + '% - 6px)'
+            });
+            $body.append($d);
+        });
+        if (!dayData.is_past) {
+            const $hover = $('<div>').addClass('tt-hover');
+            $body.append($hover);
+            const at = e => {
+                const y = e.pageY - $body.offset().top;
+                return Math.min(end - SNAP, start + Math.floor(y / PX / SNAP) * SNAP);
+            };
+            $body.on('mousemove', e => {
+                const m = at(e);
+                $hover.css({ top: (m - start) * PX, height: SNAP * PX }).text('＋ ' + m2t(m) + ' から枠を出す');
+            });
+            $body.on('click', e => {
+                const m = at(e);
+                if (dayData.now_time && m + SNAP <= t2m(dayData.now_time)) { showResult('過去の時間は指定できません．', true); return; }
+                openCreate(currentDay, m2t(m), m2t(Math.min(m + 60, 24 * 60 - 1)));
+            });
+        }
+        $col.append($body);
+        $tt.append($col);
+
+        if (scroll) {
+            const first = sorted.length ? t2m(sorted[0].start_time) : (dayData.now_time ? t2m(dayData.now_time) : 9 * 60);
+            $('#tt-wrap').scrollTop(Math.max(0, (first - start - 30) * PX));
+        }
+    }
+
+    function buildDayBlock(s) {
+        const $d = $('<div>').addClass('mtg dayblk st-' + s.state + ' tp-' + s.time_state);
+        if (s.my_role === 'host') $d.addClass('role-host');
+        if (s.my_role === 'guest' && ['pending', 'accepted'].includes(s.my_status)) $d.addClass('role-guest');
+        const one = t => String(t || '').replace(/\s+/g, ' ').trim();
+        // 1行目：時刻・状態・題目・ホスト・場所・入室リンク・請求
+        const $l1 = $('<div>').addClass('dl1');
+        $l1.append($('<span>').addClass('d-time').text(s.start_time + '–' + s.end_time));
+        $l1.append($('<span>').addClass('pill st-' + s.state).text(s.state_label));
+        if (s.late_booked || s.late_cancel) $l1.append($('<span>').addClass('tag tag-late').text('⚡直前'));
+        $l1.append($('<span>').addClass('d-title').text((KIND_ICON[s.kind] || '') + ' ' + one(s.title)));
+        let who = s.my_role === 'host' ? 'ホスト：あなた' : 'ホスト：' + s.host_name;
+        if (s.my_role === 'guest' && s.my_status) who += '（あなた：' + s.my_status_label + '）';
+        $l1.append($('<span>').addClass('d-who').text(who));
+        $l1.append($('<span>').addClass('d-place').text((MODE_ICON[s.mode] || '') + ' ' + s.mode_label + (s.location ? ' ' + one(s.location) : '')));
+        if (s.online_url) {
+            $l1.append($('<a>').addClass('d-url').attr({ href: s.online_url, target: '_blank', rel: 'noopener' }).text('🔗 入室')
+                .on('click', e => e.stopPropagation()));
+        }
+        if (s.can_request) {
+            $l1.append($('<button>').addClass('btn-small d-btn').text(s.kind === 'open' && s.auto_accept ? '参加する' : '請求する')
+                .on('click', e => { e.stopPropagation(); openDetail(s.id); }));
+        }
+        // 2行目：参加者・メモ・最新の連絡（1行に収め，はみ出しは…）
+        const parts = [];
+        if (s.my_role === 'host') {
+            parts.push('👥 ' + (s.people.length ? s.people.map(p => p.label).join('，') : 'ゲストなし'));
+        } else {
+            let ppl = s.visible_guests.join('，');
+            if (s.hidden_count) ppl += (ppl ? '，' : '') + 'ほか' + s.hidden_count + '名';
+            parts.push('👥 ' + (ppl || 'まだいません') + (s.kind === 'open' && s.capacity ? '（定員' + s.capacity + '）' : ''));
+        }
+        if (s.status === 'canceled' && s.cancel_reason) parts.push('取消理由：' + one(s.cancel_reason));
+        if (s.last_message) parts.push('💬 ' + s.last_message.name + '：' + one(s.last_message.body));
+        if (s.note) parts.push('📝 ' + one(s.note));
+        const $l2 = $('<div>').addClass('dl2').text(parts.join('　｜　'));
+        $d.append($l1).append($l2);
+        const tip = [s.start_time + '–' + s.end_time + ' ' + one(s.title), who, s.mode_label + (s.location ? ' ' + one(s.location) : '')].concat(parts);
+        $d.attr('title', tip.join('\n') + '\n（クリックで詳細）');
+        $d.on('click', e => { e.stopPropagation(); openDetail(s.id); });
+        $d.on('mousemove', e => e.stopPropagation());
+        return $d;
+    }
+    $('#d-mine-only').on('change', () => renderDay(true));
+    $('#prevDay').on('click', function() { loadDay($(this).data('date')); });
+    $('#nextDay').on('click', function() { loadDay($(this).data('date')); });
+    $('#thisDay').on('click', () => loadDay());
+    $('#dayPicker').on('change', function() { if ($(this).val()) loadDay($(this).val()); });
+
+    // ---------------- マイ設定 ----------------
+    let prefs = { order_mode: 'slots_first', manual_order: [], show: {}, unset_policy: 'auto' };
+    let pAccounts = [];        // マイ設定画面の会員一覧（並べ替え中の順）
+    let pDirty = false;
+
+    function isShown(a) {
+        const k = String(a.id);
+        if (k in prefs.show) return !!prefs.show[k];
+        return prefs.unset_policy === 'auto' && a.slot_count > 0;
+    }
+    // 表示する人の並べ方（時間割の列と右の一覧の両方に使う）
+    function orderAccounts(list) {
+        const pos = {};
+        prefs.manual_order.forEach((id, i) => { pos[id] = i; });
+        const byName = (a, b) => a.name.localeCompare(b.name, 'ja');
+        const mode = prefs.order_mode;
+        return list.slice().sort((a, b) => {
+            if (mode === 'affiliation') return (a.affiliation || '').localeCompare(b.affiliation || '', 'ja') || byName(a, b);
+            if (mode === 'slots_first') return ((b.slot_count || 0) > 0) - ((a.slot_count || 0) > 0) || byName(a, b);
+            if (mode === 'manual') {
+                const x = a.id in pos ? pos[a.id] : 1e9, y = b.id in pos ? pos[b.id] : 1e9;
+                return x - y || byName(a, b);
+            }
+            return byName(a, b);
+        });
+    }
+    function savePrefs(patch, quiet) {
+        return $.ajax({ url: API.prefs, method: 'POST', contentType: 'application/json', data: JSON.stringify(patch) })
+            .done(r => {
+                if (r.success) { prefs = r.prefs; if (!quiet) showResult(r.message, false); }
+                else showResult(r.error || '設定を保存できませんでした．', true);
+            })
+            .fail(x => showResult((x.responseJSON && x.responseJSON.error) || '設定を保存できませんでした．', true));
+    }
+
+    function loadPrefs() {
+        $.get(API.prefs, function(resp) {
+            if (!resp.success) { showResult(resp.error, true); return; }
+            prefs = resp.prefs;
+            const $m = $('#p-modes').empty();
+            resp.order_modes.forEach(([k, v]) => {
+                $m.append($('<label>').addClass('inline').append($('<input>').attr({ type: 'radio', name: 'order_mode', value: k })
+                    .prop('checked', prefs.order_mode === k)).append(document.createTextNode(' ' + v)));
+            });
+            const $u = $('#p-unset').empty();
+            resp.unset_policies.forEach(([k, v]) => {
+                $u.append($('<label>').addClass('inline').append($('<input>').attr({ type: 'radio', name: 'unset_policy', value: k })
+                    .prop('checked', prefs.unset_policy === k)).append(document.createTextNode(' ' + v)));
+            });
+            // 並べ替えの初期順：手動の順があればそれ，なければ今の並べ方（名前順など）
+            const saved = prefs.order_mode;
+            if (!prefs.manual_order.length) prefs.order_mode = (saved === 'manual' ? 'name' : saved);
+            else prefs.order_mode = 'manual';
+            pAccounts = orderAccounts(resp.accounts);
+            prefs.order_mode = saved;
+            pDirty = false;
+            renderPrefList();
+        }).fail(() => showResult('設定の取得に失敗しました．', true));
+    }
+
+    function renderPrefList() {
+        const q = $('#p-q').val().trim();
+        const $b = $('#p-body').empty();
+        pAccounts.forEach((a, i) => {
+            if (q && a.name.indexOf(q) < 0 && a.affiliation.indexOf(q) < 0) return;
+            const k = String(a.id);
+            const st = (k in prefs.show) ? (prefs.show[k] ? '1' : '0') : '';
+            const nm = 'pshow-' + a.id;
+            const radio = v => $('<input>').attr({ type: 'radio', name: nm, value: v }).prop('checked', st === v)
+                .on('change', () => { if (v === '') delete prefs.show[k]; else prefs.show[k] = v === '1'; markDirty(); });
+            const $num = $('<input>').attr({ type: 'number', step: '0.01', min: '0' }).addClass('ord').val((i + 1).toFixed(2));
+            $num.on('change', function() { reorderBy(a.id, $(this).val()); })
+                .on('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); $(this).trigger('change'); } });
+            $b.append($('<tr>')
+                .append($('<td>').append($num))
+                .append($('<td>').text(a.name))
+                .append($('<td>').addClass('aff-c').text(a.affiliation))
+                .append($('<td>').addClass('c').append(radio('1')))
+                .append($('<td>').addClass('c').append(radio('0')))
+                .append($('<td>').addClass('c').append(radio(''))));
+        });
+        $('#p-total').text('会員 ' + pAccounts.length + '人');
+    }
+    // 書き換えた番号で小さい順に並べ直し，1, 2, 3… に振り直す
+    function reorderBy(id, val) {
+        const v = parseFloat(val);
+        if (isNaN(v)) { renderPrefList(); return; }
+        const keyed = pAccounts.map((a, i) => ({ a: a, k: a.id === id ? v : i + 1, tie: a.id === id ? 0 : 1 }));
+        keyed.sort((x, y) => x.k - y.k || x.tie - y.tie);
+        pAccounts = keyed.map(x => x.a);
+        $('input[name=order_mode][value=manual]').prop('checked', true);
+        markDirty();
+        renderPrefList();
+    }
+    function markDirty() { pDirty = true; $('#p-dirty').show(); }
+    $('#p-q').on('input', renderPrefList);
+    $(document).on('change', 'input[name=order_mode], input[name=unset_policy]', markDirty);
+    $('#p-sort-name').on('click', () => { pAccounts.sort((a, b) => a.name.localeCompare(b.name, 'ja')); $('input[name=order_mode][value=manual]').prop('checked', true); markDirty(); renderPrefList(); });
+    $('#p-sort-aff').on('click', () => { pAccounts.sort((a, b) => a.affiliation.localeCompare(b.affiliation, 'ja') || a.name.localeCompare(b.name, 'ja')); $('input[name=order_mode][value=manual]').prop('checked', true); markDirty(); renderPrefList(); });
+    $('#p-save').on('click', () => {
+        savePrefs({
+            order_mode: $('input[name=order_mode]:checked').val(),
+            unset_policy: $('input[name=unset_policy]:checked').val(),
+            manual_order: pAccounts.map(a => a.id),
+            show: prefs.show
+        }).done(r => { if (r.success) { pDirty = false; $('#p-dirty').hide(); } });
+    });
+    $('#p-reset').on('click', () => { $('#p-dirty').hide(); loadPrefs(); });
+
+    // ---------------- 起動 ----------------
+    $('.tab').on('click', function(e, gotoDate) {
+        currentTab = $(this).data('tab');
+        $('.tab').removeClass('active'); $(this).addClass('active');
+        if (gotoDate) currentDay = gotoDate;
+        $('#pane-day').toggle(currentTab === 'day');
+        $('#day-actions').toggle(currentTab === 'day');
+        $('#day-nav').toggle(currentTab === 'day');
+        $('#pane-cal').toggle(currentTab === 'cal');
+        $('#pane-month').toggle(currentTab === 'month');
+        $('#pane-table').toggle(currentTab === 'table');
+        $('#pane-mine').toggle(currentTab === 'mine');
+        $('#pane-prefs').toggle(currentTab === 'prefs');
+        $('#week-nav').toggle(currentTab === 'cal');
+        $('#month-nav').toggle(currentTab === 'month');
+        refreshAll();
+    });
+    $('#prevMonth').on('click', function() { loadMonth($(this).data('month')); });
+    $('#nextMonth').on('click', function() { loadMonth($(this).data('month')); });
+    $('#thisMonth').on('click', () => loadMonth());
+    $('#btn-create').on('click', () => openCreate());
+    $('#btn-propose').on('click', () => openPropose());
+    $('#prevWeek').on('click', function() { loadWeek($(this).data('start')); });
+    $('#nextWeek').on('click', function() { loadWeek($(this).data('start')); });
+    $('#thisWeek').on('click', () => loadWeek());
+    $('#backdrop').on('click', closeModals);
+
+    loadDay();
+</script>
+</body>
+</html>
