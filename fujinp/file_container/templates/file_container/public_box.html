@@ -1,0 +1,55 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'file_container/_public_base.html' %}
+{% block content %}
+<h1>{{ box.title }}</h1>
+{% if box.expires_at %}<div class="muted">{{ fmt_dt(box.expires_at) }} まで</div>{% endif %}
+
+{% if box.kind == 'download' %}
+  {% if files %}
+  <ul class="files">
+    {% for f in files %}
+    <li><span class="name">{{ f.original_name }}<br><span class="muted">{{ fmt_bytes(f.size_bytes) }}</span></span>
+        <a class="btn" href="{{ url_for('file_container.public_download', token=box.token, file_id=f.id) }}">ダウンロード</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">いまダウンロードできるファイルはありません．</p>
+  {% endif %}
+{% else %}
+  <form method="post" action="{{ url_for('file_container.public_upload', token=box.token) }}" enctype="multipart/form-data" onsubmit="return fcSending(this);">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>お名前（任意．送り主の確認に使います）</label>
+    <input type="text" name="uploader_label" maxlength="100">
+    <label>ファイル（1件 {{ max_label }} まで．複数選べます）</label>
+    <input type="file" name="files" multiple required onchange="fcCheckSize(this)">
+    <div style="margin-top:14px;"><button class="btn" id="send" type="submit">送る</button></div>
+    <p class="muted" id="sending" style="display:none;">送信中です．画面を閉じずにお待ちください…</p>
+  </form>
+  {% if files %}
+  <div style="margin-top:16px;" class="muted">受け付けたファイル</div>
+  <ul class="files">
+    {% for f in files %}<li><span class="name">{{ f.original_name }}</span><span class="muted">{{ fmt_bytes(f.size_bytes) }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+function fcCheckSize(input) {
+  const max = {{ max_bytes }};
+  for (const f of input.files) {
+    if (f.size > max) { alert('「' + f.name + '」は ' + (f.size/1048576).toFixed(1) + 'MB あります．1件 {{ max_label }} までです．'); input.value = ''; return; }
+  }
+}
+function fcSending(form) {
+  document.getElementById('send').disabled = true;
+  document.getElementById('sending').style.display = '';
+  return true;
+}
+</script>
+{% endblock %}

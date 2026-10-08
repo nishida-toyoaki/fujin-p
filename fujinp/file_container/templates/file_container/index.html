@@ -1,0 +1,59 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'file_container/_base.html' %}
+{% block content %}
+<div class="tabs">
+  <a href="{{ url_for('file_container.index', tab='download') }}" class="{{ 'on-dl' if tab == 'download' }}">📤 渡す箱<span class="cnt">{{ counts.download }}</span></a>
+  <a href="{{ url_for('file_container.index', tab='upload') }}" class="{{ 'on-ul' if tab == 'upload' }}">📥 受け取る箱<span class="cnt">{{ counts.upload }}</span></a>
+</div>
+
+<div class="row" style="margin-bottom:10px;">
+  <div style="margin-right:auto;">
+    {% if tab == 'download' %}
+      <strong>渡す箱</strong> <span class="muted">— ファイルを入れておき，相手がURLとパスワードでダウンロードします</span>
+    {% else %}
+      <strong>受け取る箱</strong> <span class="muted">— 相手がURLとパスワードでファイルを送り込みます</span>
+    {% endif %}
+  </div>
+  <a class="btn btn-acc" href="{{ url_for('file_container.new_box', kind=tab) }}">＋ {{ KIND_LABELS[tab] }}を作る</a>
+</div>
+<div class="row muted" style="margin-bottom:8px;">
+  <span>このタブの実体 {{ fmt_bytes(tab_bytes) }}（全体 {{ fmt_bytes(total_live) }}）　1件の上限 {{ max_label }}</span>
+  <span style="margin-left:auto;">
+    {% if show == 'active' %}使用中の箱だけを表示（<a href="{{ url_for('file_container.index', tab=tab, show='all') }}">記録だけの箱も表示</a>）
+    {% else %}すべての箱を表示（<a href="{{ url_for('file_container.index', tab=tab) }}">使用中だけ</a>）{% endif %}
+  </span>
+</div>
+<table>
+  <thead><tr>
+    <th>ID</th><th>題名</th><th>状態</th><th>ファイル</th>
+    {% if tab == 'download' %}<th class="hide-sm">ダウンロード</th>{% else %}<th class="hide-sm">取り出し</th>{% endif %}
+    <th class="hide-sm">期限</th><th class="hide-sm">最終の出来事</th>
+  </tr></thead>
+  <tbody>
+  {% for b in boxes %}
+    <tr>
+      <td class="muted">{{ b.id }}</td>
+      <td><a href="{{ url_for('file_container.box_detail', box_id=b.id) }}"><strong>{{ b.title }}</strong></a>
+        {% if b.note %}<div class="muted">{{ b.note[:60] }}{% if b.note|length > 60 %}…{% endif %}</div>{% endif %}</td>
+      <td>
+        {% if b.status == 'closed' %}<span class="tag tag-closed">閉鎖</span>
+        {% elif b.expired %}<span class="tag tag-exp">期限切れ</span>
+        {% else %}<span class="tag tag-open">受付中</span>{% endif %}
+      </td>
+      <td>{{ b.file_live }} 件{% if b.file_total > b.file_live %} <span class="muted">（削除済み {{ b.file_total - b.file_live }}）</span>{% endif %}
+        {% if b.live_bytes %}<div class="muted">{{ fmt_bytes(b.live_bytes) }}</div>{% endif %}</td>
+      <td class="hide-sm">{{ b.download_count }}</td>
+      <td class="hide-sm muted">{{ fmt_dt(b.expires_at) or '無期限' }}</td>
+      <td class="hide-sm muted">{{ fmt_dt(b.last_event_at) }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted" style="text-align:center; padding:28px;">{{ KIND_LABELS[tab] }}はまだありません．上のボタンから作ってください．</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

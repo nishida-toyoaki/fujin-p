@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-10-07 23:17:11",
+  "generated_at": "2026-10-08 21:34:57",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -1459,6 +1459,43 @@
           "sort_order": 10,
           "visibility": "public",
           "description": "オフィスアワーを出す・会いたい人に請求する・招待する",
+          "extra_class": ""
+        }
+      ],
+      "version_id": "v20261007.232423-a276a6",
+      "version_confirmed_at": "2026-10-07 23:24:23"
+    },
+    {
+      "app_name": "file_container",
+      "display_name": "ふぁいこん",
+      "icon": "📦",
+      "description": "大型ファイル（1件100MBまで）をURLとパスワードで受け渡す．渡す箱／受け取る箱を作り，用事がすめば実体を消して記録だけを残す．管理はadmin専用．",
+      "sort_order": 410.0,
+      "kind": "app",
+      "enabled": true,
+      "disclosed": true,
+      "blueprints": [
+        {
+          "attr": "file_container_bp",
+          "name": "file_container",
+          "module": "fujinp.file_container",
+          "url_prefix": "/file_container"
+        }
+      ],
+      "launchers": [
+        {
+          "icon": "📦",
+          "label": "ふぁいこん",
+          "groups": [],
+          "params": "",
+          "section": "internal",
+          "endpoint": "file_container.index",
+          "dashboards": [
+            "admin"
+          ],
+          "sort_order": 30,
+          "visibility": "private",
+          "description": "大型ファイルをURLとパスワードで受け渡す",
           "extra_class": ""
         }
       ],

@@ -1,0 +1,122 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'file_container/_base.html' %}
+{% block title %}{{ box.title }} - ふぁいこん{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:6px;">
+  <span class="tag {{ 'tag-dl' if box.kind == 'download' else 'tag-ul' }}">{{ KIND_LABELS[box.kind] }}</span>
+  {% if box.status == 'closed' %}<span class="tag tag-closed">閉鎖</span>
+  {% elif box.expired %}<span class="tag tag-exp">期限切れ</span>
+  {% else %}<span class="tag tag-open">受付中</span>{% endif %}
+  <span class="muted">ID {{ box.id }}</span>
+</div>
+<h1>{{ box.title }}</h1>
+
+<div class="card">
+  <div class="muted">受け渡し口のURL{% if not box.live %}（いまは閉じています）{% endif %}</div>
+  <div class="row"><span id="url" class="mono" style="word-break:break-all;">{{ url }}</span>
+    <button class="btn btn-sm" type="button" onclick="fcCopy('url', this)">コピー</button></div>
+  <div class="muted" style="margin-top:6px;">作成 {{ fmt_dt(box.created_at) }}（{{ names.get(box.created_by, '不明') }}）　期限 {{ fmt_dt(box.expires_at) or '無期限' }}{% if box.closed_at %}　閉鎖 {{ fmt_dt(box.closed_at) }}{% endif %}</div>
+  {% if box.note %}<div style="margin-top:6px; white-space:pre-wrap;">{{ box.note }}</div>{% endif %}
+</div>
+
+<h2>ファイル</h2>
+<table>
+  <thead><tr><th>名前</th><th>大きさ</th><th class="hide-sm">入れた日時</th><th class="hide-sm">経路</th><th>DL</th><th></th></tr></thead>
+  <tbody>
+  {% for f in files %}
+    <tr>
+      <td>{% if f.purged_at %}<span class="gone">{{ f.original_name }}</span>
+            <div class="muted">実体削除 {{ fmt_dt(f.purged_at) }}</div>
+          {% else %}<a href="{{ url_for('file_container.admin_download', box_id=box.id, file_id=f.id) }}">{{ f.original_name }}</a>{% endif %}
+          <div class="muted mono hide-sm" title="SHA-256">{{ f.sha256[:16] }}…</div></td>
+      <td>{{ fmt_bytes(f.size_bytes) }}</td>
+      <td class="hide-sm muted">{{ fmt_dt(f.uploaded_at) }}</td>
+      <td class="hide-sm muted">{% if f.uploaded_via == 'link' %}受け渡し口{% if f.uploader_label %}（{{ f.uploader_label }}）{% endif %}{% else %}管理画面{% endif %}</td>
+      <td>{{ f.download_count }}</td>
+      <td style="text-align:right;">
+        {% if not f.purged_at %}
+        <form class="inline" method="post" action="{{ url_for('file_container.admin_purge', box_id=box.id, file_id=f.id) }}"
+              onsubmit="return confirm('このファイルの実体を削除します．記録は残ります．よろしいですか？');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-bad btn-sm" type="submit">実体を削除</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted" style="text-align:center; padding:18px;">ファイルはまだありません</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<form class="card" style="margin-top:12px;" method="post" action="{{ url_for('file_container.admin_upload', box_id=box.id) }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row">
+    <span class="muted">ファイルを入れる（1件 {{ max_label }} まで．複数可）</span>
+    <input type="file" name="files" multiple onchange="fcCheckSize(this)">
+    <button class="btn btn-acc btn-sm" type="submit">入れる</button>
+  </div>
+</form>
+
+<h2>操作</h2>
+<div class="card">
+  <div class="row">
+    <form class="inline" method="post" action="{{ url_for('file_container.finish_box', box_id=box.id) }}"
+          onsubmit="return confirm('受付を止め，この箱のファイルの実体をすべて削除します．記録は残ります．よろしいですか？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-bad" type="submit">用事がすんだ（受付停止＋実体をすべて削除）</button>
+    </form>
+    <form class="inline" method="post" action="{{ url_for('file_container.set_status', box_id=box.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if box.status == 'open' %}
+        <input type="hidden" name="to" value="closed"><button class="btn" type="submit">受付を停止</button>
+      {% else %}
+        <input type="hidden" name="to" value="open"><button class="btn" type="submit">受付を再開</button>
+      {% endif %}
+    </form>
+  </div>
+
+  <details style="margin-top:12px;">
+    <summary>パスワードを作り直す</summary>
+    <form method="post" action="{{ url_for('file_container.reset_password', box_id=box.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>新しいパスワード（空なら自動で作ります）</label>
+      <input type="text" name="password" class="mono" autocomplete="off" style="max-width:320px;">
+      <label style="color:inherit;"><input type="checkbox" name="new_url" value="1"> URLも作り直す（古いURLは使えなくなります）</label>
+      <button class="btn" type="submit">作り直す</button>
+    </form>
+  </details>
+
+  <details style="margin-top:8px;">
+    <summary>題名・メモ・期限を直す</summary>
+    <form method="post" action="{{ url_for('file_container.edit_box', box_id=box.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>題名</label><input type="text" name="title" value="{{ box.title }}" maxlength="200" required>
+      <label>メモ</label><textarea name="note">{{ box.note or '' }}</textarea>
+      <label>期限（空なら無期限）</label>
+      <input type="datetime-local" name="expires_at" value="{{ box.expires_at.strftime('%Y-%m-%dT%H:%M') if box.expires_at else '' }}" style="max-width:260px;">
+      <div style="margin-top:10px;"><button class="btn" type="submit">保存</button></div>
+    </form>
+  </details>
+</div>
+
+<h2>記録</h2>
+<table>
+  <thead><tr><th>日時</th><th>出来事</th><th>内容</th><th class="hide-sm">誰が／どこから</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="muted" style="white-space:nowrap;">{{ fmt_dt(e.created_at) }}</td>
+      <td>{{ EVENT_LABELS.get(e.event, e.event) }}</td>
+      <td>{{ e.detail or '' }}</td>
+      <td class="hide-sm muted">{% if e.user_id %}{{ names.get(e.user_id, '#' ~ e.user_id) }}{% else %}{{ e.ip }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

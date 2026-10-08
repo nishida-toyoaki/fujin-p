@@ -1,0 +1,54 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'file_container/_base.html' %}
+{% block content %}
+<h1>箱を作る</h1>
+<form class="card" method="post" action="{{ url_for('file_container.new_box') }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>種類</label>
+  <div class="row">
+    <label style="margin:0; color:inherit;"><input type="radio" name="kind" value="download" {% if kind != 'upload' %}checked{% endif %} onchange="fcKind()"> 渡す箱（相手がダウンロードする）</label>
+    <label style="margin:0; color:inherit;"><input type="radio" name="kind" value="upload" {% if kind == 'upload' %}checked{% endif %} onchange="fcKind()"> 受け取る箱（相手がアップロードする）</label>
+  </div>
+
+  <label>題名（相手の画面にも出ます）</label>
+  <input type="text" name="title" maxlength="200" required>
+
+  <label>メモ（管理画面だけに出ます）</label>
+  <textarea name="note"></textarea>
+
+  <label>パスワード（8文字以上．作った直後に一度だけ表示します）</label>
+  <input type="text" name="password" value="{{ password }}" class="mono" minlength="8" required autocomplete="off">
+
+  <label>期限</label>
+  <select name="expires_days" style="max-width:220px;">
+    <option value="7">7日後まで</option>
+    <option value="14" selected>14日後まで</option>
+    <option value="30">30日後まで</option>
+    <option value="0">無期限</option>
+  </select>
+
+  <div id="first-files">
+    <label>入れておくファイル（あとからでも入れられます．1件 {{ max_label }} まで．複数可）</label>
+    <input type="file" name="files" multiple onchange="fcCheckSize(this)">
+  </div>
+
+  <div class="row" style="margin-top:16px;">
+    <button class="btn btn-acc" type="submit">作る</button>
+    <a class="btn" href="{{ url_for('file_container.index') }}">やめる</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+function fcKind() {
+  const dl = document.querySelector('input[name=kind][value=download]').checked;
+  document.getElementById('first-files').style.display = dl ? '' : 'none';
+}
+fcKind();
+</script>
+{% endblock %}

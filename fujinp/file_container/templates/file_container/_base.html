@@ -1,0 +1,95 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}ふぁいこん{% endblock %}</title>
+<style>
+  :root { --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb; --bg:#f6f7f9; --acc:#0f766e; --acc2:#115e59; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif; color:var(--ink); background:var(--bg); font-size:15px; line-height:1.6; }
+  header { background:#fff; border-bottom:1px solid var(--line); }
+  .bar { max-width:1100px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:18px; margin-right:auto; }
+  .brand small { font-weight:400; color:var(--sub); font-size:13px; margin-left:6px; }
+  .btn { display:inline-block; border:1px solid var(--line); background:#fff; color:var(--ink); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:14px; cursor:pointer; font-family:inherit; }
+  .btn:hover { background:#f3f4f6; }
+  .btn-acc { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .btn-acc:hover { background:var(--acc2); }
+  .btn-bad { background:#fff; border-color:#fecaca; color:var(--bad); }
+  .btn-bad:hover { background:#fef2f2; }
+  .btn-fujin { background:#dc2626; border-color:#dc2626; color:#fff; font-weight:700; }
+  .btn-fujin:hover { background:#b91c1c; }
+  .btn-home { background:#7c4a1e; border-color:#7c4a1e; color:#fff; font-weight:700; }
+  .btn-home:hover { background:#5e3714; }
+  .tabs { display:flex; gap:4px; border-bottom:2px solid var(--line); margin-bottom:14px; }
+  .tabs a { padding:9px 18px; text-decoration:none; color:var(--sub); font-weight:600; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; }
+  .tabs a:hover { color:var(--ink); background:#fff; }
+  .tabs a.on-dl { color:#155e75; background:#fff; border-color:var(--line); border-bottom:2px solid #fff; box-shadow:inset 0 3px 0 #0891b2; }
+  .tabs a.on-ul { color:#854d0e; background:#fff; border-color:var(--line); border-bottom:2px solid #fff; box-shadow:inset 0 3px 0 #ca8a04; }
+  .tabs .cnt { display:inline-block; min-width:20px; padding:0 6px; margin-left:6px; border-radius:10px; background:#f3f4f6; font-size:12px; color:var(--sub); text-align:center; }
+  .btn-sm { padding:3px 9px; font-size:13px; }
+  main { max-width:1100px; margin:0 auto; padding:18px 16px 48px; }
+  h1 { font-size:20px; margin:4px 0 14px; }
+  h2 { font-size:16px; margin:22px 0 8px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:14px; }
+  table { width:100%; border-collapse:collapse; background:#fff; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  th { color:var(--sub); font-weight:600; font-size:13px; background:#fafafa; }
+  .muted { color:var(--sub); font-size:13px; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); white-space:nowrap; }
+  .tag-dl { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
+  .tag-ul { background:#fef9c3; border-color:#fde68a; color:#854d0e; }
+  .tag-open { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
+  .tag-closed { background:#f3f4f6; color:#4b5563; }
+  .tag-exp { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+  .gone { color:#9ca3af; text-decoration:line-through; }
+  .flash { padding:9px 12px; border-radius:6px; margin-bottom:10px; font-size:14px; }
+  .flash-success { background:#dcfce7; color:#166534; }
+  .flash-error { background:#fee2e2; color:#991b1b; }
+  .flash-info { background:#e0f2fe; color:#075985; }
+  label { display:block; font-size:13px; color:var(--sub); margin:10px 0 4px; }
+  input[type=text], input[type=password], input[type=datetime-local], textarea, select { width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; font-family:inherit; }
+  textarea { min-height:70px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .copybox { background:#f9fafb; border:1px solid var(--line); border-radius:6px; padding:10px 12px; white-space:pre-wrap; word-break:break-all; }
+  form.inline { display:inline; }
+  @media (max-width:700px) { .hide-sm { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">📦 ふぁいこん<small>大型ファイルの受け渡し</small></div>
+    <a class="btn btn-home" href="{{ url_for('file_container.index', tab=home_tab) if home_tab else url_for('file_container.index') }}">📦 ふぁいこんダッシュボードへ</a>
+    <a class="btn btn-fujin" href="{{ url_for('file_container.return_to_fujin') }}">FUJIN-P</a>
+  </div>
+</header>
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash flash-{{ cat if cat in ['success','error','info'] else 'info' }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<script>
+function fcCopy(id, btn) {
+  const t = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(t).then(() => { const o = btn.textContent; btn.textContent = 'コピーしました'; setTimeout(() => btn.textContent = o, 1500); });
+}
+function fcCheckSize(input) {
+  const max = {{ max_bytes }};
+  for (const f of input.files) {
+    if (f.size > max) { alert('「' + f.name + '」は ' + (f.size/1048576).toFixed(1) + 'MB あります．1件 {{ max_label }} までです．'); input.value = ''; return; }
+  }
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

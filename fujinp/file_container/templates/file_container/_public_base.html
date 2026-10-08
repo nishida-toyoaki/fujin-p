@@ -1,0 +1,46 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>{% block title %}ファイルの受け渡し{% endblock %}</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif; color:#1f2937; background:#f6f7f9; font-size:15px; line-height:1.7; }
+  .wrap { max-width:560px; margin:48px auto; padding:0 16px; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:22px 22px 18px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .muted { color:#6b7280; font-size:13px; }
+  input[type=password], input[type=text] { width:100%; padding:9px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:15px; font-family:inherit; }
+  .btn { display:inline-block; border:1px solid #0f766e; background:#0f766e; color:#fff; padding:8px 18px; border-radius:6px; text-decoration:none; font-size:15px; cursor:pointer; font-family:inherit; }
+  .btn:hover { background:#115e59; }
+  ul.files { list-style:none; padding:0; margin:12px 0 0; }
+  ul.files li { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid #e5e7eb; }
+  ul.files li .name { flex:1; word-break:break-all; }
+  .flash { padding:9px 12px; border-radius:6px; margin-bottom:12px; font-size:14px; }
+  .flash-success { background:#dcfce7; color:#166534; }
+  .flash-error { background:#fee2e2; color:#991b1b; }
+  .flash-info { background:#e0f2fe; color:#075985; }
+  label { display:block; font-size:13px; color:#6b7280; margin:12px 0 4px; }
+  footer { text-align:center; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash flash-{{ cat if cat in ['success','error','info'] else 'info' }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="card">{% block content %}{% endblock %}</div>
+  <footer class="muted">FUJIN-P ふぁいこん</footer>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
