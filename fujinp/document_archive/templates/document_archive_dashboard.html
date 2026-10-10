@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/nishida-toyoaki/fujin-p
+  Source: https://github.com/u-fukuchiyama/fujin-p
 #}
 
 {% import 'document_archive_macros.html' as ui with context %}
@@ -189,6 +189,10 @@
                                                     <a href="{{ url_for('document_archive.plain_view', doc_id=doc.id) }}"
                                                        class="btn btn-outline-info btn-sm" title="プレーンHTML表示">
                                                         <i class="fas fa-external-link-alt"></i>
+                                                    </a>
+                                                    <a href="{{ url_for('document_archive.download_document', doc_id=doc.id) }}"
+                                                       class="btn btn-outline-secondary btn-sm" title="ダウンロード">
+                                                        <i class="fas fa-download"></i>
                                                     </a>
                                                     {% if doc.file_type and doc.file_type.startswith('video/') %}
                                                     <a href="{{ url_for('document_archive.plain_view', doc_id=doc.id) }}"

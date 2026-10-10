@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 文書アーカイブ閲覧アプリケーション
@@ -47,6 +47,8 @@
     P0-6 /debug_session を削除
     P1   検索結果の権限表示・作成者氏名・公開範囲バッジ・next付きログイン誘導・権限モジュール分離
     P2   デッドコード削除・N+1解消・一時ファイル掃除・ログ整理・ZIP名の日本語対応
+  2026-09-21  コンテンツのダウンロード（/download/<doc_id>．種類に応じた拡張子で保存）
+  2026-10-10  研修版（nishida4fujinp）と大学版（fujinp）の合流．あわみからの文書登録口（/awami_create_document）
 """
 
 import hmac
@@ -183,6 +185,10 @@ def _submitted_csrf_token():
 def verify_csrf_token():
     """POST リクエストのCSRFトークンを検証する"""
     if request.method != 'POST':
+        return None
+    # あわみからの文書登録口は，他アプリの画面から JSON で呼ばれるためトークンを持たない．
+    # 代わりに受け口の中で「JSON であること」「同じサイトからの要求であること」を確かめる．
+    if request.endpoint == 'document_archive.awami_create_document':
         return None
 
     expected = session.get(CSRF_SESSION_KEY)
@@ -1016,6 +1022,80 @@ def plain_view(doc_id):
     return Response(document['content'], mimetype='text/html; charset=utf-8')
 
 
+# ダウンロード時の拡張子（MIMEタイプ → Windows 標準の拡張子）
+DOWNLOAD_EXTENSIONS = {
+    'application/pdf': 'pdf',
+    'image/svg+xml': 'svg',
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/bmp': 'bmp',
+    'image/x-icon': 'ico',
+    'video/mp4': 'mp4',
+    'text/plain': 'txt',
+    'text/html': 'html',
+}
+
+_HTML_CHARSET_RE = re.compile(r'<meta[^>]+charset', re.IGNORECASE)
+
+
+def download_filename(title, ext):
+    """タイトルから Windows で使えるファイル名を作る（拡張子の二重付けを避ける）"""
+    base = str(title or '').strip()
+    aliases = {'jpg': ('jpg', 'jpeg'), 'html': ('html', 'htm')}.get(ext, (ext,))
+    for known in aliases:
+        if base.lower().endswith('.' + known):
+            base = base[:-(len(known) + 1)]
+            break
+    return zip_safe_name(base, '', '.' + ext)
+
+
+@document_archive_bp.route('/download/<int:doc_id>')
+def download_document(doc_id):
+    """コンテンツを種類に応じた拡張子のファイルとしてダウンロードさせる"""
+    document = get_document_by_id(doc_id)
+
+    if not document:
+        return "文書が見つかりません", 404
+
+    if not check_view_permission(document):
+        if not current_user_id():
+            flash('このページを閲覧するにはログインが必要です', 'info')
+            return redirect(url_for('auth.login', next=request.url))
+        return "権限がありません", 403
+
+    # バイナリ文書：保存ファイルをそのまま渡す
+    if document.get('file_path'):
+        abs_path = storage_path(document['file_path'])
+        if not abs_path or not os.path.exists(abs_path):
+            logger.error(f"実ファイルが見つかりません: doc_id={doc_id} path={document['file_path']!r}")
+            return "ファイルが見つかりません", 404
+        mime = (document.get('file_type') or '').split(';')[0].strip().lower()
+        ext = file_extension(document['file_path'])
+        if ext == 'jpeg':
+            ext = 'jpg'
+        if not ext:
+            ext = DOWNLOAD_EXTENSIONS.get(mime, 'bin')
+        return send_file(abs_path,
+                         mimetype=document.get('file_type') or 'application/octet-stream',
+                         as_attachment=True,
+                         download_name=download_filename(document.get('title'), ext))
+
+    # HTML文書：DBの content を .html として渡す
+    content = document.get('content')
+    if not content:
+        return "No Content", 404
+    data = content.encode('utf-8')
+    if not _HTML_CHARSET_RE.search(content[:4096]):
+        # 文字コード宣言の無いHTMLは，ローカルで開いたとき文字化けしないようBOMを付ける
+        data = b'\xef\xbb\xbf' + data
+    return send_file(io.BytesIO(data),
+                     mimetype='text/html; charset=utf-8',
+                     as_attachment=True,
+                     download_name=download_filename(document.get('title'), 'html'))
+
+
 @document_archive_bp.route('/search')
 @login_required
 def search():
@@ -1442,3 +1522,74 @@ def export_cleanup(token):
 def return_to_fujin():
     """FUJINダッシュボードに戻る"""
     return redirect_to_dashboard()
+
+
+# ─────────────────────────────────────────────────────────────────
+# あわみからの文書登録口
+#
+# あわみの「📥 JSON取込」でコンテンツ付きJSONを取り込むとき，各ノードの本文（HTML）を
+# 新しい文書として登録する．あわみ側で画像は static/mdimgs/ に保存済み，本文は単独で
+# 開けるHTML文書に仕立て済みで届く．登録した文書の表示URL（/document_archive/plain/<id>）を返す．
+#   {probe: true}                 → 使えるかの確認（作成権限があれば success）
+#   {title, html, access_policy, access_group_ids, source_url, note}
+#                                 → 登録して {success, doc_id, entity_url}
+# CSRF トークンの代わりに，JSON であることと同じサイトからの要求であることを確かめる．
+# ─────────────────────────────────────────────────────────────────
+
+def _same_site_request():
+    """ブラウザが付ける Origin／Sec-Fetch-Site で，同じサイトからの要求かを確かめる"""
+    site = request.headers.get('Sec-Fetch-Site')
+    if site and site not in ('same-origin', 'none'):
+        # same-site は同じ親ドメインの別サイト（他の *.pythonanywhere.com など）を含むので受けない
+        return False
+    origin = request.headers.get('Origin')
+    if origin and urlparse(origin).netloc != request.host:
+        return False
+    return True
+
+
+@document_archive_bp.route('/awami_create_document', methods=['POST'])
+@login_required
+def awami_create_document():
+    if not request.is_json or not _same_site_request():
+        logger.warning(f"[security] あわみ登録口への不正な要求を拒否: user={current_user_id()}")
+        return jsonify({'success': False, 'error': '不正な要求です'}), 400
+    if not can_create_document():
+        return jsonify({'success': False,
+                        'error': '文書アーカイブの文書作成権限がありません'}), 403
+    data = request.get_json(silent=True) or {}
+    if data.get('probe'):
+        return jsonify({'success': True})
+
+    title = (data.get('title') or '').strip()[:TITLE_MAX_LENGTH] or '（無題）'
+    html = data.get('html') or ''
+    if not html.strip():
+        return jsonify({'success': False, 'error': '本文がありません'}), 400
+    access_policy = data.get('access_policy') or 'private'
+    if access_policy not in VALID_ACCESS_POLICIES:
+        access_policy = 'private'
+    group_ids = data.get('access_group_ids') or []
+    if access_policy in GROUP_POLICIES and not group_ids:
+        access_policy = 'private'          # グループ未指定のグループ公開は誰にも見えないので非公開に倒す
+    source_url = (data.get('source_url') or '').strip()
+    note = (data.get('note') or '').strip()
+    owner_memo = 'あわみから取り込み' + ('．出所：' + source_url if source_url else '')
+
+    content, file_type, file_path = html, None, None
+    if len(html.encode('utf-8')) > HTML_DB_MAX_BYTES:
+        # 大きなHTMLは /save と同じくファイルとして保存し，プレーン表示でそのまま配信する
+        file_path = f"{uuid.uuid4().hex}.html"
+        with open(storage_path(file_path), 'w', encoding='utf-8', newline='') as f:
+            f.write(html)
+        content, file_type = None, MIME_TYPES['html']
+
+    ok, msg, doc_id = save_document_to_db(
+        title, note, owner_memo, content, access_policy, group_ids,
+        file_type=file_type, file_path=file_path)
+    if not ok:
+        if file_path:
+            delete_stored_file(file_path)
+        return jsonify({'success': False, 'error': msg}), 500
+    logger.info(f"[awami] 文書を登録: doc={doc_id} user={current_user_id()} src={source_url!r}")
+    return jsonify({'success': True, 'doc_id': doc_id,
+                    'entity_url': url_for('document_archive.plain_view', doc_id=doc_id)})

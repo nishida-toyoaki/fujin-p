@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/nishida-toyoaki/fujin-p
+# Source: https://github.com/u-fukuchiyama/fujin-p
 
 """
 文書アーカイブ（document_archive）権限判定モジュール
@@ -160,14 +160,41 @@ def is_admin_user():
 # グループ・フィーチャーの取得（default DB）
 # ─────────────────────────────────────────────────────────────────
 
+# 構成員の判定はまいぐるの公開APIに任せる。台帳のルールから作られたグループ
+# （総務課など）は user_group_memberships に行を持たないため、このテーブルを
+# 直接引くと構成員が0人になる。取り込みは初回の呼び出し時に行う
+# （起動時の読み込み順に左右されないようにするため）。
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す。無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
+
 def get_user_active_group_ids(user_id=None):
     """
     指定ユーザが現在所属している有効なグループIDのリストを返す（JST基準）。
-    valid_from / valid_until による有効期間つき。
+
+    まいぐるの get_user_group_ids に委ねる（直接メンバー ∪ 台帳のルール由来 − 除外）。
+    それが使えない環境では、従来どおり user_group_memberships を直接引く。
     """
     user_id = current_user_id() if user_id is None else int(user_id or 0)
     if not user_id:
         return []
+    _fn = _ug('get_user_group_ids')
+    if _fn is not None:
+        try:
+            return list(_fn(user_id))
+        except Exception as e:
+            logger.error(f"user_groups.get_user_group_ids エラー: {e}")
     try:
         now_jst = datetime.now(JST).replace(tzinfo=None)
         with get_db_cursor(database='default') as (cursor, conn):

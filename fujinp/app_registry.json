@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "generated_at": "2026-10-08 21:34:57",
+  "generated_at": "2026-10-10 23:48:02",
   "note": "FUJIN-P アプリ正本の写し．正本は app_share_registry / app_share_sections / app_share_dashboards（アプシャ）．手で編集せず，アプシャの「発行」で再生成する．",
   "apps": [
     {
@@ -95,8 +95,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20261001.101122-ae1203",
-      "version_confirmed_at": "2026-10-01 10:11:22"
+      "version_id": "v20261010.182759-9b4374",
+      "version_confirmed_at": "2026-10-10 18:28:00"
     },
     {
       "app_name": "user_groups",
@@ -970,8 +970,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": "v20261006.161628-81ff1b",
-      "version_confirmed_at": "2026-10-06 16:16:29"
+      "version_id": "v20261010.234759-dcb380",
+      "version_confirmed_at": "2026-10-10 23:48:00"
     },
     {
       "app_name": "free_hand_curve",
@@ -1488,7 +1488,7 @@
           "label": "ふぁいこん",
           "groups": [],
           "params": "",
-          "section": "internal",
+          "section": "system",
           "endpoint": "file_container.index",
           "dashboards": [
             "admin"
@@ -1499,8 +1499,8 @@
           "extra_class": ""
         }
       ],
-      "version_id": null,
-      "version_confirmed_at": null
+      "version_id": "v20261008.215448-1b5b8b",
+      "version_confirmed_at": "2026-10-08 21:54:48"
     }
   ],
   "sections": [
