@@ -263,9 +263,6 @@
 
 <div id="header">
     <h1>管理者パネル <span style="font-size:12px; opacity:0.8; margin-left:10px; font-weight:400;">Admin Panel</span></h1>
-    <!--<a href="/migration_assistant/admin_migration" class="btn btn-warning">-->
-    <!--    🔄 データマイグレーション-->
-    <!--</a>-->
     <a href="/migration_assistant" class="nav-link">👣 まいあしに戻る</a>
 </div>
 
@@ -284,6 +281,42 @@
         <div id="mentors-container">
             <div class="empty-state">読み込み中...</div>
         </div>
+    </div>
+
+    <!-- 教材と履修記録の移設（2026-10-09 追加） -->
+    <div class="section-card">
+        <div class="section-header">
+            <div class="section-title">教材と履修記録の移設</div>
+            <a class="btn btn-primary" style="text-decoration:none;"
+               href="{{ url_for('migration_assistant.export_content') }}">📦 教材と履修記録エクスポート</a>
+        </div>
+        <div class="form-help" style="font-size:12px; margin-bottom:18px;">
+            エクスポートは，全教材・受講登録・進捗・師匠候補の記録を，関係するユーザのメールアドレス付きの JSON ファイルとしてダウンロードします（本文中の画像も同梱）．
+            インポートは，別のサイトでエクスポートした JSON を，メールアドレスでこのサイトのユーザに対応付けて取り込みます．
+        </div>
+
+        <div class="form-group">
+            <label>インポートする JSON ファイル</label>
+            <input type="file" id="import-file" accept=".json,application/json">
+        </div>
+        <div class="form-group">
+            <label>メールアドレスの読み替え（任意）</label>
+            <textarea id="import-map" rows="2" placeholder="旧アドレス=新アドレス（1行に1人）"></textarea>
+            <div class="form-help">送り出し側とこのサイトでメールアドレスが違う人だけ書きます</div>
+        </div>
+        <div class="form-group">
+            <label style="font-weight:normal;">
+                <input type="checkbox" id="import-force" style="width:auto;">
+                同じ作成者・同じタイトルの教材が既にあっても新しく作る
+            </label>
+        </div>
+        <div class="form-actions" style="justify-content:flex-start;">
+            <button class="btn btn-secondary" onclick="runImport(false)">🔍 試行（書き込まない）</button>
+            <button class="btn btn-primary" id="import-commit-btn" onclick="runImport(true)" disabled>📥 インポート実行</button>
+        </div>
+        <div class="form-help">まず「試行」で対応付けと件数を確かめてから「インポート実行」を押してください</div>
+
+        <div id="import-result" style="margin-top:20px;"></div>
     </div>
 </div>
 
@@ -476,6 +509,126 @@ async function revokeMentor(mentorId) {
     } catch (e) {
         alert('エラーが発生しました: ' + e.message);
     }
+}
+
+// =====================================================================
+// 教材と履修記録のインポート（2026-10-09 追加）
+// =====================================================================
+const IMPORT_STAT_LABELS = {
+    courses: '教材',
+    phases: 'Phase',
+    stages: 'Stage',
+    steps: 'Step',
+    enrollments: '受講登録',
+    progress: '進捗',
+    mentors: '師匠候補の記録',
+    courses_skipped: '取り込まなかった教材',
+    enrollments_skipped: '取り込まなかった受講登録（弟子が未対応）',
+    enrollments_existing: '既にあった受講登録',
+    progress_skipped: '取り込まなかった進捗（弟子が未対応）',
+    mentors_skipped: '取り込まなかった師匠候補の記録',
+    mentors_existing: '既にあった師匠候補の記録'
+};
+
+// ファイルを選び直したら，試行からやり直す
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('import-file').addEventListener('change', () => {
+        document.getElementById('import-commit-btn').disabled = true;
+        document.getElementById('import-result').innerHTML = '';
+    });
+});
+
+async function runImport(commit) {
+    const fileInput = document.getElementById('import-file');
+    if (!fileInput.files.length) {
+        alert('JSONファイルを選んでください');
+        return;
+    }
+    if (commit && !confirm('インポートを実行します．よろしいですか？')) {
+        return;
+    }
+
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('commit', commit ? '1' : '0');
+    fd.append('force', document.getElementById('import-force').checked ? '1' : '0');
+    fd.append('map', document.getElementById('import-map').value);
+
+    const box = document.getElementById('import-result');
+    box.innerHTML = '<div class="empty-state">' + (commit ? '取り込み中...' : '試行中...') + '</div>';
+
+    try {
+        const res = await fetch('{{ url_for("migration_assistant.import_content") }}', {
+            method: 'POST',
+            body: fd
+        });
+        const data = await res.json();
+        if (!data.success) {
+            box.innerHTML = '<div class="empty-state" style="color:#c62828;">エラー: ' + esc(data.error) + '</div>';
+            document.getElementById('import-commit-btn').disabled = true;
+            return;
+        }
+        box.innerHTML = renderImportResult(data);
+        // 試行が成功したら実行ボタンを有効に．実行後は二重取り込みを防ぐため無効に戻す
+        document.getElementById('import-commit-btn').disabled = !!data.committed;
+        if (data.committed) {
+            await loadMentors();
+        }
+    } catch (e) {
+        box.innerHTML = '<div class="empty-state" style="color:#c62828;">エラー: ' + esc(e.message) + '</div>';
+    }
+}
+
+function renderImportResult(d) {
+    let html = '';
+    html += '<div style="font-weight:bold; margin-bottom:10px; color:' + (d.committed ? '#2e7d32' : '#555') + ';">';
+    html += d.committed ? '✅ インポートしました' : '🔍 試行結果（まだ書き込んでいません）';
+    html += '</div>';
+    html += '<div class="form-help" style="font-size:12px; margin-bottom:15px;">送り出し元: '
+         + esc(d.source_site || '-') + '（' + esc(d.generated_at || '-') + ' 作成）</div>';
+
+    // ユーザの対応付け
+    html += '<div class="section-title" style="font-size:14px; margin:10px 0;">ユーザの対応付け</div>';
+    html += '<table class="data-table"><thead><tr><th>送り出し側</th><th>メールアドレス</th><th>このサイト</th></tr></thead><tbody>';
+    (d.users || []).forEach(u => {
+        const right = u.new_id
+            ? `<strong>${esc(u.new_name)}</strong> <span style="font-size:11px; color:#888;">ID: ${u.new_id}</span>`
+            : `<span style="color:#c62828;">× ${esc(u.reason)}</span>`;
+        html += `<tr><td>${esc(u.old_name || '-')} <span style="font-size:11px; color:#888;">ID: ${u.old_id}</span></td>`;
+        html += `<td style="font-size:12px;">${esc(u.email || '-')}</td><td>${right}</td></tr>`;
+    });
+    html += '</tbody></table>';
+
+    // 教材
+    html += '<div class="section-title" style="font-size:14px; margin:20px 0 10px;">教材</div>';
+    html += '<table class="data-table"><thead><tr><th>教材</th><th>結果</th></tr></thead><tbody>';
+    (d.courses || []).forEach(c => {
+        const right = c.new_id
+            ? `新しい教材ID ${c.new_id}`
+            : `<span style="color:#c62828;">取り込まない（${esc(c.reason)}）</span>`;
+        html += `<tr><td>${esc(c.title)} <span style="font-size:11px; color:#888;">ID: ${c.old_id}</span></td><td>${right}</td></tr>`;
+    });
+    html += '</tbody></table>';
+
+    // 件数
+    html += '<div class="section-title" style="font-size:14px; margin:20px 0 10px;">件数</div>';
+    html += '<table class="data-table"><tbody>';
+    Object.keys(IMPORT_STAT_LABELS).forEach(k => {
+        if (d.stats && d.stats[k]) {
+            html += `<tr><td>${IMPORT_STAT_LABELS[k]}</td><td style="text-align:right;">${d.stats[k]}</td></tr>`;
+        }
+    });
+    const im = d.images || {};
+    html += `<tr><td>画像（${d.committed ? '書き込み' : '書き込み予定'} / 既にある / 同梱なし）</td>`
+         + `<td style="text-align:right;">${im.written || 0} / ${im.existing || 0} / ${im.not_included || 0}</td></tr>`;
+    html += '</tbody></table>';
+
+    if (d.warnings && d.warnings.length) {
+        html += '<div style="margin-top:15px; font-size:12px; color:#e65100;">';
+        d.warnings.forEach(w => { html += '⚠ ' + esc(w) + '<br>'; });
+        html += '</div>';
+    }
+    return html;
 }
 
 // モーダルを閉じる

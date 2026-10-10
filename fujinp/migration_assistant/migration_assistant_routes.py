@@ -39,6 +39,20 @@ from . import migration_assistant
 
 JST = timezone(timedelta(hours=9), 'JST')
 
+# =============================================================================
+# まいあしが所有するテーブル（2026-10-09 アプリ名つきに改名）
+#   旧名: courses / course_phase_contents / course_stage_contents /
+#         course_step_contents / course_enrollments / course_progress
+#   SQL では必ずこの定数を使う（アプシャは *_TABLE 定数からテーブルを見つける）
+# =============================================================================
+COURSES_TABLE     = 'migration_assistant_courses'             # 教材
+PHASES_TABLE      = 'migration_assistant_course_phases'       # 教材コンテンツ Phase
+STAGES_TABLE      = 'migration_assistant_course_stages'       # 教材コンテンツ Stage
+STEPS_TABLE       = 'migration_assistant_course_steps'        # 教材コンテンツ Step
+ENROLLMENTS_TABLE = 'migration_assistant_course_enrollments'  # 受講登録
+PROGRESS_TABLE    = 'migration_assistant_course_progress'     # ステップ別進捗
+MENTORS_TABLE     = 'migration_assistant_mentors'             # 師匠候補の記録
+
 #def get_db_connection():
 #    """データベース接続を取得"""
 #    return mysql.connector.connect(
@@ -60,7 +74,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 # フロント側チェックはAPIを直接叩かれると迂回できるため、サーバー側でも見る）
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
-# course_progress.status の許可値（DBのENUM定義と一致させる）
+# migration_assistant_course_progress.status の許可値（DBのENUM定義と一致させる）
 PROGRESS_STATUSES = ('未着手', '取り組み中', '苦戦', '完了', '放棄')
 
 def allowed_file(filename):
@@ -118,7 +132,7 @@ def require_course_editor(course_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT creator_user_id FROM courses WHERE id = %s", (course_id,))
+        cursor.execute(f"SELECT creator_user_id FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
         course = cursor.fetchone()
         cursor.close()
     except Exception as e:
@@ -170,7 +184,7 @@ def require_enrollment_owner(enrollment_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT course_id FROM course_enrollments "
+            f"SELECT course_id FROM {ENROLLMENTS_TABLE} "
             "WHERE id = %s AND student_user_id = %s",
             (enrollment_id, user_id)
         )
@@ -230,7 +244,7 @@ def course_view(course_id):
         cursor = conn.cursor(dictionary=True)
         # URLの course_id に対する、このユーザー本人の受講レコードを取得
         cursor.execute(
-            "SELECT id FROM course_enrollments "
+            f"SELECT id FROM {ENROLLMENTS_TABLE} "
             "WHERE course_id = %s AND student_user_id = %s",
             (course_id, user_id)
         )
@@ -275,7 +289,7 @@ def mentor_content_editor(course_id):
         cursor = conn.cursor(dictionary=True)
 
         # 1. 教材の所有者（作成者）を特定する
-        cursor.execute("SELECT creator_user_id, course_title FROM courses WHERE id = %s", (course_id,))
+        cursor.execute(f"SELECT creator_user_id, course_title FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
         course = cursor.fetchone()
 
         if not course:
@@ -294,8 +308,8 @@ def mentor_content_editor(course_id):
         # 3. 師匠としての記録を（未登録なら）自動で作成、または更新する
         # これにより「コンテンツを書いた＝師匠になった」という事実をDBに刻みます
         now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
-        cursor.execute("""
-            INSERT INTO migration_assistant_mentors (user_id, approved_by, valid_from, notes)
+        cursor.execute(f"""
+            INSERT INTO {MENTORS_TABLE} (user_id, approved_by, valid_from, notes)
             VALUES (%s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE valid_from = IFNULL(valid_from, VALUES(valid_from))
         """, (user_id, user_id, now_jst, f"Course ID {course_id} の作成により自動昇格"))
@@ -337,9 +351,9 @@ def get_course_content_v2(course_id):
         cursor = conn.cursor(dictionary=True)
 
         # Phase取得
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT phase_id, phase_number, phase_title, phase_description
-            FROM course_phase_contents WHERE course_id = %s ORDER BY phase_number
+            FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number
         """, (course_id,))
         phases = cursor.fetchall()
 
@@ -357,9 +371,9 @@ def get_course_content_v2(course_id):
             }
 
             # Stage取得
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT stage_id, stage_number, stage_title
-                FROM course_stage_contents
+                FROM {STAGES_TABLE}
                 WHERE course_id = %s AND phase_id = %s ORDER BY stage_number
             """, (course_id, p_id))
             stages = cursor.fetchall()
@@ -374,9 +388,9 @@ def get_course_content_v2(course_id):
                 }
 
                 # Step取得
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT step_id, step_number, step_title, step_detail
-                    FROM course_step_contents
+                    FROM {STEPS_TABLE}
                     WHERE course_id = %s AND phase_id = %s AND stage_id = %s ORDER BY step_number
                 """, (course_id, p_id, s_id))
                 steps = cursor.fetchall()
@@ -437,8 +451,8 @@ def get_systems():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 1. 完了したステップ数：course_progress テーブルで '完了' になっているレコード
-        # 2. 全ステップ数：course_step_contents テーブルに登録されているマスターデータ数
+        # 1. 完了したステップ数：migration_assistant_course_progress テーブルで '完了' になっているレコード
+        # 2. 全ステップ数：migration_assistant_course_steps テーブルに登録されているマスターデータ数
         cursor.execute(f"""
             SELECT
                 e.id,
@@ -449,15 +463,15 @@ def get_systems():
                 e.mentor_user_id,
                 u.full_name as mentor_name,
                 -- 完了したステップ数をカウント
-                (SELECT COUNT(*) FROM course_progress cp
+                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
                  WHERE cp.student_user_id = e.student_user_id
                  AND cp.course_id = e.course_id
                  AND cp.status = '完了') as completed_steps,
                 -- 師匠が用意した全ステップ数をカウント
-                (SELECT COUNT(*) FROM course_step_contents csc
+                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
                  WHERE csc.course_id = e.course_id) as total_steps
-            FROM course_enrollments e
-            JOIN courses c ON e.course_id = c.id
+            FROM {ENROLLMENTS_TABLE} e
+            JOIN {COURSES_TABLE} c ON e.course_id = c.id
             LEFT JOIN {Tables.USERS} u ON e.mentor_user_id = u.id
             WHERE e.student_user_id = %s
             ORDER BY e.enrolled_at DESC
@@ -521,7 +535,7 @@ def get_mentor_students():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 新テーブル (course_enrollments) を主軸に、コース名と学生名、進捗を集計
+        # 新テーブル (migration_assistant_course_enrollments) を主軸に、コース名と学生名、進捗を集計
         cursor.execute(f"""
             SELECT
                 e.id as enrollment_id,
@@ -531,20 +545,20 @@ def get_mentor_students():
                 c.course_title as system_name,
                 e.enrolled_at as assigned_at,
                 -- 完了したステップ数
-                (SELECT COUNT(*) FROM course_progress cp
+                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
                  WHERE cp.student_user_id = e.student_user_id
                    AND cp.course_id = e.course_id
                    AND cp.status = '完了') as completed_steps,
                 -- コース内の全ステップ数
-                (SELECT COUNT(*) FROM course_step_contents csc
+                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
                  WHERE csc.course_id = e.course_id) as total_steps,
                 -- 最終活動日時
-                (SELECT MAX(updated_at) FROM course_progress cp
+                (SELECT MAX(updated_at) FROM {PROGRESS_TABLE} cp
                  WHERE cp.student_user_id = e.student_user_id
                    AND cp.course_id = e.course_id) as last_activity
-            FROM course_enrollments e
+            FROM {ENROLLMENTS_TABLE} e
             JOIN {Tables.USERS} u ON e.student_user_id = u.id
-            JOIN courses c ON e.course_id = c.id
+            JOIN {COURSES_TABLE} c ON e.course_id = c.id
             WHERE e.mentor_user_id = %s
             ORDER BY last_activity DESC, e.enrolled_at DESC
         """, (user_id,))
@@ -580,8 +594,8 @@ def get_student_progress(student_id, enrollment_id):
         cursor = conn.cursor(dictionary=True)
 
         # 権限チェック
-        cursor.execute("""
-            SELECT course_id FROM course_enrollments
+        cursor.execute(f"""
+            SELECT course_id FROM {ENROLLMENTS_TABLE}
             WHERE id = %s AND mentor_user_id = %s AND student_user_id = %s
         """, (enrollment_id, user_id, student_id))
 
@@ -592,9 +606,9 @@ def get_student_progress(student_id, enrollment_id):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
 
         # 進捗取得
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT phase_id, stage_id, step_id, status
-            FROM course_progress
+            FROM {PROGRESS_TABLE}
             WHERE student_user_id = %s AND course_id = %s
         """, (student_id, enrollment['course_id']))
 
@@ -636,7 +650,7 @@ def get_admin_mentors():
                 m.valid_until,
                 m.notes,
                 m.created_at
-            FROM migration_assistant_mentors m
+            FROM {MENTORS_TABLE} m
             JOIN {Tables.USERS} u ON m.user_id = u.id
             LEFT JOIN {Tables.USERS} approver ON m.approved_by = approver.id
             ORDER BY m.created_at DESC
@@ -679,8 +693,8 @@ def approve_mentor():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO migration_assistant_mentors (user_id, approved_by, valid_from, valid_until, notes)
+        cursor.execute(f"""
+            INSERT INTO {MENTORS_TABLE} (user_id, approved_by, valid_from, valid_until, notes)
             VALUES (%s, %s, %s, %s, %s)
         """, (mentor_user_id, user_id, valid_from, valid_until, notes))
 
@@ -706,7 +720,7 @@ def revoke_mentor(mentor_id):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM migration_assistant_mentors WHERE id = %s", (mentor_id,))
+        cursor.execute(f"DELETE FROM {MENTORS_TABLE} WHERE id = %s", (mentor_id,))
 
         conn.commit()
         cursor.close()
@@ -775,8 +789,8 @@ def update_phase_content_v2():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE course_phase_contents
+    cursor.execute(f"""
+        UPDATE {PHASES_TABLE}
         SET phase_title = %s, phase_description = %s
         WHERE course_id = %s AND phase_id = %s
     """, (title, desc, c_id, p_id))
@@ -801,8 +815,8 @@ def update_stage_content_v2():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE course_stage_contents
+    cursor.execute(f"""
+        UPDATE {STAGES_TABLE}
         SET stage_title = %s
         WHERE course_id = %s AND phase_id = %s AND stage_id = %s
     """, (title, c_id, p_id, s_id))
@@ -836,8 +850,8 @@ def update_step_content_v2():
         cursor = conn.cursor(dictionary=True)
 
         # ★まずレコードが存在するか確認
-        cursor.execute("""
-            SELECT step_id FROM course_step_contents
+        cursor.execute(f"""
+            SELECT step_id FROM {STEPS_TABLE}
             WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
         """, (c_id, p_id, s_id, st_id))
 
@@ -851,14 +865,14 @@ def update_step_content_v2():
 
         # ★UPDATE実行
         if detail is not None:
-            cursor.execute("""
-                UPDATE course_step_contents
+            cursor.execute(f"""
+                UPDATE {STEPS_TABLE}
                 SET step_title = %s, step_detail = %s
                 WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
             """, (title, detail, c_id, p_id, s_id, st_id))
         else:
-            cursor.execute("""
-                UPDATE course_step_contents
+            cursor.execute(f"""
+                UPDATE {STEPS_TABLE}
                 SET step_title = %s
                 WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
             """, (title, c_id, p_id, s_id, st_id))
@@ -917,24 +931,24 @@ def add_phase_v2():
 
         # 1. 挿入位置の決定と既存番号の押し上げ
         insert_number = 1 if position == 'first' else after_num + 1
-        cursor.execute("""
-            UPDATE course_phase_contents
+        cursor.execute(f"""
+            UPDATE {PHASES_TABLE}
             SET phase_number = phase_number + 1
             WHERE course_id = %s AND phase_number >= %s
         """, (c_id, insert_number))
 
         # 2. 新規挿入
         new_p_id = f"p_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute("""
-            INSERT INTO course_phase_contents (course_id, phase_id, phase_number, phase_title)
+        cursor.execute(f"""
+            INSERT INTO {PHASES_TABLE} (course_id, phase_id, phase_number, phase_title)
             VALUES (%s, %s, %s, %s)
         """, (c_id, new_p_id, insert_number, "新しいPhase"))
 
         # 3. 連番の強制再整理（念のため）
-        cursor.execute("SELECT phase_id FROM course_phase_contents WHERE course_id = %s ORDER BY phase_number", (c_id,))
+        cursor.execute(f"SELECT phase_id FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number", (c_id,))
         phases = cursor.fetchall()
         for idx, p in enumerate(phases, start=1):
-            cursor.execute("UPDATE course_phase_contents SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
+            cursor.execute(f"UPDATE {PHASES_TABLE} SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
 
         conn.commit()
         return jsonify({'success': True})
@@ -958,15 +972,15 @@ def delete_phase_v2():
         conn = get_db_connection()
         cursor = conn.cursor()
         # 1. 下位階層をすべて削除（Step -> Stage -> Phase）
-        cursor.execute("DELETE FROM course_step_contents WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-        cursor.execute("DELETE FROM course_stage_contents WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-        cursor.execute("DELETE FROM course_phase_contents WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
+        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
+        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
+        cursor.execute(f"DELETE FROM {PHASES_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
 
         # 2. 残ったPhaseの番号を詰め直す
-        cursor.execute("SELECT phase_id FROM course_phase_contents WHERE course_id = %s ORDER BY phase_number", (c_id,))
+        cursor.execute(f"SELECT phase_id FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number", (c_id,))
         phases = cursor.fetchall()
         for idx, p in enumerate(phases, start=1):
-            cursor.execute("UPDATE course_phase_contents SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
+            cursor.execute(f"UPDATE {PHASES_TABLE} SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
 
         conn.commit()
         return jsonify({'success': True})
@@ -996,23 +1010,23 @@ def add_stage_v2():
         # 1. 挿入スペースを確保（指定番号より後ろを+1）
         if position == 'first':
             insert_number = 1
-            cursor.execute("UPDATE course_stage_contents SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
+            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
         else: # after
             insert_number = after_number + 1
-            cursor.execute("UPDATE course_stage_contents SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s AND stage_number >= %s", (c_id, p_id, insert_number))
+            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s AND stage_number >= %s", (c_id, p_id, insert_number))
 
         # 2. 新規挿入
         new_s_id = f"s_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute("""
-            INSERT INTO course_stage_contents (course_id, phase_id, stage_id, stage_number, stage_title)
+        cursor.execute(f"""
+            INSERT INTO {STAGES_TABLE} (course_id, phase_id, stage_id, stage_number, stage_title)
             VALUES (%s, %s, %s, %s, %s)
         """, (c_id, p_id, new_s_id, insert_number, "新しいStage"))
 
         # 3. 番号を綺麗に振り直し（データの整合性を保証）
-        cursor.execute("SELECT stage_id FROM course_stage_contents WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
+        cursor.execute(f"SELECT stage_id FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
         stages = cursor.fetchall()
         for idx, stage in enumerate(stages, start=1):
-            cursor.execute("UPDATE course_stage_contents SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
+            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
 
         conn.commit()
         cursor.close()
@@ -1039,16 +1053,16 @@ def delete_stage_v2():
         cursor = conn.cursor()
 
         # 1. 関連するStepを削除
-        cursor.execute("DELETE FROM course_step_contents WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
+        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
 
         # 2. Stage本体を削除
-        cursor.execute("DELETE FROM course_stage_contents WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
+        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
 
         # 3. 削除後の番号詰め
-        cursor.execute("SELECT stage_id FROM course_stage_contents WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
+        cursor.execute(f"SELECT stage_id FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
         stages = cursor.fetchall()
         for idx, stage in enumerate(stages, start=1):
-            cursor.execute("UPDATE course_stage_contents SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
+            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
 
         conn.commit()
         cursor.close()
@@ -1076,28 +1090,28 @@ def add_step_v2():
 
         # 1. 挿入スペース確保
         insert_number = 1 if position == 'first' else after_num + 1
-        cursor.execute("""
-            UPDATE course_step_contents
+        cursor.execute(f"""
+            UPDATE {STEPS_TABLE}
             SET step_number = step_number + 1
             WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_number >= %s
         """, (c_id, p_id, s_id, insert_number))
 
         # 2. 新規挿入
         new_st_id = f"st_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute("""
-            INSERT INTO course_step_contents (course_id, phase_id, stage_id, step_id, step_number, step_title, step_detail)
+        cursor.execute(f"""
+            INSERT INTO {STEPS_TABLE} (course_id, phase_id, stage_id, step_id, step_number, step_title, step_detail)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (c_id, p_id, s_id, new_st_id, insert_number, "新しいStep", ""))
 
         # 3. 番号振り直し
-        cursor.execute("""
-            SELECT step_id FROM course_step_contents
+        cursor.execute(f"""
+            SELECT step_id FROM {STEPS_TABLE}
             WHERE course_id = %s AND phase_id = %s AND stage_id = %s
             ORDER BY step_number
         """, (c_id, p_id, s_id))
         steps = cursor.fetchall()
         for idx, st in enumerate(steps, start=1):
-            cursor.execute("UPDATE course_step_contents SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
+            cursor.execute(f"UPDATE {STEPS_TABLE} SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
 
         conn.commit()
         return jsonify({'success': True})
@@ -1123,17 +1137,17 @@ def delete_step_v2():
         conn = get_db_connection()
         cursor = conn.cursor()
         # 1. 削除実行
-        cursor.execute("DELETE FROM course_step_contents WHERE course_id = %s AND step_id = %s", (c_id, st_id))
+        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND step_id = %s", (c_id, st_id))
 
         # 2. 番号を詰め直す
-        cursor.execute("""
-            SELECT step_id FROM course_step_contents
+        cursor.execute(f"""
+            SELECT step_id FROM {STEPS_TABLE}
             WHERE course_id = %s AND phase_id = %s AND stage_id = %s
             ORDER BY step_number
         """, (c_id, p_id, s_id))
         steps = cursor.fetchall()
         for idx, st in enumerate(steps, start=1):
-            cursor.execute("UPDATE course_step_contents SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
+            cursor.execute(f"UPDATE {STEPS_TABLE} SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
 
         conn.commit()
         return jsonify({'success': True})
@@ -1163,9 +1177,9 @@ def get_student_content():
 
         # 1. 受講情報から course_id と mentor_user_id を取得
         # 所有者（student_user_id）のチェックも同時に行う
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT course_id, mentor_user_id
-            FROM course_enrollments
+            FROM {ENROLLMENTS_TABLE}
             WHERE id = %s AND student_user_id = %s
         """, (enrollment_id, user_id))
         enrollment = cursor.fetchone()
@@ -1210,9 +1224,9 @@ def get_student_step_detail(phase_id, stage_id, step_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 新テーブル (course_step_contents) からデータを取得
-        cursor.execute("""
-            SELECT step_title, step_detail FROM course_step_contents
+        # 新テーブル (migration_assistant_course_steps) からデータを取得
+        cursor.execute(f"""
+            SELECT step_title, step_detail FROM {STEPS_TABLE}
             WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
         """, (course_id, phase_id, stage_id, step_id))
 
@@ -1252,7 +1266,7 @@ def get_student_progress_v2():
 
         # 新テーブルから進捗をロード
         cursor.execute(
-            "SELECT phase_id, stage_id, step_id, status FROM course_progress "
+            f"SELECT phase_id, stage_id, step_id, status FROM {PROGRESS_TABLE} "
             "WHERE student_user_id = %s AND course_id = %s",
             (user_id, course_id)
         )
@@ -1301,8 +1315,8 @@ def update_student_progress_v2():
 
         # UPSERT (なければ挿入、あれば更新)
         now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
-        cursor.execute("""
-            INSERT INTO course_progress (student_user_id, course_id, phase_id, stage_id, step_id, status, updated_at)
+        cursor.execute(f"""
+            INSERT INTO {PROGRESS_TABLE} (student_user_id, course_id, phase_id, stage_id, step_id, status, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = VALUES(updated_at)
         """, (user_id, c_id, phase_id, stage_id, step_id, status, now_jst))
@@ -1342,10 +1356,10 @@ def get_mentor_step_detail_v2():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # 【重要】course_step_contents (V2) から生の Markdown を取得
-    cursor.execute("""
+    # 【重要】migration_assistant_course_steps (V2) から生の Markdown を取得
+    cursor.execute(f"""
         SELECT step_title, step_detail
-        FROM course_step_contents
+        FROM {STEPS_TABLE}
         WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
     """, (course_id, phase_id, stage_id, step_id))
 
@@ -1379,9 +1393,9 @@ def get_mentor_progress_by_step_v2(course_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT phase_id, stage_id, step_id, status, COUNT(*) as count
-            FROM course_progress WHERE course_id = %s
+            FROM {PROGRESS_TABLE} WHERE course_id = %s
             GROUP BY phase_id, stage_id, step_id, status
         """, (course_id,))
         results = cursor.fetchall()
@@ -1461,196 +1475,6 @@ def upload_image():
         logging.error(f"画像アップロードエラー: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@migration_assistant.route('/admin_migrationNG')
-def admin_migrationNG():
-    """管理者用: データマイグレーション管理ページ"""
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return "❌ 管理者権限が必要です", 403
-    return render_template('migration_assistant/migration_assistant_admin_migration.html')
-
-
-@migration_assistant.route('/api/admin/migrate_to_coursesNG', methods=['POST'])
-def migrate_to_coursesNG():
-    """旧システムのデータを新テーブルに転写（完全にリセットしてやり直す）"""
-    now_jst = get_now_jst()
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-
-    log = []
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        log.append('[INFO] データマイグレーション開始（リセットモード）')
-
-        # --- ここから TRUNCATE (リセット処理) ---
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 0") # 外部キー制約を一時的に無効化
-
-        tables_to_reset = [
-            "course_progress",
-            "course_enrollments",
-            "course_step_contents",
-            "course_stage_contents",
-            "course_phase_contents",
-            "courses"
-        ]
-
-        for table in tables_to_reset:
-            cursor.execute(f"TRUNCATE TABLE {table}")
-            log.append(f'  → {table} をリセットしました')
-
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 1") # 制約を元に戻す
-        # ---------------------------------------
-
-        # 1. 既存の全師匠を取得
-        cursor.execute("SELECT DISTINCT mentor_user_id FROM migration_assistant_phase_contents")
-        mentors = cursor.fetchall()
-
-        for mentor in mentors:
-            mentor_user_id = mentor['mentor_user_id']
-            # ここからは新規作成のみを行う（TRUNCATEしたので既存チェックは不要）
-            cursor.execute("""
-                INSERT INTO courses (creator_user_id, course_title, course_description, is_public, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (mentor_user_id, f"デフォルトコース（師匠ID: {mentor_user_id}）", "旧システムから移行されたコース", True, now_jst, now_jst))
-
-            course_id = cursor.lastrowid
-            log.append(f'[SUCCESS] 師匠ID {mentor_user_id} 用にコースID {course_id} を新規作成しました')
-
-            # 3. Phase データを転写
-            cursor.execute("""
-                SELECT * FROM migration_assistant_phase_contents
-                WHERE mentor_user_id = %s
-                ORDER BY phase_number
-            """, (mentor_user_id,))
-            phases = cursor.fetchall()
-
-            for phase in phases:
-                cursor.execute("""
-                    INSERT INTO course_phase_contents
-                    (course_id, phase_id, phase_number, phase_title, phase_description)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    course_id,
-                    phase['phase_id'],
-                    phase['phase_number'],
-                    phase['phase_title'],
-                    phase['phase_description']
-                ))
-
-            log.append(f'  → Phase: {len(phases)}件')
-
-            # 4. Stage データを転写
-            cursor.execute("""
-                SELECT * FROM migration_assistant_stage_contents
-                WHERE mentor_user_id = %s
-                ORDER BY phase_id, stage_number
-            """, (mentor_user_id,))
-            stages = cursor.fetchall()
-
-            for stage in stages:
-                cursor.execute("""
-                    INSERT INTO course_stage_contents
-                    (course_id, phase_id, stage_id, stage_number, stage_title)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    course_id,
-                    stage['phase_id'],
-                    stage['stage_id'],
-                    stage['stage_number'],
-                    stage['stage_title']
-                ))
-
-            log.append(f'  → Stage: {len(stages)}件')
-
-            # 5. Step データを転写
-            cursor.execute("""
-                SELECT * FROM migration_assistant_step_contents
-                WHERE mentor_user_id = %s
-                ORDER BY phase_id, stage_id, step_number
-            """, (mentor_user_id,))
-            steps = cursor.fetchall()
-
-            for step in steps:
-                cursor.execute("""
-                    INSERT INTO course_step_contents
-                    (course_id, phase_id, stage_id, step_id, step_number, step_title, step_detail)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    course_id,
-                    step['phase_id'],
-                    step['stage_id'],
-                    step['step_id'],
-                    step['step_number'],
-                    step['step_title'],
-                    step['step_detail']
-                ))
-
-            log.append(f'  → Step: {len(steps)}件')
-
-            # 6. 受講関係を転写
-            cursor.execute("""
-                SELECT * FROM migration_assistant_mentor_assignments
-                WHERE mentor_user_id = %s
-            """, (mentor_user_id,))
-            enrollments = cursor.fetchall()
-
-            for enrollment in enrollments:
-                cursor.execute("""
-                    INSERT INTO course_enrollments
-                    (student_user_id, course_id, mentor_user_id)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE course_id = course_id
-                """, (
-                    enrollment['student_user_id'],
-                    course_id,
-                    mentor_user_id
-                ))
-
-            log.append(f'  → 受講関係: {len(enrollments)}件')
-
-            # 7. 進捗データを転写
-            cursor.execute("""
-                SELECT * FROM migration_assistant_progress
-                WHERE mentor_user_id = %s
-            """, (mentor_user_id,))
-            progress_records = cursor.fetchall()
-
-            for progress in progress_records:
-                # ★修正箇所: updated_at に NOW() ではなく now_jst を使う
-                cursor.execute("""
-                    INSERT INTO course_progress
-                    (student_user_id, course_id, phase_id, stage_id, step_id, status, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = VALUES(updated_at)
-                """, (
-                    progress['student_user_id'],
-                    course_id,
-                    progress['phase_id'],
-                    progress['stage_id'],
-                    progress['step_id'],
-                    progress['status'],
-                    now_jst # updated_at
-                ))
-
-            log.append(f'  → 進捗: {len(progress_records)}件')
-
-        conn.commit()
-        log.append('[SUCCESS] 全データの転写が完了しました')
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'log': log})
-
-    except Exception as e:
-        logging.error(f"Migration error: {e}")
-        import traceback
-        traceback.print_exc()
-        log.append(f'[ERROR] {str(e)}')
-        return jsonify({'success': False, 'error': str(e), 'log': log}), 500
 
 # =============================================================================
 # コース閲覧・受講申し込みAPI（新システム）
@@ -1675,8 +1499,8 @@ def get_public_courses_v2():
                 u.full_name as creator_name,
                 c.created_at,
                 c.updated_at,
-                (SELECT COUNT(*) FROM course_phase_contents WHERE course_id = c.id) as phase_count
-            FROM courses c
+                (SELECT COUNT(*) FROM {PHASES_TABLE} WHERE course_id = c.id) as phase_count
+            FROM {COURSES_TABLE} c
             JOIN {Tables.USERS} u ON c.creator_user_id = u.id
             WHERE c.is_public = TRUE
             ORDER BY c.updated_at DESC
@@ -1726,7 +1550,7 @@ def enroll_in_course():
         cursor = conn.cursor(dictionary=True)
 
         # 1. 教材の作成者を取得
-        cursor.execute("SELECT creator_user_id FROM courses WHERE id = %s", (course_id,))
+        cursor.execute(f"SELECT creator_user_id FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
         course = cursor.fetchone()
 
         if not course:
@@ -1734,11 +1558,11 @@ def enroll_in_course():
             return jsonify({'success': False, 'error': 'Course not found'}), 404
 
         # 2. 重複受講の防止
-        #    course_enrollments には UNIQUE(student_user_id, course_id) が無いため、
+        #    migration_assistant_course_enrollments には UNIQUE(student_user_id, course_id) が無いため、
         #    INSERT の一意制約違反には頼れない。ここで明示的に既存受講を確認する。
         #    （DB側にも一意キーを追加することを推奨。add_unique_enrollment.sql 参照）
-        cursor.execute("""
-            SELECT id FROM course_enrollments
+        cursor.execute(f"""
+            SELECT id FROM {ENROLLMENTS_TABLE}
             WHERE student_user_id = %s AND course_id = %s
         """, (user_id, course_id))
         if cursor.fetchone():
@@ -1747,8 +1571,8 @@ def enroll_in_course():
 
         # 3. 受講登録時に著者（creator_user_id）を師匠（mentor_user_id）として保存
         now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためデフォルト不可）
-        cursor.execute("""
-            INSERT INTO course_enrollments (student_user_id, course_id, mentor_user_id, enrolled_at)
+        cursor.execute(f"""
+            INSERT INTO {ENROLLMENTS_TABLE} (student_user_id, course_id, mentor_user_id, enrolled_at)
             VALUES (%s, %s, %s, %s)
         """, (user_id, course_id, course['creator_user_id'], now_jst))
 
@@ -1789,8 +1613,8 @@ def delete_enrollment(enrollment_id):
         cursor = conn.cursor(dictionary=True)
 
         # 自分の受講かチェック
-        cursor.execute("""
-            SELECT id, course_id FROM course_enrollments
+        cursor.execute(f"""
+            SELECT id, course_id FROM {ENROLLMENTS_TABLE}
             WHERE id = %s AND student_user_id = %s
         """, (enrollment_id, user_id))
 
@@ -1803,14 +1627,14 @@ def delete_enrollment(enrollment_id):
         course_id = enrollment['course_id']
 
         # 進捗データを削除
-        cursor.execute("""
-            DELETE FROM course_progress
+        cursor.execute(f"""
+            DELETE FROM {PROGRESS_TABLE}
             WHERE student_user_id = %s AND course_id = %s
         """, (user_id, course_id))
 
         # 受講登録を削除
-        cursor.execute("""
-            DELETE FROM course_enrollments
+        cursor.execute(f"""
+            DELETE FROM {ENROLLMENTS_TABLE}
             WHERE id = %s
         """, (enrollment_id,))
 
@@ -1841,7 +1665,7 @@ def get_my_courses():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 c.id,
                 c.course_title,
@@ -1849,9 +1673,9 @@ def get_my_courses():
                 c.is_public,
                 c.created_at,
                 c.updated_at,
-                (SELECT COUNT(*) FROM course_phase_contents WHERE course_id = c.id) as phase_count,
-                (SELECT COUNT(*) FROM course_enrollments WHERE course_id = c.id) as student_count
-            FROM courses c
+                (SELECT COUNT(*) FROM {PHASES_TABLE} WHERE course_id = c.id) as phase_count,
+                (SELECT COUNT(*) FROM {ENROLLMENTS_TABLE} WHERE course_id = c.id) as student_count
+            FROM {COURSES_TABLE} c
             WHERE c.creator_user_id = %s
             ORDER BY c.updated_at DESC
         """, (user_id,))
@@ -1897,8 +1721,8 @@ def create_course():
         cursor = conn.cursor()
 
         now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためデフォルト不可）
-        cursor.execute("""
-            INSERT INTO courses (creator_user_id, course_title, course_description, is_public, created_at, updated_at)
+        cursor.execute(f"""
+            INSERT INTO {COURSES_TABLE} (creator_user_id, course_title, course_description, is_public, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (user_id, course_title, course_description, is_public, now_jst, now_jst))
 
@@ -1929,8 +1753,8 @@ def delete_course(course_id):
         cursor = conn.cursor(dictionary=True)
 
         # 自分のコースかチェック
-        cursor.execute("""
-            SELECT id, course_title FROM courses
+        cursor.execute(f"""
+            SELECT id, course_title FROM {COURSES_TABLE}
             WHERE id = %s AND creator_user_id = %s
         """, (course_id, user_id))
 
@@ -1941,8 +1765,8 @@ def delete_course(course_id):
             return jsonify({'success': False, 'error': 'コースが見つかりません'}), 404
 
         # 弟子がいないかチェック
-        cursor.execute("""
-            SELECT COUNT(*) as count FROM course_enrollments
+        cursor.execute(f"""
+            SELECT COUNT(*) as count FROM {ENROLLMENTS_TABLE}
             WHERE course_id = %s
         """, (course_id,))
 
@@ -1953,12 +1777,12 @@ def delete_course(course_id):
             return jsonify({'success': False, 'error': '弟子が受講中のため削除できません'}), 400
 
         # コンテンツを削除
-        cursor.execute("DELETE FROM course_step_contents WHERE course_id = %s", (course_id,))
-        cursor.execute("DELETE FROM course_stage_contents WHERE course_id = %s", (course_id,))
-        cursor.execute("DELETE FROM course_phase_contents WHERE course_id = %s", (course_id,))
+        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s", (course_id,))
+        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s", (course_id,))
+        cursor.execute(f"DELETE FROM {PHASES_TABLE} WHERE course_id = %s", (course_id,))
 
         # コースを削除
-        cursor.execute("DELETE FROM courses WHERE id = %s", (course_id,))
+        cursor.execute(f"DELETE FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
 
         conn.commit()
         cursor.close()
@@ -1992,14 +1816,14 @@ def get_course_students(course_id):
                 u.full_name,
                 e.enrolled_at,
                 -- 完了したステップ数
-                (SELECT COUNT(*) FROM course_progress cp
+                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
                  WHERE cp.student_user_id = e.student_user_id
                  AND cp.course_id = e.course_id
                  AND cp.status = '完了') as completed_steps,
                 -- 【重要】コース内の全ステップ数（マスターから数える）
-                (SELECT COUNT(*) FROM course_step_contents csc
+                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
                  WHERE csc.course_id = e.course_id) as total_steps
-            FROM course_enrollments e
+            FROM {ENROLLMENTS_TABLE} e
             JOIN {Tables.USERS} u ON e.student_user_id = u.id
             WHERE e.course_id = %s AND e.mentor_user_id = %s
             ORDER BY e.enrolled_at DESC
@@ -2030,8 +1854,8 @@ def get_student_course_progress(course_id, student_id):
         cursor = conn.cursor(dictionary=True)
 
         # 自分のコースかチェック
-        cursor.execute("""
-            SELECT id FROM courses
+        cursor.execute(f"""
+            SELECT id FROM {COURSES_TABLE}
             WHERE id = %s AND creator_user_id = %s
         """, (course_id, user_id))
 
@@ -2041,14 +1865,14 @@ def get_student_course_progress(course_id, student_id):
             return jsonify({'success': False, 'error': 'コースが見つかりません'}), 404
 
         # 進捗詳細を取得
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 phase_id,
                 stage_id,
                 step_id,
                 status,
                 updated_at
-            FROM course_progress
+            FROM {PROGRESS_TABLE}
             WHERE student_user_id = %s AND course_id = %s
             ORDER BY updated_at DESC
         """, (student_id, course_id))
@@ -2089,8 +1913,8 @@ def update_course_settings_api(course_id):
 
         now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
         # 権限チェック：自分が作成したコースのみ更新可能
-        cursor.execute("""
-            UPDATE courses
+        cursor.execute(f"""
+            UPDATE {COURSES_TABLE}
             SET course_title = %s, course_description = %s, is_public = %s, updated_at = %s
             WHERE id = %s AND creator_user_id = %s
         """, (title, description, is_public, now_jst, course_id, user_id))
@@ -2130,7 +1954,7 @@ def aggregate_course_markdown(course_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT creator_user_id, course_title FROM courses WHERE id = %s",
+            f"SELECT creator_user_id, course_title FROM {COURSES_TABLE} WHERE id = %s",
             (course_id,)
         )
         course = cursor.fetchone()

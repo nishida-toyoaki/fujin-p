@@ -36,3 +36,4 @@ migration_assistant = Blueprint(
 
 from . import migration_assistant_routes
 from . import install_guide   # 別サイトへのインストール（配布物と手引き）
+from . import migration_assistant_transfer   # 教材と履修記録のエクスポート／インポート（2026-10-09 追加）
