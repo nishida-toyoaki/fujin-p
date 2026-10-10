@@ -125,6 +125,7 @@ function renderCheck(){
     else h+=`<span class="badge b-gray">${esc(t.status)}</span> ${esc(t.error||'')}`;
     h+='</div>';
   });
+  h+=refsHtml(c.table_refs);
   const miss=r.libraries.filter(x=>!x.installed&&x.kind==='pip');
   h+=`<h3>ライブラリ</h3><div class="box">${r.libraries.length?r.libraries.map(x=>`<code>${esc(x.import)}</code> ${x.installed?'✅':'❌'}`).join('　'):'<span class="badge b-gray">目録なし</span>'}${miss.length?'<pre class="sql">pip install --user '+esc(miss.map(x=>x.name).join(' '))+'</pre>':''}</div>`;
   h+=`<h3>定数（config.py）</h3><div class="box">${r.config_keys.length?r.config_keys.map(k=>`<code>${esc(k.name)}</code> ${!k.exists?'<span class="badge b-bad">無い</span>':k.placeholder?'<span class="badge b-warn">&lt;YOUR_…&gt;</span>':'<span class="badge b-ok">設定済み</span>'}`).join('　'):'<span class="badge b-gray">目録なし</span>'}</div>`;
@@ -135,9 +136,51 @@ function renderCheck(){
   document.getElementById('result-panel').style.display='none';
 }
 
+// ── コードが参照するテーブル（2026-10-10） ──
+// 台帳（tables[]）にも取り込み先の DB にも無いテーブルを不足として示し，宣言の案を添える．
+// 「宣言を台帳に加える」でパッケージの tables[] に足し，検証をやり直す（適用でテーブルが作られる）．
+const DDL_FROM={package:'パッケージ内の CREATE 文',draft:'コードの INSERT 文から組み立てた草案（型と索引を確かめてください）',none:''};
+function refsHtml(tr){
+  if(!tr)return '';
+  let h='<h3>コードが参照するテーブル</h3>';
+  if(tr.missing.length){
+    h+=`<div class="box" style="border-color:#ef4444;background:#fef2f2"><span class="badge b-bad">⚠ 不足 ${tr.missing.length} 件</span> コードが参照しているのに，パッケージの台帳にもこのサイトの DB にもありません．このまま取り込むと，そのテーブルを使う操作が失敗します．宣言を台帳に加えてから適用してください．</div>`;
+    tr.missing.forEach((m,i)=>{
+      h+=`<div class="box"><code>${esc(m.table_name)}</code> <span style="color:#64748b">（${m.files.map(esc).join('，')} で参照）</span>`;
+      if(m.owners.length)h+=`<div style="color:#92400e">台帳では ${m.owners.map(esc).join('，')} の所有ですが，実物がありません．そのアプリを先に取り込むのが筋です．</div>`;
+      if(m.ddl){
+        h+=`<div style="font-size:.78rem;color:#64748b;margin-top:4px">宣言の案：${esc(DDL_FROM[m.ddl_from]||'')}${m.ddl_file?'（'+esc(m.ddl_file)+'）':''}</div>
+          <textarea id="ref-ddl-${i}" rows="7" style="width:100%;font-family:Consolas,Monaco,monospace;font-size:.76rem;margin-top:4px">${esc(m.ddl)}</textarea>
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">DB <select id="ref-db-${i}"><option value="default">default</option><option value="fujinp">fujinp</option><option value="public">public</option></select>
+          <button class="btn sm green" onclick="addDecl(${i})">＋ この宣言を台帳に加える</button></div>`;
+      }else{
+        h+='<div style="color:#991b1b;margin-top:4px">宣言の案を作れませんでした（コードに CREATE 文も INSERT の列もありません）．送り元のサイトで SHOW CREATE TABLE を取り，送り元のアプシャの台帳に登録してから書き出し直してください．</div>';
+      }
+      h+='</div>';
+    });
+  }
+  const ok=tr.referenced.filter(x=>x.in_package||x.exists_in);
+  if(ok.length)h+=`<div class="box">${ok.map(x=>`<code>${esc(x.table_name)}</code> ${x.in_package?'<span class="badge b-info">台帳</span>':''}${x.exists_in?' <span class="badge b-ok">'+esc(x.exists_in)+' にあり</span>':''}${x.owners.length?' <span style="color:#64748b;font-size:.75rem">（'+x.owners.map(esc).join('，')+'）</span>':''}`).join('　')}</div>`;
+  if(!tr.referenced.length)h+='<div class="box"><span class="badge b-gray">SQL からテーブル名を拾えませんでした</span></div>';
+  return h;
+}
+async function addDecl(i){
+  const m=CHECK.table_refs.missing[i];
+  const ddl=(document.getElementById('ref-ddl-'+i).value||'').trim().replace(/;\s*$/,'');
+  if(!/^CREATE\s+TABLE/i.test(ddl)){toast('CREATE TABLE で始まる宣言を入れてください',true);return}
+  PKG.tables=(PKG.tables||[]).filter(t=>t.table_name!==m.table_name);
+  PKG.tables.push({table_name:m.table_name,db_target:document.getElementById('ref-db-'+i).value,ddl:ddl,
+                   status:'confirmed',note:'取り込み時に補った宣言',sort_order:(PKG.tables.length+1)*10});
+  try{const r=await POST('/app_share/package/check',PKG);CHECK=r.result;renderCheck();
+    toast(m.table_name+' の宣言を台帳に加えました．適用するとテーブルが作られます')}
+  catch(e){toast('検証失敗: '+e.message,true)}
+}
+
 async function apply(){
   if(!PKG||!CHECK)return;
   const id=CHECK.identity;
+  const missN=(CHECK.table_refs&&CHECK.table_refs.missing.length)||0;
+  if(missN&&!confirm(`不足テーブルが ${missN} 件あります（${CHECK.table_refs.missing.map(m=>m.table_name).join('，')}）．\nこのまま取り込むと，そのテーブルを使う操作が失敗します．それでも続けますか？`))return;
   if(!confirm(`${id.exists_registry?'既存アプリを差し替え':'新規アプリを導入'}します：${id.app_name}\n\nファイル ${CHECK.files.counts.new+CHECK.files.counts.changed} 件を配置し，正本・文書・台帳・不具合を更新し，発行します．\n既存ディレクトリは import_backups に退避されます．\nよろしいですか？`))return;
   document.getElementById('btn-apply').disabled=true;
   try{
@@ -146,6 +189,7 @@ async function apply(){
     h+=`<div class="box"><span class="badge b-ok">適用完了</span> ファイル ${x.files.written} 件配置（除外 ${x.files.skipped}）${x.files.backup?'　退避: '+esc(x.files.backup):''}${x.files.errors.length?'<div style="color:#991b1b">'+x.files.errors.map(esc).join('<br>')+'</div>':''}</div>`;
     h+=`<div class="box">正本・文書・台帳を更新．不具合 ${x.issues_added} 件を追加．${x.published?'<span class="badge b-ok">発行済み</span>':''}</div>`;
     if(x.tables_executed.length)h+='<div class="box">テーブル:'+x.tables_executed.map(t=>`<div>${t.ok?'✅':'❌'} <code>${esc(t.table_name)}</code>${t.error?' '+esc(t.error):''}<pre class="sql">${esc(t.sql)}</pre></div>`).join('')+'</div>';
+    if(x.missing_tables&&x.missing_tables.length)h+=`<div class="box" style="border-color:#ef4444;background:#fef2f2"><span class="badge b-bad">⚠ 不足テーブル</span> 次のテーブルはまだありません：${x.missing_tables.map(m=>'<code>'+esc(m.table_name)+'</code>').join('，')}．管理画面のテーブルタブで台帳に登録して「適用」するか，MySQL で作成してください．${x.missing_tables.filter(m=>m.ddl).map(m=>'<pre class="sql">'+esc(m.ddl)+';</pre>').join('')}</div>`;
     if(x.need_reload)h+=`<div class="box" style="border-color:#f59e0b"><span class="badge b-warn">Reload が必要</span> ${x.not_running.length?'未起動の Blueprint: '+x.not_running.map(esc).join(', ')+'．':'コードを置き換えたので'}再起動して反映します． <button class="btn amber" onclick="reloadSite()">🔄 Reload</button></div>`;
     h+=`<div style="margin-top:8px"><a class="btn" href="/app_share/app/${encodeURIComponent(x.app_name)}">🛠 管理画面へ</a> <a class="btn gray" href="/app_share/" style="background:#dc2626;color:#fff;border-color:#dc2626">📦 アプシャダッシュボードに戻る</a></div>`;
     document.getElementById('result-body').innerHTML=h;document.getElementById('result-panel').style.display='block';

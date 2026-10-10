@@ -32,6 +32,7 @@ App Share (アプシャ) - FUJIN-Pアプリケーション共有システム
   （ログインした全員．admin 以外は文書の点検を省いた「そのまま」の書き出し）
 - アプリ単位パッケージの取り込み（admin専用・専用ダッシュボードで検証つき）
 - アプリ説明のバージョン（更新日時）記録
+- ソースとテーブルの閲覧（source.py，admin 専用．2026-10-10）
 
 ※ アプリ説明のバージョン記録には app_share_registry に updated_at 列を追加:
    ALTER TABLE app_share_registry
@@ -126,6 +127,7 @@ _NON_ADMIN_ENDPOINTS = frozenset({
     # ほかのサイトのオーナーが自分のサイトに組み込めるよう，ログインした全員に開く．
     # 取り込み・適用・削除・文書の保存は admin のまま．
     'export_kernel_package',      # カーネル（admin 以外は公開用の絞り込み版）
+    'catalog',            # アプリ目録（サーバ側で組み立てる．オール経由で Claude も読む）
 })
 
 @app_share_bp.before_request
@@ -621,6 +623,32 @@ def edit_document(app_name, doc_type):
                            app_name=app_name, doc_type=doc_type,
                            title_label=title_label, doc=doc)
 
+
+# ============================================
+# Markdown をサーバ側で HTML にする（2026-10-10）
+# ============================================
+# マニュアル・仕様書のページは，これまでブラウザの JavaScript（marked）で本文を描いていた．
+# オールのように HTML を文字にして読む読み手には本文が届かないので，サーバ側で組み立てて返す．
+
+def _md_html(text):
+    """Markdown → HTML．markdown_converter（カーネル）→ markdown ライブラリ → <pre> の順に試す"""
+    if not (text or '').strip():
+        return ''
+    try:
+        from markdown_converter import process_markdown
+        html = process_markdown(text, 'admin')
+        if html:
+            return html
+    except Exception as e:
+        logging.warning(f"_md_html: markdown_converter: {e}")
+    try:
+        import markdown as _md
+        return _md.markdown(text, extensions=['tables', 'fenced_code'])
+    except Exception as e:
+        logging.warning(f"_md_html: markdown: {e}")
+    from markupsafe import escape
+    return '<pre style="white-space:pre-wrap">' + str(escape(text)) + '</pre>'
+
 @app_share_bp.route('/manual/<app_name>')
 @login_required
 def manual_page(app_name):
@@ -673,9 +701,88 @@ def manual_page(app_name):
                            display_name=display_name,
                            icon=icon,
                            content=content,
+                           content_html=_md_html(content),
                            updated_at=updated_at,
                            updated_by_name=updated_by_name,
                            is_admin=is_admin)
+
+# ============================================
+# アプリ目録（2026-10-10）
+# ============================================
+# このサイトのアプリを，表示名・概要・使える人・版・マニュアルと仕様書へのリンクとともに
+# 1枚の HTML に並べる．JavaScript を使わずサーバ側で組み立てるので，オールの URL 文書として
+# 登録すれば Claude も人と同じ中身を読める．admin 以外には有効かつ公開のアプリだけを出す．
+
+@app_share_bp.route('/catalog')
+@login_required
+def catalog():
+    is_admin = check_admin_permission(session.get('user_id'))
+    apps, sections = [], {}
+    conn = None
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        with conn.cursor(dictionary=True, buffered=True) as cursor:
+            cursor.execute("SELECT * FROM app_share_registry ORDER BY sort_order ASC, id ASC")
+            rows = cursor.fetchall()
+            cursor.execute("""SELECT app_name, doc_type, CHAR_LENGTH(content) AS clen, updated_at
+                              FROM app_share_documents WHERE doc_type IN ('manual','spec')""")
+            docs = {}
+            for d in cursor.fetchall():
+                docs.setdefault(d['app_name'], {})[d['doc_type']] = d
+            try:
+                cursor.execute("SELECT section_key, title FROM app_share_sections")
+                sections = {r['section_key']: r['title'] for r in cursor.fetchall()}
+            except Exception:
+                sections = {}
+    except Exception as e:
+        logging.error(f"catalog error: {e}")
+        rows, docs = [], {}
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
+
+    labels = getattr(_reg, 'VISIBILITY_LABELS', {}) or {}
+    for r in rows:
+        name = r['app_name']
+        if name == '_platform':
+            continue
+        enabled = bool(r.get('enabled', 1))
+        disclosed = r.get('disclosed') is None or bool(r.get('disclosed'))
+        if not is_admin and not (enabled and disclosed):
+            continue
+        try:
+            launchers = json.loads(r['launchers']) if isinstance(r.get('launchers'), str) \
+                else (r.get('launchers') or [])
+        except Exception:
+            launchers = []
+        cards = []
+        for c in launchers if isinstance(launchers, list) else []:
+            if not isinstance(c, dict):
+                continue
+            vis = c.get('visibility') or 'private'
+            who = labels.get(vis, vis)
+            if c.get('groups'):
+                who += '（' + '，'.join(c['groups']) + '）'
+            cards.append({'section': sections.get(c.get('section'), c.get('section') or ''),
+                          'who': who, 'description': c.get('description') or ''})
+        d = docs.get(name, {})
+        m, sp = d.get('manual'), d.get('spec')
+        apps.append({
+            'app_name': name,
+            'display_name': r.get('display_name') or name,
+            'icon': r.get('icon') or '📦',
+            'description': r.get('description') or '',
+            'kind': r.get('kind') or 'app',
+            'enabled': enabled, 'disclosed': disclosed,
+            'version_id': r.get('version_id'),
+            'cards': cards,
+            'manual_chars': (m or {}).get('clen') or 0,
+            'manual_updated': _fmt_jst(m['updated_at']) if m and m.get('updated_at') else '',
+            'spec_chars': (sp or {}).get('clen') or 0,
+        })
+    return render_template('app_share_catalog.html', apps=apps, is_admin=is_admin,
+                           site_name=getattr(Config, 'DB_ACCOUNT', ''),
+                           generated_at=_now_jst().strftime('%Y-%m-%d %H:%M'))
 
 @app_share_bp.route('/return_to_fujin')
 @login_required

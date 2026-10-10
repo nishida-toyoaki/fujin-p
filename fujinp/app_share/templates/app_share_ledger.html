@@ -1,0 +1,165 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/u-fukuchiyama/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台帳点検 - アプシャ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1200px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.header h1{font-size:1.3rem;color:#333}
+.hdr-btns{float:right;display:flex;gap:8px}
+a.btn,button.btn{display:inline-block;padding:7px 14px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#6366f1}
+.btn.gray{background:#64748b}.btn.green{background:#10b981}.btn.red{background:#ef4444}.btn.amber{background:#f59e0b}.btn.sm{padding:3px 8px;font-size:.72rem}
+.btn:disabled{opacity:.5;cursor:default}
+.panel{background:#fff;padding:20px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:12px}
+.hint{font-size:.8rem;color:#64748b;margin-bottom:10px;line-height:1.6}
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin-bottom:8px}
+th,td{border:1px solid #e5e7eb;padding:4px 7px;text-align:left;vertical-align:top}
+th{background:#f3f4f6;font-size:.74rem;white-space:nowrap}
+code{font-family:Consolas,Monaco,monospace;font-size:.78rem;background:#f1f5f9;padding:1px 4px;border-radius:3px}
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:.7rem;font-weight:600;white-space:nowrap}
+.k-add_own{background:#dcfce7;color:#166534}.k-add_platform{background:#dbeafe;color:#1e40af}.k-remove_common{background:#fef3c7;color:#92400e}
+.k-recapture{background:#ede9fe;color:#5b21b6}.k-apply_cols{background:#fde68a;color:#78350f}.k-no_table{background:#fee2e2;color:#991b1b}.k-unreferenced{background:#f3f4f6;color:#374151}
+.k-not_in_db{background:#fee2e2;color:#991b1b}.k-remove_other{background:#fef3c7;color:#92400e}.k-dup_ledger{background:#fef9c3;color:#854d0e}.k-foreign{background:#ffedd5;color:#9a3412}.k-other_app{background:#f1f5f9;color:#475569}
+h2{font-size:1rem;color:#333;margin:14px 0 6px}
+h3{font-size:.9rem;color:#334155;margin:12px 0 4px}
+.app{border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;margin-bottom:8px}
+.app.clean{opacity:.6}
+.app .title{font-weight:600;font-size:.9rem;margin-bottom:4px}
+.files{color:#64748b;font-size:.72rem}
+.toast{position:fixed;top:14px;right:14px;padding:10px 16px;border-radius:8px;color:#fff;background:#10b981;opacity:0;transition:.3s;z-index:100;pointer-events:none;max-width:60%}
+.toast.show{opacity:1}.toast.err{background:#ef4444}
+.sum{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.sum .badge{font-size:.78rem;padding:4px 10px}
+.log{font-size:.76rem;color:#334155;max-height:200px;overflow:auto;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:6px 8px;margin-top:8px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns"><a class="btn gray" href="{{ url_for('app_share.dashboard') }}" style="background:#dc2626">📦 アプシャダッシュボードに戻る</a></div>
+    <h1>🧱 台帳点検</h1>
+  </div>
+  <div class="panel">
+    <div class="hint">
+      全アプリのコード（.py・.sql）が参照するテーブルと，台帳（app_share_tables）と，このサイトの DB の実物を突き合わせます．
+      方針：アプリの台帳にはそのアプリが持つテーブルだけを載せ，共通テーブル（users・user_groups 群・ug_* など）は _platform の台帳に一本化します．台帳の DDL は実物と一致させます．<br>
+      エクスポートは台帳をそのまま tables[] に写すので，ここで台帳を正しくしておくと，別のサイトへの取り込みで表が欠けません．
+      参照の拾い方：SQL 文の中の名前，文字列定数に入れた名前（<code>T = 'app_items'</code>），カーネル db.py の <code>Tables.X</code>．名前を接頭辞と語の連結で組み立てる書き方は拾えないので，その表は管理画面のテーブルタブで手で登録してください．
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn" onclick="load()">🔍 点検する</button>
+      <button class="btn green" id="btn-all" onclick="actAll()" disabled title="取り込み・外す・取り直し（判断の要らない処置）を一括で実行">⚡ 判断の要らない処置をすべて実行</button>
+      <span id="status" style="font-size:.8rem;color:#64748b"></span>
+    </div>
+    <div class="sum" id="sum"></div>
+    <details style="font-size:.78rem;color:#475569;margin-bottom:6px"><summary>判定の意味</summary><table id="legend" style="margin-top:6px"></table></details>
+    <div id="log" class="log" style="display:none"></div>
+  </div>
+  <div class="panel" id="out" style="display:none"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let R=null;
+const KIND={
+  add_own:['このアプリの表が台帳に無い','実物の DDL を台帳に取り込む','取り込む',true],
+  add_platform:['共通テーブルが _platform の台帳に無い','実物の DDL を _platform の台帳に取り込む','_platform に取り込む',true],
+  foreign:['台帳に持ち主の無い表を参照','このアプリの表なら取り込む．他アプリの表なら，そのアプリの管理画面で登録する','取り込む',false],
+  remove_common:['共通テーブルがこのアプリの台帳に載っている','このアプリの台帳から外す（_platform に一本化．持ち主のユーザとグループは除く）','外す',true],
+  remove_other:['他アプリの表がこのアプリの台帳に載っている','接頭辞がそのアプリ名なので持ち主は明らか．外す','外す',true],
+  dup_ledger:['他アプリの台帳にも載っている','接頭辞では持ち主が決まらない．持ち主でなければ外す','外す',false],
+  recapture:['台帳の DDL が実物と違う','実物の方が進んでいる（列が多い等）．実物から取り直す','取り直す',true],
+  apply_cols:['台帳にだけある列・索引がある','宣言の方が進んでいる．ALTER TABLE ADD で実物に足す（取り直しはしない）','実物に足す',false],
+  no_table:['コードが参照するが DB にも台帳にも無い','未作成の表か，使われなくなったコード．判断が要る','',false],
+  unreferenced:['台帳にあるがコードに出ない','不要なら外す（データの表や他アプリの表の混入）．判断が要る','外す',false],
+  not_in_db:['台帳にあるが DB に無い','管理画面のテーブルタブで「適用」すると作られる','',false],
+  other_app:['他アプリの台帳にある表を参照','閲覧しているだけ．処置なし','',false],
+};
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast show'+(err?' err':'');setTimeout(()=>t.className='toast',2600)}
+async function GET(u){const r=await fetch(u);const j=await r.json();if(!j.success)throw new Error(j.error||'失敗');return j}
+async function POST(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!j.success)throw new Error(j.error||'失敗');return j}
+async function load(){
+  document.getElementById('status').textContent='点検中…';
+  try{const j=await GET('/app_share/api/ledger/audit');R=j.result;render();document.getElementById('status').textContent='';}
+  catch(e){document.getElementById('status').textContent='';toast('点検失敗: '+e.message,true)}
+}
+function legend(){
+  const t=document.getElementById('legend');if(t.innerHTML)return;
+  let h='<thead><tr><th>判定</th><th>意味</th><th>処置</th></tr></thead><tbody>';
+  for(const k in KIND)h+=`<tr><td><span class="badge k-${k}">${esc(KIND[k][0])}</span></td><td>${esc(KIND[k][1])}</td><td>${KIND[k][2]?(KIND[k][3]?'自動（⚡で一括）':'判断してから'):'なし'}</td></tr>`;
+  t.innerHTML=h+'</tbody>';
+}
+function render(){
+  legend();
+  const sum=document.getElementById('sum');sum.innerHTML='';
+  let auto=0;
+  for(const k in KIND){const n=R.totals[k]||0;if(!n)continue;sum.innerHTML+=`<span class="badge k-${k}">${esc(KIND[k][0])}：${n}</span>`;if(KIND[k][3])auto+=n;}
+  if(!sum.innerHTML)sum.innerHTML='<span class="badge" style="background:#dcfce7;color:#166534">台帳とコードと DB は一致しています</span>';
+  document.getElementById('btn-all').disabled=!auto;
+  const out=document.getElementById('out');out.style.display='';
+  let h='<h2>_platform（共通テーブルの台帳）</h2><div class="app"><div class="files">台帳：'+(R.platform.ledger.map(t=>'<code>'+esc(t)+'</code>').join(' ')||'（空）')+'</div>';
+  if(R.platform.items.length)h+=itemsTable('_platform',R.platform.items);
+  h+='</div><h2>アプリ</h2>';
+  for(const a of R.apps){
+    const n=a.items.length;
+    h+=`<div class="app${n?'':' clean'}"><div class="title">${esc(a.app_name)} <span style="font-weight:400;color:#64748b;font-size:.75rem">${n?n+'件':'✔ ずれなし'}${a.has_code?'':'（コード無し）'}</span></div>`;
+    h+=`<div class="files">台帳：${a.ledger.map(t=>'<code>'+esc(t)+'</code>').join(' ')||'（空）'}</div>`;
+    if(n)h+=itemsTable(a.app_name,a.items);
+    h+='</div>';
+  }
+  out.innerHTML=h;
+}
+function itemsTable(app,items){
+  let h='<table><thead><tr><th>判定</th><th>テーブル</th><th>DB</th><th>出どころ</th><th>処置</th></tr></thead><tbody>';
+  items.forEach((it,i)=>{
+    const k=KIND[it.kind]||[it.kind,'','',false];
+    let extra='';
+    if((it.kind==='recapture'||it.kind==='apply_cols')&&it.diff){const d=it.diff;const parts=[];
+      if(d.live_only_columns.length)parts.push('実物にだけある列：'+d.live_only_columns.join(', '));
+      if(d.ledger_only_columns.length)parts.push('台帳にだけある列：'+d.ledger_only_columns.join(', '));
+      if(d.changed_columns.length)parts.push('定義が違う列：'+d.changed_columns.join(', '));
+      if(d.ledger_only_indexes.length)parts.push('台帳にだけある索引：'+d.ledger_only_indexes.join(', '));
+      extra='<div class="files">'+esc(parts.join('／'))+'</div>';}
+    if(it.kind==='add_platform'&&it.apps)extra='<div class="files">参照：'+it.apps.map(esc).join('，')+'</div>';
+    if(it.kind==='remove_other'||it.kind==='dup_ledger')extra='<div class="files">持ち主：'+it.owners.map(esc).join('，')+'</div>';
+    if(it.kind==='other_app')extra='<div class="files">持ち主：'+it.owners.map(esc).join('，')+'</div>';
+    if(it.kind==='unreferenced')extra='<div class="files">'+(it.exists?'DB に実在':'DB にも無い')+'</div>';
+    const btn=k[2]?`<button class="btn sm ${k[3]?'green':'amber'}" onclick="act('${esc(app)}','${(it.kind==='unreferenced'||it.kind==='dup_ledger')?'remove':(it.kind==='foreign'?'add_own':it.kind)}','${esc(it.table_name)}','${esc(it.db_target||'')}',this)">${esc(k[2])}</button>`:'';
+    h+=`<tr><td><span class="badge k-${it.kind}">${esc(k[0])}</span></td><td><code>${esc(it.table_name)}</code>${extra}</td><td>${esc(it.db_target||'')}</td><td class="files">${(it.files||[]).map(esc).join('<br>')}</td><td>${btn}</td></tr>`;
+  });
+  return h+'</tbody></table>';
+}
+async function act(app,kind,table,db,btn){
+  if(kind==='remove'&&!confirm(`${app} の台帳から ${table} を外します．よろしいですか？`))return;
+  if(btn)btn.disabled=true;
+  try{const j=await POST('/app_share/api/ledger/act',{actions:[{app_name:app,kind:kind,table_name:table,db_target:db}]});
+    const r=j.results[0];toast(r.message,!r.ok);logLine(r);await load();}
+  catch(e){toast(e.message,true);if(btn)btn.disabled=false}
+}
+async function actAll(){
+  const acts=[];
+  for(const it of R.platform.items)if(it.kind==='add_platform')acts.push({app_name:'_platform',kind:it.kind,table_name:it.table_name,db_target:it.db_target||''});
+  for(const a of R.apps)for(const it of a.items)if(KIND[it.kind]&&KIND[it.kind][3])acts.push({app_name:a.app_name,kind:it.kind,table_name:it.table_name,db_target:it.db_target||''});
+  if(!acts.length)return;
+  if(!confirm(`${acts.length} 件の処置（取り込み・外す・取り直し）を実行します．よろしいですか？`))return;
+  document.getElementById('btn-all').disabled=true;
+  try{const j=await POST('/app_share/api/ledger/act',{actions:acts});
+    const ng=j.results.filter(r=>!r.ok).length;j.results.forEach(logLine);
+    toast(`${j.results.length-ng} 件完了${ng?'，'+ng+' 件失敗':''}`,!!ng);await load();}
+  catch(e){toast(e.message,true)}
+}
+function logLine(r){const l=document.getElementById('log');l.style.display='';l.textContent+=(r.ok?'✅ ':'❌ ')+r.message+'\n';l.scrollTop=l.scrollHeight;}
+load();
+</script>
+</body>
+</html>

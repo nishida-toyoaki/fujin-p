@@ -93,6 +93,7 @@
             <div class="dl-btns">
                 <button onclick="download('{{ url_for('app_share.package_export_all_public') }}','全アプリパッケージ')">⬇ 全アプリパッケージ</button>
                 <button class="kernel" onclick="download('{{ url_for('app_share.export_kernel_package') }}','カーネル')">⚙ カーネル</button>
+                <button class="kernel" onclick="location.href='{{ url_for('app_share.catalog') }}'">📚 アプリ目録</button>
             </div>
             <div class="dl-msg" id="dl-msg"></div>
         </div>

@@ -12,7 +12,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ display_name }} - ユーザーズマニュアル</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
@@ -75,26 +74,20 @@
             {% if updated_by_name %}<span>👤 {{ updated_by_name }}</span>{% endif %}
         </div>
         {% endif %}
-        <div id="man-body"></div>
+        <div id="man-body">
+        {% if content_html %}
+            <div class="md-r">{{ content_html|safe }}</div>
+        {% else %}
+            <div class="man-empty"><div class="me-icon">📖</div><p>まだマニュアルが作成されていません。</p>
+            {% if is_admin %}<p style="margin-top:12px"><a href="{{ url_for('app_share.edit_document', app_name=app_name, doc_type='manual') }}" style="color:#6366f1;font-weight:600">📝 マニュアルを作成する</a></p>{% endif %}
+            </div>
+        {% endif %}
+        </div>
     </div>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
-marked.setOptions({breaks:true,gfm:true});
-const CONTENT = {{ content|tojson }};
-const IS_ADMIN = {{ is_admin|tojson }};
-const EDIT_URL = "{{ url_for('app_share.edit_document', app_name=app_name, doc_type='manual') }}";
-
-if (CONTENT && CONTENT.trim()) {
-    document.getElementById('man-body').innerHTML = '<div class="md-r">' + marked.parse(CONTENT) + '</div>';
-} else {
-    let h = '<div class="man-empty"><div class="me-icon">📖</div><p>まだマニュアルが作成されていません。</p>';
-    if (IS_ADMIN) h += '<p style="margin-top:12px"><a href="' + EDIT_URL + '" style="color:#6366f1;font-weight:600">📝 マニュアルを作成する</a></p>';
-    h += '</div>';
-    document.getElementById('man-body').innerHTML = h;
-}
-
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600)}
 function copyUrl(){
     const u = location.href;

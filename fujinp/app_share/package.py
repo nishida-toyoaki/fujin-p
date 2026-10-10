@@ -672,6 +672,164 @@ def _file_bytes(entry):
     return str(entry['content']).encode('utf-8')
 
 
+# ============================================================
+# コードが参照するテーブルの点検（2026-10-10）
+# ============================================================
+# パッケージのコード（.py と .sql）に書かれた SQL からテーブル名を拾い，
+# パッケージの台帳（tables[]）にも取り込み先の DB にも無いものを「不足テーブル」として示す．
+# 不足テーブルには宣言の案（CREATE TABLE）を添える．案は，パッケージ内の CREATE 文があれば
+# それを，無ければコードの INSERT の列から組み立てた草案を使う．
+# 名前を組み立てて参照する書き方（f 文字列の {table} など）は拾えない．
+
+_Q = r"(?:`?([^\W\d][\w$]*)`?\.)?`?([^\W\d][\w$]*)`?(?![\w$.(])"   # 「DB名.」付きも可（group1=DB，group2=表）
+_SQL_REF_PATTERNS = (
+    re.compile(r"\b(?:FROM|JOIN|INTO)\s+" + _Q),
+    re.compile(r"\bUPDATE\s+" + _Q + r"\s+SET\b"),
+    re.compile(r"\b(?:CREATE|ALTER|DROP|TRUNCATE)\s+TABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?" + _Q),
+)
+_SQL_NOT_TABLES = {'information_schema', 'dual', 'mysql', 'performance_schema', 'sys'}
+_CREATE_RE = re.compile(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([^\W\d][\w$]*)`?\s*\(', re.I)
+_INSERT_COLS_RE = re.compile(r'\bINTO\s+`?([^\W\d][\w$]*)`?\s*\(([^()]*)\)\s*VALUES', re.S)
+
+
+def _code_texts(pkg):
+    """(相対パス, 本文) の並び．.py と .sql だけ"""
+    out = []
+    for f in pkg.get('files') or []:
+        rel = f.get('path') or ''
+        if f.get('encoding') != 'text' or not rel.endswith(('.py', '.sql')):
+            continue
+        out.append((rel, f.get('content') or ''))
+    return out
+
+
+def _referenced_tables(pkg):
+    """{テーブル名: [そのテーブルが出てくるファイル, ...]}"""
+    return referenced_tables_in(_code_texts(pkg))
+
+
+def referenced_tables_in(texts, known=None):
+    """(相対パス, 本文) の並びから {テーブル名: [ファイル, ...]} を拾う（台帳点検 ledger.py と共用）．
+    日本語などの非 ASCII 名は，文章中の語を拾わないよう，バッククォート付きか known（実在・台帳にある名前）に限る"""
+    refs = {}
+    known = known or set()
+    for rel, text in texts:
+        for pat in _SQL_REF_PATTERNS:
+            for m in pat.finditer(text):
+                qual, name = m.group(1), m.group(2)
+                if qual and qual.lower() in _SQL_NOT_TABLES:
+                    continue                    # information_schema.tables など
+                if not name.isascii() and ('`' + name + '`') not in m.group(0) and name not in known:
+                    continue
+                if name.lower() in _SQL_NOT_TABLES or (name.isascii() and name.upper() == name):
+                    continue                    # 予約語や定数（CURRENT_TIMESTAMP など）
+                files = refs.setdefault(name, [])
+                if rel not in files:
+                    files.append(rel)
+    return refs
+
+
+def _create_stmt_in(pkg, table):
+    """パッケージの中にある CREATE TABLE 文（括弧の対応で切り出す）．無ければ None"""
+    for rel, text in _code_texts(pkg):
+        for m in _CREATE_RE.finditer(text):
+            if m.group(1) != table:
+                continue
+            depth, i = 0, m.end() - 1
+            while i < len(text):
+                if text[i] == '(':
+                    depth += 1
+                elif text[i] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                i += 1
+            end = text.find(';', i)
+            stmt = text[m.start(): (end + 1) if end >= 0 else i + 1].strip()
+            if '{' in stmt:
+                continue                        # 文字列の組み立て途中は使わない
+            return stmt, rel
+    return None, None
+
+
+def _draft_ddl(pkg, table):
+    """コードの INSERT 文の列から組み立てる宣言の草案．列が分からなければ None"""
+    cols = []
+    for rel, text in _code_texts(pkg):
+        for m in _INSERT_COLS_RE.finditer(text):
+            if m.group(1) != table:
+                continue
+            for c in m.group(2).split(','):
+                c = c.strip().strip('`')
+                if re.match(r'^[A-Za-z_]\w*$', c) and c not in cols:
+                    cols.append(c)
+    if not cols:
+        return None
+    lines, keys = [], []
+    has_id = 'id' in cols
+    if has_id:
+        lines.append('  `id` int NOT NULL AUTO_INCREMENT')
+    for c in cols:
+        if c == 'id':
+            continue
+        if c.endswith('_id'):
+            t = 'int NOT NULL'
+        elif c.endswith('_at'):
+            t = 'datetime DEFAULT NULL'
+        else:
+            t = 'text'
+        lines.append('  `%s` %s' % (c, t))
+    id_cols = [c for c in cols if c.endswith('_id')]
+    if has_id:
+        keys.append('  PRIMARY KEY (`id`)')
+        keys += ['  KEY `idx_%s` (`%s`)' % (c, c) for c in id_cols]
+    elif len(id_cols) >= 2 and len(id_cols) == len(cols):
+        keys.append('  PRIMARY KEY (%s)' % ','.join('`%s`' % c for c in id_cols))
+        keys += ['  KEY `idx_%s` (`%s`)' % (c, c) for c in id_cols[1:]]
+    else:
+        keys += ['  KEY `idx_%s` (`%s`)' % (c, c) for c in id_cols]
+    return ('CREATE TABLE `%s` (\n' % table + ',\n'.join(lines + keys) +
+            '\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci')
+
+
+def _referenced_table_report(cur, pkg):
+    """コードが参照するテーブルの点検．
+    戻り値 {'referenced': [...], 'missing': [...]}．missing には宣言の案（ddl）と出どころを添える．"""
+    declared = {t.get('table_name') for t in (pkg.get('tables') or [])}
+    live = {}
+    for suf, dbname in _m._db_names().items():
+        try:
+            for t in _m._list_tables(dbname):
+                live.setdefault(t, suf)
+        except Exception:
+            pass
+    owners = {}
+    try:
+        cur.execute("SELECT app_name, table_name FROM app_share_tables")
+        for r in cur.fetchall():
+            owners.setdefault(r['table_name'], []).append(r['app_name'])
+    except Exception:
+        pass
+    app = pkg.get('app_name') or ''
+    referenced, missing = [], []
+    for name, files in sorted(referenced_tables_in(_code_texts(pkg), set(live) | declared).items()):
+        item = {'table_name': name, 'files': files,
+                'in_package': name in declared,
+                'exists_in': live.get(name),
+                'owners': [o for o in owners.get(name, []) if o != app]}
+        referenced.append(item)
+        if item['in_package'] or item['exists_in']:
+            continue
+        ddl, src = _create_stmt_in(pkg, name)
+        how = 'package'
+        if not ddl:
+            ddl, src, how = _draft_ddl(pkg, name), None, 'draft'
+        if not ddl:
+            how = 'none'
+        missing.append(dict(item, ddl=ddl, ddl_from=how, ddl_file=src))
+    return {'referenced': referenced, 'missing': missing}
+
+
 def _check(cur, pkg):
     app_name = pkg.get('app_name') or ''
     ok_name = bool(_m._valid_app(app_name))
@@ -781,6 +939,7 @@ def _check(cur, pkg):
                           'updated_at': v.get('updated_at')} for k, v in (pkg.get('documents') or {}).items()},
         'issues': issues,
         'site_style': _site_style_plan(cur, pkg),
+        'table_refs': _referenced_table_report(cur, pkg),
         'site': {'site_name': pkg.get('site_name'), 'site_url': pkg.get('site_url'),
                  'generated_at': pkg.get('generated_at'), 'generated_by': pkg.get('generated_by')},
     }
@@ -959,6 +1118,14 @@ def package_apply():
             finally:
                 conn2.close()
     result['tables_executed'] = executed
+    # コードが参照するのに，台帳にも DB にも無いテーブル（2026-10-10）
+    try:
+        with _m._db() as (cur, conn):
+            result['missing_tables'] = [
+                {'table_name': x['table_name'], 'files': x['files'], 'ddl': x['ddl'], 'ddl_from': x['ddl_from']}
+                for x in _referenced_table_report(cur, pkg)['missing']]
+    except Exception as e:
+        result['missing_tables_error'] = str(e)
     # 3.5) 区画と背景（取り込み先に無いものだけ足す．2026-09-23）
     #      色の列や背景の表はテーブルの改訂（3）で作られるので，その後に行う
     try:

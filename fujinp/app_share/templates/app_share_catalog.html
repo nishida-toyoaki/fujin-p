@@ -1,0 +1,75 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/u-fukuchiyama/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FUJIN-P アプリ目録</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);min-height:100vh;padding:15px}
+.container{max-width:1100px;margin:0 auto}
+.header{background:#fff;padding:15px 25px;border-radius:10px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+h1{color:#333;font-size:1.35rem;margin-bottom:5px}
+.subtitle{color:#666;font-size:.85rem;line-height:1.7}
+.hdr-btns{float:right;display:flex;gap:8px;flex-wrap:wrap}
+.hdr-btns a{padding:8px 14px;border-radius:5px;text-decoration:none;font-size:.82rem;font-weight:600;color:#fff;background:#dc2626}
+.hdr-btns a.home{background:#ef4444}
+.panel{background:#fff;padding:20px 26px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.app{border-bottom:1px solid #e5e7eb;padding:14px 0}
+.app:last-child{border-bottom:none}
+.app h2{font-size:1.05rem;color:#1e293b;margin-bottom:2px}
+.app h2 .dir{font-size:.78rem;color:#94a3b8;font-weight:400;margin-left:6px}
+.app p{font-size:.88rem;color:#374151;line-height:1.7;margin:4px 0}
+.meta{font-size:.8rem;color:#64748b;line-height:1.7}
+.meta a{color:#4338ca;margin-right:14px}
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:.7rem;font-weight:600;background:#fef3c7;color:#92400e;margin-left:4px}
+ul.cards{margin:2px 0 0 1.2em;font-size:.82rem;color:#475569;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="hdr-btns">
+      {% if is_admin %}<a href="{{ url_for('app_share.source_index') }}">🧩 アプリ索引</a>
+      <a href="{{ url_for('app_share.table_catalog') }}">🧱 テーブルカタログ</a>{% endif %}
+      <a href="{{ url_for('app_share.dashboard') }}">📦 アプシャ</a>
+      <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
+    </div>
+    <h1>📚 FUJIN-P アプリ目録</h1>
+    <p class="subtitle">このサイト（{{ site_name }}）に登録されているアプリ {{ apps|length }} 本の一覧です．各アプリの名前，用途，使える人，版と，マニュアル・仕様書へのリンクを並べています．{{ generated_at }} 現在．
+    {% if not is_admin %}有効で公開されているアプリだけを表示しています．{% endif %}</p>
+  </div>
+  <div class="panel">
+    {% for a in apps %}
+    <div class="app">
+      <h2>{{ a.icon }} {{ a.display_name }}<span class="dir">{{ a.app_name }}</span>
+        {% if a.kind == 'kernel' %}<span class="badge">基盤</span>{% endif %}
+        {% if not a.enabled %}<span class="badge">無効</span>{% endif %}
+        {% if not a.disclosed %}<span class="badge">非公開</span>{% endif %}
+      </h2>
+      {% if a.description %}<p>{{ a.description }}</p>{% endif %}
+      {% if a.cards %}
+      <ul class="cards">
+        {% for c in a.cards %}<li>ダッシュボードの「{{ c.section }}」に置かれ，使える人は {{ c.who }}{% if c.description %}．{{ c.description }}{% endif %}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <div class="meta">
+        版 {{ a.version_id or '未確定' }}
+        {% if a.manual_chars %}　<a href="{{ url_for('app_share.manual_page', app_name=a.app_name) }}">📖 {{ a.display_name }} ユーザマニュアル（{{ a.manual_chars }}字{% if a.manual_updated %}，{{ a.manual_updated }}更新{% endif %}）</a>{% else %}　マニュアルは未作成{% endif %}
+        {% if a.spec_chars %}<a href="{{ url_for('app_share.spec_view', app_name=a.app_name) }}">📋 {{ a.display_name }} 技術仕様書（{{ a.spec_chars }}字）</a>{% endif %}
+        {% if is_admin %}<a href="{{ url_for('app_share.source_app', app_name=a.app_name) }}">🧩 {{ a.display_name }} のソース</a>{% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="meta">表示できるアプリがありません．</p>
+    {% endfor %}
+  </div>
+</div>
+</body>
+</html>

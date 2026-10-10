@@ -315,6 +315,7 @@ def spec_view(app_name):
                            config_keys=_jload(row.get('config_keys'), []),
                            tables=tables,
                            spec_content=spec.get('content') or '',
+                           spec_html=_routes._md_html(spec.get('content') or ''),
                            spec_updated_at=_routes._fmt_jst(spec.get('updated_at')) if spec else None,
                            spec_updated_by=spec.get('updated_by_name') if spec else None,
                            issues=issues,

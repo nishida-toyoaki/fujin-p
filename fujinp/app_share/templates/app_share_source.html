@@ -1,0 +1,225 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/u-fukuchiyama/fujin-p
+#}
+{# ソースとテーブルの閲覧（admin 専用）．JavaScript を使わずサーバ側で組み立てる．オールが読む #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% if mode == 'index' %}FUJIN-P アプリ索引{% elif mode == 'app' %}{{ row.display_name or app_name }} の中身{% elif mode == 'file' %}{{ app_name }}/{{ rel }}{% elif mode == 'registry' %}{{ app_name }} の正本（JSON）{% elif mode == 'tables' %}FUJIN-P テーブルカタログ{% else %}{{ table }}{% endif %}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;min-height:100vh;padding:15px;color:#1e293b}
+.container{max-width:1200px;margin:0 auto}
+.header{background:#fff;padding:14px 22px;border-radius:10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+h1{font-size:1.3rem;margin-bottom:4px}
+h2{font-size:1.02rem;margin:16px 0 6px}
+.sub{color:#64748b;font-size:.84rem;line-height:1.7}
+.nav{float:right;display:flex;gap:8px;flex-wrap:wrap}
+.nav a{padding:6px 12px;border-radius:5px;text-decoration:none;font-size:.8rem;font-weight:600;color:#fff;background:#6366f1}
+.nav a.home{background:#ef4444}
+.panel{background:#fff;padding:16px 22px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{border-bottom:1px solid #e2e8f0;padding:4px 6px;text-align:left;vertical-align:top}
+th{background:#f8fafc;color:#475569;font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem}
+pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:8px}
+a{color:#4338ca}
+.muted{color:#94a3b8}
+.badge{display:inline-block;padding:0 6px;border-radius:8px;font-size:.7rem;font-weight:600;background:#fef3c7;color:#92400e}
+ul.plain{margin-left:1.2em;font-size:.84rem;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+  <div class="nav">
+    <a href="{{ url_for('app_share.source_index') }}">🧩 アプリ索引</a>
+    <a href="{{ url_for('app_share.table_catalog') }}">🧱 テーブルカタログ</a>
+    <a href="{{ url_for('app_share.catalog') }}">📚 アプリ目録</a>
+    <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
+  </div>
+
+{% if mode == 'index' %}
+  <h1>🧩 FUJIN-P アプリ索引</h1>
+  <p class="sub">このサイトのカーネルと全アプリ {{ apps|length }} 件のソースへの入口です．アプリ名を押すと，ファイル・テーブル・文書の一覧に進みます．{{ generated_at }} 現在．admin 専用．</p>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>アプリ</th><th>ブループリント名</th><th>概要</th><th>ファイル</th><th>大きさ</th><th>持つテーブル</th><th>版</th></tr>
+    {% for a in apps %}
+    <tr>
+      <td><a href="{{ url_for('app_share.source_app', app_name=a.app_name) }}">{{ a.icon }} {{ a.display_name }}</a>
+        {% if a.kind == 'kernel' %}<span class="badge">基盤</span>{% endif %}{% if not a.enabled %}<span class="badge">無効</span>{% endif %}</td>
+      <td class="mono">{{ a.app_name }}</td>
+      <td>{{ a.description|truncate(90) }}</td>
+      <td class="num">{{ a.n_files }}</td>
+      <td class="num">{{ '{:,}'.format(a.n_bytes) }}</td>
+      <td class="num">{{ a.n_tables }}</td>
+      <td class="mono">{{ a.version_id or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% elif mode == 'app' %}
+  <h1>{{ '🧠' if is_kernel else (row.icon or '📦') }} {{ 'カーネル' if is_kernel else (row.display_name or app_name) }} の中身 <span class="mono muted">{{ app_name }}</span></h1>
+  <p class="sub">{{ row.description or '' }}</p>
+  <p class="sub">版 <span class="mono">{{ row.version_id or '未確定' }}</span>　{{ generated_at }} 現在．
+  <a href="{{ url_for('app_share.source_registry', app_name=app_name) }}">🧾 正本（JSON）</a>　
+  {% if not is_kernel %}
+    {% if docs.manual %}<a href="{{ url_for('app_share.manual_page', app_name=app_name) }}">📖 ユーザマニュアル（{{ docs.manual.clen }}字）</a>{% else %}マニュアルは未作成{% endif %}
+    {% if docs.spec %}　<a href="{{ url_for('app_share.spec_view', app_name=app_name) }}">📋 技術仕様書（{{ docs.spec.clen }}字）</a>{% endif %}
+  {% endif %}</p>
+</div>
+
+{% if not is_kernel %}
+<div class="panel">
+  <h2>正本の要点</h2>
+  <ul class="plain">
+    <li>ブループリント：{% for b in blueprints %}<code>{{ b.name if b is mapping else b }}{% if b is mapping and b.url_prefix %}（{{ b.url_prefix }}）{% endif %}</code>{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+    <li>ランチャ：{% for l in launchers %}{{ l.label or '' }}（<code>{{ l.endpoint or '' }}</code>，区画 {{ l.section or '' }}，{{ l.visibility or 'private' }}{% if l.groups %}：{{ l.groups|join('，') }}{% endif %}）{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+    <li>ライブラリ：{% for l in libraries %}{{ l.name if l is mapping else l }}{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+    <li>設定名：{% for k in config_keys %}<code>{{ k.name if k is mapping else k }}</code>{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+  </ul>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>ファイル（{{ files|length }} 本）</h2>
+  <table>
+    <tr><th>パス</th><th>行数</th><th>大きさ</th><th>更新</th></tr>
+    {% for f in files %}
+    <tr>
+      <td class="mono"><a href="{{ url_for('app_share.source_file', app_name=app_name, rel=f.path) }}">{{ f.path }}</a>{% if f.binary %} <span class="muted">（base64）</span>{% endif %}</td>
+      <td class="num">{{ f.lines if f.lines is not none else '' }}</td>
+      <td class="num">{{ '{:,}'.format(f.size) }}</td>
+      <td class="mono">{{ f.mtime }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">ファイルが見つかりません．</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2>持っているテーブル（台帳）</h2>
+  {% if tables %}
+  <table>
+    <tr><th>テーブル</th><th>DB</th><th>行数（概数）</th><th>ほかに名前が出るアプリ</th><th>メモ</th></tr>
+    {% for t in tables %}
+    <tr>
+      <td class="mono">{% if t.exists %}<a href="{{ url_for('app_share.table_schema', db=t.db, table=t.table) }}">{{ t.table }}</a>{% else %}{{ t.table }} <span class="badge">実物なし</span>{% endif %}</td>
+      <td>{{ t.db }}</td>
+      <td class="num">{{ t.rows if t.rows is not none else '' }}</td>
+      <td>{{ t.users|join('，') }}</td>
+      <td>{{ t.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="sub">台帳に登録されたテーブルはありません．</p>{% endif %}
+
+  <h2>ほかのアプリのテーブルで，このアプリのソースに名前が出るもの</h2>
+  {% if borrowed %}
+  <table>
+    <tr><th>テーブル</th><th>DB</th><th>持ち主</th></tr>
+    {% for t in borrowed %}
+    <tr><td class="mono">{% if t.db %}<a href="{{ url_for('app_share.table_schema', db=t.db, table=t.table) }}">{{ t.table }}</a>{% else %}{{ t.table }}{% endif %}</td>
+      <td>{{ t.db or '' }}</td><td>{{ t.owners|join('，') }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="sub">ありません．</p>{% endif %}
+
+  {% if stray %}
+  <h2>台帳に持ち主のないテーブルで，このアプリのソースに名前が出るもの</h2>
+  <ul class="plain">
+    {% for db, t in stray %}<li class="mono"><a href="{{ url_for('app_share.table_schema', db=db, table=t) }}">{{ t }}</a>（{{ db }}）</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+{% if issues %}
+<div class="panel">
+  <h2>既知の不具合（未解決）</h2>
+  <ul class="plain">
+    {% for i in issues %}<li>{{ i.title }}{% if i.detail %}：{{ i.detail }}{% endif %}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% elif mode == 'file' %}
+  <h1><a href="{{ url_for('app_share.source_app', app_name=app_name) }}">{{ app_name }}</a> / <span class="mono">{{ rel }}</span></h1>
+  <p class="sub">{% if encoding == 'text' %}{{ lines }} 行，{% endif %}{{ '{:,}'.format(size) }} バイト，更新 {{ mtime }}，sha256 <span class="mono">{{ sha256 }}</span>．
+  {% if encoding == 'base64' %}UTF-8 のテキストではないので，本文を base64 で示します．{% endif %}
+  {% if masked %}資格情報らしき値を伏せ字（＊＊伏せ字＊＊）にした行：{{ masked_lines|join('，') }}．{% endif %}</p>
+</div>
+<div class="panel">
+  {% if text is not none %}<pre>{{ text }}</pre>{% else %}<p class="sub">ファイルを読めませんでした．</p>{% endif %}
+</div>
+
+{% elif mode == 'registry' %}
+  <h1><a href="{{ url_for('app_share.source_app', app_name=app_name) }}">{{ app_name }}</a> の正本（JSON）</h1>
+  <p class="sub">アプシャが書き出すアプリパッケージから，ファイルの本文を除いたもの全部です（registry・tables・documents・issues・site_style・版など）．files には各ファイルの目録（大きさ・更新・encoding・sha256・伏せ字にした行・本文の URL）を入れています．この JSON の files を，各ファイルの本文で置き換えればパッケージになります．{{ generated_at }} 現在．</p>
+  {% if n_masked %}<p class="sub">資格情報らしき値を伏せ字にした行が {{ n_masked }} 行あります．その行を含むファイルは，本文から組み立てると元と一致しません（sha256 で確かめられます）．</p>{% endif %}
+</div>
+<div class="panel">
+  {% if err %}<p class="sub">正本を組み立てられませんでした：{{ err }}</p>{% endif %}
+  {% if body %}<pre>{{ body }}</pre>{% endif %}
+</div>
+
+{% elif mode == 'tables' %}
+  <h1>🧱 FUJIN-P テーブルカタログ</h1>
+  <p class="sub">このサイトの DB にあるテーブル {{ n_tables }} 本の一覧です．「持ち主」はアプシャのテーブル台帳でそのテーブルを持つアプリ，「名前が出るアプリ」は持ち主以外でソースにテーブル名がそのまま現れるアプリです（名前を組み立てて参照するものは拾えません）．テーブル名を押すとスキーマに進みます．中身のデータは載せていません．{{ generated_at }} 現在．admin 専用．</p>
+</div>
+{% for e in errors %}<div class="panel"><p class="sub">{{ e.db }}（{{ e.schema }}）を読めませんでした：{{ e.error }}</p></div>{% endfor %}
+{% for d in dbs %}
+<div class="panel">
+  <h2>{{ d.db }} の DB（{{ d.tables|length }} 本．複数のアプリにかかわるもの {{ d.shared }} 本，どのアプリにも結びつかないもの {{ d.orphan }} 本）</h2>
+  <table>
+    <tr><th>テーブル</th><th>行数（概数）</th><th>持ち主</th><th>名前が出るアプリ</th><th>説明</th><th>更新</th></tr>
+    {% for t in d.tables %}
+    <tr>
+      <td class="mono"><a href="{{ url_for('app_share.table_schema', db=t.db, table=t.table) }}">{{ t.table }}</a>{% if t.view %} <span class="badge">ビュー</span>{% endif %}</td>
+      <td class="num">{{ t.rows if t.rows is not none else '' }}</td>
+      <td>{{ t.owners|join('，') }}</td>
+      <td>{{ t.users|join('，') }}</td>
+      <td>{{ t.comment }}{% if t.comment and t.note %}／{% endif %}{{ t.note }}</td>
+      <td class="mono">{{ t.updated or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+
+{% else %}
+  <h1>🧱 <span class="mono">{{ table }}</span> <span class="muted" style="font-size:.85rem">（{{ db }} の DB）</span></h1>
+  <p class="sub">{% if info.view %}ビュー．{% endif %}行数（概数）{{ info.rows if info.rows is not none else '不明' }}，更新 {{ info.updated or '不明' }}．{% if info.comment %}説明：{{ info.comment }}{% endif %}</p>
+</div>
+<div class="panel">
+  <h2>関係するアプリ</h2>
+  <ul class="plain">
+    <li>持ち主（台帳）：{% for a, n in owners %}<a href="{{ url_for('app_share.source_app', app_name=a) }}">{{ n }}</a>{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+    <li>ソースに名前が出るアプリ：{% for a, n in users %}<a href="{{ url_for('app_share.source_app', app_name=a) }}">{{ n }}</a>{{ '，' if not loop.last }}{% else %}なし{% endfor %}</li>
+    {% for l in ledger %}<li>台帳の記録（{{ l.app_name }}）：状態 {{ l.status or '' }}{% if l.captured_at %}，取り込み {{ l.captured_at }}{% endif %}{% if l.note %}，{{ l.note }}{% endif %}</li>{% endfor %}
+  </ul>
+  <h2>列（{{ cols|length }}）</h2>
+  <table>
+    <tr><th>#</th><th>列名</th><th>型</th><th>NULL</th><th>キー</th><th>既定値</th><th>付加</th><th>コメント</th></tr>
+    {% for c in cols %}
+    <tr><td class="num">{{ loop.index }}</td><td class="mono">{{ c.COLUMN_NAME }}</td><td class="mono">{{ c.COLUMN_TYPE }}</td>
+      <td>{{ c.IS_NULLABLE }}</td><td>{{ c.COLUMN_KEY }}</td><td class="mono">{{ c.COLUMN_DEFAULT if c.COLUMN_DEFAULT is not none else '' }}</td>
+      <td>{{ c.EXTRA }}</td><td>{{ c.COLUMN_COMMENT }}</td></tr>
+    {% endfor %}
+  </table>
+  <h2>CREATE 文</h2>
+  <pre>{{ ddl }}</pre>
+</div>
+{% endif %}
+</div>
+</body>
+</html>
