@@ -220,6 +220,7 @@ body {
     <button class="btn secondary" id="btnTypes">🏷 ラベル管理</button>
     {% endif %}
     <button class="btn secondary" id="btnExport" title="表示中のノードと結合子（ラベル）関係をメタデータ付きJSONでダウンロード">💾 JSONエクスポート</button>
+    <button class="btn secondary" id="btnExportFull" title="表示中のノードと結合子に，各ノードの実体URLが指す文書の中身（本文テキストとHTML）を添えたJSONでダウンロード">📦 コンテンツ付きJSON</button>
     {% if is_owner %}
     <button class="btn secondary" id="btnImport" title="エクスポートしたJSONをこのキャンバスに新規追加（既存には触れません）">📥 JSON取込</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
@@ -1547,7 +1548,9 @@ async function seedHarvest(doc, base, sameOrigin) {
             el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener');
         }
     }
-    if (sameOrigin) {
+    // 画像の埋め込みは，文書のサイトではなく画像のサイトで判断する
+    // （他サイトの文書に載った，このサイトの画像も埋め込む）
+    {
         for (const img of Array.from(body.querySelectorAll('img[src]'))) {
             const src = img.getAttribute('src');
             if (/^data:/i.test(src)) continue;
@@ -2070,6 +2073,199 @@ $('#btnExport').on('click', function() {
     showResult('JSONをダウンロードしました（ノード' + data.metadata.node_count +
                '個・結合子' + data.metadata.edge_count + '個）', false);
 });
+// =============== コンテンツ付きJSONエクスポート ===============
+// 通常のJSONエクスポート（awami-canvas-export）の各ノードに content を添える。
+// 文書の取得は「種文書を展開」と同じ機構（seedLoad）を使う：
+//  ・同一サイトの文書：閲覧者のログイン状態のまま取得し，描画後の姿を写す（画像は埋め込み）
+//  ・他サイトの文書：サーバの中継口（seed_fetch，キャンバス作成者のみ）で取得する
+// content は文書に展開せず，ノードとの対応付けを保ったまま持つ：
+//   status   ok（本文あり）／link（参照のみ）／error（取得できず）／no_url（URLなし）／duplicate（同じURLが先出）
+//   url      取得した絶対URL
+//   same_as  duplicate のとき，同じ文書を持つ先出ノードのid
+//   note     参照のみ・取得できなかった理由など
+//   text     本文のプレーンテキスト（AIや検索に渡す用）
+//   html     本文のHTML（Shadow DOM 用に読み替え済み．:host と .seed-root が器）
+// 取込（📥 JSON取込）は content を読まない（文書の実体は元の場所にあるため）。
+function seedHtmlToText(html) {
+    try {
+        const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+        doc.querySelectorAll('style, link, script, noscript').forEach(el => el.remove());
+        // ブロック要素の切れ目に改行を入れてから文字列を取り出す
+        doc.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6, tr, br, pre, blockquote, section, article, table')
+            .forEach(el => el.insertAdjacentText('afterend', '\n'));
+        return (doc.body.textContent || '').replace(/[ \t ]+/g, ' ')
+            .replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    } catch (e) { return ''; }
+}
+let exportFullBusy = false;
+async function exportWithContent() {
+    if (exportFullBusy) return;
+    const data = buildExportJson();
+    if (!data.nodes.length) { showResult('書き出すノードがありません', true); return; }
+    exportFullBusy = true;
+    const $btn = $('#btnExportFull');
+    const btnLabel = $btn.text();
+    $btn.prop('disabled', true);
+    seedEmbedded = 0;
+    const firstAt = {}, jobs = [];
+    data.nodes.forEach(function(nd) {
+        if (!nd.url) { nd.content = { status: 'no_url' }; return; }
+        const abs = seedAbs(nd.url, location.href);
+        if (firstAt[abs] !== undefined) {
+            nd.content = { status: 'duplicate', url: abs, same_as: firstAt[abs] };
+            return;
+        }
+        firstAt[abs] = nd.id;
+        nd.content = { status: 'pending', url: abs };
+        jobs.push(nd);
+    });
+    let done = 0, next = 0;
+    const status = () => $btn.text('⏳ 取得中 ' + done + '/' + jobs.length);
+    status();
+    async function worker() {
+        while (next < jobs.length) {
+            const nd = jobs[next++];
+            const c = nd.content;
+            let same = false;
+            try { same = new URL(c.url).origin === location.origin; } catch (e) {}
+            let res;
+            if (!same && !IS_OWNER) {
+                res = { kind: 'error', note: '他サイトの文書はキャンバス作成者だけが取得できます' };
+            } else {
+                try { res = await seedLoad(c.url, same); }
+                catch (e) { res = { kind: 'error', note: '取得中にエラー：' + (e && e.message || e) }; }
+            }
+            if (res.kind === 'html') {
+                c.status = 'ok';
+                c.text = seedHtmlToText(res.html);
+                c.html = res.html;
+            } else {
+                c.status = res.kind;          // link / error
+            }
+            if (res.note) c.note = res.note;
+            done++; status();
+        }
+    }
+    try {
+        await Promise.all(Array.from({ length: Math.min(SEED_WORKERS, jobs.length) }, worker));
+        const counts = { ok: 0, link: 0, error: 0, no_url: 0, duplicate: 0 };
+        data.nodes.forEach(nd => { counts[nd.content.status] = (counts[nd.content.status] || 0) + 1; });
+        const d = new Date();
+        data.metadata.content_included = true;
+        data.metadata.content_fetched_at = d.toISOString();
+        data.metadata.content_counts = counts;
+        data.metadata.content_note =
+            'nodes[].content に実体URLの文書の中身を添えた．status は ok（本文あり）／link（参照のみ）／' +
+            'error（取得できず）／no_url（URLなし）／duplicate（same_as のノードと同じ文書）．' +
+            'text は本文のプレーンテキスト，html は描画後の本文（画像は data URL で埋め込み，' +
+            'スタイルは Shadow DOM 用に :host と .seed-root へ読み替え済み）．' +
+            '同一サイトの文書は書き出した人のログイン状態で取得している．';
+        const json = JSON.stringify(data, null, 1);
+        const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = exportFileName().replace(/\.json$/, '_content.json');
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        const mb = (blob.size / 1024 / 1024).toFixed(1);
+        const bad = counts.error;
+        showResult('コンテンツ付きJSONをダウンロードしました（ノード' + data.nodes.length +
+                   '個・本文あり' + counts.ok + '件' +
+                   (counts.link ? '・参照のみ' + counts.link + '件' : '') +
+                   (bad ? '・取得できず' + bad + '件' : '') + '・' + mb + 'MB）', !!bad);
+    } catch (e) {
+        showResult('コンテンツ付きJSONの書き出しに失敗しました：' + (e && e.message || e), true);
+    } finally {
+        exportFullBusy = false;
+        $btn.prop('disabled', false).text(btnLabel);
+    }
+}
+$('#btnExportFull').on('click', function() { exportWithContent(); });
+// =============== コンテンツの取込（文書アーカイブへ） ===============
+// 📥 JSON取込で網を取り込んだあと，content.status が ok のノードごとに
+//  1. content_store：html の data URL 画像を static/mdimgs/ に保存し，単独のHTML文書に仕立てる
+//  2. 文書アーカイブの受け口に新しい文書として登録する（公開範囲はノードに合わせる）
+//  3. set_url：取り込んだノード（同じ文書を指していた duplicate のノードも）の実体URLを付け替える
+// 失敗したノードは元のURLのまま残し，最後に一覧で知らせる。
+const DA_CREATE_URL = '/document_archive/awami_create_document';
+function postJson(url, payload) {
+    return new Promise(function(resolve) {
+        $.ajax({ url: url, method: 'POST', contentType: 'application/json',
+                 data: JSON.stringify(payload || {}),
+                 success: r => resolve(r && typeof r === 'object' ? r
+                                       : { success: false, error: 'JSONでない応答' }),
+                 error: function(xhr) {
+                     let r = null; try { r = JSON.parse(xhr.responseText); } catch (e) {}
+                     resolve({ success: false, status: xhr.status,
+                               error: (r && r.error) || ('HTTP ' + (xhr.status || '応答なし')) });
+                 } });
+    });
+}
+async function importContents(data, nodeMap, summary) {
+    const $btn = $('#btnImport');
+    const label = $btn.text();
+    $btn.prop('disabled', true).text('⏳ 文書アーカイブを確認中');
+    const probe = await postJson(DA_CREATE_URL, { probe: true });
+    if (!probe.success) {
+        $btn.prop('disabled', false).text(label);
+        loadData(false);
+        alert(summary + '\n\n文書アーカイブに受け口が無いか使えないため，文書は取り込みませんでした' +
+              '（' + probe.error + '）．ノードは元のURLのままです．');
+        return;
+    }
+    const fetched = (data.metadata && data.metadata.content_fetched_at) || '';
+    const jobs = (data.nodes || []).filter(nd => nd.content && nd.content.status === 'ok' && nd.content.html);
+    const dupOf = {};      // 先出ノードの key → 同じ文書を指していたノードの key 群
+    (data.nodes || []).forEach(function(nd) {
+        if (nd.content && nd.content.status === 'duplicate' && nd.content.same_as != null)
+            (dupOf[nd.content.same_as] = dupOf[nd.content.same_as] || []).push(nd.id);
+    });
+    let done = 0, nDocs = 0, nImgs = 0, nImgSkip = 0;
+    const failed = [];
+    for (const nd of jobs) {
+        $btn.text('⏳ 文書を取込中 ' + done + '/' + jobs.length);
+        const newId = nodeMap[String(nd.id)];
+        const title = nd.label || '（無題）';
+        try {
+            if (!newId) throw new Error('取り込んだノードが見つかりません');
+            const st = await postJson(API_BASE + 'canvas/' + CANVAS_ID + '/content_store',
+                                      { html: nd.content.html, title: title });
+            if (!st.success) throw new Error('画像の保存：' + st.error);
+            nImgs += st.images_saved || 0; nImgSkip += st.images_skipped || 0;
+            const pol = nd.access_policy && nd.access_policy !== 'inherit' ? nd.access_policy : null;
+            const da = await postJson(DA_CREATE_URL, {
+                title: title,
+                html: st.html,
+                access_policy: pol || CANVAS_POLICY,
+                access_group_ids: pol ? (nd.access_groups || []).map(g => g.id) : CANVAS_GROUP_IDS,
+                source_url: nd.content.url || nd.url || '',
+                note: 'あわみのコンテンツ付きJSONから取り込み．出所：' + (nd.content.url || nd.url || '') +
+                      (fetched ? '（取得 ' + fetched + '）' : '')
+            });
+            if (!da.success || !da.entity_url) throw new Error('文書アーカイブ：' + (da.error || 'URLが返りませんでした'));
+            nDocs++;
+            const targets = [newId].concat((dupOf[nd.id] || []).map(k => nodeMap[String(k)]).filter(Boolean));
+            for (const t of targets) {
+                const su = await postJson(API_BASE + 'node/' + t + '/set_url', { url: da.entity_url });
+                if (!su.success) throw new Error('ノードのURL付け替え：' + su.error +
+                                                 '（文書は登録済み：' + da.entity_url + '）');
+            }
+        } catch (e) {
+            failed.push('・' + title + '：' + (e && e.message || e));
+        }
+        done++;
+    }
+    $btn.prop('disabled', false).text(label);
+    loadData(false);
+    const msg = summary + '．文書' + nDocs + '件を文書アーカイブに登録，画像' + nImgs + '枚を保存' +
+                (nImgSkip ? '（保存しなかった画像' + nImgSkip + '枚はそのまま）' : '');
+    if (failed.length) {
+        alert(msg + '\n\n取り込めなかった文書が' + failed.length + '件あります．' +
+              'これらのノードは元のURLのままです．\n' + failed.join('\n'));
+    } else {
+        showResult(msg, false);
+    }
+}
 // =============== JSONインポート（取込・owner専用） ===============
 // エクスポートしたJSONをこのキャンバスに「新規追加」する。
 // ・💾 JSONエクスポート形式（awami-canvas-export）と
@@ -2098,15 +2294,28 @@ $('#importFile').on('change', function() {
                      '本を，このキャンバスに新規追加します．\n' +
                      '既存のノード・結合子には触れません（IDはすべて新規発番）．' +
                      'よろしいですか？')) return;
-        apiPost('canvas/' + CANVAS_ID + '/import', data, function(resp) {
-            loadData(false);
-            showResult('取込完了：ノード' + resp.imported_nodes + '個・結合子' +
+        // コンテンツ付きJSONなら，文書を文書アーカイブに取り込むかを尋ねる
+        const nContent = (data.nodes || []).filter(nd => nd.content && nd.content.status === 'ok').length;
+        const withContent = nContent > 0 && confirm(
+            'このファイルには文書の中身が' + nContent + '件入っています．\n' +
+            'OK：文書アーカイブに新しい文書として登録し，ノードをその文書につなぎます' +
+            '（画像は新しいファイルとして保存します）．\n' +
+            'キャンセル：網だけを取り込み，ノードは元のURLのままにします．');
+        // 網の取込には中身を送らない（サーバは読まないので，通信を軽くする）
+        const netOnly = Object.assign({}, data, {
+            nodes: (data.nodes || []).map(function(nd) {
+                const o = Object.assign({}, nd); delete o.content; return o;
+            })
+        });
+        apiPost('canvas/' + CANVAS_ID + '/import', netOnly, function(resp) {
+            const summary = '取込完了：ノード' + resp.imported_nodes + '個・結合子' +
                 resp.imported_edges + '本' +
                 (resp.added_connector_types
                     ? '・ラベル' + resp.added_connector_types + '種を自動追加' : '') +
                 (resp.skipped_edges
-                    ? '（端点不備で' + resp.skipped_edges + '本スキップ）' : ''),
-                false);
+                    ? '（端点不備で' + resp.skipped_edges + '本スキップ）' : '');
+            if (!withContent) { loadData(false); showResult(summary, false); return; }
+            importContents(data, resp.node_map || {}, summary);
         });
     };
     reader.readAsText(f, 'utf-8');

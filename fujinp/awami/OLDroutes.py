@@ -1,25 +1,4 @@
 # -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
-# SPDX-License-Identifier: AGPL-3.0-or-later
-#
-# This file is part of FUJIN-P.
-# Copyright (C) 2024-2026 Toyoaki Nishida
-#
-# FUJIN-P is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# FUJIN-P is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Source: https://github.com/nishida-toyoaki/fujin-p
-
 """awami routes - あわみ（our_meeting）"""
 import datetime
 import json
@@ -1107,266 +1086,6 @@ def api_edge_toggle_member(edge_id):
 
 
 # =========================================================
-# JSONエクスポート／インポート（owner専用）
-# エクスポート: キャンバスの全ノード・全エッジを自己完結JSONで書き出す。
-#   結合子タイプは（分類・名前・向き）を埋め込み，ID非依存＝環境間で可搬。
-#   ノードの key はエクスポート時のノードID（エッジの端点参照用の局所名）。
-# インポート: JSONの内容を「現在のキャンバスに追加」する。IDはすべて新規発番，
-#   既存ノード・エッジには一切触れない（上書きなし・削除なし）。
-#   不足する結合子タイプは自動追加（transport_awanara と同じ思想）。
-# =========================================================
-@our_meeting_bp.route('/api/canvas/<int:canvas_id>/export')
-@login_required
-def api_canvas_export(canvas_id):
-    user_id = session.get('user_id')
-    try:
-        conn = _connect()
-        cursor = conn.cursor(dictionary=True)
-        canvas, err = _require_owner(cursor, canvas_id, user_id)
-        if err:
-            return err
-        cursor.execute(
-            "SELECT id, label, url, note, x, y, access_policy "
-            "FROM awami_nodes WHERE canvas_id = %s ORDER BY id", (canvas_id,))
-        node_rows = cursor.fetchall()
-        node_groups = load_node_group_ids(cursor, [r['id'] for r in node_rows])
-        nodes = [{'key': r['id'], 'label': r['label'], 'url': r['url'] or '',
-                  'note': r['note'] or '', 'x': float(r['x']), 'y': float(r['y']),
-                  'access_policy': r['access_policy'],
-                  'access_group_ids': node_groups[r['id']]} for r in node_rows]
-        cursor.execute(
-            "SELECT e.id, e.note, e.label_x, e.label_y, "
-            "       t.category, t.name, t.directed "
-            "FROM awami_edges e "
-            "JOIN awami_connector_types t ON t.id = e.connector_type_id "
-            "WHERE e.canvas_id = %s ORDER BY e.id", (canvas_id,))
-        edge_rows = cursor.fetchall()
-        edges = []
-        if edge_rows:
-            fmt = ','.join(['%s'] * len(edge_rows))
-            cursor.execute(
-                "SELECT edge_id, node_id, role, position FROM awami_edge_members "
-                "WHERE edge_id IN (" + fmt + ") ORDER BY edge_id, role, position",
-                [e['id'] for e in edge_rows])
-            mem = {}
-            for m in cursor.fetchall():
-                mem.setdefault(m['edge_id'], []).append(m)
-            for e in edge_rows:
-                ms = mem.get(e['id'], [])
-                edges.append({
-                    'type_category': e['category'],
-                    'type_name': e['name'],
-                    'directed': bool(e['directed']),
-                    'note': e['note'] or '',
-                    'label_x': float(e['label_x']) if e['label_x'] is not None else None,
-                    'label_y': float(e['label_y']) if e['label_y'] is not None else None,
-                    'inputs': [m['node_id'] for m in ms if m['role'] == 'in'],
-                    'outputs': [m['node_id'] for m in ms if m['role'] != 'in'],
-                })
-        payload = {
-            'format': 'awami-canvas-json',
-            'version': 1,
-            'exported_at': fmt_datetime(get_jst_now()),
-            'canvas': {'name': canvas['name'],
-                       'description': canvas['description'] or ''},
-            'nodes': nodes,
-            'edges': edges,
-        }
-        return jsonify({'success': True, 'data': payload})
-    except Exception as e:
-        logging.error("awami api_canvas_export error: %s", e)
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-
-def _normalize_import_payload(data):
-    """取込JSONを共通形式 (nodes, edges) に正規化する。非対応形式は None。
-
-    受け付ける形式：
-    - 'awami-canvas-export'（キャンバス画面の💾 JSONエクスポートが生成する形式）:
-        nodes[].id を key に読み替え。access_policy 'inherit'→None。
-        access_groups [{id,name}] → group id 列。edges[].label {name,category,
-        directed} と label_position {x,y}|null。inputs/outputs は
-        [{node_id, label}] 形式
-    - 'awami-canvas-json'（サーバ書出 /export 形式）: そのまま
-    共通形式: nodes[]={key,label,url,note,x,y,access_policy,access_group_ids},
-              edges[]={type_category,type_name,directed,note,label_x,label_y,
-                       inputs[keys],outputs[keys]}
-    """
-    fmt = (data or {}).get('format')
-    if fmt == 'awami-canvas-json':
-        return (data.get('nodes') or []), (data.get('edges') or [])
-    if fmt != 'awami-canvas-export':
-        return None
-    nodes = []
-    for nd in (data.get('nodes') or []):
-        ap = nd.get('access_policy')
-        if ap in ('inherit', '', None):
-            ap = None
-        groups = [g.get('id') for g in (nd.get('access_groups') or [])
-                  if isinstance(g, dict) and g.get('id') is not None]
-        nodes.append({'key': nd.get('id'), 'label': nd.get('label'),
-                      'url': nd.get('url') or '', 'note': nd.get('note') or '',
-                      'x': nd.get('x') or 0, 'y': nd.get('y') or 0,
-                      'access_policy': ap, 'access_group_ids': groups})
-    edges = []
-    for eg in (data.get('edges') or []):
-        lab = eg.get('label') or {}
-        pos = eg.get('label_position')
-        if not isinstance(pos, dict):
-            pos = {}
-        edges.append({
-            'type_category': lab.get('category'),
-            'type_name': lab.get('name'),
-            'directed': lab.get('directed'),
-            'note': eg.get('note') or '',
-            'label_x': pos.get('x'),
-            'label_y': pos.get('y'),
-            'inputs': [m.get('node_id') for m in (eg.get('inputs') or [])
-                       if isinstance(m, dict)],
-            'outputs': [m.get('node_id') for m in (eg.get('outputs') or [])
-                        if isinstance(m, dict)],
-        })
-    return nodes, edges
-
-
-@our_meeting_bp.route('/api/canvas/<int:canvas_id>/import', methods=['POST'])
-@login_required
-def api_canvas_import(canvas_id):
-    """エクスポートJSONの内容を現在のキャンバスに新規追加する。
-
-    - 受付形式は2種（_normalize_import_payload 参照）
-    - ノード・エッジのIDはすべて新規発番（既存の上書き・削除は一切しない）
-    - エッジの端点はファイル内の key で解決（対応の取れない端点は落とし，
-      入力か出力が空になったエッジはスキップして件数を報告）
-    - 結合子タイプは（分類・名前・向き）で照合し，無ければ自動追加
-    """
-    user_id = session.get('user_id')
-    data = request.json or {}
-    normalized = _normalize_import_payload(data)
-    if normalized is None:
-        return jsonify({'success': False,
-                        'error': 'あわみのJSONエクスポート形式ではありません'
-                                 '（format: awami-canvas-export / '
-                                 'awami-canvas-json のみ受付）'}), 400
-    in_nodes, in_edges = normalized
-    try:
-        conn = _connect()
-        cursor = conn.cursor(dictionary=True)
-        canvas, err = _require_owner(cursor, canvas_id, user_id)
-        if err:
-            return err
-        now = get_jst_now()
-
-        # 結合子タイプ対応表（(分類,名前,向き) → id）。無いものは後で追加
-        cursor.execute(
-            "SELECT id, category, name, directed FROM awami_connector_types")
-        typemap = {(r['category'], r['name'], int(r['directed'] or 0)): r['id']
-                   for r in cursor.fetchall()}
-        cursor.execute(
-            "SELECT COALESCE(MAX(sort_order), 0) AS m FROM awami_connector_types")
-        next_sort = cursor.fetchone()['m']
-        added_types = 0
-
-        # --- ノード（key → 新ID の対応表を作りながら挿入）---
-        keymap = {}
-        n_nodes = 0
-        for nd in in_nodes:
-            label = (str(nd.get('label') or '')).strip() or '（無題）'
-            cursor.execute(
-                "INSERT INTO awami_nodes "
-                "(canvas_id, label, url, note, x, y, "
-                " created_by, created_at, updated_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (canvas_id, label[:200], (str(nd.get('url') or ''))[:500],
-                 str(nd.get('note') or ''),
-                 float(nd.get('x') or 0), float(nd.get('y') or 0),
-                 user_id, now, now))
-            nid = cursor.lastrowid
-            save_node_access(cursor, nid, nd.get('access_policy'),
-                             nd.get('access_group_ids'))
-            if nd.get('key') is not None:
-                keymap[nd.get('key')] = nid
-            n_nodes += 1
-
-        # --- エッジ ---
-        n_edges = 0
-        skipped = 0
-        for eg in in_edges:
-            # key解決＋順序保持の重複除去。入力と両属しているものは入力を優先
-            ins, seen = [], set()
-            for k in (eg.get('inputs') or []):
-                nid = keymap.get(k)
-                if nid and nid not in seen:
-                    ins.append(nid); seen.add(nid)
-            outs = []
-            for k in (eg.get('outputs') or []):
-                nid = keymap.get(k)
-                if nid and nid not in seen:
-                    outs.append(nid); seen.add(nid)
-            if not ins or not outs:
-                skipped += 1
-                continue
-            cat = (str(eg.get('type_category') or '')).strip() or 'その他'
-            name = (str(eg.get('type_name') or '')).strip() or '関連'
-            directed = 1 if eg.get('directed') else 0
-            tkey = (cat, name, directed)
-            if tkey not in typemap:
-                next_sort += 1
-                cursor.execute(
-                    "INSERT INTO awami_connector_types "
-                    "(category, name, directed, sort_order, is_active) "
-                    "VALUES (%s, %s, %s, %s, 1)",
-                    (cat[:50], name[:100], directed, next_sort))
-                typemap[tkey] = cursor.lastrowid
-                added_types += 1
-            lx = eg.get('label_x')
-            ly = eg.get('label_y')
-            cursor.execute(
-                "INSERT INTO awami_edges "
-                "(canvas_id, connector_type_id, note, label_x, label_y, "
-                " created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (canvas_id, typemap[tkey], str(eg.get('note') or ''),
-                 float(lx) if lx is not None else None,
-                 float(ly) if ly is not None else None, now, now))
-            eid = cursor.lastrowid
-            for pos, nid in enumerate(ins, start=1):
-                cursor.execute(
-                    "INSERT INTO awami_edge_members (edge_id, node_id, role, position) "
-                    "VALUES (%s, %s, 'in', %s)", (eid, nid, pos))
-            for pos, nid in enumerate(outs, start=1):
-                cursor.execute(
-                    "INSERT INTO awami_edge_members (edge_id, node_id, role, position) "
-                    "VALUES (%s, %s, 'out', %s)", (eid, nid, pos))
-            n_edges += 1
-
-        cursor.execute(
-            "UPDATE awami_canvases SET updated_at = %s WHERE id = %s",
-            (now, canvas_id))
-        conn.commit()
-        return jsonify({'success': True,
-                        'imported_nodes': n_nodes,
-                        # ファイル内の key（書き出し時のノードID）→ 新ノードID
-                        # （コンテンツの取り込みで使う）
-                        'node_map': {str(k): v for k, v in keymap.items()},
-                        'imported_edges': n_edges,
-                        'skipped_edges': skipped,
-                        'added_connector_types': added_types})
-    except Exception as e:
-        logging.error("awami api_canvas_import error: %s", e)
-        if 'conn' in locals():
-            conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-
-# =========================================================
 # 結合子タイプ（ラベルセット）管理：admin専用
 # 結合子タイプは全キャンバス共通（グローバル）のため、編集はシステム管理者のみ。
 # 変更は全キャンバスの表示・選択肢に即時反映される。
@@ -2387,12 +2106,153 @@ def api_plan_delete(item_id):
 
 
 # =========================================================
-# あわなら → あわみ トランスポート：2026-07-21 撤去
-# 旧あわなら（awanara_*）からの一括取込機能（POST /api/transport_awanara）は
-# 役目を終えたため，一覧画面のボタンとともに削除した（ユーザ指示）。
-# 取込履歴テーブル awami_transport_log は記録として残置。
-# 復活が必要な場合はプロジェクト保管の旧 routes.py（2026-07-21以前）を参照。
+# あわなら → あわみ トランスポート（admin専用）
+# awanara_* の6テーブルをIDを付け替えつつコピーする。
+# 結合子タイプは（分類, 名前）で対応付け、無いものはあわみ側に追加。
+# 取込済みキャンバスは awami_transport_log に記録し、二重取込を防ぐ
+# （何度実行しても未取込分だけが追加される）。
 # =========================================================
+@our_meeting_bp.route('/api/transport_awanara', methods=['POST'])
+@login_required
+def api_transport_awanara():
+    user_id = session.get('user_id')
+    if get_user_category(user_id) != 'admin':
+        return jsonify({'success': False,
+                        'error': '取り込みはシステム管理者のみ実行できます'}), 403
+    try:
+        conn = _connect()
+        cursor = conn.cursor(dictionary=True)
+
+        # あわなら側テーブルの存在確認
+        try:
+            cursor.execute("SELECT COUNT(*) AS n FROM awanara_canvases")
+            cursor.fetchone()
+        except Exception:
+            return jsonify({'success': False,
+                            'error': 'あわなら（awanara_*）のテーブルが見つかりません'}), 400
+
+        # 結合子タイプの対応表（(category, name) → awami id）。無ければ追加
+        cursor.execute("SELECT id, category, name FROM awami_connector_types")
+        awami_types = {(r['category'], r['name']): r['id'] for r in cursor.fetchall()}
+        cursor.execute(
+            "SELECT id, category, name, directed, sort_order, is_active "
+            "FROM awanara_connector_types")
+        type_map = {}
+        added_types = 0
+        for t in cursor.fetchall():
+            key = (t['category'], t['name'])
+            if key not in awami_types:
+                cursor.execute(
+                    "INSERT INTO awami_connector_types "
+                    "(category, name, directed, sort_order, is_active) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (t['category'], t['name'], t['directed'],
+                     t['sort_order'], t['is_active']))
+                awami_types[key] = cursor.lastrowid
+                added_types += 1
+            type_map[t['id']] = awami_types[key]
+
+        # 取込済みキャンバスは飛ばす
+        cursor.execute("SELECT awanara_canvas_id FROM awami_transport_log")
+        done = {r['awanara_canvas_id'] for r in cursor.fetchall()}
+
+        cursor.execute("SELECT * FROM awanara_canvases ORDER BY id")
+        src_canvases = [c for c in cursor.fetchall() if c['id'] not in done]
+
+        n_nodes = n_edges = 0
+        now = get_jst_now()
+        for c in src_canvases:
+            cursor.execute(
+                "INSERT INTO awami_canvases "
+                "(name, description, access_policy, owner_user_id, "
+                " created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
+                (c['name'], c['description'], c['access_policy'],
+                 c['owner_user_id'], c['created_at'], c['updated_at']))
+            new_cid = cursor.lastrowid
+
+            cursor.execute(
+                "SELECT group_id FROM awanara_canvas_access_groups "
+                "WHERE canvas_id = %s", (c['id'],))
+            for g in cursor.fetchall():
+                cursor.execute(
+                    "INSERT INTO awami_canvas_access_groups (canvas_id, group_id) "
+                    "VALUES (%s, %s)", (new_cid, g['group_id']))
+
+            # ノード（IDマップを作る）
+            cursor.execute(
+                "SELECT * FROM awanara_nodes WHERE canvas_id = %s ORDER BY id",
+                (c['id'],))
+            node_map = {}
+            for n in cursor.fetchall():
+                cursor.execute(
+                    "INSERT INTO awami_nodes "
+                    "(canvas_id, label, url, note, access_policy, x, y, "
+                    " created_by, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (new_cid, n['label'], n['url'], n['note'],
+                     n['access_policy'], n['x'], n['y'],
+                     n['created_by'], n['created_at'], n['updated_at']))
+                node_map[n['id']] = cursor.lastrowid
+                n_nodes += 1
+            if node_map:
+                fmt = ','.join(['%s'] * len(node_map))
+                cursor.execute(
+                    f"SELECT node_id, group_id FROM awanara_node_access_groups "
+                    f"WHERE node_id IN ({fmt})", tuple(node_map.keys()))
+                for r in cursor.fetchall():
+                    cursor.execute(
+                        "INSERT INTO awami_node_access_groups (node_id, group_id) "
+                        "VALUES (%s, %s)", (node_map[r['node_id']], r['group_id']))
+
+            # エッジと端点
+            cursor.execute(
+                "SELECT * FROM awanara_edges WHERE canvas_id = %s ORDER BY id",
+                (c['id'],))
+            for e in cursor.fetchall():
+                cursor.execute(
+                    "INSERT INTO awami_edges "
+                    "(canvas_id, connector_type_id, note, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (new_cid, type_map.get(e['connector_type_id']),
+                     e['note'], e['created_at'], e['updated_at']))
+                new_eid = cursor.lastrowid
+                n_edges += 1
+                cursor.execute(
+                    "SELECT node_id, position FROM awanara_edge_members "
+                    "WHERE edge_id = %s ORDER BY position", (e['id'],))
+                for m in cursor.fetchall():
+                    if m['node_id'] in node_map:
+                        # 旧モデル（主＝position1／従＝それ以外）を
+                        # 入力／出力ロールへ読み替えて取り込む
+                        cursor.execute(
+                            "INSERT INTO awami_edge_members "
+                            "(edge_id, node_id, role, position) "
+                            "VALUES (%s, %s, %s, %s)",
+                            (new_eid, node_map[m['node_id']],
+                             'in' if m['position'] == 1 else 'out',
+                             m['position']))
+
+            cursor.execute(
+                "INSERT INTO awami_transport_log "
+                "(awanara_canvas_id, awami_canvas_id, imported_at) "
+                "VALUES (%s, %s, %s)", (c['id'], new_cid, now))
+
+        conn.commit()
+        return jsonify({'success': True,
+                        'imported_canvases': len(src_canvases),
+                        'imported_nodes': n_nodes,
+                        'imported_edges': n_edges,
+                        'added_connector_types': added_types,
+                        'skipped_already': len(done)})
+    except Exception as e:
+        logging.error("awami transport_awanara error: %s", e)
+        if 'conn' in locals():
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 # =========================================================
@@ -2623,230 +2483,3 @@ def api_plans_detail(canvas_id):
     finally:
         cursor.close()
         conn.close()
-
-
-# =========================================================
-# 種文書を展開（ノード統合文書生成パネルから）
-# キャンバスのノードが指す文書の本文を集めて一つのHTMLにまとめる機能のうち，
-# 他サイト（別ホスト）のURLだけをサーバ側で取得する中継口．同一サイトの文書は
-# ブラウザが閲覧者のログイン状態のまま直接取得するので，ここは通らない．
-# 乱用を避けるため，キャンバスのowner本人が，そのキャンバスのノードに
-# 登録済みのURLだけを取得できる．
-# =========================================================
-import urllib.request
-import urllib.error
-import urllib.parse
-
-SEED_FETCH_MAX_BYTES = 10 * 1024 * 1024
-SEED_FETCH_TIMEOUT = 20
-
-
-def _decode_html(raw, content_type):
-    """Content-Type → <meta charset> → utf-8 の順で文字コードを決めて復号する。"""
-    m = re.search(r'charset=([\w\-]+)', content_type or '', re.IGNORECASE)
-    enc = m.group(1) if m else None
-    if not enc:
-        m = re.search(rb'<meta[^>]+charset=["\']?([\w\-]+)', raw[:4096], re.IGNORECASE)
-        enc = m.group(1).decode('ascii', 'ignore') if m else 'utf-8'
-    try:
-        return raw.decode(enc, errors='replace')
-    except LookupError:
-        return raw.decode('utf-8', errors='replace')
-
-
-@our_meeting_bp.route('/api/canvas/<int:canvas_id>/seed_fetch', methods=['POST'])
-@login_required
-def api_seed_fetch(canvas_id):
-    data = request.json or {}
-    url = (data.get('url') or '').strip()
-    if not re.match(r'^https?://', url, re.IGNORECASE):
-        return jsonify({'success': False, 'error': 'http(s) の絶対URLのみ取得できます'}), 400
-    conn = _connect()
-    try:
-        cursor = conn.cursor(dictionary=True)
-        canvas, err = _require_owner(cursor, canvas_id, session.get('user_id'))
-        if err:
-            return err
-        cursor.execute("SELECT COUNT(*) AS n FROM awami_nodes WHERE canvas_id = %s AND url = %s",
-                       (canvas_id, url))
-        if not cursor.fetchone()['n']:
-            return jsonify({'success': False,
-                            'error': 'このキャンバスのノードに登録されたURLではありません'}), 403
-    finally:
-        cursor.close()
-        conn.close()
-
-    req = urllib.request.Request(url, headers={
-        'User-Agent': 'FUJIN-P awami seed_fetch',
-        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8'})
-    try:
-        with urllib.request.urlopen(req, timeout=SEED_FETCH_TIMEOUT) as res:
-            final_url = res.geturl()
-            status = res.status
-            ctype = res.headers.get('Content-Type', '')
-            raw = res.read(SEED_FETCH_MAX_BYTES + 1)
-    except urllib.error.HTTPError as e:
-        return jsonify({'success': True, 'status': e.code, 'final_url': url,
-                        'content_type': '', 'html': None})
-    except Exception as e:
-        logging.warning("awami seed_fetch error %s: %s", url, e)
-        return jsonify({'success': False, 'error': '取得に失敗しました（' + str(e)[:120] + '）'}), 502
-    if len(raw) > SEED_FETCH_MAX_BYTES:
-        return jsonify({'success': True, 'status': status, 'final_url': final_url,
-                        'content_type': ctype, 'html': None, 'too_large': True})
-    html = None
-    if 'html' in ctype.lower() or (not ctype and raw.lstrip()[:1] == b'<'):
-        html = _decode_html(raw, ctype)
-    return jsonify({'success': True, 'status': status, 'final_url': final_url,
-                    'content_type': ctype, 'html': html})
-
-
-SKELETON_PROMPT_FILE = 'skeleton_prompt.md'
-
-
-@our_meeting_bp.route('/canvas/<int:canvas_id>/skeleton')
-@login_required
-def canvas_skeleton(canvas_id):
-    """スケルトンに基づく文書生成（作業の手引き＋スケルトン依頼／スケルトンで展開，講師／司会者のみ）"""
-    canvas = _canvas_owner_or_none(canvas_id, session.get('user_id'))
-    if canvas is None:
-        return "スケルトンに基づく文書生成は講師／司会者（キャンバス作成者）のみ開けます", 403
-    return render_template('awami/canvas_skeleton.html', canvas=canvas)
-
-
-@our_meeting_bp.route('/api/skeleton_prompt')
-@login_required
-def api_skeleton_prompt():
-    """スケルトン作成の依頼文（アプリ直下の skeleton_prompt.md）を返す。"""
-    import os
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), SKELETON_PROMPT_FILE)
-    try:
-        with open(path, encoding='utf-8') as f:
-            text = f.read()
-    except OSError:
-        return jsonify({'success': False, 'error': SKELETON_PROMPT_FILE + ' が見つかりません'}), 404
-    return jsonify({'success': True, 'text': text})
-
-
-# =========================================================
-# コンテンツ付きJSONの取込（owner専用）
-# 📦 コンテンツ付きJSON の nodes[].content.html を，このサイトの文書として
-# 取り込むための2つの口．文書の登録そのものは文書アーカイブの受け口
-# （POST /document_archive/awami_create_document）をブラウザから呼ぶ．
-#   content_store : html の中の data URL 画像を static/mdimgs/ に新しい
-#                   ファイルとして保存し，参照をその公開URLに書き換え，
-#                   単独で開ける一つのHTML文書に仕立てて返す．
-#                   画像はCoRePo・マイMDノートと同じく，推測されにくい名前の
-#                   公開URL（URLを知る人だけが見られる）で置く．
-#   set_url       : 取り込んだノードの実体URLを，登録した文書のURLに付け替える．
-# =========================================================
-import base64
-import os
-import uuid
-from flask import current_app
-
-CONTENT_IMG_DIR = 'mdimgs'                      # static 配下の置き場（CoRePoと共用）
-CONTENT_IMG_MAX = 8 * 1024 * 1024               # 1枚の上限（デコード後）
-CONTENT_IMG_EXT = {'png': 'png', 'jpeg': 'jpg', 'jpg': 'jpg',
-                   'gif': 'gif', 'webp': 'webp'}  # SVGは保存しない（data URLのまま残す）
-_DATA_IMG_RE = re.compile(
-    r"""(src\s*=\s*)(["'])data:image/([a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)\2""")
-
-
-def _content_full_html(title, body_html):
-    """Shadow DOM 用に読み替えたスタイル（:host）を文書全体に効く形（:root）に戻し，
-    単独で開けるHTML文書に包む。"""
-    body_html = re.sub(r':host(?![\w-])', ':root', body_html)
-    safe_title = (title or '').replace('&', '&amp;').replace('<', '&lt;')
-    return ('<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-            '<title>' + safe_title + '</title>\n</head>\n<body style="margin:0;">\n' +
-            body_html + '\n</body>\n</html>\n')
-
-
-@our_meeting_bp.route('/api/canvas/<int:canvas_id>/content_store', methods=['POST'])
-@login_required
-def api_content_store(canvas_id):
-    data = request.json or {}
-    html = data.get('html') or ''
-    title = (data.get('title') or '').strip()
-    if not html:
-        return jsonify({'success': False, 'error': '本文がありません'}), 400
-    conn = _connect()
-    try:
-        cursor = conn.cursor(dictionary=True)
-        canvas, err = _require_owner(cursor, canvas_id, session.get('user_id'))
-        if err:
-            return err
-    finally:
-        cursor.close()
-        conn.close()
-
-    root = request.url_root.rstrip('/')
-    stamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
-    st = {'saved': 0, 'skipped': 0, 'cache': {}}
-
-    def repl(m):
-        ext = CONTENT_IMG_EXT.get(m.group(3).lower())
-        if not ext:
-            st['skipped'] += 1
-            return m.group(0)
-        b64 = re.sub(r'\s+', '', m.group(4))
-        if b64 in st['cache']:                  # 同じ画像は1回だけ保存する
-            return m.group(1) + m.group(2) + st['cache'][b64] + m.group(2)
-        try:
-            raw = base64.b64decode(b64, validate=True)
-        except Exception:
-            st['skipped'] += 1
-            return m.group(0)
-        if len(raw) > CONTENT_IMG_MAX:
-            st['skipped'] += 1
-            return m.group(0)
-        img_dir = os.path.join(current_app.static_folder, CONTENT_IMG_DIR)
-        os.makedirs(img_dir, exist_ok=True)
-        fname = '%s_awami_%s_%d.%s' % (uuid.uuid4().hex[:8], stamp, st['saved'] + 1, ext)
-        with open(os.path.join(img_dir, fname), 'wb') as f:
-            f.write(raw)
-        url = root + url_for('static', filename=CONTENT_IMG_DIR + '/' + fname)
-        st['cache'][b64] = url
-        st['saved'] += 1
-        return m.group(1) + m.group(2) + url + m.group(2)
-
-    try:
-        body = _DATA_IMG_RE.sub(repl, html)
-    except Exception as e:
-        logging.error("awami api_content_store error: %s", e)
-        return jsonify({'success': False,
-                        'error': '画像の保存に失敗しました（' + str(e)[:120] + '）'}), 500
-    return jsonify({'success': True, 'html': _content_full_html(title, body),
-                    'images_saved': st['saved'], 'images_skipped': st['skipped']})
-
-
-@our_meeting_bp.route('/api/node/<int:node_id>/set_url', methods=['POST'])
-@login_required
-def api_node_set_url(node_id):
-    url = ((request.json or {}).get('url') or '').strip()
-    if not url:
-        return jsonify({'success': False, 'error': 'URLがありません'}), 400
-    try:
-        conn = _connect()
-        cursor = conn.cursor(dictionary=True)
-        row, err = _node_owner_check(cursor, node_id, session.get('user_id'))
-        if err:
-            return err
-        now = get_jst_now()
-        cursor.execute("UPDATE awami_nodes SET url = %s, updated_at = %s WHERE id = %s",
-                       (url[:500], now, node_id))
-        cursor.execute("UPDATE awami_canvases SET updated_at = %s WHERE id = %s",
-                       (now, row['canvas_id']))
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        logging.error("awami api_node_set_url error: %s", e)
-        if 'conn' in locals():
-            conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
