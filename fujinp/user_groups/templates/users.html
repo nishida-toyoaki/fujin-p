@@ -1,0 +1,339 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page_title }}</title>
+<style>
+  :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fafbfc; font-size:14px; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { margin-left:12px; color:var(--acc); text-decoration:none; font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:4px; }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  #reqTabs .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .bar input[type=text], .bar input[type=date], .bar input[type=search] { padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+  .bar .sp { flex:1; }
+  .btn { border:1px solid var(--line); background:#fff; padding:6px 12px; cursor:pointer; border-radius:4px; font-size:13px; }
+  .btn.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btn.warn { color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .summary { padding:6px 16px; color:var(--sub); font-size:12px; }
+  .wrap { padding:0 16px 8px; overflow:auto; }   /* 高さは JS で画面内に収め，横スクロールバーを常に見せる */
+  table.grid { border-collapse:separate; border-spacing:0; min-width:100%; background:#fff; }
+  table.grid th, table.grid td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:4px 6px; vertical-align:top; }
+  table.grid th { background:var(--head); position:sticky; top:0; z-index:5; text-align:left; white-space:nowrap; }
+  table.grid th:first-child, table.grid td:first-child { position:sticky; left:0; background:#fff; z-index:6; border-left:1px solid var(--line); min-width:260px; max-width:420px; }
+  table.grid th:first-child { z-index:7; background:var(--head); }
+  td.unit { white-space:normal; }
+  td.unit .nm { cursor:default; }
+  td.unit .note { color:var(--sub); font-size:11px; margin-left:6px; }
+  tr.d0 td { background:#f3f6fa; font-weight:600; }
+  tr.d1 td { font-weight:500; }
+  tr.d0 td:first-child { background:#f3f6fa; }
+  .ind { display:inline-block; }
+  .chip { display:inline-block; margin:1px 4px 1px 0; padding:1px 7px; border-radius:10px; border:1px solid #b8bec6; background:#e4e7eb; color:#555; font-size:13px; white-space:nowrap; }
+  .chip.res { border-color:var(--acc); background:#e8f0fb; color:var(--ink); }
+  .chip.vac { border:1px dotted #c9ced5; color:#aab; background:#fff; }
+  .chip.hit { outline:2px solid #f6ad55; }
+  .editing .chip { cursor:pointer; }
+  .editing .chip:hover { background:#ffe9c7; }
+  .editing td.unit .nm { cursor:pointer; text-decoration:underline dotted; }
+  .editing th.role { cursor:pointer; }
+  .add { display:none; color:var(--acc); cursor:pointer; font-size:12px; margin-left:4px; }
+  .editing td:hover .add { display:inline; }
+  tr.hide { display:none; }
+  tr.dim td { opacity:.55; }
+  .empty { padding:30px; color:var(--sub); }
+  /* modal */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.on { display:flex; }
+  .md { background:#fff; border-radius:8px; padding:18px 20px; width:520px; max-width:95vw; max-height:90vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+  .md > *:not(.foot) { flex:0 0 auto; }
+  .md .foot { position:sticky; bottom:-18px; margin-left:-20px; margin-right:-20px; margin-bottom:-18px; padding:10px 20px; background:#fff; border-top:1px solid var(--line); z-index:2; }
+  .md h2 { font-size:16px; margin:0 0 12px; }
+  .md label { display:block; font-size:12px; color:var(--sub); margin-top:8px; }
+  .md input[type=text], .md input[type=date], .md input[type=number], .md select, .md textarea { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+  .md .row { display:flex; gap:10px; }
+  .md .row > div { flex:1; }
+  .md .foot { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .md .foot .left { margin-right:auto; }
+  .imp pre { background:#f6f8fa; padding:10px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  .person { padding:8px 16px; }
+  .person table { border-collapse:collapse; background:#fff; }
+  .person td, .person th { border:1px solid var(--line); padding:3px 8px; font-size:13px; }
+  .nm-table { border-collapse:collapse; width:100%; }
+  .nm-table th, .nm-table td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; vertical-align:middle; }
+  .nm-table select { max-width:220px; padding:3px; }
+  .nm-table .btn { padding:3px 8px; font-size:12px; }
+  .cand { padding:4px 8px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .cand:hover { background:#e8f0fb; }
+  .cand small { color:var(--sub); }
+  .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
+  .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
+</style>
+<style>
+  .ov.inline { position:static; display:none; background:none; z-index:auto; }
+  .ov.inline.on { display:block; }
+  .ov.inline > .md { width:auto !important; max-width:none; max-height:none; box-shadow:none; border:1px solid var(--line); margin:12px 16px; border-radius:6px; }
+  .ov.inline > .md > .foot { display:none; }
+  .ov.inline h2 { font-size:15px; }
+  .card2 { background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 16px; margin:12px 16px; }
+  .card2 h2 { font-size:15px; margin:0 0 8px; }
+  .card2 p { font-size:12px; color:var(--sub); margin:0 0 8px; }
+</style>
+</head><body>
+{% include '_nav.html' %}
+<div class="bar">
+  <span class="tabs" id="utabs">
+    <button data-t="ovRoster" class="on">名簿</button>
+    <button data-t="ovNames">名寄せ</button>
+    <button data-t="ovReq">登録申請とブラックリスト<span id="reqBadge" style="display:none;background:var(--bad);color:#fff;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px"></span></button>
+  </span>
+</div>
+<div class="ov inline" id="ovRoster"><div class="md" style="width:960px">
+  <h2>アカウント名簿（人 → ログインできる人）</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．ここで人を足す・直す・消すと，users に直ちに反映されます（自分自身と最後の admin は降格・削除しません）．メール未記入の人は先頭に出ます（右端の「編集」で直せます）．「発行」を押すと，有効期間内でまだ users にいない人を approved_users に写し，期限切れの人を approved_users から外します．approved_users にある人は初回ログインでアカウントが作られます．「users まで作る」を付けると，ログインを待たずに users を直接作ります（実験段階向け）．既にある users は触りません（退職者の停止はユーザ管理で）．発行後は名寄せを自動で掛け直します．Google を使わない人には 🔑 でパスワード設定メールを送れます（本人が「パスワードを忘れた方」から自分で設定することもできます）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <span id="rosterSummary" style="font-size:13px"></span>
+    <input type="search" id="rosterFilter" placeholder="絞り込み" style="padding:4px 8px;border:1px solid var(--line);border-radius:4px">
+    <button class="btn" id="rosterSortReset" title="所属順（既定）に戻す">並び順を戻す</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="rosterAdd">＋人</button>
+    <label style="font-size:12px"><input type="checkbox" id="rosterCreateUsers"> users まで作る</label>
+    <label style="font-size:12px"><input type="checkbox" id="rosterDeactivate"> 期限切れの users を無効化</label>
+    <button class="btn pri" id="rosterPublish">発行</button>
+  </div>
+  <div id="rosterList" style="max-height:60vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovRoster')">閉じる</button></div>
+</div></div>
+
+<div class="ov inline" id="ovNames"><div class="md" style="width:900px">
+  <h2>名寄せ（氏名 → ユーザ）</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">自動で紐づくのは，users の氏名と完全一致するもの（空白・括弧は無視）と，名簿の氏名からメール経由で一意に決まるものだけです．姓だけの表記は曖昧なので自動では紐づけません．ここで人を選んで「紐づけ」を押すと，その氏名の発令をまとめて結びつけます．users に登録のない外部の方は「対象外」にすると一覧から消えます（下の一覧で解除できます）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <span id="namesSummary" style="font-size:13px"></span>
+    <label style="font-size:12px;margin-left:12px"><input type="checkbox" id="namesShowIgnored"> 対象外も表示</label>
+    <span style="flex:1"></span>
+    <button class="btn" id="namesAuto">自動名寄せを実行</button>
+  </div>
+  <div id="namesList" style="max-height:45vh;overflow:auto"></div>
+  <h2 style="margin-top:14px">対象外にした氏名</h2>
+  <div id="exclList" style="max-height:25vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovNames');load()">閉じる</button></div>
+</div></div>
+
+<div class="ov inline" id="ovReq"><div class="md" style="width:960px">
+  <h2>登録申請とブラックリスト</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">名簿にない人からの登録申請です．「承認」は名簿に載せて users を直ちに作ります（区分は申請どおり，ここで変えられます）．「ブラックリスト」はその後の申請とログインを止めます（users があれば無効化）．</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="reqTabs">
+    <button class="btn on" data-st="pending">承認待ち <span></span></button>
+    <button class="btn" data-st="approved">承認済 <span></span></button>
+    <button class="btn" data-st="rejected">却下 <span></span></button>
+    <button class="btn" data-st="blacklisted">ブラックリスト <span></span></button>
+    <span style="flex:1"></span>
+    <button class="btn" id="blAdd">＋ブラックリストに追加</button>
+  </div>
+  <div id="reqList" style="max-height:60vh;overflow:auto"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovReq')">閉じる</button></div>
+</div></div>
+
+<div class="ov" id="ovPerson"><div class="md">
+  <h2 id="personTitle">人</h2>
+  <label>氏名</label><input type="text" id="pName">
+  <label>メール（空なら名簿だけ．users は作られない）</label><input type="text" id="pEmail">
+  <div class="row"><div><label>区分</label><select id="pCat"><option value="regular">regular</option><option value="guest">guest</option><option value="admin">admin</option></select></div><div><label>所属</label><input type="text" id="pAff"></div></div>
+  <div class="row"><div><label>開始</label><input type="date" id="pFrom"></div><div><label>終了</label><input type="date" id="pUntil"></div></div>
+  <label>備考</label><input type="text" id="pNote">
+  <div class="foot"><button class="btn" onclick="hide('ovPerson')">閉じる</button><button class="btn pri" id="pSave">保存（users にも反映）</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+const API = '{{ url_for("user_groups.ledger_tree") }}'.replace(/\/tree$/, '');
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id){ $(id).classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null, form=null){
+  const opt = {method, headers:{}};
+  if (form) opt.body = form; else if (body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+  const r = await fetch(url, opt); const j = await r.json().catch(()=>({success:false,error:'応答が不正です'}));
+  if (!j.success) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
+}
+function asOfParam(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
+
+function load(){}      // この画面に台帳の大表はない
+let namesUsers = [];
+  // 名寄せ
+  const HOW = {exact:'完全一致', alias:'別名（旧）', person:'名簿経由', ignore:'対象外', post:'充て職'};
+  async function loadNames(){
+    $('namesList').innerHTML = '読み込み中…';
+    try{
+      const r = await api(`${API}/names?show_ignored=${$('namesShowIgnored').checked ? 1 : 0}`);
+      namesUsers = r.users;
+      const total = r.unresolved.reduce((a,x)=>a+x.count,0);
+      const autoN = r.unresolved.filter(x=>x.auto && x.auto!=='ignore' && x.auto!=='post').length;
+      $('namesSummary').textContent = `未解決 ${r.unresolved.length} 名（発令 ${total} 件）｜うち自動判定できるもの ${autoN} 名` + (r.ignored_hidden ? `｜対象外 ${r.ignored_hidden} 名は非表示` : '');
+      const userOpts = r.users.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
+      if (!r.unresolved.length) $('namesList').innerHTML = '<div class="empty">未解決の氏名はありません</div>';
+      else $('namesList').innerHTML = '<table class="nm-table"><tr><th>氏名</th><th>件数</th><th>種別</th><th>自動判定</th><th>ユーザ</th><th></th></tr>' +
+        r.unresolved.map(x => {
+          const cand = x.candidates.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
+          const sel = `<select data-name="${esc(x.name)}"><option value="">（選択）</option>${cand ? `<optgroup label="候補">${cand}</optgroup>` : ''}<optgroup label="全ユーザ">${userOpts}</optgroup></select>`;
+          const auto = x.auto ? `${HOW[x.auto]}${x.auto_user ? '→'+esc(x.auto_user) : ''}` : '<span style="color:var(--sub)">なし</span>';
+          return `<tr><td><b>${esc(x.name)}</b></td><td>${x.count}</td><td>${esc(x.kinds.join('・'))}</td><td>${auto}</td><td>${sel}</td>` +
+                 `<td style="white-space:nowrap"><button class="btn pri" data-link="${esc(x.name)}">紐づけ</button> <button class="btn" data-ignore="${esc(x.name)}">対象外</button></td></tr>`;
+        }).join('') + '</table>';
+      $('exclList').innerHTML = r.excluded.length ? '<table class="nm-table"><tr><th>氏名</th><th>備考</th><th></th></tr>' +
+        r.excluded.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.note)}</td><td><button class="btn" data-exdel="${a.id}">対象外を解除</button></td></tr>`).join('') + '</table>'
+        : '<div style="color:var(--sub);font-size:12px">ありません</div>';
+    }catch(e){ $('namesList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_person_aliases が未作成なら，先に作成してください．</small>'; }
+  }
+  $('namesShowIgnored').onchange = loadNames;
+  $('namesAuto').onclick = async () => { try{ const r = await api(`${API}/names/auto`, 'POST', {}); toast(`${r.checked}件を点検，${r.resolved}件を紐づけ（完全一致 ${r.by.exact}・別名 ${r.by.alias}・先頭一致 ${r.by.prefix}）`, 4000); loadNames(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+  $('ovNames').addEventListener('click', async ev => {
+    const t = ev.target;
+    try{
+      if (t.dataset.link !== undefined){
+        const sel = $('ovNames').querySelector(`select[data-name="${CSS.escape(t.dataset.link)}"]`);
+        if (!sel.value){ toast('ユーザを選んでください'); return; }
+        const u = namesUsers.find(x => x.id == sel.value);
+        if (!confirm(`「${t.dataset.link}」の発令を users #${sel.value} ${u ? u.full_name : ''} に紐づけます．よろしいですか`)) return;
+        const r = await api(`${API}/names/link`, 'POST', {name:t.dataset.link, user_id:+sel.value}); toast(`${r.linked}件を紐づけました`); loadNames(); load();
+      } else if (t.dataset.ignore !== undefined){
+        await api(`${API}/exclusions`, 'POST', {name:t.dataset.ignore, note:'対象外'}); toast(`「${t.dataset.ignore}」を対象外に`); loadNames();
+      } else if (t.dataset.exdel !== undefined){
+        await api(`${API}/exclusions/${t.dataset.exdel}`, 'DELETE'); toast('対象外を解除しました'); loadNames();
+      }
+    }catch(e){ toast('失敗：'+e.message, 4000); }
+  });
+
+  // 名簿
+  let rosterItems = [], rosterUnreg = [];
+  let rosterSort = {key:'default', dir:1};
+  function renderRoster(){
+    const q = $('rosterFilter').value.trim().toLowerCase();
+    const ORD2 = i => (!i.email ? 0 : 1);
+    const ORD = {'教員':0,'事務職員':1,'特命':2,'客員':3,'名誉':4,'教職員':5,'役員・委員':6,'福知山市':7,'学外':8,'学生':9,'テスト用':10};
+    const cmp = {
+      default: (a,b) => (ORD2(a) - ORD2(b)) || ((ORD[a.affiliation] ?? 8) - (ORD[b.affiliation] ?? 8)) || a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
+      name:    (a,b) => a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
+      email:   (a,b) => a.email.localeCompare(b.email) || a.full_name.localeCompare(b.full_name,'ja'),
+      user:    (a,b) => ((a.user_id ?? Infinity) - (b.user_id ?? Infinity)) || a.full_name.localeCompare(b.full_name,'ja'),
+    }[rosterSort.key];
+    const rows = rosterItems.filter(i => !q || (i.full_name+' '+i.email+' '+i.affiliation+' '+i.note).toLowerCase().includes(q))
+      .sort((a,b) => cmp(a,b) * rosterSort.dir);
+    const arrow = k => rosterSort.key===k ? (rosterSort.dir===1 ? ' ▲' : ' ▼') : '';
+    const th = (k,label) => `<th data-sort="${k}" style="cursor:pointer;white-space:nowrap" title="クリックで並べ替え">${label}${arrow(k)}</th>`;
+    const st = i => !i.email ? '<span style="color:var(--bad)">メール未記入</span>' : !i.active ? '<span style="color:var(--sub)">期限外</span>' : i.user_id ? (i.user_inactive ? '<span style="color:var(--bad)">users（停止中）</span>' : `<span style="color:var(--acc)">users #${i.user_id}</span>${i.has_password ? '' : '<small style="color:var(--sub)">（パスワード未設定）</small>'}`) : i.approved ? '発行済（初回ログイン待ち）' : '<span style="color:var(--warn)">未発行</span>';
+    const uq = rosterUnreg.filter(u => !q || (u.full_name+' '+u.email+' '+u.affiliation).toLowerCase().includes(q));
+    const unregHtml = uq.length ? `<div style="border:1px solid var(--warn);background:#fff7ed;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="color:var(--warn)">台帳未登録のアカウント ${uq.length} 件</b><span style="font-size:12px;color:var(--sub)">users にあって名簿に無い人です．台帳が正なので，台帳登録してください（users の氏名・メール・区分・所属をそのまま名簿に写します．users は変わりません）．</span><span style="flex:1"></span>${uq.length > 1 ? `<button class="btn pri" data-padoptall="1">すべて台帳登録</button>` : ''}</div>
+      <table class="nm-table">${uq.map(u => `<tr><td><b>${esc(u.full_name)}</b></td><td>${esc(u.email) || '<span style="color:var(--bad)">メール空（登録不可）</span>'}</td><td>${esc(u.category)}</td><td>${esc(u.affiliation)}</td><td><span style="color:var(--acc)">users #${u.user_id}</span>${u.inactive ? '<small style="color:var(--bad)">（停止中）</small>' : ''}</td><td style="white-space:nowrap">${u.email ? `<button class="btn pri" data-padopt="${u.user_id}">台帳登録</button>` : ''}</td></tr>`).join('')}</table></div>` : '';
+    $('rosterList').innerHTML = unregHtml + (rows.length ? `<table class="nm-table"><tr>${th('name','氏名')}${th('email','メール')}<th>区分</th><th>所属</th><th>期間</th>${th('user','状態（users ID）')}<th>備考</th><th></th></tr>` +
+      rows.map(i => `<tr><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${esc(i.from)}〜${esc(i.until)}</td><td>${st(i)}</td><td>${esc(i.note)}</td><td style="white-space:nowrap"><button class="btn" data-pedit="${i.id}" title="この行を編集（氏名・メール・区分・所属・期間・備考）">編集</button> ${i.user_id && !i.user_inactive ? `<button class="btn" data-pmail="${i.id}" title="パスワード設定メールを送る">🔑</button> ` : ''}<button class="btn" data-pdel="${i.id}">削除</button></td></tr>`).join('') + '</table>'
+      : '<div class="empty">名簿が空です．「＋人」で登録するか，管理タブのサイト移行用の取り込みで入れてください．</div>');
+    $('rosterList').querySelectorAll('th[data-sort]').forEach(h => h.onclick = () => {
+      const k = h.dataset.sort;
+      if (rosterSort.key === k) rosterSort.dir = -rosterSort.dir; else rosterSort = {key:k, dir:1};
+      renderRoster();
+    });
+  }
+  async function loadRoster(){
+    $('rosterList').innerHTML = '読み込み中…';
+    try{ const r = await api(`${API}/roster`); rosterItems = r.items; rosterUnreg = r.unregistered || []; const c = r.counts;
+      $('rosterSummary').textContent = `名簿 ${c.total} 人（有効 ${c.active}）｜users あり ${c.users}・発行済 ${c.approved}・未発行 ${c.pending}・メール未記入 ${c.no_email}` + (c.unregistered ? `｜台帳未登録 ${c.unregistered}` : ''); renderRoster();
+    }catch(e){ $('rosterList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_persons が未作成なら，先に作成してください．</small>'; }
+  }
+  $('rosterFilter').oninput = renderRoster;
+  $('rosterSortReset').onclick = () => { rosterSort = {key:'default', dir:1}; renderRoster(); };
+  $('rosterPublish').onclick = async () => { const cu = $('rosterCreateUsers').checked;
+    if (!confirm('台帳を正として発行します．users にある人は 氏名・区分・所属 を名簿に合わせ' + (cu ? '，無い人は users を作り' : '，無い人は approved_users に写し') + '，期限切れの人は approved_users から外し' + ($('rosterDeactivate').checked ? '，その users を無効化し' : '') + 'ます．よろしいですか')) return;
+    try{ const r = await api(`${API}/roster/publish`, 'POST', {create_users: cu, deactivate_expired: $('rosterDeactivate').checked});
+      toast(`発行：users作成 ${r.users_created}・users更新 ${r.users_updated}・無効化 ${r.users_deactivated}・approved追加 ${r.added}・更新 ${r.updated}・削除 ${r.removed}｜名寄せ ${r.linked}件` + ((r.pids_linked && (r.pids_linked.person||r.pids_linked.group)) ? `｜永続IDの付け直し 人 ${r.pids_linked.person}・グループ ${r.pids_linked.group}` : '') + (r.warnings.length ? '｜' + r.warnings.join('，') : ''), 8000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
+  $('ovRoster').addEventListener('click', async ev => { const t = ev.target;
+    if (t.dataset.padopt !== undefined || t.dataset.padoptall !== undefined){
+      const ids = t.dataset.padopt !== undefined ? [Number(t.dataset.padopt)] : rosterUnreg.filter(u => u.email).map(u => u.user_id);
+      const who = ids.length === 1 ? (() => { const u = rosterUnreg.find(x => x.user_id === ids[0]); return `${u.full_name}（${u.email}，${u.category}）`; })() : `${ids.length} 人`;
+      if (!confirm(`${who} を台帳（名簿）に登録します．よろしいですか`)) return;
+      try{ const r = await api(`${API}/roster/adopt`, 'POST', {user_ids: ids}); toast(`台帳登録 ${r.adopted.length} 件` + (r.skipped.length ? `・見送り ${r.skipped.length} 件` : '') + (r.linked ? `｜名寄せ ${r.linked}件` : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+      return; }
+    if (t.dataset.pedit !== undefined){ openPerson(rosterItems.find(x => x.id == t.dataset.pedit)); return; }
+    if (t.dataset.pmail !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pmail); if (!confirm(`${i.full_name}（${i.email}）にパスワード設定メールを送りますか`)) return; try{ await api(`${API}/roster/${t.dataset.pmail}/password_mail`, 'POST', {}); toast('送信しました'); }catch(e){ toast('失敗：'+e.message, 5000); } return; }
+    if (t.dataset.pdel !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pdel);
+      let withUser = false;
+      if (i.user_id){ withUser = confirm(`${i.full_name} を名簿から消します．users #${i.user_id} も削除（論理削除・ログイン不可）しますか？\nOK＝users も削除　キャンセル＝名簿だけ`); }
+      else if (!confirm(`${i.full_name} を名簿から消しますか`)) return;
+      try{ const r = await api(`${API}/roster/${t.dataset.pdel}?with_user=${withUser?1:0}`, 'DELETE'); toast(r.user_action==='deleted' ? 'users も削除しました' : '名簿から消しました'); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); } } });
+  // 登録申請
+  let reqItems = [], reqSt = 'pending';
+  async function loadReq(){
+    $('reqList').innerHTML = '読み込み中…';
+    try{ const r = await api(`${API}/requests`); reqItems = r.items;
+      document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.querySelector('span').textContent = r.counts[b.dataset.st] || 0);
+      renderReq();
+    }catch(e){ $('reqList').innerHTML = '失敗：' + esc(e.message); }
+  }
+  function renderReq(){
+    const rows = reqItems.filter(i => i.status === reqSt);
+    const acts = i => reqSt==='pending' ? `<select data-cat="${i.id}"><option value="regular" ${i.category==='regular'?'selected':''}>regular</option><option value="guest" ${i.category==='guest'?'selected':''}>guest</option><option value="admin" ${i.category==='admin'?'selected':''}>admin</option></select> <button class="btn pri" data-act="approve" data-id="${i.id}">承認</button> <button class="btn" data-act="reject" data-id="${i.id}">却下</button> <button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`
+      : reqSt==='blacklisted' ? `<button class="btn" data-act="unblock" data-id="${i.id}">解除</button>`
+      : `<button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`;
+    $('reqList').innerHTML = rows.length ? '<table class="nm-table"><tr><th>申請日</th><th>氏名</th><th>メール</th><th>区分</th><th>所属</th><th>状態</th><th>メモ</th><th></th></tr>' +
+      rows.map(i => `<tr><td>${esc(i.requested_at)}</td><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${i.in_users ? '<span style="color:var(--acc)">users あり</span>' : i.in_roster ? '名簿あり' : ''}</td><td>${esc(i.note)}</td><td style="white-space:nowrap">${acts(i)}</td></tr>`).join('') + '</table>'
+      : '<div class="empty">ありません</div>';
+  }
+  document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.onclick = () => { document.querySelectorAll('#reqTabs button[data-st]').forEach(x => x.classList.remove('on')); b.classList.add('on'); reqSt = b.dataset.st; renderReq(); });
+  $('reqList').addEventListener('click', async ev => {
+    const t = ev.target; if (!t.dataset.act) return;
+    const i = reqItems.find(x => x.id == t.dataset.id);
+    const msg = {approve:`${i.full_name}（${i.email}）を承認し，名簿に載せて users を作りますか`, reject:`${i.full_name} の申請を却下しますか`, blacklist:`${i.email} をブラックリストに載せますか（users があれば無効化）`, unblock:`${i.email} のブラックリストを解除しますか（却下に戻ります）`}[t.dataset.act];
+    if (!confirm(msg)) return;
+    const body = {}; if (t.dataset.act==='approve'){ const sel = $('reqList').querySelector(`select[data-cat="${i.id}"]`); if (sel) body.category = sel.value; }
+    try{ const r = await api(`${API}/requests/${i.id}/${t.dataset.act}`, 'POST', body); toast((r.user_action ? `users を${r.user_action==='created'?'作成':r.user_action==='revived'?'復活':'更新'}` : '更新しました') + (r.warning ? '｜'+r.warning : '')); loadReq(); loadRosterSilently(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
+  $('blAdd').onclick = async () => { const em = prompt('ブラックリストに載せるメールアドレス'); if (!em) return; const note = prompt('理由（任意）') || ''; try{ await api(`${API}/requests/blacklist`, 'POST', {email: em, note}); toast('登録しました'); loadReq(); }catch(e){ toast('失敗：'+e.message, 5000); } };
+  async function loadRosterSilently(){ try{ const r = await api(`${API}/requests`); const n = r.counts.pending || 0; $('reqBadge').style.display = n ? '' : 'none'; $('reqBadge').textContent = n; }catch(e){} }
+  loadRosterSilently();
+
+  let curPerson = null;
+  function openPerson(i){
+    curPerson = i ? i.id : null;
+    $('personTitle').textContent = i ? '人を編集' : '人を追加';
+    $('pName').value = i ? i.full_name : ''; $('pEmail').value = i ? i.email : ''; $('pCat').value = i ? i.category : 'regular';
+    $('pAff').value = i ? i.affiliation : ''; $('pFrom').value = i ? i.from.slice(0,10) : ''; $('pUntil').value = i ? i.until.slice(0,10) : ''; $('pNote').value = i ? i.note : '';
+    show('ovPerson'); $('pName').focus();
+  }
+  $('rosterAdd').onclick = () => openPerson(null);
+  $('pSave').onclick = async () => {
+    const body = {full_name:$('pName').value, email:$('pEmail').value, category:$('pCat').value, affiliation:$('pAff').value, valid_from:$('pFrom').value, valid_until:$('pUntil').value, note:$('pNote').value};
+    try{ const r = curPerson ? await api(`${API}/roster/${curPerson}`, 'PUT', body) : await api(`${API}/roster`, 'POST', body);
+      hide('ovPerson'); toast((r.user_action==='created' ? 'users を作成' : r.user_action==='revived' ? 'users を復活' : r.user_action==='updated' ? 'users を更新' : '保存') + (r.warning ? '｜' + r.warning : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  };
+
+
+  document.querySelectorAll('#utabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#utabs button').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    ['ovRoster','ovNames','ovReq'].forEach(id => $(id).classList.toggle('on', id === b.dataset.t));
+    ({ovRoster: loadRoster, ovNames: loadNames, ovReq: loadReq})[b.dataset.t]();
+  });
+  show('ovRoster'); loadRoster();
+</script>
+</body>
+</html>

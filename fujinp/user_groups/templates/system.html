@@ -1,0 +1,298 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page_title }}</title>
+<style>
+  :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fafbfc; font-size:14px; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { margin-left:12px; color:var(--acc); text-decoration:none; font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:4px; }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  #reqTabs .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .bar input[type=text], .bar input[type=date], .bar input[type=search] { padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+  .bar .sp { flex:1; }
+  .btn { border:1px solid var(--line); background:#fff; padding:6px 12px; cursor:pointer; border-radius:4px; font-size:13px; }
+  .btn.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btn.warn { color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .summary { padding:6px 16px; color:var(--sub); font-size:12px; }
+  .wrap { padding:0 16px 8px; overflow:auto; }   /* 高さは JS で画面内に収め，横スクロールバーを常に見せる */
+  table.grid { border-collapse:separate; border-spacing:0; min-width:100%; background:#fff; }
+  table.grid th, table.grid td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:4px 6px; vertical-align:top; }
+  table.grid th { background:var(--head); position:sticky; top:0; z-index:5; text-align:left; white-space:nowrap; }
+  table.grid th:first-child, table.grid td:first-child { position:sticky; left:0; background:#fff; z-index:6; border-left:1px solid var(--line); min-width:260px; max-width:420px; }
+  table.grid th:first-child { z-index:7; background:var(--head); }
+  td.unit { white-space:normal; }
+  td.unit .nm { cursor:default; }
+  td.unit .note { color:var(--sub); font-size:11px; margin-left:6px; }
+  tr.d0 td { background:#f3f6fa; font-weight:600; }
+  tr.d1 td { font-weight:500; }
+  tr.d0 td:first-child { background:#f3f6fa; }
+  .ind { display:inline-block; }
+  .chip { display:inline-block; margin:1px 4px 1px 0; padding:1px 7px; border-radius:10px; border:1px solid #b8bec6; background:#e4e7eb; color:#555; font-size:13px; white-space:nowrap; }
+  .chip.res { border-color:var(--acc); background:#e8f0fb; color:var(--ink); }
+  .chip.vac { border:1px dotted #c9ced5; color:#aab; background:#fff; }
+  .chip.hit { outline:2px solid #f6ad55; }
+  .editing .chip { cursor:pointer; }
+  .editing .chip:hover { background:#ffe9c7; }
+  .editing td.unit .nm { cursor:pointer; text-decoration:underline dotted; }
+  .editing th.role { cursor:pointer; }
+  .add { display:none; color:var(--acc); cursor:pointer; font-size:12px; margin-left:4px; }
+  .editing td:hover .add { display:inline; }
+  tr.hide { display:none; }
+  tr.dim td { opacity:.55; }
+  .empty { padding:30px; color:var(--sub); }
+  /* modal */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.on { display:flex; }
+  .md { background:#fff; border-radius:8px; padding:18px 20px; width:520px; max-width:95vw; max-height:90vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+  .md > *:not(.foot) { flex:0 0 auto; }
+  .md .foot { position:sticky; bottom:-18px; margin-left:-20px; margin-right:-20px; margin-bottom:-18px; padding:10px 20px; background:#fff; border-top:1px solid var(--line); z-index:2; }
+  .md h2 { font-size:16px; margin:0 0 12px; }
+  .md label { display:block; font-size:12px; color:var(--sub); margin-top:8px; }
+  .md input[type=text], .md input[type=date], .md input[type=number], .md select, .md textarea { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+  .md .row { display:flex; gap:10px; }
+  .md .row > div { flex:1; }
+  .md .foot { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .md .foot .left { margin-right:auto; }
+  .imp pre { background:#f6f8fa; padding:10px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  .person { padding:8px 16px; }
+  .person table { border-collapse:collapse; background:#fff; }
+  .person td, .person th { border:1px solid var(--line); padding:3px 8px; font-size:13px; }
+  .nm-table { border-collapse:collapse; width:100%; }
+  .nm-table th, .nm-table td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; vertical-align:middle; }
+  .nm-table select { max-width:220px; padding:3px; }
+  .nm-table .btn { padding:3px 8px; font-size:12px; }
+  .cand { padding:4px 8px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .cand:hover { background:#e8f0fb; }
+  .cand small { color:var(--sub); }
+  .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
+  .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
+</style>
+<style>
+  .ov.inline { position:static; display:none; background:none; z-index:auto; }
+  .ov.inline.on { display:block; }
+  .ov.inline > .md { width:auto !important; max-width:none; max-height:none; box-shadow:none; border:1px solid var(--line); margin:12px 16px; border-radius:6px; }
+  .ov.inline > .md > .foot { display:none; }
+  .ov.inline h2 { font-size:15px; }
+  .card2 { background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 16px; margin:12px 16px; }
+  .card2 h2 { font-size:15px; margin:0 0 8px; }
+  .mst { font-size:11px; padding:1px 8px; border-radius:10px; white-space:nowrap; }
+  .mst.ok { background:#c6f6d5; color:#22543d; } .mst.renamed { background:#bee3f8; color:#2a4365; }
+  .mst.none { background:#feebc8; color:#7b341e; } .mst.multi { background:#fed7d7; color:#822727; }
+  .card2 p { font-size:12px; color:var(--sub); margin:0 0 8px; }
+</style>
+</head><body>
+{% include '_nav.html' %}
+<div class="card2">
+  <h2>永続IDの起点とサイト移行用の書き出し</h2>
+  <p>このサイトを永続IDの起点にすると，その時点のユーザとグループのうち永続IDの無いものに発番します．以後は書き出すたびに，新しく増えたユーザとグループにも発番します．接頭辞は，一度発番すると変えられません．</p>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px">
+    <label><input type="checkbox" id="pidIssuer"> このサイトを永続IDの起点にする</label>
+    <span>接頭辞 <input type="text" id="pidPrefix" maxlength="8" style="width:90px;padding:4px 6px;border:1px solid var(--line);border-radius:4px;text-transform:uppercase" placeholder="例 FUC"></span>
+    <button class="btn" id="pidSave">設定する</button>
+    <span id="pidState" style="color:var(--sub)"></span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px;margin-top:10px">
+    <button class="btn pri" id="btnExportJson">サイト移行用に書き出す（JSON）</button>
+    <label><input type="checkbox" id="expSecrets"> パスワードのハッシュも含める</label>
+  </div>
+  <p style="margin-top:8px">ユーザ（登録申請・ブラックリストを含む），システムグループと直接メンバー，組織ツリー（ノード・親子・メンバーシップ・立場），導出ルールと対応付け，名簿，永続IDを1本のファイルに書き出します．</p>
+</div>
+<div class="card2">
+  <h2>サイト移行用の取り込み</h2>
+  <p>ほかのサイトで書き出した JSON を取り込みます．ユーザは永続ID，次にメールで突き合わせ，一致したユーザはこのサイトの行をそのまま使います（admin などの区分も変わりません）．新しく作るユーザのうち区分 admin の人は regular になります．グループは永続ID，次に名前で突き合わせます．同じ名前のグループは，統合するか別名で残すかを選べます．「確認」は取り込みを最後まで試してから取り消すので，出てくる件数は「取り込む」と同じです．</p>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px">
+    <input type="file" id="migFile" accept=".json,application/json">
+    <label><input type="checkbox" id="migSecrets" checked> パスワードのハッシュが入っていれば使う</label>
+    <button class="btn" id="migCheck">確認</button>
+    <button class="btn pri" id="migApply" disabled>取り込む</button>
+  </div>
+  <div id="migOut" style="margin-top:10px;font-size:13px"></div>
+</div>
+<div class="card2">
+  <h2>ノードとシステムグループの対応付け（例外管理）</h2>
+  <p>組織ツリーのノードには，作ったときに同名のシステムグループが1対1で付きます．ここでは，システム構築上の事情で名前が違うもの・対応のないもの・複数付いているものを admin が直します．組織情報管理の画面には，ここでの結果が表示だけされます．</p>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:13px">
+    <label><input type="checkbox" id="mapExOnly" checked> 例外だけ表示</label>
+    <input type="search" id="mapFilter" placeholder="ノード名・グループ名で絞り込み" style="padding:4px 8px;border:1px solid var(--line);border-radius:4px;width:240px">
+    <span id="mapCount" style="color:var(--sub)"></span>
+  </div>
+  <div id="mapList" style="max-height:60vh;overflow:auto">読み込み中…</div>
+</div>
+<div class="ov inline" id="ovSup"><div class="md" style="width:640px">
+  <h2>グループ管理統括の任命</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">グループ管理統括は，グループの改廃（作成・改名・廃止）とグループ管理者の任命を行います．任期はなく，解任するまで続きます．台帳では予約単位「グループ管理統括」のメンバーとして記録され，サイト移行用の書き出しで他のサイトへも運ばれます．admin が統括を兼ねるときは，ここで自分を任命してください．</p>
+  <div id="supList" style="margin-bottom:10px"></div>
+  <label>任命する人を検索（users ID・メール・氏名の一部）</label>
+  <input type="text" id="supSearch" placeholder="例：34 / nishida / 西田" autocomplete="off">
+  <div id="supCand" style="border:1px solid var(--line);border-radius:4px;max-height:180px;overflow:auto;display:none"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovSup')">閉じる</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+const API = '{{ url_for("user_groups.ledger_tree") }}'.replace(/\/tree$/, '');
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id){ $(id).classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null, form=null){
+  const opt = {method, headers:{}};
+  if (form) opt.body = form; else if (body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+  const r = await fetch(url, opt); const j = await r.json().catch(()=>({success:false,error:'応答が不正です'}));
+  if (!j.success) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
+}
+function asOfParam(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
+
+function load(){}
+  // グループ管理統括の任命
+  const SAPI = '{{ url_for("user_groups.steward_supervisors") }}'.replace(/\/supervisors$/, '');
+  async function loadSup(){
+    $('supList').innerHTML = '読み込み中…';
+    try{ const r = await api(`${SAPI}/supervisors`);
+      const now = r.items.filter(x => x.now), past = r.items.filter(x => !x.now && !x.future);
+      $('supList').innerHTML = (now.length ? '<div>いまの統括：' + now.map(x => `<span class="chip res" title="${esc(x.email)}　${esc(x.from)}〜">${esc(x.name)} <a href="#" data-supend="${x.id}" style="color:var(--bad);text-decoration:none">解任</a></span>`).join('') + '</div>' : '<div style="color:var(--sub)">いまの統括はいません</div>') +
+        (past.length ? '<div style="margin-top:6px;font-size:12px;color:var(--sub)">これまで：' + past.map(x => `${esc(x.name)}（${esc(x.from)}〜${esc(x.until)}）`).join('，') + '</div>' : '');
+    }catch(e){ $('supList').innerHTML = '失敗：' + esc(e.message); }
+  }
+  $('supList').addEventListener('click', async ev => { const t = ev.target; if (t.dataset.supend === undefined) return; ev.preventDefault();
+    if (!confirm('この統括を解任しますか（記録は残ります）')) return;
+    try{ await api(`${SAPI}/appointments/${t.dataset.supend}/end`, 'POST', {}); toast('解任しました'); loadSup(); load(); }catch(e){ toast('失敗：'+e.message, 5000); } });
+  let supTimer = null;
+  $('supSearch').oninput = () => { clearTimeout(supTimer); supTimer = setTimeout(async () => {
+    const q = $('supSearch').value.trim(); if (!q){ $('supCand').style.display='none'; return; }
+    try{ const r = await api(`${SAPI}/users?q=${encodeURIComponent(q)}`);
+      $('supCand').innerHTML = r.items.map(u => `<div class="cand" data-supadd="${u.id}">${esc(u.full_name)} <small>#${u.id} ${esc(u.email)} ${esc(u.category)}</small></div>`).join('') || '<div class="cand">該当なし</div>';
+      $('supCand').style.display = '';
+    }catch(e){} }, 250); };
+  $('supCand').addEventListener('click', async ev => { const d = ev.target.closest('[data-supadd]'); if (!d) return;
+    if (!confirm(`${d.textContent.trim()} をグループ管理統括に任命しますか`)) return;
+    try{ await api(`${SAPI}/supervisors`, 'POST', {user_id: Number(d.dataset.supadd)}); toast('任命しました'); $('supSearch').value=''; $('supCand').style.display='none'; loadSup(); load(); }catch(e){ toast('失敗：'+e.message, 5000); } });
+
+  // ノードとシステムグループの対応付け（例外管理）
+  let MAP = null;
+  const ST = {ok:'同名で対応', renamed:'名前が違う', none:'対応なし', multi:'複数に対応'};
+  async function loadMap(){ try{ MAP = await api(`${API}/mapping`); renderMap(); }catch(e){ $('mapList').innerHTML = '失敗：' + esc(e.message); } }
+  function renderMap(){
+    const q = $('mapFilter').value.trim(), ex = $('mapExOnly').checked;
+    const rows = MAP.items.filter(x => (!ex || x.status !== 'ok' || x.groups.some(g => g.shared.length)) &&
+      (!q || x.name.includes(q) || x.groups.some(g => g.name.includes(q))));
+    const counts = {}; MAP.items.forEach(x => counts[x.status] = (counts[x.status] || 0) + 1);
+    $('mapCount').textContent = `ノード ${MAP.items.length}（同名で対応 ${counts.ok || 0}・名前が違う ${counts.renamed || 0}・対応なし ${counts.none || 0}・複数 ${counts.multi || 0}）`;
+    const opts = MAP.groups.map(g => `<option value="${g.id}">${esc(g.name)}（#${g.id}）</option>`).join('');
+    $('mapList').innerHTML = rows.length ? '<table class="nm-table"><tr><th>ノード</th><th>状態</th><th>対応するシステムグループ</th><th>対応付けを変える</th></tr>' + rows.map(x => `<tr>
+      <td><b>${esc(x.name)}</b>${x.valid ? '' : ' <small style="color:var(--sub)">（閉じている）</small>'}<br><small style="color:var(--sub)">${esc(x.path)}</small></td>
+      <td><span class="mst ${x.status}">${ST[x.status]}</span></td>
+      <td>${x.groups.map(g => `${esc(g.name)} <small style="color:var(--sub)">#${g.id}</small>${g.shared.length ? `<br><small style="color:#822727">ほかに ${g.shared.map(esc).join('，')} も対応</small>` : ''}`).join('<br>') || '—'}</td>
+      <td style="white-space:nowrap"><select data-msel="${x.id}" style="max-width:220px"><option value="">（グループを選ぶ）</option>${opts}</select>
+        <button class="btn" data-mlink="${x.id}">対応付ける</button> <button class="btn" data-mcreate="${x.id}" title="ノードと同名のグループ（無ければ作る）">同名に</button>
+        ${x.groups.length ? ` <button class="btn warn" data-munlink="${x.id}">外す</button>` : ''}</td></tr>`).join('') + '</table>'
+      : '<div style="color:var(--sub);font-size:13px">該当するノードはありません</div>';
+  }
+  $('mapExOnly').onchange = () => MAP && renderMap();
+  $('mapFilter').oninput = () => MAP && renderMap();
+  $('mapList').addEventListener('click', async ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const id = b.dataset.mlink || b.dataset.mcreate || b.dataset.munlink; if (!id) return;
+    const x = MAP.items.find(i => i.id == id);
+    try{
+      if (b.dataset.mlink){ const gid = $('mapList').querySelector(`select[data-msel="${id}"]`).value; if (!gid){ toast('グループを選んでください'); return; }
+        if (!confirm(`「${x.name}」をこのグループに対応付けます（いまの対応は外れます）．よろしいですか`)) return;
+        await api(`${API}/nodes/${id}/group`, 'POST', {action:'link', group_id:Number(gid)}); }
+      else if (b.dataset.mcreate){ if (!confirm(`「${x.name}」を同名のグループに対応付けます（無ければ作ります）．よろしいですか`)) return;
+        await api(`${API}/nodes/${id}/group`, 'POST', {action:'create'}); }
+      else { if (!confirm(`「${x.name}」の対応を外しますか（グループの行は残ります）`)) return;
+        await api(`${API}/nodes/${id}/group`, 'POST', {action:'unlink'}); }
+      toast('変えました'); loadMap();
+    }catch(e){ toast('失敗：'+e.message, 5000); }
+  });
+  loadMap();
+  show('ovSup'); loadSup();
+
+// ── 永続IDの起点とサイト移行用の書き出し ──
+async function loadPid(){
+  const r = await fetch('{{ url_for("user_groups.migrate_settings_get") }}').then(r=>r.json());
+  if (!r.success) return;
+  $('pidIssuer').checked = r.issuer; $('pidPrefix').value = r.prefix || '';
+  const c = r.counts;
+  $('pidState').textContent = `永続IDあり：ユーザ ${c.users_with_pid}・グループ ${c.groups_with_pid}／なし：ユーザ ${c.users_without_pid}・グループ ${c.groups_without_pid}`;
+}
+$('pidSave').onclick = async () => {
+  const r = await fetch('{{ url_for("user_groups.migrate_settings_put") }}', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({issuer: $('pidIssuer').checked, prefix: $('pidPrefix').value.trim().toUpperCase()})}).then(r=>r.json());
+  if (!r.success) { toast(r.error, 4000); loadPid(); return; }
+  toast(r.issuer ? `設定しました（発番：ユーザ ${r.issued.person}・グループ ${r.issued.group}）` : '設定しました');
+  loadPid();
+};
+$('btnExportJson').onclick = () => {
+  location.href = '{{ url_for("user_groups.migrate_export") }}' + ($('expSecrets').checked ? '?secrets=1' : '');
+  setTimeout(loadPid, 2500);
+};
+loadPid();
+
+// ── サイト移行用の取り込み ──
+const MIG_LABEL = {users:'ユーザ', approved_users:'ログインを認めるメール', registration_requests:'登録申請・ブラックリスト',
+  user_groups:'システムグループ', user_group_memberships:'直接メンバー', ug_roles:'立場', ug_units:'ノード',
+  ug_unit_links:'ノードの親子', ug_appointments:'メンバーシップ', ug_group_rules:'導出ルール・対応付け',
+  ug_persons:'名簿', ug_person_aliases:'名寄せの対象外', ug_pids:'永続ID'};
+let migActions = {};
+async function migRun(mode){
+  const f = $('migFile').files[0];
+  if (!f) { toast('ファイルを選んでください'); return; }
+  const fd = new FormData();
+  fd.append('file', f); fd.append('mode', mode);
+  fd.append('secrets', $('migSecrets').checked ? '1' : '0');
+  fd.append('group_actions', JSON.stringify(migActions));
+  $('migOut').textContent = mode === 'apply' ? '取り込んでいます…' : '確認しています…';
+  const r = await fetch('{{ url_for("user_groups.migrate_import") }}', {method:'POST', body:fd}).then(r=>r.json());
+  if (!r.success) { $('migOut').textContent = r.error; $('migApply').disabled = true; return; }
+  const s = r.source, rep = r.report;
+  let h = `<div style="color:var(--sub)">書き出し元：${esc(s.site)}（${esc(s.exported_at)}，接頭辞 ${esc(s.pid_prefix||'なし')}）</div>`;
+  h += `<p style="margin:6px 0;font-weight:600">${r.mode === 'apply' ? '取り込みました．' : '確認の結果です（まだ取り込んでいません）．'}</p>`;
+  h += '<table class="nm-table" style="width:auto"><tr><th>対象</th><th>新しく作る</th><th>既存と一致</th><th>見送り</th></tr>';
+  for (const k of Object.keys(MIG_LABEL)) { const v = r.stats[k]; if (!v) continue;
+    h += `<tr><td>${esc(MIG_LABEL[k])}</td><td>${v.added}</td><td>${v.matched}</td><td>${v.skipped}</td></tr>`; }
+  h += '</table>';
+  if (rep.groups_same_name.length) {
+    h += '<p style="margin:10px 0 4px;font-weight:600">同じ名前のグループ</p><table class="nm-table" style="width:auto"><tr><th>グループ名</th><th>永続ID</th><th>扱い</th></tr>';
+    for (const g of rep.groups_same_name)
+      h += `<tr><td>${esc(g.name)}</td><td>${esc(g.pid||'')}</td><td><select data-mig="${g.src_id}" ${r.mode==='apply'?'disabled':''}>
+            <option value="merge" ${g.action!=='rename'?'selected':''}>このサイトのグループに統合する</option>
+            <option value="rename" ${g.action==='rename'?'selected':''}>別名（${esc(g.name)}（移入））で残す</option></select></td></tr>`;
+    h += '</table>';
+  }
+  const lists = [['admin から regular にする人', rep.admin_demoted], ['永続IDの見送り', rep.pid_conflicts], ['注意', rep.warnings]];
+  for (const [t, a] of lists) if (a.length) h += `<p style="margin:10px 0 4px;font-weight:600">${t}</p><div>${a.map(esc).join('<br>')}</div>`;
+  if (rep.users_matched.length)
+    h += `<details style="margin-top:10px"><summary>メールまたは永続IDで一致したユーザ（${rep.users_matched.length}${rep.users_matched.length>=200?' 以上':''}）</summary>`
+       + rep.users_matched.map(u=>`${esc(u.name)}（${esc(u.email)}）→ ID ${u.local_id}`).join('<br>') + '</details>';
+  $('migOut').innerHTML = h;
+  document.querySelectorAll('[data-mig]').forEach(sel => sel.onchange = () => { migActions[sel.dataset.mig] = sel.value; $('migApply').disabled = true; toast('扱いを変えたので，もう一度「確認」を押してください', 3000); });
+  $('migApply').disabled = (r.mode === 'apply');
+  if (r.mode === 'apply') { $('migFile').value = ''; migActions = {}; loadPid(); }
+}
+$('migFile').onchange = () => { migActions = {}; $('migApply').disabled = true; $('migOut').textContent = ''; };
+$('migCheck').onclick = () => migRun('check');
+$('migApply').onclick = () => migRun('apply');
+</script>
+</body>
+</html>

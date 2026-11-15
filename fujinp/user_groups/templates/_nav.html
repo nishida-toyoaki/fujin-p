@@ -1,0 +1,26 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{# 全画面共通の上のタブ．nav = stewards.nav_context(active)．権限のないタブは出さない #}
+<style>
+  header.topnav { display:flex; align-items:center; gap:6px; padding:8px 16px 0; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; flex-wrap:wrap; }
+  header.topnav .brand { font-weight:700; font-size:16px; margin-right:12px; padding-bottom:8px; }
+  header.topnav a.tab { padding:8px 16px; border:1px solid var(--line); border-bottom:none; border-radius:6px 6px 0 0; background:#f3f5f8; color:var(--ink); text-decoration:none; font-size:14px; margin-bottom:-1px; }
+  header.topnav a.tab:hover { background:#e8eef6; }
+  header.topnav a.tab.on { background:#fff; color:var(--acc); font-weight:700; border-color:var(--line); border-bottom:1px solid #fff; }
+  header.topnav .sp { flex:1; }
+  header.topnav a.home { background:#c53030; color:#fff; border-radius:6px; padding:6px 14px; text-decoration:none; font-size:13px; margin-bottom:8px; }
+  header.topnav a.home:hover { background:#9b2c2c; }
+</style>
+<header class="topnav">
+  <span class="brand">👥 ユーザとグループ</span>
+  {% if nav.users %}<a class="tab {% if nav.active == 'users' %}on{% endif %}" href="{{ url_for('user_groups.users_page') }}">ユーザ管理</a>{% endif %}
+  {% if nav.groups %}<a class="tab {% if nav.active == 'groups' %}on{% endif %}" href="{{ url_for('user_groups.my_groups_page') }}">グループ管理</a>{% endif %}
+  {% if nav.org %}<a class="tab {% if nav.active == 'org' %}on{% endif %}" href="{{ url_for('user_groups.ledger_page') }}">組織情報管理</a>{% endif %}
+  {% if nav.system %}<a class="tab {% if nav.active == 'system' %}on{% endif %}" href="{{ url_for('user_groups.system_page') }}">管理</a>{% endif %}
+  <span class="sp"></span>
+  <a class="home" href="{{ url_for('user_groups.return_to_fujin') }}">FUJINダッシュボードに帰る</a>
+</header>

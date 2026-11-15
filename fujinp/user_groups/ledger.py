@@ -17,36 +17,35 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
-user_groups/ledger.py — ユーザとグループ（発令台帳）
+user_groups/ledger.py — ユーザとグループ（台帳の画面とユーザ管理）
 
-「単位 × 役割 × 人 × 期間」の台帳と，その大表ビュー，Excel 入出力を提供する．
-既存のグループ機能（routes.py / utils.py）には触れない．
+画面
+  /ledger  組織情報管理（admin・グループ管理統括）．ツリーの API は tree.py
+  /users   ユーザ管理（admin）：名簿・名寄せ・登録申請とブラックリスト
+  /system  管理（admin）：永続IDの起点とサイト移行（migrate.py）・対応付けの例外管理（tree.py）・統括の任命（stewards.py）
+
+このモジュールの API
+  ノードの編集（PUT /api/ledger/units/<id>），立場の追加，メンバーシップ（発令）の追加・変更・削除，
+  年度の引き継ぎ，ユーザ検索，名寄せ，名簿，登録申請とブラックリスト
 
 テーブル（すべて default DB）
-  ug_units         単位（組織・会議体・分担事務の木）
-  ug_roles         役割の語彙（表の列）
-  ug_appointments  発令（表のセル1個＝1行）
+  ug_units          ノード（組織・会議体の木と，種別 group のシステム用グループの単位）
+  ug_roles          立場の語彙
+  ug_appointments   メンバーシップ（ノード×ユーザ×立場×期間）
   ug_person_aliases 名寄せの対象外リスト（user_id NULL の行＝この氏名は誰にも紐づけない）
-                    ※ user_id ありの行（表記の別名）は 2026-09-08 に廃止．残っていれば読むだけ
-  ug_group_rules   グループの導出ルール（単位×役割 → user_groups の構成員）
-  ug_group_snapshot ルール導入前の構成員集合（回帰の照合用）
-  ug_persons       アカウント名簿（氏名・メール・区分・所属・期間）．台帳が正で，users に直ちに反映する
-  （カーネル表 users / approved_users / registration_requests を読み書きする：名簿の発行・申請の承認・ブラックリスト）
-
-単位の種別 kind は構造の骨格としてコードに持つ（org / body / duty / group）．
-group は管理者が手で作るグループ（まいぐるの user_groups に対応．役割は 所有者／メンバー）．
-単位名・役割名・人・期間はすべてデータ側．
+  ug_group_rules    グループの導出ルール（ノード×立場 → user_groups の構成員）
+  ug_persons        アカウント名簿（氏名・メール・区分・所属・期間）．users に直ちに反映する
+  （カーネル表 users / approved_users / registration_requests を読み書きする）
 """
-import io
 import re
 import logging
 from functools import wraps
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
-from flask import render_template, jsonify, request, session, send_file
+from flask import render_template, jsonify, request, session
 
 from decorators import login_required
 from . import user_groups_bp
@@ -57,28 +56,12 @@ JST = timezone(timedelta(hours=9), 'JST')
 # 単位の種別（骨格）．表示名は kind ラベル．
 KINDS = [('org', '組織'), ('body', '会議体'), ('duty', '分担事務'), ('group', 'グループ')]
 KIND_LABEL = dict(KINDS)
-LABEL_KIND = {v: k for k, v in KINDS}
-# 台帳が扱う種別．group は 2026-09-24 に廃止（アドホックなグループはグループ画面＝groups.py で管理）．
-# 列挙値は既存データを読むために残してある．
-LEDGER_KINDS = [(k, v) for k, v in KINDS if k != 'group']
-GROUP_KIND_RETIRED = '種別「グループ」は台帳では扱いません（「グループ」タブで管理します）'
 
-MAX_DEPTH = 5           # Excel の階層列の本数
 DEFAULT_RANK = 99       # 未登録の役割を自動作成するときの序列
 
-SHEET_UNITS = '単位'
-SHEET_ROLES = '役割'
-SHEET_APPT = '発令'
-SHEET_PERSONS = '人'
-
-UNIT_HEADERS = ['種別'] + [f'階層{i}' for i in range(1, MAX_DEPTH + 1)] + ['序列', '管理グループ', '開始', '終了', '備考']
-ROLE_HEADERS = ['種別', '役割名', '序列', '備考']
-APPT_HEADERS = ['種別'] + [f'階層{i}' for i in range(1, MAX_DEPTH + 1)] + ['役割', '氏名', '開始', '終了', '備考', '出典']
-PERSON_HEADERS = ['氏名', 'メール', '区分', '所属', '開始', '終了', '備考']
 PERSON_CATEGORIES = ('admin', 'regular', 'guest')
 
 # 氏名欄の区切り（複数人を1セルに書いたとき）
-_NAME_SPLIT_RE = re.compile(r'[、，,／/・;；]\s*|\s{2,}')
 
 
 # ────────────────────────────────────────────
@@ -94,18 +77,6 @@ def _s(v):
     if v is None:
         return ''
     return str(v).strip()
-
-
-def _d(v):
-    """セル値を datetime に（空なら None）．Excel の日付セルと文字列の両方を受ける"""
-    if v is None or v == '':
-        return None
-    if isinstance(v, datetime):
-        return v.replace(tzinfo=None)
-    if isinstance(v, date):
-        return datetime(v.year, v.month, v.day)
-    s = str(v).strip().replace('/', '-')
-    return parse_input(s)
 
 
 def _dstr(dt):
@@ -127,20 +98,6 @@ def _as_of_from_request():
     return dt
 
 
-def _fiscal_year_bounds(at):
-    """at を含む年度（4月1日始まり）の始点・終点"""
-    y = at.year if at.month >= 4 else at.year - 1
-    return date(y, 4, 1), date(y + 1, 3, 31)
-
-
-def _partial(valid_from, valid_until, at):
-    """時点の年度の途中で始まる／終わる発令か（年度いっぱいのものは False）"""
-    if at is None:
-        return bool(valid_from or valid_until)
-    fs, fe = _fiscal_year_bounds(at)
-    return bool((valid_from and valid_from.date() > fs) or (valid_until and valid_until.date() < fe))
-
-
 def _valid_at(valid_from, valid_until, at):
     if at is None:
         return True
@@ -149,6 +106,11 @@ def _valid_at(valid_from, valid_until, at):
     if valid_until and valid_until < at:
         return False
     return True
+
+
+def _has_order(cursor):
+    from .stewards import ensure_order_column
+    return ensure_order_column(cursor)
 
 
 def _norm_name(s):
@@ -162,6 +124,47 @@ def _is_admin():
 
 def _deny():
     return jsonify({'success': False, 'error': '権限がありません（台帳の操作は総管理者のみ）'}), 403
+
+
+def _can_define_groups():
+    """台帳から導くグループの定義（グループ定義）は admin とグループ管理統括"""
+    if _is_admin():
+        return True
+    try:
+        from .stewards import who
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            return who(cursor, session.get('user_id'))['can_steward']
+        finally:
+            cursor.close()
+            conn.close()
+    except Exception as e:
+        logging.warning("steward check failed: %s", e)
+        return False
+
+
+def org_only(view):
+    """組織情報管理（台帳）の操作：admin とグループ管理統括"""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not _can_define_groups():
+            return _deny()
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def _reserved_unit_guard(cursor, unit_ids):
+    """予約単位（グループ管理統括）の単位・発令は admin だけが触れる．触れてはいけなければエラー文を返す"""
+    if _is_admin() or not unit_ids:
+        return None
+    from .stewards import SUPERVISOR_NAME
+    marks = ','.join(['%s'] * len(unit_ids))
+    cursor.execute(f"SELECT COUNT(*) AS n FROM ug_units WHERE id IN ({marks}) AND kind='group' AND name=%s",
+                   tuple(unit_ids) + (SUPERVISOR_NAME,))
+    if cursor.fetchone()['n']:
+        return 'グループ管理統括の任命・解任は admin が「管理」で行います'
+    return None
 
 
 def admin_only(view):
@@ -191,86 +194,6 @@ DENY_PAGE = (
 # 単位の木
 # ────────────────────────────────────────────
 
-def _load_units(cursor, kind):
-    cursor.execute("""
-        SELECT id, kind, name, parent_id, owner_group_id, sort_order,
-               valid_from, valid_until, note
-        FROM ug_units WHERE kind = %s
-        ORDER BY sort_order, id
-    """, (kind,))
-    return cursor.fetchall()
-
-
-def _tree_order(units):
-    """親→子の順に並べ，depth と path を付けて返す"""
-    by_parent = {}
-    for u in units:
-        by_parent.setdefault(u['parent_id'], []).append(u)
-    out = []
-
-    def walk(pid, depth, path):
-        for u in by_parent.get(pid, []):
-            u = dict(u)
-            u['depth'] = depth
-            u['path'] = path + [u['name']]
-            out.append(u)
-            walk(u['id'], depth + 1, u['path'])
-
-    walk(None, 0, [])
-    # 親が消えて宙に浮いた単位も末尾に出す
-    seen = {u['id'] for u in out}
-    for u in units:
-        if u['id'] not in seen:
-            u = dict(u)
-            u['depth'] = 0
-            u['path'] = ['?', u['name']]
-            out.append(u)
-    return out
-
-
-def _find_unit_by_path(cursor, kind, path):
-    """階層パス（名前のリスト）で単位を探す．なければ None"""
-    pid = None
-    unit = None
-    for name in path:
-        if pid is None:
-            cursor.execute("SELECT id FROM ug_units WHERE kind=%s AND parent_id IS NULL AND name=%s",
-                           (kind, name))
-        else:
-            cursor.execute("SELECT id FROM ug_units WHERE kind=%s AND parent_id=%s AND name=%s",
-                           (kind, pid, name))
-        row = cursor.fetchone()
-        if not row:
-            return None
-        pid = row['id']
-        unit = row
-    return unit['id'] if unit else None
-
-
-def _ensure_unit_path(cursor, kind, path, created):
-    """階層パスの単位を（なければ作りながら）辿り，末端の id を返す"""
-    pid = None
-    for depth, name in enumerate(path):
-        if pid is None:
-            cursor.execute("SELECT id FROM ug_units WHERE kind=%s AND parent_id IS NULL AND name=%s",
-                           (kind, name))
-        else:
-            cursor.execute("SELECT id FROM ug_units WHERE kind=%s AND parent_id=%s AND name=%s",
-                           (kind, pid, name))
-        row = cursor.fetchone()
-        if row:
-            pid = row['id']
-        else:
-            cursor.execute("SELECT COALESCE(MAX(sort_order),0)+10 AS so FROM ug_units WHERE kind=%s AND parent_id <=> %s",
-                           (kind, pid))
-            so = cursor.fetchone()['so']
-            cursor.execute("INSERT INTO ug_units (kind, name, parent_id, sort_order) VALUES (%s,%s,%s,%s)",
-                           (kind, name, pid, so))
-            pid = cursor.lastrowid
-            created.append('／'.join(path[:depth + 1]))
-    return pid
-
-
 # ────────────────────────────────────────────
 # 画面
 # ────────────────────────────────────────────
@@ -278,15 +201,38 @@ def _ensure_unit_path(cursor, kind, path, created):
 @user_groups_bp.route('/ledger')
 @login_required
 def ledger_page():
-    # 総管理者は台帳とグループ，それ以外はグループのタブだけを使う
-    is_admin = _is_admin()
-    tab = request.args.get('tab') or ''
-    if not is_admin or tab not in [k for k, _ in LEDGER_KINDS]:
-        tab = 'groups' if (not is_admin or tab == 'groups') else LEDGER_KINDS[0][0]
-    return render_template('ledger.html',
-                           kinds=LEDGER_KINDS,
-                           is_admin=is_admin,
-                           start_tab=tab,
+    if not _can_define_groups():
+        from flask import url_for
+        return DENY_PAGE.format(back=url_for('user_groups.return_to_fujin')), 403
+    from .stewards import nav_context
+    return render_template('ledger.html', page_title='組織情報管理', nav=nav_context('org'),
+                           kinds=KINDS,
+                           is_admin=True,          # 台帳の編集ボタンを出す（admin と統括）
+                           real_admin=_is_admin(),
+                           today=_now().strftime('%Y-%m-%d'))
+
+
+@user_groups_bp.route('/users')
+@login_required
+def users_page():
+    """ユーザ管理（admin）：名簿・名寄せ・登録申請とブラックリスト"""
+    if not _is_admin():
+        from flask import url_for
+        return DENY_PAGE.format(back=url_for('user_groups.return_to_fujin')), 403
+    from .stewards import nav_context
+    return render_template('users.html', page_title='ユーザ管理', is_admin=True, nav=nav_context('users'),
+                           today=_now().strftime('%Y-%m-%d'))
+
+
+@user_groups_bp.route('/system')
+@login_required
+def system_page():
+    """管理（admin）：永続IDの起点とサイト移行・ノードとシステムグループの対応付けの例外管理・グループ管理統括の任命"""
+    if not _is_admin():
+        from flask import url_for
+        return DENY_PAGE.format(back=url_for('user_groups.return_to_fujin')), 403
+    from .stewards import nav_context
+    return render_template('system.html', page_title='管理', is_admin=True, nav=nav_context('system'),
                            today=_now().strftime('%Y-%m-%d'))
 
 
@@ -294,154 +240,14 @@ def ledger_page():
 # 大表（グリッド）
 # ────────────────────────────────────────────
 
-@user_groups_bp.route('/api/ledger/grid')
-@login_required
-@admin_only
-def ledger_grid():
-    kind = request.args.get('kind', 'org')
-    if kind not in KIND_LABEL:
-        return jsonify({'success': False, 'error': 'kind が不正です'}), 400
-    at = _as_of_from_request()
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT id, name, `rank`, sort_order, note FROM ug_roles WHERE kind=%s ORDER BY `rank`, sort_order, id",
-                       (kind,))
-        roles = cursor.fetchall()
-
-        units = _tree_order(_load_units(cursor, kind))
-        unit_ids = [u['id'] for u in units]
-        appts = []
-        if unit_ids:
-            fmt = ','.join(['%s'] * len(unit_ids))
-            cursor.execute(f"""
-                SELECT a.id, a.unit_id, a.role_id, a.user_id, a.person_name,
-                       a.valid_from, a.valid_until, a.note, a.source,
-                       u.full_name, u.email
-                FROM ug_appointments a
-                LEFT JOIN users u ON u.id = a.user_id
-                WHERE a.unit_id IN ({fmt})
-                ORDER BY a.valid_from, a.id
-            """, tuple(unit_ids))
-            appts = cursor.fetchall()
-
-        cell = {}
-        for a in appts:
-            if not _valid_at(a['valid_from'], a['valid_until'], at):
-                continue
-            cell.setdefault(a['unit_id'], {}).setdefault(a['role_id'], []).append({
-                'id': a['id'],
-                'name': a['person_name'] or a['full_name'] or '',
-                'user_name': a['full_name'] or '',
-                'user_email': a['email'] or '',
-                'user_id': a['user_id'],
-                'resolved': a['user_id'] is not None,
-                'vacant': not (a['person_name'] or a['full_name']),
-                'from': _dstr(a['valid_from']),
-                'until': _dstr(a['valid_until']),
-                'partial': _partial(a['valid_from'], a['valid_until'], at),
-                'note': a['note'] or '',
-                'source': a['source'] or '',
-            })
-
-        rows = []
-        for u in units:
-            if not _valid_at(u['valid_from'], u['valid_until'], at):
-                continue
-            rows.append({
-                'id': u['id'],
-                'name': u['name'],
-                'depth': u['depth'],
-                'path': u['path'],
-                'parent_id': u['parent_id'],
-                'sort_order': u['sort_order'],
-                'owner_group_id': u['owner_group_id'],
-                'from': _dstr(u['valid_from']),
-                'until': _dstr(u['valid_until']),
-                'note': u['note'] or '',
-                'cells': {str(rid): items for rid, items in cell.get(u['id'], {}).items()},
-            })
-
-        return jsonify({'success': True, 'kind': kind, 'kind_label': KIND_LABEL[kind],
-                        'as_of': _dstr(at) if at else '',
-                        'roles': [{'id': r['id'], 'name': r['name'], 'rank': r['rank'], 'note': r['note'] or ''} for r in roles],
-                        'rows': rows,
-                        'appointment_count': sum(len(v) for c in cell.values() for v in c.values())})
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/summary')
-@login_required
-@admin_only
-def ledger_summary():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        out = {}
-        for kind, label in KINDS:
-            cursor.execute("SELECT COUNT(*) AS n FROM ug_units WHERE kind=%s", (kind,))
-            nu = cursor.fetchone()['n']
-            cursor.execute("SELECT COUNT(*) AS n FROM ug_roles WHERE kind=%s", (kind,))
-            nr = cursor.fetchone()['n']
-            cursor.execute("SELECT COUNT(*) AS n FROM ug_appointments a JOIN ug_units u ON u.id=a.unit_id WHERE u.kind=%s", (kind,))
-            na = cursor.fetchone()['n']
-            out[kind] = {'label': label, 'units': nu, 'roles': nr, 'appointments': na}
-        cursor.execute("SELECT source, COUNT(*) AS n, MIN(valid_from) AS f, MAX(valid_until) AS t FROM ug_appointments GROUP BY source ORDER BY source")
-        sources = [{'source': r['source'] or '', 'n': r['n'], 'from': _dstr(r['f']), 'until': _dstr(r['t'])} for r in cursor.fetchall()]
-        cursor.execute("SELECT COUNT(*) AS n FROM ug_appointments WHERE user_id IS NULL AND COALESCE(person_name,'')<>''")
-        unresolved = cursor.fetchone()['n']
-        cursor.execute("SELECT COUNT(*) AS n FROM ug_appointments WHERE user_id IS NULL AND COALESCE(person_name,'')=''")
-        vacant = cursor.fetchone()['n']
-        return jsonify({'success': True, 'kinds': out, 'sources': sources,
-                        'unresolved': unresolved, 'vacant': vacant})
-    finally:
-        cursor.close()
-        conn.close()
-
-
 # ────────────────────────────────────────────
 # 単位・役割・発令の CRUD（総管理者）
 # ────────────────────────────────────────────
 
-@user_groups_bp.route('/api/ledger/units', methods=['POST'])
-@login_required
-def ledger_unit_create():
-    if not _is_admin():
-        return _deny()
-    data = request.get_json(silent=True) or {}
-    kind = data.get('kind')
-    name = _s(data.get('name'))
-    if kind not in KIND_LABEL or not name:
-        return jsonify({'success': False, 'error': '種別と名称は必須です'}), 400
-    parent_id = data.get('parent_id') or None
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT COALESCE(MAX(sort_order),0)+10 AS so FROM ug_units WHERE kind=%s AND parent_id <=> %s",
-                       (kind, parent_id))
-        so = data.get('sort_order') or cursor.fetchone()['so']
-        cursor.execute("""INSERT INTO ug_units (kind, name, parent_id, owner_group_id, sort_order, valid_from, valid_until, note)
-                          VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
-                       (kind, name, parent_id, data.get('owner_group_id') or None, so,
-                        parse_input(_s(data.get('valid_from'))), parse_input(_s(data.get('valid_until'))),
-                        _s(data.get('note')) or None))
-        conn.commit()
-        return jsonify({'success': True, 'id': cursor.lastrowid})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
 @user_groups_bp.route('/api/ledger/units/<int:unit_id>', methods=['PUT'])
 @login_required
 def ledger_unit_update(unit_id):
-    if not _is_admin():
+    if not _can_define_groups():
         return _deny()
     data = request.get_json(silent=True) or {}
     fields, vals = [], []
@@ -462,8 +268,11 @@ def ledger_unit_update(unit_id):
     if 'parent_id' in data and data['parent_id'] == unit_id:
         return jsonify({'success': False, 'error': '自分自身を親にはできません'}), 400
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        err = _reserved_unit_guard(cursor, [unit_id])
+        if err:
+            return jsonify({'success': False, 'error': err}), 403
         cursor.execute(f"UPDATE ug_units SET {', '.join(fields)} WHERE id=%s", tuple(vals) + (unit_id,))
         conn.commit()
         return jsonify({'success': True})
@@ -475,41 +284,10 @@ def ledger_unit_update(unit_id):
         conn.close()
 
 
-@user_groups_bp.route('/api/ledger/units/<int:unit_id>', methods=['DELETE'])
-@login_required
-def ledger_unit_delete(unit_id):
-    """単位を削除（配下の単位と発令も一緒に消す）"""
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        ids = [unit_id]
-        queue = [unit_id]
-        while queue:
-            pid = queue.pop()
-            cursor.execute("SELECT id FROM ug_units WHERE parent_id=%s", (pid,))
-            for r in cursor.fetchall():
-                ids.append(r['id'])
-                queue.append(r['id'])
-        fmt = ','.join(['%s'] * len(ids))
-        cursor.execute(f"DELETE FROM ug_appointments WHERE unit_id IN ({fmt})", tuple(ids))
-        na = cursor.rowcount
-        cursor.execute(f"DELETE FROM ug_units WHERE id IN ({fmt})", tuple(ids))
-        conn.commit()
-        return jsonify({'success': True, 'deleted_units': len(ids), 'deleted_appointments': na})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
 @user_groups_bp.route('/api/ledger/roles', methods=['POST'])
 @login_required
 def ledger_role_create():
-    if not _is_admin():
+    if not _can_define_groups():
         return _deny()
     data = request.get_json(silent=True) or {}
     kind = data.get('kind')
@@ -523,59 +301,6 @@ def ledger_role_create():
                        (kind, name, data.get('rank') or DEFAULT_RANK, data.get('sort_order') or 0, _s(data.get('note')) or None))
         conn.commit()
         return jsonify({'success': True, 'id': cursor.lastrowid})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/roles/<int:role_id>', methods=['PUT'])
-@login_required
-def ledger_role_update(role_id):
-    if not _is_admin():
-        return _deny()
-    data = request.get_json(silent=True) or {}
-    fields, vals = [], []
-    if 'name' in data:
-        fields.append("name=%s"); vals.append(_s(data['name']))
-    if 'rank' in data:
-        fields.append("`rank`=%s"); vals.append(data['rank'] or DEFAULT_RANK)
-    if 'sort_order' in data:
-        fields.append("sort_order=%s"); vals.append(data['sort_order'] or 0)
-    if 'note' in data:
-        fields.append("note=%s"); vals.append(_s(data['note']) or None)
-    if not fields:
-        return jsonify({'success': False, 'error': '変更がありません'}), 400
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(f"UPDATE ug_roles SET {', '.join(fields)} WHERE id=%s", tuple(vals) + (role_id,))
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/roles/<int:role_id>', methods=['DELETE'])
-@login_required
-def ledger_role_delete(role_id):
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT COUNT(*) AS n FROM ug_appointments WHERE role_id=%s", (role_id,))
-        if cursor.fetchone()['n']:
-            return jsonify({'success': False, 'error': 'この役割を使う発令が残っています．先に発令を消してください'}), 400
-        cursor.execute("DELETE FROM ug_roles WHERE id=%s", (role_id,))
-        conn.commit()
-        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -695,7 +420,7 @@ def _resolve_user_id(cursor, name, cache):
 
 @user_groups_bp.route('/api/ledger/users')
 @login_required
-@admin_only
+@org_only
 def ledger_users_search():
     """発令の編集で人を選ぶための検索：users ID・メール・氏名の一部（空白無視）"""
     q = _s(request.args.get('q'))
@@ -706,11 +431,13 @@ def ledger_users_search():
     try:
         cursor.execute("SELECT id, full_name, email, category, is_active FROM users WHERE deleted_at IS NULL")
         key = _norm_name(q).lower()
+        _is_admin_cached = _is_admin()
         items = []
         for r in cursor.fetchall():
-            hit = (q.isdigit() and r['id'] == int(q)) or (key and key in _norm_name(r['full_name']).lower()) or (key and key in (r['email'] or '').lower())
+            adm = _is_admin_cached
+            hit = (q.isdigit() and r['id'] == int(q)) or (key and key in _norm_name(r['full_name']).lower()) or (adm and key and key in (r['email'] or '').lower())
             if hit:
-                items.append({'id': r['id'], 'full_name': r['full_name'] or '', 'email': r['email'] or '',
+                items.append({'id': r['id'], 'full_name': r['full_name'] or '', 'email': (r['email'] or '') if adm else '',
                               'category': r['category'], 'inactive': not r['is_active']})
         items.sort(key=lambda x: (not (q.isdigit() and x['id'] == int(q)), x['inactive'], x['full_name']))
         return jsonify({'success': True, 'items': items[:12], 'more': max(0, len(items) - 12)})
@@ -722,7 +449,7 @@ def ledger_users_search():
 @user_groups_bp.route('/api/ledger/appointments', methods=['POST'])
 @login_required
 def ledger_appt_create():
-    if not _is_admin():
+    if not _can_define_groups():
         return _deny()
     data = request.get_json(silent=True) or {}
     unit_id = data.get('unit_id')
@@ -733,6 +460,9 @@ def ledger_appt_create():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        err = _reserved_unit_guard(cursor, [unit_id])
+        if err:
+            return jsonify({'success': False, 'error': err}), 403
         user_id = data.get('user_id') if 'user_id' in data else _resolve_user_id(cursor, person, {})
         cursor.execute("""INSERT INTO ug_appointments
                           (unit_id, role_id, user_id, person_name, valid_from, valid_until, note, source, created_by)
@@ -753,12 +483,17 @@ def ledger_appt_create():
 @user_groups_bp.route('/api/ledger/appointments/<int:appt_id>', methods=['PUT'])
 @login_required
 def ledger_appt_update(appt_id):
-    if not _is_admin():
+    if not _can_define_groups():
         return _deny()
     data = request.get_json(silent=True) or {}
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT unit_id FROM ug_appointments WHERE id=%s", (appt_id,))
+        row = cursor.fetchone()
+        err = _reserved_unit_guard(cursor, [row['unit_id']] + ([data['unit_id']] if data.get('unit_id') else [])) if row else None
+        if err:
+            return jsonify({'success': False, 'error': err}), 403
         fields, vals = [], []
         if 'person_name' in data:
             person = _s(data['person_name'])
@@ -792,11 +527,16 @@ def ledger_appt_update(appt_id):
 @user_groups_bp.route('/api/ledger/appointments/<int:appt_id>', methods=['DELETE'])
 @login_required
 def ledger_appt_delete(appt_id):
-    if not _is_admin():
+    if not _can_define_groups():
         return _deny()
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT unit_id FROM ug_appointments WHERE id=%s", (appt_id,))
+        row = cursor.fetchone()
+        err = _reserved_unit_guard(cursor, [row['unit_id']]) if row else None
+        if err:
+            return jsonify({'success': False, 'error': err}), 403
         cursor.execute("DELETE FROM ug_appointments WHERE id=%s", (appt_id,))
         conn.commit()
         return jsonify({'success': True})
@@ -808,39 +548,77 @@ def ledger_appt_delete(appt_id):
         conn.close()
 
 
-@user_groups_bp.route('/api/ledger/persons')
+# ────────────────────────────────────────────
+# 年度の引き継ぎ（年度ごとに区切った発令を翌年度へ写す）
+# ────────────────────────────────────────────
+
+@user_groups_bp.route('/api/ledger/carryover', methods=['POST'])
 @login_required
-@admin_only
-def ledger_persons():
-    """人から引く：氏名の部分一致で発令を横断検索（全期間）"""
-    q = _s(request.args.get('q'))
-    if not q:
-        return jsonify({'success': True, 'items': []})
+@org_only
+def ledger_carryover():
+    """
+    {kind, from_fy, to_fy, mode: check|apply}
+    from_fy 年度の末日（3月31日）で終わる発令を，to_fy 年度（4月1日〜3月31日）の発令として写す．
+    期限のない発令はそのまま続くので写さない．写し先の年度に同じ単位・役割・人の発令が既にあれば飛ばす．
+    単位がその年度より前に閉じていれば飛ばす．
+    """
+    data = request.get_json(silent=True) or {}
+    kind = data.get('kind')
+    try:
+        fy0, fy1 = int(data.get('from_fy')), int(data.get('to_fy'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': '年度を数で指定してください'}), 400
+    kinds = ['org', 'body'] if kind == 'tree' else [kind]
+    if any(k not in KIND_LABEL for k in kinds) or fy1 <= fy0:
+        return jsonify({'success': False, 'error': '種別と年度（写し先は写し元より後）を指定してください'}), 400
+    apply_ = data.get('mode') == 'apply'
+    src_end = datetime(fy0 + 1, 3, 31)
+    t0, t1 = datetime(fy1, 4, 1), datetime(fy1 + 1, 3, 31)
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT a.id, a.person_name, a.user_id, a.valid_from, a.valid_until, a.note,
-                   u.kind, u.id AS unit_id, r.name AS role_name, us.full_name
-            FROM ug_appointments a
-            JOIN ug_units u ON u.id = a.unit_id
-            JOIN ug_roles r ON r.id = a.role_id
-            LEFT JOIN users us ON us.id = a.user_id
-            WHERE a.person_name LIKE %s OR us.full_name LIKE %s
-            ORDER BY u.kind, u.id, r.`rank`
-        """, (f'%{q}%', f'%{q}%'))
-        hits = cursor.fetchall()
-        # 単位のパスを解決
-        paths = {}
-        for kind, _ in KINDS:
-            for u in _tree_order(_load_units(cursor, kind)):
-                paths[u['id']] = u['path']
-        items = [{'id': h['id'], 'name': h['person_name'] or h['full_name'] or '',
-                  'kind': h['kind'], 'kind_label': KIND_LABEL[h['kind']],
-                  'path': paths.get(h['unit_id'], []), 'role': h['role_name'],
-                  'from': _dstr(h['valid_from']), 'until': _dstr(h['valid_until']),
-                  'note': h['note'] or ''} for h in hits]
-        return jsonify({'success': True, 'items': items})
+        has_order = _has_order(cursor)
+        cursor.execute(f"""
+            SELECT a.id, a.unit_id, a.role_id, a.user_id, a.person_name, a.valid_from, a.valid_until, a.note,
+                   {'a.sort_order' if has_order else 'NULL AS sort_order'},
+                   u.name AS unit_name, u.valid_until AS unit_until, r.name AS role_name
+            FROM ug_appointments a JOIN ug_units u ON u.id=a.unit_id JOIN ug_roles r ON r.id=a.role_id
+            WHERE u.kind IN ({','.join(['%s'] * len(kinds))})""", tuple(kinds))
+        rows = cursor.fetchall()
+        def key(a):
+            return (a['unit_id'], a['role_id'], a['user_id'] or ('n:' + _norm_name(a['person_name'])))
+        in_target = {key(a) for a in rows
+                     if (a['valid_from'] is None or a['valid_from'] <= t1) and (a['valid_until'] is None or a['valid_until'] >= t0)}
+        open_ended = sum(1 for a in rows if a['valid_until'] is None and (a['valid_from'] is None or a['valid_from'] <= t1))
+        copy, skipped_exist, skipped_closed = [], 0, 0
+        for a in rows:
+            if not a['valid_until'] or a['valid_until'].date() != src_end.date():
+                continue
+            if a['unit_until'] and a['unit_until'] < t0:
+                skipped_closed += 1
+                continue
+            if key(a) in in_target:
+                skipped_exist += 1
+                continue
+            copy.append(a)
+        source = f"{fy1}年度（{fy0}年度から引継ぎ）"
+        if apply_:
+            me = session.get('user_id')
+            for a in copy:
+                cursor.execute("""INSERT INTO ug_appointments
+                                  (unit_id, role_id, user_id, person_name, valid_from, valid_until, note, source, created_by)
+                                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                               (a['unit_id'], a['role_id'], a['user_id'], a['person_name'], t0, t1, a['note'], source, me))
+                if has_order and a['sort_order'] is not None:
+                    cursor.execute("UPDATE ug_appointments SET sort_order=%s WHERE id=%s", (a['sort_order'], cursor.lastrowid))
+            conn.commit()
+        sample = [f"{a['unit_name']}／{a['role_name']}：{a['person_name'] or ''}" for a in copy[:15]]
+        return jsonify({'success': True, 'mode': 'apply' if apply_ else 'check', 'copied': len(copy),
+                        'skipped_existing': skipped_exist, 'skipped_closed': skipped_closed,
+                        'open_ended': open_ended, 'source': source, 'sample': sample})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -851,120 +629,8 @@ def ledger_persons():
 # ────────────────────────────────────────────
 
 # 会議体で「委員の側」に当たる役割（残りは事務局側とみなす）
-BODY_MEMBER_ROLES = ('理事長', '理事', '監事', '議長', '担当副学長', '委員長', '副委員長',
-                     '室長', '副室長', '部局長', '副学部長等', '委員', '構成員')
 BODY_STAFF_ROLES = ('事務職員',)
 # 組織で「教員」に当たる役割
-FACULTY_ROLES = ('学長', '副学長', '学部長', '副学部長', '基盤教育院長', '研究科長',
-                 '教授', '准教授', '講師', '助教', '特命教授')   # 参考（いまは単位ごと全役割で足りる）
-
-
-def _rules_of(cursor, group_id):
-    cursor.execute("""
-        SELECT r.id, r.unit_id, r.role_id, r.recurse, r.mode, r.valid_from, r.valid_until, r.note,
-               u.kind, u.name AS unit_name, ro.name AS role_name
-        FROM ug_group_rules r
-        JOIN ug_units u ON u.id = r.unit_id
-        LEFT JOIN ug_roles ro ON ro.id = r.role_id
-        WHERE r.group_id = %s ORDER BY r.id
-    """, (group_id,))
-    return cursor.fetchall()
-
-
-def _unit_path(cursor, unit_id):
-    names, cur = [], unit_id
-    for _ in range(MAX_DEPTH + 2):
-        cursor.execute("SELECT name, parent_id FROM ug_units WHERE id=%s", (cur,))
-        r = cursor.fetchone()
-        if not r:
-            break
-        names.append(r['name'])
-        if not r['parent_id']:
-            break
-        cur = r['parent_id']
-    return list(reversed(names))
-
-
-@user_groups_bp.route('/api/ledger/groups')
-@login_required
-@admin_only
-def ledger_groups():
-    """グループの一覧：直接メンバー・ルール・いまの構成員（台帳が導く分を含む）"""
-    at = _as_of_from_request() or _now()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        from .utils import _group_member_ids
-        cursor.execute("SELECT id, name, description, manager_user_id FROM user_groups ORDER BY name")
-        groups = cursor.fetchall()
-        cursor.execute("SELECT id, full_name FROM users WHERE deleted_at IS NULL")
-        uname = {r['id']: r['full_name'] or '' for r in cursor.fetchall()}
-        items = []
-        for g in groups:
-            cursor.execute("""SELECT user_id, valid_from, valid_until FROM user_group_memberships WHERE group_id=%s""", (g['id'],))
-            direct = {r['user_id'] for r in cursor.fetchall() if _valid_at(r['valid_from'], r['valid_until'], at)}
-            rules = _rules_of(cursor, g['id'])
-            members = _group_member_ids(cursor, g['id'], at)
-            items.append({
-                'id': g['id'], 'name': g['name'], 'description': g['description'] or '',
-                'manager': uname.get(g['manager_user_id'], ''),
-                'direct': sorted(direct), 'direct_names': [uname.get(u, f'#{u}') for u in sorted(direct)],
-                'rules': [{'id': r['id'], 'unit_id': r['unit_id'], 'unit': '／'.join(_unit_path(cursor, r['unit_id'])),
-                           'kind': KIND_LABEL.get(r['kind'], r['kind']), 'role': r['role_name'] or '（全役割）',
-                           'recurse': bool(r['recurse']), 'mode': r['mode'], 'note': r['note'] or ''} for r in rules],
-                'members': sorted(members), 'member_names': [uname.get(u, f'#{u}') for u in sorted(members)],
-            })
-        return jsonify({'success': True, 'items': items, 'as_of': _dstr(at)})
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/rules', methods=['POST'])
-@login_required
-def ledger_group_rule_add():
-    """グループにルールを1本足す"""
-    if not _is_admin():
-        return _deny()
-    data = request.get_json(silent=True) or {}
-    if not data.get('group_id') or not data.get('unit_id'):
-        return jsonify({'success': False, 'error': 'グループと単位は必須です'}), 400
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""INSERT INTO ug_group_rules (group_id, unit_id, role_id, recurse, mode, valid_from, valid_until, note, created_by)
-                          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                       (data['group_id'], data['unit_id'], data.get('role_id') or None,
-                        1 if data.get('recurse') else 0, data.get('mode') if data.get('mode') in ('include', 'exclude') else 'include',
-                        parse_input(_s(data.get('valid_from'))), parse_input(_s(data.get('valid_until'))),
-                        _s(data.get('note')) or None, session.get('user_id')))
-        conn.commit()
-        return jsonify({'success': True, 'id': cursor.lastrowid})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/rules/<int:rule_id>', methods=['DELETE'])
-@login_required
-def ledger_group_rule_delete(rule_id):
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM ug_group_rules WHERE id=%s", (rule_id,))
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 def _proposals(cursor):
@@ -996,7 +662,7 @@ def _proposals(cursor):
         out.append({'group_name': '事務局', 'unit_id': r['id'], 'unit': '事務局', 'rules': [(None, 'include')],
                     'role_label': '所属する職員', 'recurse': True, 'kind': '組織'})
 
-    # グループ種別は 2026-09-24 に廃止（グループ画面の直接メンバーへ移す．groups.py の retire_group_kind）
+    # 種別グループの単位はグループ管理（stewards.py）が改廃のたびに user_groups を揃える
 
     # 会議体：末端の単位ごとに「<名称>」（委員側）と「<名称>_事務」（事務職員）
     cursor.execute("SELECT id, name, parent_id FROM ug_units WHERE kind='body' ORDER BY sort_order, id")
@@ -1014,237 +680,6 @@ def _proposals(cursor):
                         'rules': [(rid, 'include') for rid in staff],
                         'role_label': '事務職員', 'recurse': False, 'kind': '会議体'})
     return out
-
-
-@user_groups_bp.route('/api/ledger/groups/proposals')
-@login_required
-def ledger_group_proposals():
-    """台帳から作れるグループの候補と，その構成員（作る前に確かめる）"""
-    if not _is_admin():
-        return _deny()
-    at = _now()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        from .utils import _rule_member_ids
-        cursor.execute("SELECT id, name FROM user_groups")
-        exists = {r['name']: r['id'] for r in cursor.fetchall()}
-        cursor.execute("SELECT id, full_name FROM users WHERE deleted_at IS NULL")
-        uname = {r['id']: r['full_name'] or '' for r in cursor.fetchall()}
-        cursor.execute("SELECT group_id, unit_id, role_id FROM ug_group_rules")
-        have = {(r['group_id'], r['unit_id'], r['role_id']) for r in cursor.fetchall()}
-        items = []
-        for p in _proposals(cursor):
-            inc, exc = set(), set()
-            for rid, mode in p['rules']:
-                got = _rule_member_ids(cursor, {'unit_id': p['unit_id'], 'role_id': rid, 'recurse': p['recurse']}, at)
-                (exc if mode == 'exclude' else inc).update(got)
-            ids = inc - exc
-            gid = exists.get(p['group_name'])
-            done = bool(gid) and all((gid, p['unit_id'], rid) in have for rid, _m in p['rules'])
-            items.append({k: v for k, v in p.items() if k != 'rules'} |
-                         {'rule_count': len(p['rules']), 'members': sorted(ids),
-                          'member_names': [uname.get(u, f'#{u}') for u in sorted(ids)],
-                          'exists': bool(gid), 'group_id': gid, 'done': done})
-        return jsonify({'success': True, 'items': items})
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/generate', methods=['POST'])
-@login_required
-def ledger_group_generate():
-    """選んだ候補について，グループを作り（無ければ）ルールを足す"""
-    if not _is_admin():
-        return _deny()
-    data = request.get_json(silent=True) or {}
-    want = set(data.get('names') or [])
-    if not want:
-        return jsonify({'success': False, 'error': '作るグループを選んでください'}), 400
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        me = session.get('user_id')
-        cursor.execute("SELECT id, name FROM user_groups")
-        exists = {r['name']: r['id'] for r in cursor.fetchall()}
-        cursor.execute("SELECT group_id, unit_id, role_id FROM ug_group_rules")
-        have = {(r['group_id'], r['unit_id'], r['role_id']) for r in cursor.fetchall()}
-        created_groups = added_rules = 0
-        for p in _proposals(cursor):
-            if p['group_name'] not in want:
-                continue
-            gid = exists.get(p['group_name'])
-            if not gid:
-                cursor.execute("""INSERT INTO user_groups (name, description, manager_user_id, created_at, updated_at)
-                                  VALUES (%s,%s,%s,%s,%s)""",
-                               (p['group_name'], f"台帳から生成（{p['kind']}：{p['unit']}／{p['role_label']}）", me, _now(), _now()))
-                gid = cursor.lastrowid
-                exists[p['group_name']] = gid
-                created_groups += 1
-            for rid, mode in p['rules']:
-                if (gid, p['unit_id'], rid) in have:
-                    continue
-                cursor.execute("""INSERT INTO ug_group_rules (group_id, unit_id, role_id, recurse, mode, note, created_by)
-                                  VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                               (gid, p['unit_id'], rid, 1 if p['recurse'] else 0, mode, '台帳から生成', me))
-                have.add((gid, p['unit_id'], rid))
-                added_rules += 1
-        conn.commit()
-        return jsonify({'success': True, 'groups_created': created_groups, 'rules_added': added_rules})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/sync', methods=['POST'])
-@login_required
-def ledger_group_sync():
-    """
-    台帳を users・user_groups 等に反映する（何度実行しても同じ結果になる）．
-      1. 名簿 → users（無ければ作る，あれば氏名・区分・所属を合わせる）と approved_users
-      2. 名寄せの掛け直し
-      3. 台帳の全単位 → user_groups とルール（無ければ作り，足りないルールを足す）
-      台帳に対応の無いグループは報告するだけで消さない．
-    """
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        me = session.get('user_id')
-        now = _now()
-        data = request.get_json(silent=True) or {}
-        roster = _publish_roster(cursor, me, now, create_users=True,
-                                 deactivate=bool(data.get('deactivate_expired')))
-        cursor.execute("SELECT id, name FROM user_groups")
-        exists = {r['name']: r['id'] for r in cursor.fetchall()}
-        cursor.execute("SELECT group_id, unit_id, role_id FROM ug_group_rules")
-        have = {(r['group_id'], r['unit_id'], r['role_id']) for r in cursor.fetchall()}
-        created = added = 0
-        from_ledger = set()
-        for p in _proposals(cursor):
-            from_ledger.add(p['group_name'])
-            gid = exists.get(p['group_name'])
-            if not gid:
-                cursor.execute("""INSERT INTO user_groups (name, description, manager_user_id, created_at, updated_at)
-                                  VALUES (%s,%s,%s,%s,%s)""",
-                               (p['group_name'], f"台帳から生成（{p['kind']}：{p['unit']}／{p['role_label']}）", me, now, now))
-                gid = cursor.lastrowid
-                exists[p['group_name']] = gid
-                created += 1
-            for rid, mode in p['rules']:
-                if (gid, p['unit_id'], rid) in have:
-                    continue
-                cursor.execute("""INSERT INTO ug_group_rules (group_id, unit_id, role_id, recurse, mode, note, created_by)
-                                  VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                               (gid, p['unit_id'], rid, 1 if p['recurse'] else 0, mode, '台帳から生成', me))
-                have.add((gid, p['unit_id'], rid))
-                added += 1
-        # 台帳に対応の無いグループ
-        extras = []
-        for name, gid in exists.items():
-            if name in from_ledger:
-                continue
-            cursor.execute("SELECT COUNT(*) AS n FROM ug_group_rules WHERE group_id=%s", (gid,))
-            nr = cursor.fetchone()['n']
-            cursor.execute("SELECT COUNT(*) AS n FROM user_group_memberships WHERE group_id=%s", (gid,))
-            nm = cursor.fetchone()['n']
-            extras.append({'name': name, 'rules': nr, 'direct': nm})
-        # 控えてある永続IDを，できあがった users／user_groups に付け直す（永続IDは元帳に従う）
-        pids_linked = {'person': 0, 'group': 0}
-        try:
-            from .pids import link_pending
-            cursor.execute("SAVEPOINT before_pids")
-            pids_linked = link_pending(cursor)
-        except Exception as e:
-            logging.warning("link_pending skipped: %s", e)
-            try:
-                cursor.execute("ROLLBACK TO SAVEPOINT before_pids")
-            except Exception:
-                pass
-        conn.commit()
-        return jsonify({'success': True, 'groups_created': created, 'rules_added': added,
-                        'from_ledger': len(from_ledger), 'extras': sorted(extras, key=lambda x: x['name']),
-                        'roster': roster, 'pids_linked': pids_linked})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/snapshot', methods=['POST'])
-@login_required
-def ledger_group_snapshot():
-    """いまの全グループの構成員を控える（ルール導入前の姿を記録する）"""
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        from .utils import _group_member_ids
-        at = _now()
-        cursor.execute("DELETE FROM ug_group_snapshot")
-        cursor.execute("SELECT id, name FROM user_groups")
-        n = 0
-        for g in cursor.fetchall():
-            for uid in _group_member_ids(cursor, g['id'], at):
-                cursor.execute("INSERT INTO ug_group_snapshot (taken_at, group_id, group_name, user_id) VALUES (%s,%s,%s,%s)",
-                               (at, g['id'], g['name'], uid))
-                n += 1
-        conn.commit()
-        return jsonify({'success': True, 'rows': n, 'taken_at': _dstr(at)})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/groups/compare')
-@login_required
-def ledger_group_compare():
-    """控えた構成員といまの構成員を突き合わせる（ルール0件なら完全一致するはず）"""
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        from .utils import _group_member_ids
-        at = _now()
-        cursor.execute("SELECT MIN(taken_at) AS t, COUNT(*) AS n FROM ug_group_snapshot")
-        head = cursor.fetchone()
-        if not head['n']:
-            return jsonify({'success': False, 'error': 'まだ控えがありません'}), 400
-        cursor.execute("SELECT group_id, group_name, user_id FROM ug_group_snapshot")
-        snap = {}
-        for r in cursor.fetchall():
-            snap.setdefault((r['group_id'], r['group_name']), set()).add(r['user_id'])
-        cursor.execute("SELECT id, full_name FROM users WHERE deleted_at IS NULL")
-        uname = {r['id']: r['full_name'] or '' for r in cursor.fetchall()}
-        cursor.execute("SELECT id, name FROM user_groups")
-        now_groups = cursor.fetchall()
-        diffs = []
-        for g in now_groups:
-            before = snap.get((g['id'], g['name']), set())
-            after = _group_member_ids(cursor, g['id'], at)
-            add, rem = after - before, before - after
-            if add or rem:
-                diffs.append({'group': g['name'],
-                              'added': [uname.get(u, f'#{u}') for u in sorted(add)],
-                              'removed': [uname.get(u, f'#{u}') for u in sorted(rem)]})
-        gone = [name for (gid, name) in snap if not any(g['id'] == gid for g in now_groups)]
-        return jsonify({'success': True, 'taken_at': _dstr(head['t']), 'groups': len(now_groups),
-                        'identical': not diffs and not gone, 'diffs': diffs, 'groups_gone': gone})
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # ────────────────────────────────────────────
@@ -1420,83 +855,6 @@ def ledger_name_link():
         conn.close()
 
 
-@user_groups_bp.route('/api/ledger/aliases', methods=['POST'])
-@login_required
-def ledger_alias_upsert():
-    """
-    {alias_name, user_id|null, note}
-    user_id あり … 別名を登録し，同じ氏名の未解決発令をその人に紐づける
-    user_id なし … 「紐づけ不要」（外部の方など）として登録し，未解決一覧から外す
-    """
-    if not _is_admin():
-        return _deny()
-    data = request.get_json(silent=True) or {}
-    alias = _s(data.get('alias_name'))
-    if not alias:
-        return jsonify({'success': False, 'error': '別名が空です'}), 400
-    user_id = data.get('user_id') or None
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        key = _norm_name(alias)
-        cursor.execute("SELECT id, alias_name FROM ug_person_aliases")
-        hit = next((r['id'] for r in cursor.fetchall() if _norm_name(r['alias_name']) == key), None)
-        if hit:
-            cursor.execute("UPDATE ug_person_aliases SET alias_name=%s, user_id=%s, note=%s WHERE id=%s",
-                           (alias, user_id, _s(data.get('note')) or None, hit))
-            alias_id = hit
-        else:
-            cursor.execute("INSERT INTO ug_person_aliases (alias_name, user_id, note, created_by) VALUES (%s,%s,%s,%s)",
-                           (alias, user_id, _s(data.get('note')) or None, session.get('user_id')))
-            alias_id = cursor.lastrowid
-        linked = 0
-        if user_id:
-            ids = _appt_ids_for_name(cursor, alias)
-            for aid in ids:
-                cursor.execute("UPDATE ug_appointments SET user_id=%s WHERE id=%s", (user_id, aid))
-            linked = len(ids)
-        conn.commit()
-        return jsonify({'success': True, 'id': alias_id, 'linked': linked})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@user_groups_bp.route('/api/ledger/aliases/<int:alias_id>', methods=['DELETE'])
-@login_required
-def ledger_alias_delete(alias_id):
-    """別名を消す．?unlink=1 なら，その別名で紐づいた発令の user_id も外す"""
-    if not _is_admin():
-        return _deny()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT alias_name, user_id FROM ug_person_aliases WHERE id=%s", (alias_id,))
-        row = cursor.fetchone()
-        if not row:
-            return jsonify({'success': False, 'error': '見つかりません'}), 404
-        unlinked = 0
-        if request.args.get('unlink') == '1' and row['user_id']:
-            key = _norm_name(row['alias_name'])
-            cursor.execute("SELECT id, person_name FROM ug_appointments WHERE user_id=%s", (row['user_id'],))
-            ids = [r['id'] for r in cursor.fetchall() if _norm_name(r['person_name']) == key]
-            for aid in ids:
-                cursor.execute("UPDATE ug_appointments SET user_id=NULL WHERE id=%s", (aid,))
-            unlinked = len(ids)
-        cursor.execute("DELETE FROM ug_person_aliases WHERE id=%s", (alias_id,))
-        conn.commit()
-        return jsonify({'success': True, 'unlinked': unlinked})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
 # ────────────────────────────────────────────
 # アカウント名簿（ug_persons → approved_users）
 # ────────────────────────────────────────────
@@ -1630,6 +988,18 @@ def ledger_roster_publish():
         res = _publish_roster(cursor, session.get('user_id'), _now(),
                               create_users=bool(data.get('create_users')),
                               deactivate=bool(data.get('deactivate_expired')))
+        # 先に取り込んで控えてあった永続IDを，できた users に付ける（複製：ユーザ→永続ID→台帳の順でも，逆でもよい）
+        res['pids_linked'] = {'person': 0, 'group': 0}
+        try:
+            from .pids import link_pending
+            cursor.execute("SAVEPOINT before_pids")
+            res['pids_linked'] = link_pending(cursor)
+        except Exception as e:
+            logging.warning("link_pending skipped: %s", e)
+            try:
+                cursor.execute("ROLLBACK TO SAVEPOINT before_pids")
+            except Exception:
+                pass
         conn.commit()
         return jsonify({'success': True, **res})
     except Exception as e:
@@ -2122,450 +1492,3 @@ def ledger_blacklist_add():
 # ────────────────────────────────────────────
 # Excel 入出力
 # ────────────────────────────────────────────
-
-def _wb_from_rows(units_rows, roles_rows, appt_rows, person_rows=()):
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
-
-    wb = Workbook()
-    head_font = Font(bold=True)
-    head_fill = PatternFill('solid', fgColor='DDEBF7')
-
-    def sheet(title, headers, rows, widths):
-        ws = wb.active if wb.active.title == 'Sheet' else wb.create_sheet()
-        ws.title = title
-        ws.append(headers)
-        for c in ws[1]:
-            c.font = head_font
-            c.fill = head_fill
-            c.alignment = Alignment(vertical='center')
-        for r in rows:
-            ws.append(r)
-        for i, w in enumerate(widths, start=1):
-            ws.column_dimensions[get_column_letter(i)].width = w
-        ws.freeze_panes = 'A2'
-        return ws
-
-    sheet(SHEET_UNITS, UNIT_HEADERS, units_rows, [10] + [18] * MAX_DEPTH + [6, 16, 12, 12, 30])
-    sheet(SHEET_ROLES, ROLE_HEADERS, roles_rows, [10, 22, 6, 30])
-    sheet(SHEET_APPT, APPT_HEADERS, appt_rows, [10] + [18] * MAX_DEPTH + [14, 16, 12, 12, 30, 16])
-    sheet(SHEET_PERSONS, PERSON_HEADERS, person_rows, [18, 36, 9, 14, 12, 12, 30])
-    return wb
-
-
-def _dump_rows(cursor):
-    """DB の台帳を Excel の3シート分の行に展開"""
-    cursor.execute("SELECT id, name FROM user_groups")
-    gname = {r['id']: r['name'] for r in cursor.fetchall()}
-
-    unit_rows, appt_rows = [], []
-    unit_path = {}
-    for kind, label in KINDS:
-        for u in _tree_order(_load_units(cursor, kind)):
-            p = (u['path'] + [''] * MAX_DEPTH)[:MAX_DEPTH]
-            unit_path[u['id']] = (label, p)
-            unit_rows.append([label] + p + [u['sort_order'], gname.get(u['owner_group_id'], ''),
-                                            _dstr(u['valid_from']), _dstr(u['valid_until']), u['note'] or ''])
-
-    cursor.execute("SELECT kind, name, `rank`, note FROM ug_roles ORDER BY kind, `rank`, sort_order, id")
-    role_rows = [[KIND_LABEL.get(r['kind'], r['kind']), r['name'], r['rank'], r['note'] or ''] for r in cursor.fetchall()]
-
-    cursor.execute("""
-        SELECT a.unit_id, a.person_name, a.valid_from, a.valid_until, a.note, a.source,
-               r.name AS role_name, us.full_name
-        FROM ug_appointments a
-        JOIN ug_roles r ON r.id = a.role_id
-        LEFT JOIN users us ON us.id = a.user_id
-        ORDER BY a.unit_id, r.`rank`, a.valid_from, a.id
-    """)
-    for a in cursor.fetchall():
-        label, p = unit_path.get(a['unit_id'], ('?', [''] * MAX_DEPTH))
-        appt_rows.append([label] + p + [a['role_name'], a['person_name'] or a['full_name'] or '',
-                                        _dstr(a['valid_from']), _dstr(a['valid_until']),
-                                        a['note'] or '', a['source'] or ''])
-    person_rows = []
-    try:
-        cursor.execute("SELECT full_name, email, category, affiliation, valid_from, valid_until, note FROM ug_persons ORDER BY affiliation, full_name")
-        person_rows = [[r['full_name'], r['email'], r['category'], r['affiliation'] or '', _dstr(r['valid_from']), _dstr(r['valid_until']), r['note'] or '']
-                       for r in cursor.fetchall()]
-    except Exception as e:
-        logging.warning("ug_persons unavailable: %s", e)
-    return unit_rows, role_rows, appt_rows, person_rows
-
-
-@user_groups_bp.route('/ledger/export.xlsx')
-@login_required
-@admin_only
-def ledger_export():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        unit_rows, role_rows, appt_rows, person_rows = _dump_rows(cursor)
-    finally:
-        cursor.close()
-        conn.close()
-    wb = _wb_from_rows(unit_rows, role_rows, appt_rows, person_rows)
-    bio = io.BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    fname = f"maiguru_ledger_{_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return send_file(bio, as_attachment=True, download_name=fname,
-                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-
-@user_groups_bp.route('/ledger/template.xlsx')
-@login_required
-@admin_only
-def ledger_template():
-    """空の雛形（見本として汎用の行を数行入れてある）"""
-    units = [
-        ['組織', '事務局', '', '', '', '', 10, '', '', '', ''],
-        ['組織', '事務局', '総務課', '', '', '', 10, '', '', '', ''],
-        ['組織', '事務局', '総務課', '総務係', '', '', 10, '', '', '', ''],
-        ['会議体', '全学委員会', '', '', '', '', 10, '', '', '', ''],
-        ['会議体', '全学委員会', '情報委員会', '', '', '', 10, '', '', '', ''],
-        ['分担事務', '総務課', '総務係', '文書の管理に関すること', '', '', 10, '', '', '', ''],
-    ]
-    roles = [
-        ['組織', '課長', 1, ''], ['組織', '係長', 2, ''], ['組織', '主事', 3, ''],
-        ['会議体', '委員長', 1, ''], ['会議体', '委員', 2, ''], ['会議体', '事務職員', 3, ''],
-        ['分担事務', '主担当', 1, ''], ['分担事務', '副担当', 2, ''],
-    ]
-    appts = [
-        ['組織', '事務局', '総務課', '', '', '', '課長', '山田 太郎', '2026-04-01', '', '', '見本'],
-        ['組織', '事務局', '総務課', '総務係', '', '', '係長', '佐藤 花子', '2026-04-01', '2027-03-31', '', '見本'],
-        ['会議体', '全学委員会', '情報委員会', '', '', '', '委員長', '鈴木 一郎', '', '', '', '見本'],
-        ['会議体', '全学委員会', '情報委員会', '', '', '', '事務職員', '佐藤', '', '', '氏名は姓だけでも可（users との照合は完全一致のみ）', '見本'],
-        ['分担事務', '総務課', '総務係', '文書の管理に関すること', '', '', '主担当', '佐藤 花子', '', '', '', '見本'],
-        ['分担事務', '総務課', '総務係', '文書の管理に関すること', '', '', '副担当', '', '', '', '氏名が空なら空席', '見本'],
-    ]
-    persons = [
-        ['山田 太郎', 'yamada@example.ac.jp', 'regular', '事務職員', '', '', '見本'],
-        ['鈴木 一郎', 'suzuki@example.ac.jp', 'regular', '教員', '', '2027-03-31', '見本．終了を過ぎると発行対象から外れる'],
-    ]
-    wb = _wb_from_rows(units, roles, appts, persons)
-    bio = io.BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    return send_file(bio, as_attachment=True, download_name='maiguru_ledger_template.xlsx',
-                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-
-def _read_sheet(ws, headers, key='種別'):
-    """ヘッダ名で列を割り当てて行を dict で返す（列順は問わない）．key は必須列"""
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return [], []
-    head = [_s(h) for h in rows[0]]
-    idx = {h: head.index(h) for h in headers if h in head}
-    missing = [h for h in headers if h not in idx and not h.startswith('階層')]
-    if key not in idx:
-        raise ValueError(f"シート「{ws.title}」に「{key}」列がありません")
-    out = []
-    for n, r in enumerate(rows[1:], start=2):
-        if r is None or all(_s(v) == '' for v in r):
-            continue
-        d = {h: (r[i] if i < len(r) else None) for h, i in idx.items()}
-        d['_row'] = n
-        out.append(d)
-    return out, missing
-
-
-def _path_of(d):
-    return [_s(d.get(f'階層{i}')) for i in range(1, MAX_DEPTH + 1) if _s(d.get(f'階層{i}'))]
-
-
-def parse_workbook(file_obj):
-    """アップロードされた xlsx を読み，正規化した3種の行と警告を返す（DBには触れない）"""
-    from openpyxl import load_workbook
-    wb = load_workbook(file_obj, data_only=True)
-    warnings = []
-    units, roles, appts = [], [], []
-
-    if SHEET_ROLES in wb.sheetnames:
-        rows, _ = _read_sheet(wb[SHEET_ROLES], ROLE_HEADERS)
-        for d in rows:
-            kind = LABEL_KIND.get(_s(d.get('種別')))
-            name = _s(d.get('役割名'))
-            if not kind:
-                warnings.append(f"役割 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明（{'／'.join(v for _k, v in LEDGER_KINDS)}）")
-                continue
-            if kind == 'group':
-                warnings.append(f"役割 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
-                continue
-            if not name:
-                warnings.append(f"役割 {d['_row']}行: 役割名が空")
-                continue
-            try:
-                rank = int(d.get('序列')) if _s(d.get('序列')) else DEFAULT_RANK
-            except (TypeError, ValueError):
-                rank = DEFAULT_RANK
-            roles.append({'kind': kind, 'name': name, 'rank': rank, 'note': _s(d.get('備考'))})
-
-    if SHEET_UNITS in wb.sheetnames:
-        rows, _ = _read_sheet(wb[SHEET_UNITS], UNIT_HEADERS)
-        for d in rows:
-            kind = LABEL_KIND.get(_s(d.get('種別')))
-            path = _path_of(d)
-            if not kind:
-                warnings.append(f"単位 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明")
-                continue
-            if kind == 'group':
-                warnings.append(f"単位 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
-                continue
-            if not path:
-                warnings.append(f"単位 {d['_row']}行: 階層が空")
-                continue
-            try:
-                so = int(d.get('序列')) if _s(d.get('序列')) else None
-            except (TypeError, ValueError):
-                so = None
-            units.append({'kind': kind, 'path': path, 'sort_order': so,
-                          'owner_group': _s(d.get('管理グループ')),
-                          'valid_from': _d(d.get('開始')), 'valid_until': _d(d.get('終了')),
-                          'note': _s(d.get('備考'))})
-
-    persons = []
-    if SHEET_PERSONS in wb.sheetnames:
-        rows, _ = _read_sheet(wb[SHEET_PERSONS], PERSON_HEADERS, key='氏名')
-        seen = set()
-        for d in rows:
-            fn, em = _s(d.get('氏名')), _s(d.get('メール')).lower()
-            if not fn:
-                warnings.append(f"人 {d['_row']}行: 氏名が空")
-                continue
-            if em and '@' not in em:
-                warnings.append(f"人 {d['_row']}行: メール「{em}」の形式が不正")
-                continue
-            if em and em in seen:
-                warnings.append(f"人 {d['_row']}行: メール「{em}」が重複（後の行を無視）")
-                continue
-            if em:
-                seen.add(em)
-            else:
-                warnings.append(f"人 {d['_row']}行: {fn} はメール未記入（名簿には入るが発行されない）")
-            cat = _s(d.get('区分')).lower() or 'regular'
-            if cat not in PERSON_CATEGORIES:
-                warnings.append(f"人 {d['_row']}行: 区分「{cat}」は admin/regular/guest のいずれかにしてください（regular として扱う）")
-                cat = 'regular'
-            persons.append({'full_name': fn, 'email': em, 'category': cat, 'affiliation': _s(d.get('所属')),
-                            'valid_from': _d(d.get('開始')), 'valid_until': _d(d.get('終了')), 'note': _s(d.get('備考'))})
-
-    if SHEET_APPT in wb.sheetnames:
-        rows, _ = _read_sheet(wb[SHEET_APPT], APPT_HEADERS)
-        for d in rows:
-            kind = LABEL_KIND.get(_s(d.get('種別')))
-            path = _path_of(d)
-            role = _s(d.get('役割'))
-            if not kind:
-                warnings.append(f"発令 {d['_row']}行: 種別「{_s(d.get('種別'))}」が不明")
-                continue
-            if kind == 'group':
-                warnings.append(f"発令 {d['_row']}行: {GROUP_KIND_RETIRED}．読み飛ばします")
-                continue
-            if not path:
-                warnings.append(f"発令 {d['_row']}行: 階層が空")
-                continue
-            if not role:
-                warnings.append(f"発令 {d['_row']}行: 役割が空")
-                continue
-            names = [n for n in _NAME_SPLIT_RE.split(_s(d.get('氏名'))) if n] or ['']
-            for name in names:
-                appts.append({'kind': kind, 'path': path, 'role': role, 'person_name': name,
-                              'valid_from': _d(d.get('開始')), 'valid_until': _d(d.get('終了')),
-                              'note': _s(d.get('備考')), 'source': _s(d.get('出典')), '_row': d['_row']})
-    else:
-        warnings.append(f"シート「{SHEET_APPT}」がありません")
-
-    return {'units': units, 'roles': roles, 'appts': appts, 'persons': persons, 'warnings': warnings}
-
-
-@user_groups_bp.route('/api/ledger/import', methods=['POST'])
-@login_required
-def ledger_import():
-    """
-    multipart: file=xlsx, mode=check|apply, replace_source=0|1
-    check  … DB に触れず，何が起きるかを数えて返す
-    apply  … 単位・役割は upsert，発令は追加（replace_source=1 なら同じ出典の既存発令を先に消す）
-    """
-    if not _is_admin():
-        return _deny()
-    f = request.files.get('file')
-    mode = request.form.get('mode', 'check')
-    replace_source = request.form.get('replace_source', '1') == '1'
-    if not f:
-        return jsonify({'success': False, 'error': 'ファイルがありません'}), 400
-    try:
-        parsed = parse_workbook(f.stream)
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'読み取り失敗: {e}'}), 400
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        # admin の扱い：外から来た admin は，このサイトの現 admin とメールが一致しない限り regular にする
-        cursor.execute("SELECT email FROM users WHERE category='admin' AND is_active=TRUE AND deleted_at IS NULL")
-        local_admins = {(r['email'] or '').strip().lower() for r in cursor.fetchall() if r['email']}
-        admin_kept, admin_demoted = [], []
-        for x in parsed['persons']:
-            if x['category'] != 'admin':
-                continue
-            label = f"{x['full_name']}（{x['email'] or 'メール未記入'}）"
-            if x['email'] and x['email'] in local_admins:
-                admin_kept.append(label)
-            else:
-                x['category'] = 'regular'
-                admin_demoted.append(label)
-        if admin_demoted:
-            parsed['warnings'].append(
-                f"区分 admin の {len(admin_demoted)} 人は，このサイトの admin と一致しないので regular として取り込みます："
-                + '，'.join(admin_demoted))
-
-        # 役割の突合
-        cursor.execute("SELECT id, kind, name FROM ug_roles")
-        role_db = {(r['kind'], r['name']): r['id'] for r in cursor.fetchall()}
-        role_sheet = {(r['kind'], r['name']) for r in parsed['roles']}
-        role_auto = sorted({(a['kind'], a['role']) for a in parsed['appts']
-                            if (a['kind'], a['role']) not in role_db and (a['kind'], a['role']) not in role_sheet})
-
-        # 出典ごとの既存件数
-        sources = sorted({a['source'] for a in parsed['appts']})
-        src_existing = {}
-        for s in sources:
-            cursor.execute("SELECT COUNT(*) AS n FROM ug_appointments WHERE source <=> %s", (s or None,))
-            src_existing[s] = cursor.fetchone()['n']
-
-        # 人の解決
-        rs = NameResolver(cursor)
-        resolved = unresolved = vacant = 0
-        rs.add_persons([(x['full_name'], x['email']) for x in parsed['persons']])
-        by = {'exact': 0, 'alias': 0, 'person': 0, 'ignore': 0, 'post': 0}
-        for a in parsed['appts']:
-            if not a['person_name']:
-                vacant += 1
-                a['user_id'] = None
-                continue
-            uid, how = rs.resolve(a['person_name'])
-            a['user_id'] = uid
-            if how:
-                by[how] += 1
-            if uid:
-                resolved += 1
-            elif how not in ('ignore', 'post'):
-                unresolved += 1
-
-        summary = {
-            'units': len(parsed['units']),
-            'roles': len(parsed['roles']),
-            'persons': len(parsed['persons']),
-            'appointments': len(parsed['appts']),
-            'roles_auto_created': [f"{KIND_LABEL[k]}：{n}" for k, n in role_auto],
-            'sources': [{'source': s, 'new': sum(1 for a in parsed['appts'] if a['source'] == s),
-                         'existing': src_existing[s]} for s in sources],
-            'resolved': resolved, 'unresolved': unresolved, 'vacant': vacant, 'resolved_by': by,
-            'warnings': parsed['warnings'],
-            'unresolved_names': sorted({a['person_name'] for a in parsed['appts']
-                                        if a['person_name'] and not a['user_id']
-                                        and rs.resolve(a['person_name'])[1] not in ('ignore', 'post')})[:30],
-            'replace_source': replace_source,
-            'admin_kept': admin_kept, 'admin_demoted': admin_demoted,
-        }
-        if mode != 'apply':
-            return jsonify({'success': True, 'mode': 'check', 'summary': summary})
-
-        # ── 適用 ──
-        cursor.execute("SELECT id, full_name, email FROM ug_persons")
-        _rows = cursor.fetchall()
-        blank_by_name = {}                   # 正規化した氏名 → メール未記入行の id（重複があれば全部）
-        names_any = set()
-        for r in _rows:
-            names_any.add(_norm_name(r['full_name']))
-            if not r['email']:
-                blank_by_name.setdefault(_norm_name(r['full_name']), []).append(r['id'])
-        for x in parsed['persons']:
-            if x['email']:
-                # メールが付いた人：同名でメール未記入の行があればそれを埋める（未記入→記入への昇格）
-                for bid in blank_by_name.pop(_norm_name(x['full_name']), []):
-                    cursor.execute("DELETE FROM ug_persons WHERE id=%s", (bid,))
-                cursor.execute("""INSERT INTO ug_persons (full_name, email, category, affiliation, valid_from, valid_until, note)
-                                  VALUES (%s,%s,%s,%s,%s,%s,%s)
-                                  ON DUPLICATE KEY UPDATE full_name=VALUES(full_name), category=VALUES(category),
-                                    affiliation=VALUES(affiliation), valid_from=VALUES(valid_from),
-                                    valid_until=VALUES(valid_until), note=VALUES(note)""",
-                               (x['full_name'], x['email'], x['category'], x['affiliation'] or None,
-                                x['valid_from'], x['valid_until'], x['note'] or None))
-            else:
-                k = _norm_name(x['full_name'])
-                if k in names_any:
-                    continue            # 同名の人が既にいる（メール付き／未記入とも）なら触らない
-                names_any.add(k)
-                cursor.execute("""INSERT INTO ug_persons (full_name, email, category, affiliation, valid_from, valid_until, note)
-                                  VALUES (%s,NULL,%s,%s,%s,%s,%s)""",
-                               (x['full_name'], x['category'], x['affiliation'] or None,
-                                x['valid_from'], x['valid_until'], x['note'] or None))
-        for x in parsed['persons']:
-            if x['email']:
-                _drop_ignore_alias(cursor, x['full_name'])
-        if parsed['persons']:
-            rs = NameResolver(cursor)           # 名簿を反映した解決器で引き直す
-            for a in parsed['appts']:
-                if a['person_name'] and not a['user_id']:
-                    a['user_id'] = rs.resolve(a['person_name'])[0]
-        created_units = []
-        for r in parsed['roles']:
-            key = (r['kind'], r['name'])
-            if key in role_db:
-                cursor.execute("UPDATE ug_roles SET `rank`=%s, note=%s WHERE id=%s",
-                               (r['rank'], r['note'] or None, role_db[key]))
-            else:
-                cursor.execute("INSERT INTO ug_roles (kind, name, `rank`, note) VALUES (%s,%s,%s,%s)",
-                               (r['kind'], r['name'], r['rank'], r['note'] or None))
-                role_db[key] = cursor.lastrowid
-        for k, n in role_auto:
-            cursor.execute("INSERT INTO ug_roles (kind, name, `rank`) VALUES (%s,%s,%s)", (k, n, DEFAULT_RANK))
-            role_db[(k, n)] = cursor.lastrowid
-
-        cursor.execute("SELECT id, name FROM user_groups")
-        gid_by_name = {r['name']: r['id'] for r in cursor.fetchall()}
-        for u in parsed['units']:
-            uid = _ensure_unit_path(cursor, u['kind'], u['path'], created_units)
-            sets, vals = [], []
-            if u['sort_order'] is not None:
-                sets.append("sort_order=%s"); vals.append(u['sort_order'])
-            if u['owner_group']:
-                if u['owner_group'] in gid_by_name:
-                    sets.append("owner_group_id=%s"); vals.append(gid_by_name[u['owner_group']])
-                else:
-                    summary['warnings'].append(f"単位「{'／'.join(u['path'])}」の管理グループ「{u['owner_group']}」は未登録のため無視")
-            for col in ('valid_from', 'valid_until'):
-                sets.append(f"{col}=%s"); vals.append(u[col])
-            sets.append("note=%s"); vals.append(u['note'] or None)
-            cursor.execute(f"UPDATE ug_units SET {', '.join(sets)} WHERE id=%s", tuple(vals) + (uid,))
-
-        deleted = 0
-        if replace_source:
-            for s in sources:
-                cursor.execute("DELETE FROM ug_appointments WHERE source <=> %s", (s or None,))
-                deleted += cursor.rowcount
-
-        me = session.get('user_id')
-        for a in parsed['appts']:
-            uid = _ensure_unit_path(cursor, a['kind'], a['path'], created_units)
-            rid = role_db[(a['kind'], a['role'])]
-            cursor.execute("""INSERT INTO ug_appointments
-                              (unit_id, role_id, user_id, person_name, valid_from, valid_until, note, source, created_by)
-                              VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                           (uid, rid, a['user_id'], a['person_name'] or None,
-                            a['valid_from'], a['valid_until'], a['note'] or None, a['source'] or None, me))
-        conn.commit()
-        summary['units_created'] = created_units
-        summary['appointments_deleted'] = deleted
-        return jsonify({'success': True, 'mode': 'apply', 'summary': summary})
-    except Exception as e:
-        conn.rollback()
-        logging.exception("ledger import failed")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()

@@ -1,12 +1,15 @@
-{# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
-   SPDX-License-Identifier: AGPL-3.0-or-later
-   This file is part of FUJIN-P. See <https://www.gnu.org/licenses/>. #}
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ユーザとグループ</title>
+<title>{{ page_title }}</title>
 <style>
   :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
   * { box-sizing:border-box; }
@@ -77,868 +80,531 @@
   .cand small { color:var(--sub); }
   .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
   .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
-  /* グループ（2026-09-24，まいぐるから移設） */
-  body.mode-groups #gridCtl, body.mode-groups #summary, body.mode-groups #personBox { display:none !important; }
-  body:not(.mode-groups) #groupCtl { display:none !important; }
-  .gm { display:flex; gap:12px; height:100%; }
-  .gm .lst { width:360px; flex:0 0 auto; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:6px; }
-  .gm .det { flex:1; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 16px; }
-  .gm .it { padding:6px 10px; border-bottom:1px solid var(--line); cursor:pointer; }
-  .gm .it:hover { background:#f3f6fa; }
-  .gm .it.on { background:#e8f0fb; }
-  .gm .it small { color:var(--sub); }
-  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--sub); margin-left:4px; }
-  .tag.led { border-color:#9f7aea; color:#6b46c1; }
-  .tag.mine { border-color:var(--acc); color:var(--acc); }
-  .gm h3 { margin:0 0 4px; font-size:17px; }
-  .gm .meta { color:var(--sub); font-size:12px; margin-bottom:10px; }
-  .gm table { border-collapse:collapse; width:100%; }
-  .gm th, .gm td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; }
-  .gm tr.past td { color:#aab; }
-  .gm tr.future td { color:var(--warn); }
-  .gm .sec { margin:14px 0 6px; font-weight:600; font-size:13px; }
+  .lead { font-size:12px; color:var(--sub); padding:6px 16px 0; margin:0; }
+  .pane { padding:8px 16px; }
+  table.list { border-collapse:collapse; width:100%; background:#fff; }
+  table.list th, table.list td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; font-size:13px; }
+  table.list th { background:var(--head); position:sticky; top:0; z-index:2; white-space:nowrap; }
+  .mini { padding:2px 8px; font-size:12px; }
   .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
 </style>
-</head>
-<body>
-<header>
-  <h1>👥 ユーザとグループ</h1>
-  <span style="color:var(--sub);font-size:12px">単位 × 役割 × 人 × 期間</span>
-  <nav style="margin-left:auto">
-    <a href="{{ url_for('user_groups.return_to_fujin') }}">FUJINダッシュボードへ戻る</a>
-  </nav>
-</header>
-
+<style>
+  .ov.inline { position:static; display:none; background:none; z-index:auto; }
+  .ov.inline.on { display:block; }
+  .ov.inline > .md { width:auto !important; max-width:none; max-height:none; box-shadow:none; border:1px solid var(--line); margin:12px 16px; border-radius:6px; }
+  .ov.inline > .md > .foot { display:none; }
+  .ov.inline h2 { font-size:15px; }
+  .card2 { background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 16px; margin:12px 16px; }
+  .card2 h2 { font-size:15px; margin:0 0 8px; }
+  .card2 p { font-size:12px; color:var(--sub); margin:0 0 8px; }
+</style>
+<style>
+  .layout { display:flex; min-height:calc(100vh - 150px); }
+  .tree { width:46%; min-width:360px; border-right:1px solid var(--line); background:#fff; overflow:auto; max-height:calc(100vh - 150px); padding:6px 0; }
+  .detail { flex:1; padding:10px 16px; overflow:auto; max-height:calc(100vh - 150px); min-width:0; }
+  .tr { display:flex; align-items:center; gap:6px; padding:2px 8px; font-size:13.5px; line-height:1.6; cursor:pointer; white-space:nowrap; }
+  .tr:hover { background:#f2f6fb; }
+  .tr.sel { background:#e1ecfa; }
+  .tr.hit .nm { background:#fff3c4; }
+  .tr.dim { opacity:.5; }
+  .tr .car { width:14px; color:var(--sub); text-align:center; flex:0 0 14px; }
+  .tr .nm { font-weight:500; }
+  .tr.d0 .nm { font-weight:700; }
+  .tr .bd { font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--sub); background:#f7f7f7; }
+  .tr .bd.body { color:#7b341e; background:#fff5eb; border-color:#f6ad55; }
+  .tr .bd.share { color:#2c5282; background:#ebf4ff; border-color:#90cdf4; }
+  .tr .bd.grp { color:#22543d; background:#f0fff4; border-color:#9ae6b4; }
+  .tr .per { font-size:11px; color:var(--sub); }
+  .tr .cnt { font-size:11px; color:var(--sub); margin-left:auto; }
+  .tr .ops { display:inline-flex; gap:2px; }
+  .tr .ops button { padding:0 6px; font-size:11px; line-height:18px; }
+  .tr input.tord, table.mem input.mord { width:44px; text-align:right; padding:0 3px; font-size:12px; border:1px solid var(--line); border-radius:4px; }
+  .detail h3 { margin:0 0 4px; font-size:17px; }
+  .detail .meta { font-size:12px; color:var(--sub); margin-bottom:8px; }
+  .detail .box { background:#fff; border:1px solid var(--line); border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .box.map.on { border-color:#9ae6b4; background:#f0fff4; }
+  .box.map.off { border-color:#fbd38d; background:#fffaf0; }
+  .box.map .mapst { font-weight:700; font-size:12px; padding:1px 8px; border-radius:10px; }
+  .box.map.on .mapst { background:#c6f6d5; color:#22543d; }
+  .box.map.off .mapst { background:#feebc8; color:#7b341e; }
+  details.sect { background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  details.sect summary { cursor:pointer; font-size:13px; margin-bottom:4px; }
+  .kplist { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:4px; padding:4px 8px; columns:2; column-gap:16px; }
+  .kplist label { display:block; font-size:13px; padding:1px 0; break-inside:avoid; color:var(--ink); }
+  details.sect input[type=date] { width:130px; padding:1px 3px; font-size:12px; }
+  .box.map.ex { border-color:#90cdf4; background:#ebf8ff; }
+  .box.map.ex .mapst { background:#bee3f8; color:#2a4365; }
+  table.mem { border-collapse:collapse; width:100%; font-size:13px; background:#fff; }
+  table.mem th, table.mem td { border-bottom:1px solid var(--line); padding:3px 8px; text-align:left; vertical-align:middle; }
+  table.mem th { background:var(--head); white-space:nowrap; position:sticky; top:0; }
+  table.mem td.id { color:var(--sub); width:60px; font-variant-numeric:tabular-nums; }
+  table.mem td.per { white-space:nowrap; font-variant-numeric:tabular-nums; }
+  table.mem tr.past td { color:#999; }
+  table.mem tr.fut td { background:#fffbea; }
+  table.mem td.role { white-space:nowrap; color:#444; }
+  table.mem tr.rg td { border-top:2px solid var(--line); }
+  .mini { padding:2px 8px; font-size:12px; }
+  .lead { font-size:12px; color:var(--sub); padding:6px 16px 0; margin:0; }
+  .pane { padding:8px 16px; }
+  table.list { border-collapse:collapse; width:100%; background:#fff; }
+  table.list th, table.list td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; font-size:13px; }
+  table.list th { background:var(--head); position:sticky; top:0; z-index:2; white-space:nowrap; }
+  .plink { display:flex; gap:6px; align-items:center; margin:3px 0; font-size:13px; }
+  .plink input[type=date] { width:140px; padding:2px 4px; }
+  .plink button { white-space:nowrap; }
+  #ovNode .md { width:720px; }
+</style>
+</head><body>
+{% include '_nav.html' %}
 <div class="bar">
-  <span class="tabs" id="tabs">
-    {% if is_admin %}{% for k, label in kinds %}<button data-kind="{{ k }}">{{ label }}</button>{% endfor %}{% endif %}<button data-kind="groups">グループ</button>
+  <span class="treeonly" style="display:contents">
+    <span>年度</span>
+    <select id="fy" style="padding:4px"></select>
+    <span>時点</span>
+    <input type="date" id="asof" value="{{ today }}">
+    <button class="btn" id="btnToday">今日</button>
+    <label><input type="checkbox" id="allPeriod"> 全期間</label>
+    <input type="search" id="filter" placeholder="ノード名・氏名で絞り込み" style="width:200px;margin-left:8px">
+    <button class="btn mini" id="btnOpenAll">すべて開く</button>
+    <button class="btn mini" id="btnCloseAll">閉じる</button>
+    <span class="sp"></span>
+    <button class="btn" id="btnTop">＋トップノード</button>
+    <button class="btn" id="btnCarry" title="年度末で終わる発令を翌年度へ写します">年度の引き継ぎ</button>
   </span>
-  <span id="gridCtl" style="display:contents">
-  <span style="margin-left:12px">時点</span>
-  <input type="date" id="asof" value="{{ today }}">
-  <button class="btn" id="btnToday">今日</button>
-  <label><input type="checkbox" id="allPeriod"> 全期間</label>
-  <label><input type="checkbox" id="hideEmpty" checked> 空列を隠す</label>
-  <label title="紐づいた人は users の氏名で表示（元の表記はツールチップ）"><input type="checkbox" id="useUserName" checked> 名寄せ後の氏名</label>
-  <input type="search" id="filter" placeholder="表内を絞り込み（単位名・氏名）" style="width:240px;margin-left:12px">
-  <span class="sp"></span>
-  {% if is_admin %}
-  <input type="search" id="person" placeholder="人から引く（全種別・全期間）" style="width:200px">
-  <label class="btn"><input type="checkbox" id="editMode"> 編集</label>
-  <button class="btn" id="btnAddUnit" style="display:none">＋単位</button>
-  <button class="btn" id="btnAddRole" style="display:none">＋役割</button>
-  <button class="btn" id="btnImport">Excel取込</button>
-  <a class="btn" href="{{ url_for('user_groups.ledger_export') }}">Excel出力</a>
-  <a class="btn" href="{{ url_for('user_groups.ledger_template') }}">雛形</a>
-  {% endif %}
-  </span>
-  <span id="groupCtl" style="display:contents">
-  <span style="margin-left:12px">時点</span>
-  <input type="date" id="gmAsof" value="{{ today }}">
-  <select id="gmScope" style="padding:5px">
-    <option value="all">すべてのグループ</option>
-    <option value="mine">自分が管理するグループ</option>
-    <option value="member">自分が属するグループ</option>
-    <option value="adhoc">台帳由来を除く</option>
-    <option value="ledger">台帳由来のみ</option>
-  </select>
-  <input type="search" id="gmFilter" placeholder="グループ名で絞り込み" style="width:200px">
-  <span class="sp"></span>
-  <button class="btn pri" id="gmNew" style="display:none">＋グループ</button>
-  {% if is_admin %}<button class="btn" id="gmCreators" title="グループを新しく作れる人（総管理者以外）">作成権限</button>{% endif %}
-  </span>
-  {% if is_admin %}
-  <button class="btn" id="btnNames">名寄せ</button>
-  <button class="btn" id="btnRoster">名簿</button>
-  <button class="btn" id="btnGroups">グループ定義</button>
-  <button class="btn" id="btnReq">申請<span id="reqBadge" style="display:none;background:var(--bad);color:#fff;border-radius:8px;padding:0 6px;margin-left:4px;font-size:11px"></span></button>
-  {% endif %}
 </div>
-<div class="summary" id="summary"></div>
-<div class="person" id="personBox" style="display:none"></div>
-<div class="wrap" id="wrap"><div class="empty">読み込み中…</div></div>
 
-<!-- 発令 -->
-<div class="ov" id="ovAppt"><div class="md">
-  <h2 id="apptTitle">発令</h2>
-  <div id="apptUnit" style="font-size:13px;color:var(--sub)"></div>
-  <label>役割</label><select id="apptRole"></select>
-  <label>ユーザを検索（users ID・メール・氏名の一部）</label>
-  <input type="text" id="apptSearch" placeholder="例：34 / nishida / 西田" autocomplete="off">
-  <div id="apptCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
-  <div id="apptPicked" style="margin-top:6px;font-size:13px"></div>
-  <label>氏名（台帳の表記．ユーザを選ぶと自動で入ります．空なら空席）</label><input type="text" id="apptName">
-  <div class="row"><div><label>開始</label><input type="date" id="apptFrom"></div><div><label>終了</label><input type="date" id="apptUntil"></div></div>
-  <label>備考</label><input type="text" id="apptNote">
-  <label>出典</label><input type="text" id="apptSource">
-  <div class="foot"><button class="btn warn left" id="apptDel">削除</button><button class="btn" onclick="hide('ovAppt')">閉じる</button><button class="btn pri" id="apptSave">保存</button></div>
-</div></div>
+<div class="layout" id="treeView">
+  <div class="tree" id="tree"><div class="empty">読み込み中…</div></div>
+  <div class="detail" id="detail"><div class="empty">左のツリーからノードを選ぶと，そのメンバーシップが出ます．</div></div>
+</div>
 
-<!-- 単位 -->
-<div class="ov" id="ovUnit"><div class="md">
-  <h2 id="unitTitle">単位</h2>
-  <label>親（空なら最上位）</label><select id="unitParent"></select>
-  <label>名称</label><input type="text" id="unitName">
-  <div class="row"><div><label>序列</label><input type="number" id="unitSort"></div><div><label>開始</label><input type="date" id="unitFrom"></div><div><label>終了</label><input type="date" id="unitUntil"></div></div>
-  <label>備考</label><input type="text" id="unitNote">
-  <div class="foot"><button class="btn warn left" id="unitDel">削除（配下と発令も）</button><button class="btn" onclick="hide('ovUnit')">閉じる</button><button class="btn pri" id="unitSave">保存</button></div>
-</div></div>
-
-<!-- 役割 -->
-<div class="ov" id="ovRole"><div class="md">
-  <h2 id="roleTitle">役割</h2>
-  <label>役割名</label><input type="text" id="roleName">
-  <div class="row"><div><label>序列（小さいほど左）</label><input type="number" id="roleRank"></div></div>
-  <label>備考</label><input type="text" id="roleNote">
-  <div class="foot"><button class="btn warn left" id="roleDel">削除</button><button class="btn" onclick="hide('ovRole')">閉じる</button><button class="btn pri" id="roleSave">保存</button></div>
-</div></div>
-
-<!-- 取込 -->
-<div class="ov" id="ovImp"><div class="md imp">
-  <h2>Excel取込</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">シート「単位」「役割」「発令」「人」を読みます（「雛形」の形式）．先に「検証」でDBに触れずに内容を確かめ，それから「適用」してください．「人」シートで区分が admin の人は，このサイトの admin とメールが一致するときだけ admin のまま入り，それ以外は regular になります．</p>
-  <input type="file" id="impFile" accept=".xlsx">
-  <label style="display:block;margin-top:8px"><input type="checkbox" id="impReplace" checked> 同じ「出典」の既存発令を消してから入れる（年度表の入れ替え向き）</label>
-  <pre id="impOut" style="display:none"></pre>
-  <div class="foot"><button class="btn" onclick="hide('ovImp')">閉じる</button><button class="btn" id="impCheck">検証</button><button class="btn pri" id="impApply" disabled>適用</button></div>
-</div></div>
-
-<!-- 名寄せ -->
-<div class="ov" id="ovNames"><div class="md" style="width:900px">
-  <h2>名寄せ（氏名 → ユーザ）</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">自動で紐づくのは，users の氏名と完全一致するもの（空白・括弧は無視）と，名簿の氏名からメール経由で一意に決まるものだけです．姓だけの表記は曖昧なので自動では紐づけません．ここで人を選んで「紐づけ」を押すと，その氏名の発令をまとめて結びつけます．users に登録のない外部の方は「対象外」にすると一覧から消えます（下の一覧で解除できます）．</p>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-    <span id="namesSummary" style="font-size:13px"></span>
-    <label style="font-size:12px;margin-left:12px"><input type="checkbox" id="namesShowIgnored"> 対象外も表示</label>
-    <span style="flex:1"></span>
-    <button class="btn" id="namesAuto">自動名寄せを実行</button>
+<!-- ノード -->
+<div class="ov" id="ovNode"><div class="md">
+  <h2 id="nodeTitle">ノード</h2>
+  <div id="nodeWhere" style="font-size:13px;color:var(--sub)"></div>
+  <label>名称</label><input type="text" id="nodeName">
+  <div class="row">
+    <div><label>開始</label><input type="date" id="nodeFrom"></div>
+    <div><label>終了</label><input type="date" id="nodeUntil"></div>
   </div>
-  <div id="namesList" style="max-height:45vh;overflow:auto"></div>
-  <h2 style="margin-top:14px">対象外にした氏名</h2>
-  <div id="exclList" style="max-height:25vh;overflow:auto"></div>
-  <div class="foot"><button class="btn" onclick="hide('ovNames');load()">閉じる</button></div>
+  <label>備考</label><input type="text" id="nodeNote">
+  <div id="nodeParents" style="margin-top:10px"></div>
+  <div class="foot"><button class="btn warn left" id="nodeDel">ノードを削除</button><button class="btn" onclick="hide('ovNode')">閉じる</button><button class="btn pri" id="nodeSave">保存</button></div>
 </div></div>
 
-<!-- 名簿 -->
-<div class="ov" id="ovRoster"><div class="md" style="width:960px">
-  <h2>アカウント名簿（人 → ログインできる人）</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．ここで人を足す・直す・消すと，users に直ちに反映されます（自分自身と最後の admin は降格・削除しません）．メール未記入の人は先頭に出ます（右端の「編集」で直せます）．「発行」を押すと，有効期間内でまだ users にいない人を approved_users に写し，期限切れの人を approved_users から外します．approved_users にある人は初回ログインでアカウントが作られます．「users まで作る」を付けると，ログインを待たずに users を直接作ります（実験段階向け）．既にある users は触りません（退職者の停止はユーザ管理で）．発行後は名寄せを自動で掛け直します．Google を使わない人には 🔑 でパスワード設定メールを送れます（本人が「パスワードを忘れた方」から自分で設定することもできます）．</p>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-    <span id="rosterSummary" style="font-size:13px"></span>
-    <input type="search" id="rosterFilter" placeholder="絞り込み" style="padding:4px 8px;border:1px solid var(--line);border-radius:4px">
-    <button class="btn" id="rosterSortReset" title="所属順（既定）に戻す">並び順を戻す</button>
-    <span style="flex:1"></span>
-    <button class="btn" id="rosterAdd">＋人</button>
-    <label style="font-size:12px"><input type="checkbox" id="rosterCreateUsers"> users まで作る</label>
-    <label style="font-size:12px"><input type="checkbox" id="rosterDeactivate"> 期限切れの users を無効化</label>
-    <button class="btn pri" id="rosterPublish">発行</button>
+<!-- 移動 -->
+<div class="ov" id="ovMove"><div class="md">
+  <h2 id="moveTitle">移動</h2>
+  <div id="moveFrom" style="font-size:13px;color:var(--sub)"></div>
+  <label>移動先（この下へ入れる）</label>
+  <select id="moveTo"></select>
+  <label>いつから</label>
+  <div style="font-size:13px">
+    <label style="display:block;color:var(--ink)"><input type="radio" name="moveWhen" value="always" checked> 記録を書き換える（はじめからこの親の下にあったことにする．置き間違いの修正向け）</label>
+    <label style="display:block;color:var(--ink)"><input type="radio" name="moveWhen" value="date"> この日から <input type="date" id="moveDate">（元の親の下には前日まで）</label>
   </div>
-  <div id="rosterList" style="max-height:60vh;overflow:auto"></div>
-  <div class="foot"><button class="btn" onclick="hide('ovRoster')">閉じる</button></div>
+  <div class="foot"><button class="btn" onclick="hide('ovMove')">閉じる</button><button class="btn pri" id="moveDo">移動する</button></div>
 </div></div>
 
-<!-- グループ定義 -->
-<div class="ov" id="ovGrp"><div class="md" style="width:980px">
-  <h2>グループ定義（台帳 → user_groups）</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">台帳が正です．「台帳を users・user_groups 等に反映する」を押すと，名簿から users と approved_users を揃え，名寄せを掛け直し，台帳の全単位について user_groups とルールを揃えます．何度押しても同じ結果になり，既にあるグループは名前も直接メンバーもそのままで，不足しているルールだけを足します．「候補」から作ると，組織の学部等は「◯◯教員」，事務局の課・係はその名前，会議体は「◯◯」（委員側）と「◯◯_事務」（事務職員）の2つができます．同名のグループが既にあれば，そこにルールを足すだけです．アドホックなグループは「グループ」タブで管理します．「グループ種別を移す」は，以前に台帳へ写したグループ種別を同名グループの直接メンバーへ戻す移行操作です（試算を見てから実行します）．</p>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="grpTabs">
-    <button class="btn on" data-t="list">いまのグループ <span></span></button>
-    <button class="btn" data-t="prop">候補 <span></span></button>
-    <span style="flex:1"></span>
-    <button class="btn pri" id="grpSync" title="名簿→users・approved_users，台帳の単位→user_groups とルール．何度押しても同じ結果になります">台帳を users・user_groups 等に反映する</button>
-    <button class="btn" id="grpSnap" title="ルールを入れる前の構成員を控えます">控えを取る</button>
-    <button class="btn" id="grpCmp" title="控えといまを突き合わせます">控えと照合</button>
-    <button class="btn pri" id="grpGen" style="display:none">選んだ候補を作る</button>
-    <button class="btn" id="grpRetire" title="台帳のグループ種別（旧まいぐるから写したもの）を，同名グループの直接メンバーに戻します">グループ種別を移す</button>
-  </div>
-  <div id="grpBody" style="max-height:60vh;overflow:auto"></div>
-  <div class="foot"><button class="btn" onclick="hide('ovGrp')">閉じる</button></div>
-</div></div>
-
-<!-- 登録申請 -->
-<div class="ov" id="ovReq"><div class="md" style="width:960px">
-  <h2>登録申請とブラックリスト</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">名簿にない人からの登録申請です．「承認」は名簿に載せて users を直ちに作ります（区分は申請どおり，ここで変えられます）．「ブラックリスト」はその後の申請とログインを止めます（users があれば無効化）．</p>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="reqTabs">
-    <button class="btn on" data-st="pending">承認待ち <span></span></button>
-    <button class="btn" data-st="approved">承認済 <span></span></button>
-    <button class="btn" data-st="rejected">却下 <span></span></button>
-    <button class="btn" data-st="blacklisted">ブラックリスト <span></span></button>
-    <span style="flex:1"></span>
-    <button class="btn" id="blAdd">＋ブラックリストに追加</button>
-  </div>
-  <div id="reqList" style="max-height:60vh;overflow:auto"></div>
-  <div class="foot"><button class="btn" onclick="hide('ovReq')">閉じる</button></div>
-</div></div>
-
-<!-- 人（名簿の1行） -->
-<div class="ov" id="ovPerson"><div class="md">
-  <h2 id="personTitle">人</h2>
-  <label>氏名</label><input type="text" id="pName">
-  <label>メール（空なら名簿だけ．users は作られない）</label><input type="text" id="pEmail">
-  <div class="row"><div><label>区分</label><select id="pCat"><option value="regular">regular</option><option value="guest">guest</option><option value="admin">admin</option></select></div><div><label>所属</label><input type="text" id="pAff"></div></div>
-  <div class="row"><div><label>開始</label><input type="date" id="pFrom"></div><div><label>終了</label><input type="date" id="pUntil"></div></div>
-  <label>備考</label><input type="text" id="pNote">
-  <div class="foot"><button class="btn" onclick="hide('ovPerson')">閉じる</button><button class="btn pri" id="pSave">保存（users にも反映）</button></div>
-</div></div>
-
-<!-- グループ（作成・編集） -->
-<div class="ov" id="ovGM"><div class="md">
-  <h2 id="gmTitle">グループ</h2>
-  <label>グループ名</label><input type="text" id="gmName">
-  <div id="gmNameNote" style="font-size:12px;color:var(--sub)"></div>
-  <label>説明</label><input type="text" id="gmDesc">
-  <label>管理者（ID・氏名の一部で検索）</label>
-  <input type="text" id="gmMgrSearch" placeholder="例：34 / 西田" autocomplete="off">
-  <div id="gmMgrCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
-  <div id="gmMgrPicked" style="margin-top:6px;font-size:13px"></div>
-  <label id="gmSelfRow"><input type="checkbox" id="gmSelf" checked> 管理者を今日からメンバーにも入れる</label>
-  <div class="foot"><button class="btn warn left" id="gmDel">削除</button><button class="btn" onclick="hide('ovGM')">閉じる</button><button class="btn pri" id="gmSave">保存</button></div>
-</div></div>
-
-<!-- 構成員（追加・期間の変更） -->
+<!-- メンバー -->
 <div class="ov" id="ovMem"><div class="md">
-  <h2 id="memTitle">構成員</h2>
-  <div id="memWho"></div>
-  <div id="memPickBox">
-    <label>人（ID・氏名の一部で検索．続けて何人でも選べます）</label>
-    <input type="text" id="memSearch" placeholder="例：34 / 西田" autocomplete="off">
-    <div id="memCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
-    <div id="memPicked" style="margin-top:6px;font-size:13px"></div>
-  </div>
-  <div class="row"><div><label>開始（空なら最初から）</label><input type="date" id="memFrom"></div><div><label>終了（空なら無期限）</label><input type="date" id="memUntil"></div></div>
-  <div class="foot"><button class="btn warn left" id="memDel" title="行ごと消します（誤登録の取り消し用．履歴を残すなら「今日で外す」）">行を削除</button><button class="btn" onclick="hide('ovMem')">閉じる</button><button class="btn pri" id="memSave">保存</button></div>
+  <h2 id="memTitle">メンバー</h2>
+  <div id="memWhere" style="font-size:13px;color:var(--sub)"></div>
+  <label>立場</label><select id="memRole"></select>
+  <label>ユーザを検索（users ID・氏名の一部）</label>
+  <input type="text" id="memSearch" placeholder="例：34 / 西田" autocomplete="off">
+  <div id="memCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="memPicked" style="margin-top:6px;font-size:13px"></div>
+  <label>氏名（台帳の表記．ユーザを選ぶと自動で入ります．空なら空席）</label><input type="text" id="memName">
+  <div class="row"><div><label>開始</label><input type="date" id="memFrom"></div><div><label>終了（空なら期限なし）</label><input type="date" id="memUntil"></div></div>
+  <label>備考</label><input type="text" id="memNote">
+  <label>出典</label><input type="text" id="memSource">
+  <div class="foot"><button class="btn warn left" id="memDel" title="誤って入れたときだけ．記録も消えます">削除</button><button class="btn left" id="memEnd" title="いま終える（記録は残る）">いま終える</button><button class="btn" onclick="hide('ovMem')">閉じる</button><button class="btn pri" id="memSave">保存</button></div>
 </div></div>
 
-<!-- 作成権限 -->
-<div class="ov" id="ovCre"><div class="md" style="width:640px">
-  <h2>グループの作成権限</h2>
-  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">総管理者のほかに，グループを新しく作れる人です．作った人がそのグループの管理者になります．</p>
-  <div id="creList"></div>
-  <label>追加する人</label>
-  <input type="text" id="creSearch" placeholder="例：34 / 西田" autocomplete="off">
-  <div id="creCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
-  <div class="row"><div><label>開始</label><input type="date" id="creFrom"></div><div><label>終了</label><input type="date" id="creUntil"></div></div>
-  <div class="foot"><button class="btn" onclick="hide('ovCre')">閉じる</button></div>
+<!-- 年度の引き継ぎ -->
+<div class="ov" id="ovCarry"><div class="md">
+  <h2>年度の引き継ぎ</h2>
+  <p style="font-size:12px;color:var(--sub);margin:0 0 8px">写し元の年度の末日（3月31日）で終わる発令を，写し先の年度（4月1日〜翌年3月31日）の発令として写します（ツリーの全ノード）．期限のない発令はそのまま続くので写しません．写し先の年度に同じノード・立場・人の発令が既にあるもの，ノードが閉じているものは飛ばします．</p>
+  <div class="row"><div><label>写し元の年度</label><select id="carryFrom"></select></div><div><label>写し先の年度</label><select id="carryTo"></select></div></div>
+  <pre id="carryOut" style="display:none;background:#f6f8fa;padding:10px;font-size:12px;white-space:pre-wrap"></pre>
+  <div class="foot"><button class="btn" onclick="hide('ovCarry')">閉じる</button><button class="btn" id="carryCheck">検証</button><button class="btn pri" id="carryApply" disabled>写す</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
-const API = '{{ url_for("user_groups.ledger_grid") }}'.replace(/\/grid$/, '');
-let kind = '{{ start_tab }}';
-let grid = null;
-let editing = false;
-
+const API = '{{ url_for("user_groups.ledger_tree") }}'.replace(/\/tree$/, '');
+const TODAY = '{{ today }}';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function show(id){ $(id).classList.add('on'); }
 function hide(id){ $(id).classList.remove('on'); }
-function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
-async function api(url, method='GET', body=null, form=null){
+function toast(msg, ms=2400){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null){
   const opt = {method, headers:{}};
-  if (form) opt.body = form; else if (body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+  if (body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
   const r = await fetch(url, opt); const j = await r.json().catch(()=>({success:false,error:'応答が不正です'}));
   if (!j.success) throw new Error(j.error || ('HTTP '+r.status));
   return j;
 }
-function asOfParam(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
 
-async function load(){
-  document.body.classList.toggle('mode-groups', kind === 'groups');
-  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.kind === kind));
-  fitWrap();
-  if (kind === 'groups') return loadGM();
-  try{
-    grid = await api(`${API}/grid?kind=${kind}&as_of=${encodeURIComponent(asOfParam())}`);
-    render(); loadSummary();
-  }catch(e){ $('wrap').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}<br><small>テーブル（ug_units / ug_roles / ug_appointments）が未作成なら，先に作成してください．</small></div>`; }
-}
-async function loadSummary(){
-  try{
-    const s = await api(`${API}/summary`);
-    const k = s.kinds[kind];
-    $('summary').textContent = `${k.label}：単位 ${k.units}・役割 ${k.roles}・発令 ${k.appointments}（表示中 ${grid.appointment_count}）｜全体：未解決（usersに一致なし）${s.unresolved}・空席 ${s.vacant}｜出典：` +
-      (s.sources.map(x => `${x.source || '（なし）'} ${x.n}件`).join('，') || 'なし') + (grid.as_of ? `｜時点 ${grid.as_of}` : '｜全期間');
-  }catch(e){}
-}
-
-function render(){
-  const allPeriod = $('allPeriod').checked;
-  const rows = grid.rows;
-  const used = new Set(); for (const u of rows) for (const rid of Object.keys(u.cells)) if (u.cells[rid].length) used.add(rid);
-  const roles = ($('hideEmpty').checked && !editing) ? grid.roles.filter(r => used.has(String(r.id))) : grid.roles;
-  if (!rows.length){ $('wrap').innerHTML = `<div class="empty">「${esc(grid.kind_label)}」の単位がまだありません．${IS_ADMIN ? '「Excel取込」か「＋単位」で作れます．' : ''}</div>`; return; }
-  let h = '<table class="grid"><thead><tr><th>単位</th>';
-  for (const r of roles) h += `<th class="role" data-rid="${r.id}" title="${esc(r.note)}">${esc(r.name)}</th>`;
-  h += '</tr></thead><tbody>';
-  for (const u of rows){
-    const per = (u.from || u.until) ? ` <span class="note">[${esc(u.from)}〜${esc(u.until)}]</span>` : '';
-    h += `<tr class="d${Math.min(u.depth,3)}" data-uid="${u.id}" data-text="${esc((u.name + ' ' + Object.values(u.cells).flat().map(c=>c.name + ' ' + (c.user_name||'')).join(' ')).toLowerCase())}">`;
-    h += `<td class="unit"><span class="ind" style="width:${u.depth*18}px"></span><span class="nm" data-uid="${u.id}">${esc(u.name)}</span>${per}${u.note ? `<span class="note" title="${esc(u.note)}">※</span>` : ''}</td>`;
-    for (const r of roles){
-      const items = u.cells[String(r.id)] || [];
-      h += `<td data-uid="${u.id}" data-rid="${r.id}">`;
-      for (const c of items){
-        const cls = ['chip', c.resolved?'res':'', c.vacant?'vac':''].join(' ');
-        const per = (allPeriod && (c.from||c.until)) ? `<small style="color:var(--sub)"> ${esc(c.from)}〜${esc(c.until)}</small>` : '';
-        const useUN = $('useUserName').checked && c.resolved && c.user_name;
-        const label = c.vacant ? '空席' : esc(useUN ? c.user_name : c.name);
-        const tip = c.resolved ? `users #${c.user_id}${c.user_email ? ' ' + c.user_email : ''}` : '';
-        h += `<span class="${cls}" data-aid="${c.id}" title="${esc(tip)}">${label}${per}</span>`;
-      }
-      h += `<span class="add" data-uid="${u.id}" data-rid="${r.id}">＋</span></td>`;
-    }
-    h += '</tr>';
-  }
-  h += '</tbody></table>';
-  $('wrap').innerHTML = h;
-  applyFilter();
-}
-
-function applyFilter(){
-  const q = $('filter').value.trim().toLowerCase();
-  const parent = {}; for (const u of grid.rows) parent[u.id] = u.parent_id;
-  const keep = new Set();
-  document.querySelectorAll('#wrap tbody tr').forEach(tr => {
-    if (!q || tr.dataset.text.includes(q)){ let id = +tr.dataset.uid; while (id){ keep.add(id); id = parent[id]; } }
-  });
-  document.querySelectorAll('#wrap tbody tr').forEach(tr => {
-    const hit = !q || tr.dataset.text.includes(q);
-    tr.classList.toggle('hide', !!q && !keep.has(+tr.dataset.uid));
-    tr.classList.toggle('dim', !!q && !hit);
-  });
-  document.querySelectorAll('#wrap .chip').forEach(ch => ch.classList.toggle('hit', !!q && ch.textContent.toLowerCase().includes(q)));
-}
-
-// ── イベント ──
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { kind = b.dataset.kind; load(); });
-$('asof').onchange = load;
-$('btnToday').onclick = () => { $('asof').value = '{{ today }}'; $('allPeriod').checked=false; load(); };
+// ── 年度・時点 ──
+function fyOf(d){ const dt = new Date(d); return dt.getMonth() >= 3 ? dt.getFullYear() : dt.getFullYear() - 1; }
+const CUR_FY = fyOf(TODAY);
+const fyOpts = sel => { const o = []; for (let y = CUR_FY + 3; y >= 2017; y--) o.push(`<option value="${y}" ${y===sel?'selected':''}>${y}年度${y===CUR_FY?'（今年度）':y>CUR_FY?'（準備）':''}</option>`); return o.join(''); };
+$('fy').innerHTML = '<option value="">（日付で指定）</option>' + fyOpts(CUR_FY);
+function asOf(){ return $('allPeriod').checked ? '' : ($('asof').value || 'today'); }
+function atDate(){ return $('allPeriod').checked ? null : ($('asof').value || TODAY); }
+function fyStartForNew(){ const y = $('fy').value; return (y && Number(y) !== CUR_FY) ? `${y}-04-01` : ''; }
+$('fy').onchange = () => { const y = $('fy').value; if (!y) return; $('asof').value = `${y}-04-01`; $('allPeriod').checked = false; load(); };
+$('asof').onchange = () => { $('fy').value = $('asof').value ? String(fyOf($('asof').value)) : ''; load(); };
+$('btnToday').onclick = () => { $('asof').value = TODAY; $('fy').value = String(CUR_FY); $('allPeriod').checked = false; load(); };
 $('allPeriod').onchange = load;
-$('hideEmpty').onchange = render;
-$('useUserName').onchange = render;
-$('filter').oninput = applyFilter;
-if ($('person')) $('person').onchange = async () => {
-  const q = $('person').value.trim(); const box = $('personBox');
-  if (!q){ box.style.display='none'; return; }
-  const r = await api(`${API}/persons?q=${encodeURIComponent(q)}`);
-  box.style.display='block';
-  if (!r.items.length){ box.innerHTML = `<b>${esc(q)}</b>：該当なし`; return; }
-  box.innerHTML = `<b>${esc(q)}</b>：${r.items.length}件 <button class="btn" style="padding:2px 8px" onclick="$('person').value='';$('personBox').style.display='none'">閉じる</button>` +
-    '<table><tr><th>種別</th><th>単位</th><th>役割</th><th>氏名</th><th>期間</th><th>備考</th></tr>' +
-    r.items.map(i => `<tr><td>${esc(i.kind_label)}</td><td>${esc(i.path.join('／'))}</td><td>${esc(i.role)}</td><td>${esc(i.name)}</td><td>${esc(i.from)}〜${esc(i.until)}</td><td>${esc(i.note)}</td></tr>`).join('') + '</table>';
-};
 
-if (IS_ADMIN){
-  $('editMode').onchange = () => { editing = $('editMode').checked; document.body.classList.toggle('editing', editing); render(); $('btnAddUnit').style.display = $('btnAddRole').style.display = editing ? '' : 'none'; };
-  $('btnImport').onclick = () => { $('impOut').style.display='none'; $('impApply').disabled=true; show('ovImp'); };
-  $('btnAddUnit').onclick = () => openUnit(null);
-  $('btnAddRole').onclick = () => openRole(null);
-
-  $('wrap').addEventListener('click', ev => {
-    if (!editing || kind === 'groups') return;
-    const t = ev.target;
-    if (t.classList.contains('chip')) openAppt(+t.dataset.aid, t.closest('td').dataset.uid, t.closest('td').dataset.rid);
-    else if (t.classList.contains('add')) openAppt(null, t.dataset.uid, t.dataset.rid);
-    else if (t.classList.contains('nm')) openUnit(+t.dataset.uid);
-    else if (t.classList.contains('role')) openRole(+t.dataset.rid);
-  });
-
-  // 発令
-  let curAppt = null, apptUser = null, apptTimer = null;
-  function showPicked(){
-    $('apptPicked').innerHTML = apptUser ? `<span class="picked">users #${apptUser.id} ${esc(apptUser.full_name)}${apptUser.email ? ' <small>' + esc(apptUser.email) + '</small>' : ''}<span class="x" id="apptUnpick" title="紐づけを外す">✕</span></span>` : '<span style="color:var(--sub)">ユーザに紐づいていません（氏名だけの発令）</span>';
-    const u = $('apptUnpick'); if (u) u.onclick = () => { apptUser = null; showPicked(); };
-  }
-  $('apptSearch').oninput = () => {
-    clearTimeout(apptTimer);
-    const q = $('apptSearch').value.trim();
-    if (!q){ $('apptCand').style.display = 'none'; return; }
-    apptTimer = setTimeout(async () => {
-      try{ const r = await api(`${API}/users?q=${encodeURIComponent(q)}`);
-        $('apptCand').innerHTML = r.items.length ? r.items.map(u => `<div class="cand" data-uid="${u.id}" data-name="${esc(u.full_name)}" data-email="${esc(u.email)}">#${u.id} <b>${esc(u.full_name)}</b> <small>${esc(u.email)}${u.inactive ? '（停止中）' : ''}</small></div>`).join('') + (r.more ? `<div class="cand"><small>ほか ${r.more} 件．絞り込んでください</small></div>` : '')
-          : '<div class="cand"><small>該当なし</small></div>';
-        $('apptCand').style.display = '';
-      }catch(e){}
-    }, 250);
-  };
-  $('apptCand').addEventListener('click', ev => {
-    const d = ev.target.closest('.cand'); if (!d || !d.dataset.uid) return;
-    apptUser = {id:+d.dataset.uid, full_name:d.dataset.name, email:d.dataset.email};
-    $('apptName').value = d.dataset.name; $('apptSearch').value = ''; $('apptCand').style.display = 'none'; showPicked();
-  });
-  function findAppt(aid){ for (const u of grid.rows) for (const items of Object.values(u.cells)) for (const c of items) if (c.id===aid) return {u, c}; return null; }
-  function openAppt(aid, uid, rid){
-    const u = grid.rows.find(x => x.id===+uid);
-    $('apptRole').innerHTML = grid.roles.map(r => `<option value="${r.id}" ${r.id===+rid?'selected':''}>${esc(r.name)}</option>`).join('');
-    $('apptUnit').textContent = u.path.join('／');
-    const f = aid ? findAppt(aid) : null;
-    curAppt = {aid, uid:+uid};
-    $('apptTitle').textContent = aid ? '発令を編集' : '発令を追加';
-    $('apptName').value = f ? (f.c.vacant ? '' : f.c.name) : '';
-    apptUser = (f && f.c.resolved) ? {id:f.c.user_id, full_name:f.c.user_name, email:f.c.user_email} : null;
-    $('apptSearch').value = ''; $('apptCand').style.display = 'none'; showPicked();
-    $('apptFrom').value = f ? f.c.from.slice(0,10) : ''; $('apptUntil').value = f ? f.c.until.slice(0,10) : '';
-    $('apptNote').value = f ? f.c.note : ''; $('apptSource').value = f ? f.c.source : '';
-    $('apptDel').style.display = aid ? '' : 'none';
-    show('ovAppt'); $('apptName').focus();
-  }
-  $('apptSave').onclick = async () => {
-    const body = {unit_id:curAppt.uid, role_id:+$('apptRole').value, person_name:$('apptName').value, user_id: apptUser ? apptUser.id : null, valid_from:$('apptFrom').value, valid_until:$('apptUntil').value, note:$('apptNote').value, source:$('apptSource').value};
-    if (!apptUser && $('apptName').value.trim() && !confirm('ユーザに紐づけずに，氏名だけの発令として保存します．よろしいですか')) return;
-    try{ if (curAppt.aid) await api(`${API}/appointments/${curAppt.aid}`, 'PUT', body); else await api(`${API}/appointments`, 'POST', body); hide('ovAppt'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
-  };
-  $('apptDel').onclick = async () => { if (!confirm('この発令を削除しますか')) return; try{ await api(`${API}/appointments/${curAppt.aid}`, 'DELETE'); hide('ovAppt'); toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
-
-  // 単位
-  let curUnit = null;
-  function openUnit(uid){
-    const u = uid ? grid.rows.find(x => x.id===uid) : null;
-    curUnit = uid;
-    $('unitTitle').textContent = u ? '単位を編集' : `単位を追加（${grid.kind_label}）`;
-    $('unitParent').innerHTML = '<option value="">（最上位）</option>' + grid.rows.filter(x => !u || x.id!==u.id).map(x => `<option value="${x.id}" ${u && x.id===u.parent_id?'selected':''}>${'　'.repeat(x.depth)}${esc(x.name)}</option>`).join('');
-    $('unitName').value = u ? u.name : ''; $('unitSort').value = u ? u.sort_order : '';
-    $('unitFrom').value = u ? u.from.slice(0,10) : ''; $('unitUntil').value = u ? u.until.slice(0,10) : ''; $('unitNote').value = u ? u.note : '';
-    $('unitDel').style.display = u ? '' : 'none';
-    show('ovUnit'); $('unitName').focus();
-  }
-  $('unitSave').onclick = async () => {
-    const body = {kind, name:$('unitName').value, parent_id:$('unitParent').value?+$('unitParent').value:null, sort_order:$('unitSort').value?+$('unitSort').value:null, valid_from:$('unitFrom').value, valid_until:$('unitUntil').value, note:$('unitNote').value};
-    try{ if (curUnit) await api(`${API}/units/${curUnit}`, 'PUT', body); else await api(`${API}/units`, 'POST', body); hide('ovUnit'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
-  };
-  $('unitDel').onclick = async () => { if (!confirm('この単位と配下の単位・発令をすべて削除しますか')) return; try{ const r = await api(`${API}/units/${curUnit}`, 'DELETE'); hide('ovUnit'); toast(`単位 ${r.deleted_units}・発令 ${r.deleted_appointments} を削除`); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
-
-  // 役割
-  let curRole = null;
-  function openRole(rid){
-    const r = rid ? grid.roles.find(x => x.id===rid) : null;
-    curRole = rid;
-    $('roleTitle').textContent = r ? '役割を編集' : `役割を追加（${grid.kind_label}）`;
-    $('roleName').value = r ? r.name : ''; $('roleRank').value = r ? r.rank : ''; $('roleNote').value = r ? r.note : '';
-    $('roleDel').style.display = r ? '' : 'none';
-    show('ovRole'); $('roleName').focus();
-  }
-  $('roleSave').onclick = async () => {
-    const body = {kind, name:$('roleName').value, rank:$('roleRank').value?+$('roleRank').value:null, note:$('roleNote').value};
-    try{ if (curRole) await api(`${API}/roles/${curRole}`, 'PUT', body); else await api(`${API}/roles`, 'POST', body); hide('ovRole'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); }
-  };
-  $('roleDel').onclick = async () => { if (!confirm('この役割を削除しますか')) return; try{ await api(`${API}/roles/${curRole}`, 'DELETE'); hide('ovRole'); toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
-
-  // 取込
-  async function runImport(mode){
-    const f = $('impFile').files[0]; if (!f){ toast('ファイルを選んでください'); return; }
-    const fd = new FormData(); fd.append('file', f); fd.append('mode', mode); fd.append('replace_source', $('impReplace').checked ? '1' : '0');
-    $('impOut').style.display='block'; $('impOut').textContent = mode==='check' ? '検証中…' : '適用中…';
-    try{
-      const r = await api(`${API}/import`, 'POST', null, fd); const s = r.summary;
-      let t = `[${mode==='check'?'検証':'適用'}] 単位 ${s.units}行・役割 ${s.roles}行・人 ${s.persons}行・発令 ${s.appointments}件\n`;
-      t += `氏名の照合：users と一致 ${s.resolved}（完全一致 ${s.resolved_by.exact}・名簿経由 ${s.resolved_by.person}）・対象外 ${s.resolved_by.ignore}・充て職 ${s.resolved_by.post}・一致なし ${s.unresolved}・空席 ${s.vacant}\n`;
-      if (s.unresolved_names && s.unresolved_names.length) t += `未解決のまま入る氏名（名寄せ画面で選んでください）：${s.unresolved_names.join('，')}\n`;
-      for (const x of s.sources) t += `出典「${x.source || '（なし）'}」：新規 ${x.new}件` + (s.replace_source ? `（既存 ${x.existing}件を置き換え）` : `（既存 ${x.existing}件に追加）`) + '\n';
-      if (s.admin_kept && s.admin_kept.length) t += `admin のまま入る人（このサイトの admin と一致）：${s.admin_kept.join('，')}\n`;
-      if (s.admin_demoted && s.admin_demoted.length) t += `admin → regular に格下げして入る人：${s.admin_demoted.join('，')}\n`;
-      if (s.roles_auto_created.length) t += `役割シートに無く自動作成される役割：${s.roles_auto_created.join('，')}\n`;
-      if (mode==='apply'){ t += `作成した単位 ${s.units_created.length}件・削除した発令 ${s.appointments_deleted}件\n`; }
-      if (s.warnings.length) t += '\n注意：\n' + s.warnings.map(w => '・'+w).join('\n');
-      $('impOut').textContent = t;
-      if (mode==='check') $('impApply').disabled = false; else { $('impApply').disabled = true; toast('取り込みました'); load(); }
-    }catch(e){ $('impOut').textContent = '失敗：' + e.message; }
-  }
-  // 名寄せ
-  $('btnNames').onclick = () => { show('ovNames'); loadNames(); };
-  const HOW = {exact:'完全一致', alias:'別名（旧）', person:'名簿経由', ignore:'対象外', post:'充て職'};
-  async function loadNames(){
-    $('namesList').innerHTML = '読み込み中…';
-    try{
-      const r = await api(`${API}/names?show_ignored=${$('namesShowIgnored').checked ? 1 : 0}`);
-      namesUsers = r.users;
-      const total = r.unresolved.reduce((a,x)=>a+x.count,0);
-      const autoN = r.unresolved.filter(x=>x.auto && x.auto!=='ignore' && x.auto!=='post').length;
-      $('namesSummary').textContent = `未解決 ${r.unresolved.length} 名（発令 ${total} 件）｜うち自動判定できるもの ${autoN} 名` + (r.ignored_hidden ? `｜対象外 ${r.ignored_hidden} 名は非表示` : '');
-      const userOpts = r.users.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
-      if (!r.unresolved.length) $('namesList').innerHTML = '<div class="empty">未解決の氏名はありません</div>';
-      else $('namesList').innerHTML = '<table class="nm-table"><tr><th>氏名</th><th>件数</th><th>種別</th><th>自動判定</th><th>ユーザ</th><th></th></tr>' +
-        r.unresolved.map(x => {
-          const cand = x.candidates.map(u => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('');
-          const sel = `<select data-name="${esc(x.name)}"><option value="">（選択）</option>${cand ? `<optgroup label="候補">${cand}</optgroup>` : ''}<optgroup label="全ユーザ">${userOpts}</optgroup></select>`;
-          const auto = x.auto ? `${HOW[x.auto]}${x.auto_user ? '→'+esc(x.auto_user) : ''}` : '<span style="color:var(--sub)">なし</span>';
-          return `<tr><td><b>${esc(x.name)}</b></td><td>${x.count}</td><td>${esc(x.kinds.join('・'))}</td><td>${auto}</td><td>${sel}</td>` +
-                 `<td style="white-space:nowrap"><button class="btn pri" data-link="${esc(x.name)}">紐づけ</button> <button class="btn" data-ignore="${esc(x.name)}">対象外</button></td></tr>`;
-        }).join('') + '</table>';
-      $('exclList').innerHTML = r.excluded.length ? '<table class="nm-table"><tr><th>氏名</th><th>備考</th><th></th></tr>' +
-        r.excluded.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.note)}</td><td><button class="btn" data-exdel="${a.id}">対象外を解除</button></td></tr>`).join('') + '</table>'
-        : '<div style="color:var(--sub);font-size:12px">ありません</div>';
-    }catch(e){ $('namesList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_person_aliases が未作成なら，先に作成してください．</small>'; }
-  }
-  $('namesShowIgnored').onchange = loadNames;
-  $('namesAuto').onclick = async () => { try{ const r = await api(`${API}/names/auto`, 'POST', {}); toast(`${r.checked}件を点検，${r.resolved}件を紐づけ（完全一致 ${r.by.exact}・別名 ${r.by.alias}・先頭一致 ${r.by.prefix}）`, 4000); loadNames(); }catch(e){ toast('失敗：'+e.message, 4000); } };
-  $('ovNames').addEventListener('click', async ev => {
-    const t = ev.target;
-    try{
-      if (t.dataset.link !== undefined){
-        const sel = $('ovNames').querySelector(`select[data-name="${CSS.escape(t.dataset.link)}"]`);
-        if (!sel.value){ toast('ユーザを選んでください'); return; }
-        const u = namesUsers.find(x => x.id == sel.value);
-        if (!confirm(`「${t.dataset.link}」の発令を users #${sel.value} ${u ? u.full_name : ''} に紐づけます．よろしいですか`)) return;
-        const r = await api(`${API}/names/link`, 'POST', {name:t.dataset.link, user_id:+sel.value}); toast(`${r.linked}件を紐づけました`); loadNames(); load();
-      } else if (t.dataset.ignore !== undefined){
-        await api(`${API}/exclusions`, 'POST', {name:t.dataset.ignore, note:'対象外'}); toast(`「${t.dataset.ignore}」を対象外に`); loadNames();
-      } else if (t.dataset.exdel !== undefined){
-        await api(`${API}/exclusions/${t.dataset.exdel}`, 'DELETE'); toast('対象外を解除しました'); loadNames();
-      }
-    }catch(e){ toast('失敗：'+e.message, 4000); }
-  });
-
-  // 名簿
-  let rosterItems = [], rosterUnreg = [];
-  $('btnRoster').onclick = () => { show('ovRoster'); loadRoster(); };
-  let rosterSort = {key:'default', dir:1};
-  function renderRoster(){
-    const q = $('rosterFilter').value.trim().toLowerCase();
-    const ORD2 = i => (!i.email ? 0 : 1);
-    const ORD = {'教員':0,'事務職員':1,'特命':2,'客員':3,'名誉':4,'教職員':5,'役員・委員':6,'福知山市':7,'学外':8,'学生':9,'テスト用':10};
-    const cmp = {
-      default: (a,b) => (ORD2(a) - ORD2(b)) || ((ORD[a.affiliation] ?? 8) - (ORD[b.affiliation] ?? 8)) || a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
-      name:    (a,b) => a.full_name.localeCompare(b.full_name,'ja') || a.email.localeCompare(b.email),
-      email:   (a,b) => a.email.localeCompare(b.email) || a.full_name.localeCompare(b.full_name,'ja'),
-      user:    (a,b) => ((a.user_id ?? Infinity) - (b.user_id ?? Infinity)) || a.full_name.localeCompare(b.full_name,'ja'),
-    }[rosterSort.key];
-    const rows = rosterItems.filter(i => !q || (i.full_name+' '+i.email+' '+i.affiliation+' '+i.note).toLowerCase().includes(q))
-      .sort((a,b) => cmp(a,b) * rosterSort.dir);
-    const arrow = k => rosterSort.key===k ? (rosterSort.dir===1 ? ' ▲' : ' ▼') : '';
-    const th = (k,label) => `<th data-sort="${k}" style="cursor:pointer;white-space:nowrap" title="クリックで並べ替え">${label}${arrow(k)}</th>`;
-    const st = i => !i.email ? '<span style="color:var(--bad)">メール未記入</span>' : !i.active ? '<span style="color:var(--sub)">期限外</span>' : i.user_id ? (i.user_inactive ? '<span style="color:var(--bad)">users（停止中）</span>' : `<span style="color:var(--acc)">users #${i.user_id}</span>${i.has_password ? '' : '<small style="color:var(--sub)">（パスワード未設定）</small>'}`) : i.approved ? '発行済（初回ログイン待ち）' : '<span style="color:var(--warn)">未発行</span>';
-    const uq = rosterUnreg.filter(u => !q || (u.full_name+' '+u.email+' '+u.affiliation).toLowerCase().includes(q));
-    const unregHtml = uq.length ? `<div style="border:1px solid var(--warn);background:#fff7ed;border-radius:6px;padding:8px 10px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="color:var(--warn)">台帳未登録のアカウント ${uq.length} 件</b><span style="font-size:12px;color:var(--sub)">users にあって名簿に無い人です．台帳が正なので，台帳登録してください（users の氏名・メール・区分・所属をそのまま名簿に写します．users は変わりません）．</span><span style="flex:1"></span>${uq.length > 1 ? `<button class="btn pri" data-padoptall="1">すべて台帳登録</button>` : ''}</div>
-      <table class="nm-table">${uq.map(u => `<tr><td><b>${esc(u.full_name)}</b></td><td>${esc(u.email) || '<span style="color:var(--bad)">メール空（登録不可）</span>'}</td><td>${esc(u.category)}</td><td>${esc(u.affiliation)}</td><td><span style="color:var(--acc)">users #${u.user_id}</span>${u.inactive ? '<small style="color:var(--bad)">（停止中）</small>' : ''}</td><td style="white-space:nowrap">${u.email ? `<button class="btn pri" data-padopt="${u.user_id}">台帳登録</button>` : ''}</td></tr>`).join('')}</table></div>` : '';
-    $('rosterList').innerHTML = unregHtml + (rows.length ? `<table class="nm-table"><tr>${th('name','氏名')}${th('email','メール')}<th>区分</th><th>所属</th><th>期間</th>${th('user','状態（users ID）')}<th>備考</th><th></th></tr>` +
-      rows.map(i => `<tr><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${esc(i.from)}〜${esc(i.until)}</td><td>${st(i)}</td><td>${esc(i.note)}</td><td style="white-space:nowrap"><button class="btn" data-pedit="${i.id}" title="この行を編集（氏名・メール・区分・所属・期間・備考）">編集</button> ${i.user_id && !i.user_inactive ? `<button class="btn" data-pmail="${i.id}" title="パスワード設定メールを送る">🔑</button> ` : ''}<button class="btn" data-pdel="${i.id}">削除</button></td></tr>`).join('') + '</table>'
-      : '<div class="empty">名簿が空です．Excel の「人」シートから取り込んでください．</div>');
-    $('rosterList').querySelectorAll('th[data-sort]').forEach(h => h.onclick = () => {
-      const k = h.dataset.sort;
-      if (rosterSort.key === k) rosterSort.dir = -rosterSort.dir; else rosterSort = {key:k, dir:1};
-      renderRoster();
-    });
-  }
-  async function loadRoster(){
-    $('rosterList').innerHTML = '読み込み中…';
-    try{ const r = await api(`${API}/roster`); rosterItems = r.items; rosterUnreg = r.unregistered || []; const c = r.counts;
-      $('rosterSummary').textContent = `名簿 ${c.total} 人（有効 ${c.active}）｜users あり ${c.users}・発行済 ${c.approved}・未発行 ${c.pending}・メール未記入 ${c.no_email}` + (c.unregistered ? `｜台帳未登録 ${c.unregistered}` : ''); renderRoster();
-    }catch(e){ $('rosterList').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_persons が未作成なら，先に作成してください．</small>'; }
-  }
-  $('rosterFilter').oninput = renderRoster;
-  $('rosterSortReset').onclick = () => { rosterSort = {key:'default', dir:1}; renderRoster(); };
-  $('rosterPublish').onclick = async () => { const cu = $('rosterCreateUsers').checked;
-    if (!confirm('台帳を正として発行します．users にある人は 氏名・区分・所属 を名簿に合わせ' + (cu ? '，無い人は users を作り' : '，無い人は approved_users に写し') + '，期限切れの人は approved_users から外し' + ($('rosterDeactivate').checked ? '，その users を無効化し' : '') + 'ます．よろしいですか')) return;
-    try{ const r = await api(`${API}/roster/publish`, 'POST', {create_users: cu, deactivate_expired: $('rosterDeactivate').checked});
-      toast(`発行：users作成 ${r.users_created}・users更新 ${r.users_updated}・無効化 ${r.users_deactivated}・approved追加 ${r.added}・更新 ${r.updated}・削除 ${r.removed}｜名寄せ ${r.linked}件` + (r.warnings.length ? '｜' + r.warnings.join('，') : ''), 8000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 4000); } };
-  $('ovRoster').addEventListener('click', async ev => { const t = ev.target;
-    if (t.dataset.padopt !== undefined || t.dataset.padoptall !== undefined){
-      const ids = t.dataset.padopt !== undefined ? [Number(t.dataset.padopt)] : rosterUnreg.filter(u => u.email).map(u => u.user_id);
-      const who = ids.length === 1 ? (() => { const u = rosterUnreg.find(x => x.user_id === ids[0]); return `${u.full_name}（${u.email}，${u.category}）`; })() : `${ids.length} 人`;
-      if (!confirm(`${who} を台帳（名簿）に登録します．よろしいですか`)) return;
-      try{ const r = await api(`${API}/roster/adopt`, 'POST', {user_ids: ids}); toast(`台帳登録 ${r.adopted.length} 件` + (r.skipped.length ? `・見送り ${r.skipped.length} 件` : '') + (r.linked ? `｜名寄せ ${r.linked}件` : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
-      return; }
-    if (t.dataset.pedit !== undefined){ openPerson(rosterItems.find(x => x.id == t.dataset.pedit)); return; }
-    if (t.dataset.pmail !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pmail); if (!confirm(`${i.full_name}（${i.email}）にパスワード設定メールを送りますか`)) return; try{ await api(`${API}/roster/${t.dataset.pmail}/password_mail`, 'POST', {}); toast('送信しました'); }catch(e){ toast('失敗：'+e.message, 5000); } return; }
-    if (t.dataset.pdel !== undefined){ const i = rosterItems.find(x => x.id == t.dataset.pdel);
-      let withUser = false;
-      if (i.user_id){ withUser = confirm(`${i.full_name} を名簿から消します．users #${i.user_id} も削除（論理削除・ログイン不可）しますか？\nOK＝users も削除　キャンセル＝名簿だけ`); }
-      else if (!confirm(`${i.full_name} を名簿から消しますか`)) return;
-      try{ const r = await api(`${API}/roster/${t.dataset.pdel}?with_user=${withUser?1:0}`, 'DELETE'); toast(r.user_action==='deleted' ? 'users も削除しました' : '名簿から消しました'); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); } } });
-  // グループ定義
-  let grpTab = 'list', grpList = [], grpProp = [];
-  $('btnGroups').onclick = () => { show('ovGrp'); loadGrp(); };
-  document.querySelectorAll('#grpTabs button[data-t]').forEach(b => b.onclick = () => {
-    document.querySelectorAll('#grpTabs button[data-t]').forEach(x => x.classList.remove('on')); b.classList.add('on');
-    grpTab = b.dataset.t; $('grpGen').style.display = grpTab==='prop' ? '' : 'none'; loadGrp();
-  });
-  async function loadGrp(){
-    $('grpBody').innerHTML = '読み込み中…';
-    try{
-      if (grpTab === 'list'){
-        const r = await api(`${API}/groups`); grpList = r.items;
-        document.querySelector('#grpTabs button[data-t=list] span').textContent = r.items.length;
-        $('grpBody').innerHTML = '<table class="nm-table"><tr><th>グループ</th><th>ルール（台帳から導く）</th><th>直接メンバー</th><th>いまの構成員</th></tr>' +
-          r.items.map(g => `<tr><td><b>${esc(g.name)}</b><br><small style="color:var(--sub)">${esc(g.description)}</small></td>
-            <td>${g.rules.length ? g.rules.map(x => `<div><span class="chip res">${esc(x.kind)}：${esc(x.unit)}／${esc(x.role)}${x.recurse?'（配下も）':''}${x.mode==='exclude'?'（除外）':''}</span> <button class="btn" data-rdel="${x.id}" style="padding:1px 6px">×</button></div>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
-            <td>${g.direct_names.length ? g.direct_names.map(n => `<span class="chip">${esc(n)}</span>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
-            <td><b>${g.members.length}</b>名 ${g.member_names.slice(0,8).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${g.member_names.length>8 ? ` <small>ほか${g.member_names.length-8}名</small>` : ''}</td></tr>`).join('') + '</table>';
-      } else {
-        const r = await api(`${API}/groups/proposals`); grpProp = r.items;
-        document.querySelector('#grpTabs button[data-t=prop] span').textContent = r.items.filter(x=>!x.done).length;
-        $('grpBody').innerHTML = '<table class="nm-table"><tr><th><input type="checkbox" id="grpAll"></th><th>作るグループ名</th><th>種別</th><th>もとの単位／役割</th><th>いまの構成員</th><th>状態</th></tr>' +
-          r.items.map((x,i) => `<tr><td>${x.done ? '' : `<input type="checkbox" class="grpChk" data-n="${esc(x.group_name)}" ${x.members.length?'checked':''}>`}</td>
-            <td><b>${esc(x.group_name)}</b></td><td>${esc(x.kind)}</td><td>${esc(x.unit)}／${esc(x.role_label)}${x.recurse?'（配下も）':''}</td>
-            <td><b>${x.members.length}</b>名 ${x.member_names.slice(0,6).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${x.member_names.length>6 ? ` <small>ほか${x.member_names.length-6}名</small>` : ''}</td>
-            <td>${x.done ? '<span style="color:var(--acc)">作成済</span>' : x.exists ? '同名のグループあり（ルールを足します）' : ''}</td></tr>`).join('') + '</table>';
-        const all = $('grpAll'); if (all) all.onchange = () => document.querySelectorAll('.grpChk').forEach(c => c.checked = all.checked);
-      }
-    }catch(e){ $('grpBody').innerHTML = '失敗：' + esc(e.message) + '<br><small>ug_group_rules が未作成なら，先に作成してください．</small>'; }
-  }
-  $('grpBody').addEventListener('click', async ev => {
-    const t = ev.target; if (t.dataset.rdel === undefined) return;
-    if (!confirm('このルールを外しますか（グループと直接メンバーは残ります）')) return;
-    try{ await api(`${API}/groups/rules/${t.dataset.rdel}`, 'DELETE'); toast('外しました'); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
-  });
-  $('grpGen').onclick = async () => {
-    const names = [...document.querySelectorAll('.grpChk')].filter(c => c.checked).map(c => c.dataset.n);
-    if (!names.length){ toast('作るグループを選んでください'); return; }
-    if (!confirm(`${names.length} 件のグループを作り，台帳からのルールを足します．よろしいですか`)) return;
-    try{ const r = await api(`${API}/groups/generate`, 'POST', {names}); toast(`グループ ${r.groups_created} 件・ルール ${r.rules_added} 本を追加`, 5000); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
-  };
-  $('grpSync').onclick = async () => {
-    if (!confirm('台帳を users・user_groups 等に反映します．\n・名簿の人を users に作る／氏名・区分・所属を合わせる\n・名寄せを掛け直す\n・台帳の単位ごとに user_groups とルールを揃える\n既にあるものは壊しません．よろしいですか')) return;
-    try{ const r = await api(`${API}/groups/sync`, 'POST', {});
-      const u = r.roster || {};
-      let msg = `users：作成 ${u.users_created||0}・更新 ${u.users_updated||0}｜名寄せ ${u.linked||0}件｜グループ：台帳の ${r.from_ledger} 件に対して新規 ${r.groups_created}・ルール追加 ${r.rules_added}`;
-      if (r.pids_linked && (r.pids_linked.person || r.pids_linked.group)) msg += `｜永続IDの付け直し 人 ${r.pids_linked.person}・グループ ${r.pids_linked.group}`;
-      if (r.extras.length) msg += `｜台帳に対応の無いグループ ${r.extras.length} 件（${r.extras.slice(0,5).map(x=>x.name).join('，')}${r.extras.length>5?' ほか':''}）`;
-      toast(msg, 9000); loadGrp();
-    }catch(e){ toast('失敗：'+e.message, 5000); }
-  };
-  $('grpSnap').onclick = async () => { if (!confirm('いまの全グループの構成員を控えます（前の控えは消えます）．よろしいですか')) return;
-    try{ const r = await api(`${API}/groups/snapshot`, 'POST', {}); toast(`控えました（${r.rows} 行 ${r.taken_at}）`, 5000); }catch(e){ toast('失敗：'+e.message, 5000); } };
-  $('grpCmp').onclick = async () => {
-    try{ const r = await api(`${API}/groups/compare`);
-      if (r.identical){ toast(`控え（${r.taken_at}）と完全に一致．グループ ${r.groups} 件`, 6000); return; }
-      $('grpBody').innerHTML = `<div style="margin-bottom:8px">控え（${esc(r.taken_at)}）との差：${r.diffs.length} グループ${r.groups_gone.length ? `，消えたグループ ${esc(r.groups_gone.join('，'))}` : ''}</div>` +
-        '<table class="nm-table"><tr><th>グループ</th><th>増えた人</th><th>減った人</th></tr>' +
-        r.diffs.map(d => `<tr><td><b>${esc(d.group)}</b></td><td>${d.added.map(n=>`<span class="chip res">${esc(n)}</span>`).join('')}</td><td>${d.removed.map(n=>`<span class="chip">${esc(n)}</span>`).join('')}</td></tr>`).join('') + '</table>';
-    }catch(e){ toast('失敗：'+e.message, 5000); }
-  };
-
-  // 登録申請
-  let reqItems = [], reqSt = 'pending';
-  let namesUsers = [];
-  $('btnReq').onclick = () => { show('ovReq'); loadReq(); };
-  async function loadReq(){
-    $('reqList').innerHTML = '読み込み中…';
-    try{ const r = await api(`${API}/requests`); reqItems = r.items;
-      document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.querySelector('span').textContent = r.counts[b.dataset.st] || 0);
-      renderReq();
-    }catch(e){ $('reqList').innerHTML = '失敗：' + esc(e.message); }
-  }
-  function renderReq(){
-    const rows = reqItems.filter(i => i.status === reqSt);
-    const acts = i => reqSt==='pending' ? `<select data-cat="${i.id}"><option value="regular" ${i.category==='regular'?'selected':''}>regular</option><option value="guest" ${i.category==='guest'?'selected':''}>guest</option><option value="admin" ${i.category==='admin'?'selected':''}>admin</option></select> <button class="btn pri" data-act="approve" data-id="${i.id}">承認</button> <button class="btn" data-act="reject" data-id="${i.id}">却下</button> <button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`
-      : reqSt==='blacklisted' ? `<button class="btn" data-act="unblock" data-id="${i.id}">解除</button>`
-      : `<button class="btn warn" data-act="blacklist" data-id="${i.id}">ブラックリスト</button>`;
-    $('reqList').innerHTML = rows.length ? '<table class="nm-table"><tr><th>申請日</th><th>氏名</th><th>メール</th><th>区分</th><th>所属</th><th>状態</th><th>メモ</th><th></th></tr>' +
-      rows.map(i => `<tr><td>${esc(i.requested_at)}</td><td><b>${esc(i.full_name)}</b></td><td>${esc(i.email)}</td><td>${esc(i.category)}</td><td>${esc(i.affiliation)}</td><td>${i.in_users ? '<span style="color:var(--acc)">users あり</span>' : i.in_roster ? '名簿あり' : ''}</td><td>${esc(i.note)}</td><td style="white-space:nowrap">${acts(i)}</td></tr>`).join('') + '</table>'
-      : '<div class="empty">ありません</div>';
-  }
-  document.querySelectorAll('#reqTabs button[data-st]').forEach(b => b.onclick = () => { document.querySelectorAll('#reqTabs button[data-st]').forEach(x => x.classList.remove('on')); b.classList.add('on'); reqSt = b.dataset.st; renderReq(); });
-  $('reqList').addEventListener('click', async ev => {
-    const t = ev.target; if (!t.dataset.act) return;
-    const i = reqItems.find(x => x.id == t.dataset.id);
-    const msg = {approve:`${i.full_name}（${i.email}）を承認し，名簿に載せて users を作りますか`, reject:`${i.full_name} の申請を却下しますか`, blacklist:`${i.email} をブラックリストに載せますか（users があれば無効化）`, unblock:`${i.email} のブラックリストを解除しますか（却下に戻ります）`}[t.dataset.act];
-    if (!confirm(msg)) return;
-    const body = {}; if (t.dataset.act==='approve'){ const sel = $('reqList').querySelector(`select[data-cat="${i.id}"]`); if (sel) body.category = sel.value; }
-    try{ const r = await api(`${API}/requests/${i.id}/${t.dataset.act}`, 'POST', body); toast((r.user_action ? `users を${r.user_action==='created'?'作成':r.user_action==='revived'?'復活':'更新'}` : '更新しました') + (r.warning ? '｜'+r.warning : '')); loadReq(); loadRosterSilently(); }catch(e){ toast('失敗：'+e.message, 5000); }
-  });
-  $('blAdd').onclick = async () => { const em = prompt('ブラックリストに載せるメールアドレス'); if (!em) return; const note = prompt('理由（任意）') || ''; try{ await api(`${API}/requests/blacklist`, 'POST', {email: em, note}); toast('登録しました'); loadReq(); }catch(e){ toast('失敗：'+e.message, 5000); } };
-  async function loadRosterSilently(){ try{ const r = await api(`${API}/requests`); const n = r.counts.pending || 0; $('reqBadge').style.display = n ? '' : 'none'; $('reqBadge').textContent = n; }catch(e){} }
-  loadRosterSilently();
-
-  let curPerson = null;
-  function openPerson(i){
-    curPerson = i ? i.id : null;
-    $('personTitle').textContent = i ? '人を編集' : '人を追加';
-    $('pName').value = i ? i.full_name : ''; $('pEmail').value = i ? i.email : ''; $('pCat').value = i ? i.category : 'regular';
-    $('pAff').value = i ? i.affiliation : ''; $('pFrom').value = i ? i.from.slice(0,10) : ''; $('pUntil').value = i ? i.until.slice(0,10) : ''; $('pNote').value = i ? i.note : '';
-    show('ovPerson'); $('pName').focus();
-  }
-  $('rosterAdd').onclick = () => openPerson(null);
-  $('pSave').onclick = async () => {
-    const body = {full_name:$('pName').value, email:$('pEmail').value, category:$('pCat').value, affiliation:$('pAff').value, valid_from:$('pFrom').value, valid_until:$('pUntil').value, note:$('pNote').value};
-    try{ const r = curPerson ? await api(`${API}/roster/${curPerson}`, 'PUT', body) : await api(`${API}/roster`, 'POST', body);
-      hide('ovPerson'); toast((r.user_action==='created' ? 'users を作成' : r.user_action==='revived' ? 'users を復活' : r.user_action==='updated' ? 'users を更新' : '保存') + (r.warning ? '｜' + r.warning : ''), 5000); loadRoster(); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
-  };
-
-  $('impCheck').onclick = () => runImport('check');
-  $('impApply').onclick = () => { if (confirm('DBに書き込みます．よろしいですか')) runImport('apply'); };
-  $('impFile').onchange = () => { $('impApply').disabled = true; $('impOut').style.display='none'; };
+// ── ツリー ──
+let T = null, sel = null, selLink = null, editing = true, opened = new Set(), firstRender = true;
+let byId = {}, kids = {}, tops = [];
+async function load(){
+  try{ T = await api(`${API}/tree?as_of=${encodeURIComponent(asOf())}`); build(); renderTree(); if (sel) loadDetail(sel); }
+  catch(e){ $('tree').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}</div>`; }
 }
-
-// ── グループ（2026-09-24，まいぐるから移設） ──
-const GM = API.replace(/\/api\/ledger$/, '/api/gm');
-let gmList = [], gmCan = {}, gmCur = null, gmDet = null;
-function gmAsOf(){ return $('gmAsof').value || 'today'; }
-async function loadGM(keep){
-  if (!keep) $('wrap').innerHTML = '<div class="empty">読み込み中…</div>';
+function build(){
+  byId = {}; kids = {};
+  T.nodes.forEach(n => byId[n.id] = n);
+  const hasParent = new Set();
+  T.links.filter(l => l.valid && byId[l.parent] && byId[l.child] && byId[l.child].valid).forEach(l => {
+    (kids[l.parent] = kids[l.parent] || []).push(l); hasParent.add(l.child);
+  });
+  Object.values(kids).forEach(a => a.sort((x, y) => (x.order - y.order) || (x.id - y.id)));
+  tops = T.nodes.filter(n => n.valid && !hasParent.has(n.id));
+  // 親の数（共有の印）
+  T.nodes.forEach(n => n.parents = 0);
+  T.links.filter(l => l.valid && byId[l.child]).forEach(l => byId[l.child].parents++);
+}
+function matchSet(){
+  const q = $('filter').value.trim(); if (!q) return null;
+  const hit = new Set(T.nodes.filter(n => n.name.includes(q) || n.names.some(x => x.includes(q))).map(n => n.id));
+  return {q, hit};
+}
+function subtreeHas(id, m, path, memo){
+  if (memo.has(id)) return memo.get(id);
+  if (path.has(id)) return false;
+  path.add(id);
+  let r = m.hit.has(id);
+  for (const l of (kids[id] || [])) if (subtreeHas(l.child, m, path, memo)) { r = true; }
+  path.delete(id); memo.set(id, r); return r;
+}
+function renderTree(){
+  const m = matchSet(), memo = new Map(), out = [];
+  if (firstRender){ tops.forEach(n => opened.add(String(n.id))); firstRender = false; }
+  function row(n, depth, key, link, path, pos, pkey){
+    if (m && !subtreeHas(n.id, m, new Set(), memo)) return;
+    const ch = kids[n.id] || [];
+    const loop = path.includes(n.id);
+    const isOpen = m ? true : opened.has(key);
+    const per = (n.until || (n.from && n.from > TODAY)) ? `<span class="per">${esc(n.from || '…')}〜${esc(n.until)}</span>` : '';
+    out.push(`<div class="tr d${Math.min(depth,2)} ${sel===n.id?'sel':''} ${m && m.hit.has(n.id)?'hit':''}" data-id="${n.id}" data-key="${key}" data-link="${link ? link.id : ''}" style="padding-left:${8 + depth*18}px">
+      <span class="car" data-tog="${key}">${loop ? '↺' : ch.length ? (isOpen ? '▾' : '▸') : ''}</span>
+      <span class="nm">${esc(n.name)}</span>
+      ${n.parents > 1 ? `<span class="bd share" title="${n.parents} つの親に共有されています">共有</span>` : ''}
+      ${n.groups.map(g => `<span class="bd grp" title="対応するシステムグループ">🔗${esc(g.name)}</span>`).join('')}
+      ${per}
+      ${editing ? `<input class="tord" type="number" min="1" value="${pos}" title="同じ親の中の順位" data-pkey="${pkey}">` : ''}
+      
+      <span class="cnt">${n.count ? n.count + '名' : ''}</span>
+    </div>`);
+    if (loop || !isOpen) return;
+    ch.forEach((l, i) => row(byId[l.child], depth + 1, key + '/' + l.child, l, path.concat(n.id), i + 1, String(n.id)));
+  }
+  tops.forEach((n, i) => row(n, 0, String(n.id), null, [], i + 1, ''));
+  $('tree').innerHTML = out.join('') || '<div class="empty">ノードがありません．「編集」から「＋トップノード」で作れます．</div>';
+}
+$('filter').oninput = renderTree;
+// 順位：入力した数の位置へ動かす（同じ親の中）
+$('tree').addEventListener('change', async ev => {
+  const inp = ev.target; if (!inp.classList.contains('tord')) return;
+  const tr = inp.closest('.tr'), pkey = inp.dataset.pkey, want = Math.max(1, Number(inp.value) || 1);
   try{
-    const r = await api(`${GM}/groups?as_of=${encodeURIComponent(gmAsOf())}`);
-    gmList = r.items; gmCan = r;
-    $('gmNew').style.display = r.can_create ? '' : 'none';
-    if (!$('gmPane')) $('wrap').innerHTML = '<div class="gm" id="gmPane"><div class="lst" id="gmLst"></div><div class="det" id="gmDet"><div class="empty">左からグループを選んでください</div></div></div>';
-    renderGMList();
-    if (gmCur && gmList.some(g => g.id === gmCur)) loadGMDetail(gmCur);
-    else if (!r.is_admin && !gmCur){ const m = gmList.find(g => g.mine) || gmList.find(g => g.member); if (m) loadGMDetail(m.id); }
-  }catch(e){ $('wrap').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}</div>`; }
-}
-function renderGMList(){
-  const sc = $('gmScope').value, q = $('gmFilter').value.trim().toLowerCase();
-  const rows = gmList.filter(g => (sc==='all' || (sc==='mine' && g.mine) || (sc==='member' && g.member) || (sc==='adhoc' && !g.ledger) || (sc==='ledger' && g.ledger))
-                                  && (!q || g.name.toLowerCase().includes(q)));
-  $('gmLst').innerHTML = `<div class="it" style="cursor:default;background:#f7f9fb"><small>${rows.length} / ${gmList.length} グループ</small></div>` +
-    rows.map(g => `<div class="it ${g.id===gmCur?'on':''}" data-gid="${g.id}"><b>${esc(g.name)}</b>${g.ledger?'<span class="tag led">台帳</span>':''}${g.mine?'<span class="tag mine">管理</span>':''}${g.member?'<span class="tag">所属</span>':''}<br><small>${g.count}名・管理者 ${esc(g.manager)}</small></div>`).join('');
-}
-$('wrap').addEventListener('click', ev => { const it = ev.target.closest('.it[data-gid]'); if (it) loadGMDetail(+it.dataset.gid); });
-$('gmScope').onchange = renderGMList;
-$('gmFilter').oninput = renderGMList;
-$('gmAsof').onchange = () => loadGM(true);
-async function loadGMDetail(gid){
-  gmCur = gid; renderGMList();
-  try{
-    const r = await api(`${GM}/groups/${gid}?as_of=${encodeURIComponent(gmAsOf())}`); gmDet = r;
-    const g = r.group, ed = r.can_edit;
-    const st = {current:'', future:'これから', past:'終了'};
-    let h = `<h3>${esc(g.name)}${g.ledger?'<span class="tag led">台帳由来</span>':''}</h3>
-      <div class="meta">${esc(g.description)}${g.description?'<br>':''}管理者：${esc(g.manager)}｜時点 ${esc(r.as_of)} の構成員 <b>${r.count}</b>名
-      ${ed ? ` <button class="btn" id="gmEdit" style="margin-left:8px">グループを編集</button>` : ''}</div>`;
-    if (r.rules.length){
-      h += `<div class="sec">台帳から導かれる構成員（${r.derived.length}名）</div><div style="font-size:12px;color:var(--sub);margin-bottom:4px">${r.rules.map(x => `${esc(x.kind)}：${esc(x.unit)}／${esc(x.role)}${x.recurse?'（配下も）':''}${x.mode==='exclude'?'（除外）':''}`).join('，')}．変えるときは台帳の発令を直します．</div>` +
-        (r.derived.map(n => `<span class="chip res">${esc(n)}</span>`).join('') || '<span style="color:var(--sub)">なし</span>');
+    if (pkey){
+      const list = (kids[Number(pkey)] || []).map(l => l.id), cur = list.indexOf(Number(tr.dataset.link));
+      list.splice(cur, 1); list.splice(Math.min(want - 1, list.length), 0, Number(tr.dataset.link));
+      await api(`${API}/order`, 'POST', {parent_id: Number(pkey), ids: list});
+    } else {
+      const list = tops.map(n => n.id), cur = list.indexOf(Number(tr.dataset.id));
+      list.splice(cur, 1); list.splice(Math.min(want - 1, list.length), 0, Number(tr.dataset.id));
+      await api(`${API}/order`, 'POST', {parent_id: null, ids: list});
     }
-    h += `<div class="sec">${r.rules.length ? '直接メンバー（台帳に加えて入れる人）' : 'メンバー'}${ed ? ` <button class="btn pri" id="memAdd" style="margin-left:8px;padding:3px 10px">＋人</button>` : ''}</div>`;
-    h += r.members.length ? '<table><tr><th>氏名</th><th>開始</th><th>終了</th><th>状態</th>' + (ed ? '<th></th>' : '') + '</tr>' +
-      r.members.map(m => `<tr class="${m.state}"><td>${esc(m.name)}${m.dropped?' <small style="color:var(--bad)">（除外ルールで外れています）</small>':''}</td><td>${esc(m.from)}</td><td>${esc(m.until)}</td><td>${st[m.state]}</td>` +
-        (ed ? `<td style="white-space:nowrap"><button class="btn" data-medit="${m.id}" style="padding:2px 8px">期間</button> ${m.state==='current' ? `<button class="btn" data-mend="${m.id}" style="padding:2px 8px">今日で外す</button>` : ''}</td>` : '') + '</tr>').join('') + '</table>'
-      : '<div style="color:var(--sub)">いません</div>';
-    $('gmDet').innerHTML = h;
-  }catch(e){ $('gmDet').innerHTML = `<div class="empty">読み込み失敗：${esc(e.message)}</div>`; }
-}
-
-// 人を検索して選ぶ（管理者・構成員・作成権限で共用）
-function picker(input, box, onPick){
-  let t = null;
-  input.oninput = () => { clearTimeout(t); const q = input.value.trim(); if (!q){ box.style.display='none'; return; }
-    t = setTimeout(async () => { try{ const r = await api(`${GM}/users?q=${encodeURIComponent(q)}`);
-      box.innerHTML = r.items.length ? r.items.map(u => `<div class="cand" data-uid="${u.id}" data-name="${esc(u.full_name)}">#${u.id} <b>${esc(u.full_name)}</b> <small>${esc(u.email)}${u.inactive?'（停止中）':''}</small></div>`).join('') + (r.more ? `<div class="cand"><small>ほか ${r.more} 件．絞り込んでください</small></div>` : '')
-        : '<div class="cand"><small>該当なし</small></div>'; box.style.display='block'; }catch(e){} }, 250); };
-  box.onclick = ev => { const c = ev.target.closest('.cand[data-uid]'); if (!c) return; onPick({id:+c.dataset.uid, name:c.dataset.name}); box.style.display='none'; input.value=''; input.focus(); };
-}
-
-// グループの作成・編集
-let gmMgr = null;
-function showMgr(){ $('gmMgrPicked').innerHTML = gmMgr ? `<span class="picked">#${gmMgr.id} ${esc(gmMgr.name)}</span>` : ''; }
-picker($('gmMgrSearch'), $('gmMgrCand'), u => { gmMgr = u; showMgr(); });
-function openGM(isNew){
-  const g = isNew ? null : gmDet.group;
-  $('gmTitle').textContent = isNew ? 'グループを作る' : 'グループを編集';
-  $('gmName').value = g ? g.name : ''; $('gmName').disabled = !!(g && g.ledger);
-  $('gmNameNote').textContent = g && g.ledger ? '台帳由来のグループは台帳の単位名で決まるので，ここでは改名できません' : '';
-  $('gmDesc').value = g ? g.description : '';
-  gmMgr = g ? {id:g.manager_id, name:g.manager} : null; showMgr();
-  $('gmSelfRow').style.display = isNew ? '' : 'none';
-  $('gmDel').style.display = (g && !g.ledger) ? '' : 'none';
-  $('gmSave').dataset.new = isNew ? '1' : '';
-  show('ovGM'); $('gmName').focus();
-}
-$('gmNew').onclick = () => openGM(true);
-$('wrap').addEventListener('click', ev => { if (ev.target.id === 'gmEdit') openGM(false); });
-$('gmSave').onclick = async () => {
-  const body = {name:$('gmName').value.trim(), description:$('gmDesc').value};
-  if (gmMgr) body.manager_user_id = gmMgr.id;
-  try{
-    if ($('gmSave').dataset.new){ body.manager_is_member = $('gmSelf').checked; const r = await api(`${GM}/groups`, 'POST', body); gmCur = r.id; toast('作りました'); }
-    else { if (gmDet.group.ledger) delete body.name; await api(`${GM}/groups/${gmCur}`, 'PUT', body); toast('保存しました'); }
-    hide('ovGM'); loadGM(true);
-  }catch(e){ toast('失敗：'+e.message, 5000); }
-};
-$('gmDel').onclick = async () => {
-  const g = gmDet.group;
-  if (!confirm(`グループ「${g.name}」を削除します．メンバーの記録も消え，このグループで閲覧を絞っているアプリでは誰も見られなくなります．よろしいですか`)) return;
-  try{ await api(`${GM}/groups/${g.id}`, 'DELETE'); hide('ovGM'); gmCur = null; $('gmDet').innerHTML = '<div class="empty">削除しました</div>'; loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
-};
-
-// 構成員
-let memEdit = null, memPick = [];
-function showMemPick(){ $('memPicked').innerHTML = memPick.map((u,i) => `<span class="picked" style="margin:2px">#${u.id} ${esc(u.name)}<span class="x" data-i="${i}">✕</span></span>`).join(''); }
-picker($('memSearch'), $('memCand'), u => { if (!memPick.some(x => x.id === u.id)) memPick.push(u); showMemPick(); });
-$('memPicked').onclick = ev => { if (ev.target.dataset.i !== undefined){ memPick.splice(+ev.target.dataset.i, 1); showMemPick(); } };
-function openMem(m){
-  memEdit = m; memPick = []; showMemPick();
-  $('memTitle').textContent = m ? '期間を変える' : `メンバーを加える（${gmDet.group.name}）`;
-  $('memWho').innerHTML = m ? `<b>${esc(m.name)}</b>` : '';
-  $('memPickBox').style.display = m ? 'none' : '';
-  $('memFrom').value = m ? m.from.slice(0,10) : '{{ today }}'; $('memUntil').value = m ? m.until.slice(0,10) : '';
-  $('memDel').style.display = m ? '' : 'none';
-  show('ovMem'); if (!m) $('memSearch').focus();
-}
-$('wrap').addEventListener('click', async ev => {
-  const t = ev.target;
-  if (t.id === 'memAdd') openMem(null);
-  else if (t.dataset.medit) openMem(gmDet.members.find(m => m.id === +t.dataset.medit));
-  else if (t.dataset.mend){ const m = gmDet.members.find(x => x.id === +t.dataset.mend);
-    if (!confirm(`${m.name} を今日で外します（記録は残ります）．よろしいですか`)) return;
-    try{ await api(`${GM}/members/${m.id}`, 'PUT', {end_now:true}); toast('外しました'); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); } }
+    toast('順位を変えました'); load();
+  }catch(e){ toast('失敗：'+e.message, 4000); }
 });
-$('memSave').onclick = async () => {
-  const per = {valid_from:$('memFrom').value, valid_until:$('memUntil').value};
+$('btnOpenAll').onclick = () => { $('tree').querySelectorAll('.tr').forEach(()=>{}); openAll(); };
+function openAll(){
+  const walk = (id, key, path) => { if (path.includes(id)) return; opened.add(key); (kids[id] || []).forEach(l => walk(l.child, key + '/' + l.child, path.concat(id))); };
+  tops.forEach(n => walk(n.id, String(n.id), [])); renderTree();
+}
+$('btnCloseAll').onclick = () => { opened.clear(); renderTree(); };
+$('tree').addEventListener('click', async ev => {
+  const tr = ev.target.closest('.tr'); if (!tr) return;
+  const id = Number(tr.dataset.id), key = tr.dataset.key;
+  const b = ev.target.closest('button');
+  if (ev.target.dataset.tog){ opened.has(key) ? opened.delete(key) : opened.add(key); renderTree(); return; }
+  if (ev.target.classList.contains('tord')) return;
+  // 行を押すと右に出す（ノードの編集・＋子・移動は右の欄で行う）
+  sel = id; selLink = tr.dataset.link ? Number(tr.dataset.link) : null; renderTree(); loadDetail(id);
+});
+
+// ── 詳細（メンバーシップ） ──
+let D = null;
+async function loadDetail(id){
+  const n = byId[id]; if (!n){ $('detail').innerHTML = '<div class="empty">この時点では無いノードです</div>'; return; }
+  try{ D = await api(`${API}/nodes/${id}/members?as_of=${encodeURIComponent(asOf())}`); D.node = n; renderDetail(); }
+  catch(e){ $('detail').innerHTML = '失敗：' + esc(e.message); }
+}
+function renderDetail(){
+  const n = D.node, all = $('allPeriod').checked;
+  const rows = D.items.filter(m => all || m.now || m.future);
+  let lastRole = null, k = 0;
+  const tr = rows.map(m => { const first = m.role !== lastRole; lastRole = m.role; k = first ? 1 : k + 1; m.pos = k;
+    return `<tr class="${m.now ? '' : (m.future ? 'fut' : 'past')} ${first ? 'rg' : ''}">
+      ${editing ? `<td><input class="mord" type="number" min="1" value="${m.pos}" data-mid="${m.id}" data-rid="${m.role_id}" title="この立場の中の順位"></td>` : ''}
+      <td class="role">${first ? esc(m.role) : ''}</td><td class="id">${m.user_id ?? '—'}</td>
+      <td>${esc(m.name) || '<span style="color:var(--sub)">空席</span>'}${m.resolved || !m.name ? '' : ' <span title="アカウントと結びついていません">★</span>'}${m.note ? ` <small style="color:var(--sub)">${esc(m.note)}</small>` : ''}</td>
+      <td class="per">${esc(m.from || '…')} 〜 ${esc(m.until)}</td>
+      <td>${m.now ? '' : (m.future ? '予定' : '終了')}</td>
+      ${editing ? `<td style="white-space:nowrap"><button class="btn mini" data-medit="${m.id}">編集</button>${(m.now || m.future) ? ` <button class="btn mini" data-mend="${m.id}">終える</button>` : ''}</td>` : ''}</tr>`; }).join('');
+  const g = D.groups;
+  $('detail').innerHTML = `<h3>${esc(n.name)} <small style="font-weight:normal;color:var(--sub);font-size:12px">${n.from || n.until ? `${esc(n.from || '…')}〜${esc(n.until)}` : ''}</small></h3>
+    <div class="meta">親：${D.parents.length ? D.parents.map(p => `${esc(p.name)}${p.from || p.until ? `<small>（${esc(p.from || '…')}〜${esc(p.until)}）</small>` : ''}${p.valid ? '' : '<small>（この時点では無効）</small>'}`).join('，') : 'なし（トップレベル）'}
+      </div>
+    <div style="display:flex;gap:6px;margin:0 0 8px">
+      <button class="btn mini" data-editnode="${n.id}">ノードを編集</button>
+      <button class="btn mini" data-addchild="${n.id}" title="このノードの下に新しいノードを作る">＋子</button>
+      <button class="btn mini" data-move="${n.id}" title="別の親の下へ移す">移動</button>
+    </div>
+    <div class="box map ${g.length === 1 && g[0].name === n.name ? 'on' : g.length ? 'ex' : 'off'}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="mapst">${g.length === 1 && g[0].name === n.name ? '✔ 対応あり' : g.length === 1 ? '対応あり（名前が違う）' : g.length ? '対応が複数' : '対応なし'}</span>
+        ${g.length ? g.map(x => `<span>システムグループ <b>${esc(x.name)}</b> <small style="color:var(--sub)">#${x.id}</small></span>${x.others.length ? `<small style="color:var(--sub)">（このグループには ${x.others.map(esc).join('，')} も対応）</small>` : ''}`).join('，')
+                   : '<span style="color:var(--sub)">このノードに対応するシステムグループはありません</span>'}
+        ${g.length ? `<span style="color:var(--sub)">構成員 <b style="color:var(--ink)">${D.subtree_users}</b> 名（このノードと配下 ${D.subtree_nodes - 1} ノード）</span>` : ''}
+      </div>
+      ${D.related.length ? `<div style="font-size:12px;color:var(--sub);margin-top:4px">このノードを立場で絞って使うグループ：${D.related.map(x => esc(x.name)).join('，')}</div>` : ''}
+    </div>
+    ${childrenHtml(n)}
+    ${D.children.length ? `<details open class="sect"><summary><b>構成員（自動計算）</b> <small style="color:var(--sub)">このノードと配下の，この時点のメンバー ${D.subtree_members.length} 名</small></summary>
+      ${D.subtree_members.length ? `<table class="mem"><tr><th>#</th><th>ID</th><th>氏名</th><th>どこで（立場）</th></tr>${D.subtree_members.map((p, i) => `<tr><td class="id">${i + 1}</td><td class="id">${p.user_id ?? '—'}</td><td>${esc(p.name)}${p.user_id ? '' : ' ★'}</td><td style="font-size:12px;color:#444">${p.where.map(esc).join('，')}</td></tr>`).join('')}</table>` : '<div style="color:var(--sub);font-size:13px">いません</div>'}
+    </details>` : ''}
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+      <b style="font-size:14px">${D.children.length ? 'このノードのメンバーシップ（直接）' : 'メンバーシップ'}</b><small style="color:var(--sub)">${all ? '全期間' : 'この時点のメンバーと予定'}　${rows.length} 件</small>
+      <span style="flex:1"></span>${editing ? '<button class="btn mini pri" data-madd="1">＋メンバー</button>' : ''}</div>
+    ${rows.length ? `<table class="mem"><tr>${editing ? '<th title="立場の中の順位">順位</th>' : ''}<th>立場</th><th>ID</th><th>氏名</th><th>期間</th><th>状態</th>${editing ? '<th></th>' : ''}</tr>${tr}</table>` : '<div style="color:var(--sub);font-size:13px">メンバーはいません</div>'}`;
+}
+function kidPicker(n){
+  // すべてのノードをツリーの順に並べ，いま子になっているものに印を付ける（同じノードは一度だけ）
+  const cur = new Set(D.children.filter(c => c.valid).map(c => c.id));
+  const seen = new Set(), list = [];
+  const walk = (id, depth) => { if (seen.has(id) || !byId[id]) return; seen.add(id); list.push({n: byId[id], depth}); (kids[id] || []).forEach(l => walk(l.child, depth + 1)); };
+  tops.forEach(t => walk(t.id, 0));
+  T.nodes.filter(x => x.valid && !seen.has(x.id)).forEach(x => list.push({n: x, depth: 0}));
+  return `<details class="sect kp" style="margin-top:8px"><summary><b>下位ノードを選ぶ</b> <small style="color:var(--sub)">印を付けたノードがこのノードの子になります（元の親の下にも残ります）</small></summary>
+    <div class="kplist">${list.filter(x => x.n.id !== n.id).map(x => `<label style="padding-left:${x.depth * 16}px"><input type="checkbox" class="kpc" value="${x.n.id}" ${cur.has(x.n.id) ? 'checked' : ''}> ${esc(x.n.name)}</label>`).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:12px">新しく子にする開始日 <input type="date" id="addKidsFrom" value="${fyStartForNew()}">
+      <button class="btn mini pri" data-kpsave="1">下位ノードを保存</button></div>
+  </details>`;
+}
+function childrenHtml(n){
+  const all = $('allPeriod').checked;
+  const ch = D.children.filter(c => all || c.valid || (c.from && c.from > (atDate() || TODAY)));
+  if (!ch.length && !editing) return '';
+  const others = T.nodes.filter(x => x.id !== n.id && x.valid && !D.children.some(c => c.id === x.id && c.valid));
+  return `<details open class="sect"><summary><b>下位ノード</b> <small style="color:var(--sub)">${ch.length} 件${ch.length ? '（構成員はこれらとこのノードのメンバーの和）' : ''}</small></summary>
+    ${ch.length ? `<table class="mem"><tr><th>ノード</th><th>期間</th>${editing ? '<th></th>' : '<th></th>'}</tr>${ch.map(c => `<tr class="${c.valid ? '' : 'past'}">
+      <td><a href="#" data-goto="${c.id}">${esc(c.name)}</a>${byId[c.id] && byId[c.id].parents > 1 ? ' <small style="color:#2c5282">共有</small>' : ''}</td>
+      ${editing ? `<td class="per"><input type="date" class="cf" value="${c.from.slice(0,10)}"> 〜 <input type="date" class="cu" value="${c.until.slice(0,10)}"></td>
+        <td style="white-space:nowrap"><button class="btn mini" data-csave="${c.link_id}">期間を保存</button> <button class="btn mini warn" data-cdel="${c.link_id}">外す</button></td>`
+               : `<td class="per">${esc(c.from || '…')} 〜 ${esc(c.until)}</td><td>${c.valid ? '' : '（この時点では外れている）'}</td>`}</tr>`).join('')}</table>` : ''}
+    ${editing ? kidPicker(n) : ''}
+  </details>`;
+}
+$('detail').addEventListener('click', async ev => {
+  const go = ev.target.closest('[data-goto]');
+  if (go){ ev.preventDefault(); sel = Number(go.dataset.goto); renderTree(); loadDetail(sel); return; }
+  const b = ev.target.closest('button'); if (!b || !D) return;
+  const id = D.node.id;
   try{
-    if (memEdit){ await api(`${GM}/members/${memEdit.id}`, 'PUT', per); toast('保存しました'); }
-    else { if (!memPick.length){ toast('人を選んでください'); return; }
-      const r = await api(`${GM}/groups/${gmCur}/members`, 'POST', {user_ids: memPick.map(u => u.id), ...per});
-      toast(`${r.added}名を加えました` + (r.skipped ? `｜期間が重なるため見送り：${r.skipped.join('，')}` : ''), r.skipped ? 6000 : 2200); }
-    hide('ovMem'); loadGM(true);
+    if (b.dataset.kpsave){
+      const want = new Set([...$('detail').querySelectorAll('.kpc:checked')].map(x => Number(x.value)));
+      const cur = D.children.filter(c => c.valid);
+      const add = [...want].filter(x => !cur.some(c => c.id === x)), del = cur.filter(c => !want.has(c.id));
+      if (!add.length && !del.length){ toast('変更はありません'); return; }
+      if (!confirm(`子に足す ${add.length} 件・外す ${del.length} 件．よろしいですか`)) return;
+      for (const c of add) await api(`${API}/links`, 'POST', {parent_id:id, child_id:c, valid_from:$('addKidsFrom').value});
+      for (const c of del) await api(`${API}/links/${c.link_id}`, 'DELETE');
+      opened.add(String(id)); toast(`足す ${add.length} 件・外す ${del.length} 件`); load(); return; }
+    if (b.dataset.csave){ const tr = b.closest('tr');
+      await api(`${API}/links/${b.dataset.csave}`, 'PUT', {valid_from: tr.querySelector('.cf').value, valid_until: tr.querySelector('.cu').value}); toast('保存しました'); load(); return; }
+    if (b.dataset.cdel){ if (!confirm('この下位ノードを外しますか（ノードそのものは残ります．時期を区切るだけなら終了日を入れて「期間を保存」）')) return;
+      await api(`${API}/links/${b.dataset.cdel}`, 'DELETE'); toast('外しました'); load(); return; }
+    if (b.dataset.editnode){ openNode(id); return; }
+    if (b.dataset.addchild){ openNode(null, id); return; }
+    if (b.dataset.move){ const link = selLink && T.links.some(l => l.id === selLink && l.child === id) ? selLink : null;
+      openMove(id, link || (T.links.find(l => l.child === id && l.valid) || {}).id || null); return; }
+    if (b.dataset.madd){ openMem(null); return; }
+    if (b.dataset.medit){ openMem(Number(b.dataset.medit)); return; }
+    if (b.dataset.mend){ const m = D.items.find(x => x.id == b.dataset.mend); if (!confirm(`${m.name}（${m.role}）をいま終えますか（記録は残ります）`)) return;
+      await api(`${API}/appointments/${m.id}`, 'PUT', {valid_until: nowStamp()}); toast('終えました'); load(); return; }
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+});
+$('detail').addEventListener('change', async ev => {
+  const inp = ev.target; if (!inp.classList.contains('mord') || !D) return;
+  // 同じ立場の中で，入力した数の位置へ動かす．並びはノードのメンバー全体（全期間）で保存する
+  const rid = Number(inp.dataset.rid), mid = Number(inp.dataset.mid), want = Math.max(1, Number(inp.value) || 1);
+  const shown = [...$('detail').querySelectorAll('input.mord')].filter(x => Number(x.dataset.rid) === rid).map(x => Number(x.dataset.mid));
+  const cur = shown.indexOf(mid); shown.splice(cur, 1); shown.splice(Math.min(want - 1, shown.length), 0, mid);
+  const ids = [];
+  const roles = [...new Set(D.items.map(m => m.role_id))];
+  roles.forEach(r => {
+    const inRole = D.items.filter(m => m.role_id === r).map(m => m.id);
+    if (r === rid) ids.push(...shown, ...inRole.filter(x => !shown.includes(x))); else ids.push(...inRole);
+  });
+  try{ await api(`${API}/nodes/${D.node.id}/order`, 'POST', {ids}); toast('順位を変えました'); loadDetail(D.node.id); }catch(e){ toast('失敗：'+e.message, 4000); }
+});
+function nowStamp(){ const d = new Date(); const p = x => String(x).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+
+// ── 編集モード ──
+
+// ── ノード ──
+let curNode = null, curParent = null;
+async function openNode(id, parentId=null){
+  curNode = id; curParent = parentId;
+  const n = id ? byId[id] : null;
+  $('nodeTitle').textContent = n ? 'ノードを編集' : (parentId ? `「${byId[parentId].name}」の子ノードを作る` : 'トップノードを作る');
+  $('nodeWhere').textContent = n ? '' : '作ると，同名のシステムグループも作って対応付けます（同名のグループが既にあればそれに対応付けます）．';
+  $('nodeName').value = n ? n.name : ''; 
+  $('nodeFrom').value = n ? n.from.slice(0,10) : fyStartForNew(); $('nodeUntil').value = n ? n.until.slice(0,10) : ''; $('nodeNote').value = n ? n.note : '';
+  $('nodeDel').style.display = n ? '' : 'none';
+  $('nodeParents').innerHTML = '';
+  if (n){
+    const r = await api(`${API}/nodes/${id}/members?as_of=`);
+    const others = T.nodes.filter(x => x.id !== id).map(x => `<option value="${x.id}">${esc(x.name)}${x.valid ? '' : '（この時点では無効）'}</option>`).join('');
+    $('nodeParents').innerHTML = `<div style="font-size:12px;color:var(--sub)">親（期間つき．複数の親に共有できます．時期を区切って親を変えるときは，古い親に終了日を入れて新しい親を足します）</div>` +
+      (r.parents.map(p => `<div class="plink" data-lid="${p.link_id}"><span style="min-width:150px">${esc(p.name)}</span><input type="date" class="lf" value="${p.from.slice(0,10)}"> 〜 <input type="date" class="lu" value="${p.until.slice(0,10)}"><button class="btn mini" data-lsave="${p.link_id}">期間を保存</button><button class="btn mini warn" data-ldel="${p.link_id}">外す</button></div>`).join('') || '<div style="font-size:13px">なし（トップレベル）</div>') +
+      `<div class="plink"><select id="newParent" style="max-width:220px"><option value="">（親を足す）</option>${others}</select><input type="date" id="newParentFrom" value="${fyStartForNew()}"> 〜 <button class="btn mini" id="addParent">足す</button></div>`;
+  }
+  show('ovNode'); $('nodeName').focus();
+}
+$('btnTop').onclick = () => openNode(null, null);
+$('nodeParents').addEventListener('click', async ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  try{
+    if (b.id === 'addParent'){ const p = $('newParent').value; if (!p){ toast('親を選んでください'); return; }
+      await api(`${API}/links`, 'POST', {parent_id:Number(p), child_id:curNode, valid_from:$('newParentFrom').value}); toast('親を足しました'); await load(); openNode(curNode); return; }
+    if (b.dataset.lsave){ const row = b.closest('.plink');
+      await api(`${API}/links/${b.dataset.lsave}`, 'PUT', {valid_from: row.querySelector('.lf').value, valid_until: row.querySelector('.lu').value}); toast('保存しました'); await load(); openNode(curNode); return; }
+    if (b.dataset.ldel){ if (!confirm('この親子の記録を消しますか（時期を区切るだけなら終了日を入れて「期間を保存」）')) return;
+      await api(`${API}/links/${b.dataset.ldel}`, 'DELETE'); toast('外しました'); await load(); openNode(curNode); return; }
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+});
+$('nodeSave').onclick = async () => {
+  const body = {name:$('nodeName').value.trim(), valid_from:$('nodeFrom').value, valid_until:$('nodeUntil').value, note:$('nodeNote').value};
+  try{
+    if (curNode) await api(`${API}/units/${curNode}`, 'PUT', body);
+    else { const r = await api(`${API}/nodes`, 'POST', {...body, parent_id:curParent}); sel = r.id; if (curParent) opened.add(String(curParent)); }
+    hide('ovNode'); toast('保存しました'); load();
   }catch(e){ toast('失敗：'+e.message, 5000); }
 };
-$('memDel').onclick = async () => {
-  if (!confirm(`${memEdit.name} のこの行を削除します（誤登録の取り消し用です）．よろしいですか`)) return;
-  try{ await api(`${GM}/members/${memEdit.id}`, 'DELETE'); hide('ovMem'); toast('削除しました'); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
+$('nodeDel').onclick = async () => {
+  if (!confirm('このノードを削除します（このノードの発令・親子・グループとの対応も消えます．配下のノードは残ります）．よろしいですか')) return;
+  try{ await api(`${API}/nodes/${curNode}`, 'DELETE'); hide('ovNode'); if (sel === curNode){ sel = null; $('detail').innerHTML = ''; } toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
 };
 
-// 作成権限（総管理者のみ）
-if (IS_ADMIN){
-  async function loadCre(){
-    try{ const r = await api(`${GM}/creators`);
-      $('creList').innerHTML = r.items.length ? '<table class="nm-table"><tr><th>氏名</th><th>開始</th><th>終了</th><th></th></tr>' +
-        r.items.map(i => `<tr style="${i.state==='past'?'color:#aab':''}"><td>${esc(i.name)}</td><td>${esc(i.from)}</td><td>${esc(i.until)}</td><td><button class="btn" data-cdel="${i.id}">外す</button></td></tr>`).join('') + '</table>'
-        : '<div style="color:var(--sub)">いません（総管理者だけが作れます）</div>';
-    }catch(e){ $('creList').textContent = '失敗：' + e.message; }
-  }
-  $('gmCreators').onclick = () => { show('ovCre'); loadCre(); };
-  picker($('creSearch'), $('creCand'), async u => {
-    if (!confirm(`${u.name} にグループの作成権限を与えますか`)) return;
-    try{ const r = await api(`${GM}/creators`, 'POST', {user_id:u.id, valid_from:$('creFrom').value, valid_until:$('creUntil').value}); toast(r.updated ? '期間を書き換えました' : '与えました'); loadCre(); loadGM(true); }catch(e){ toast('失敗：'+e.message, 5000); }
-  });
-  $('creList').onclick = async ev => { const id = ev.target.dataset.cdel; if (!id) return; if (!confirm('作成権限を外しますか（作ったグループはそのまま残ります）')) return;
-    try{ await api(`${GM}/creators/${id}`, 'DELETE'); loadCre(); }catch(e){ toast('失敗：'+e.message, 5000); } };
-
-  // 台帳のグループ種別 → 直接メンバー（移行）
-  $('grpRetire').onclick = async () => {
-    try{
-      const r = await api(`${GM}/retire_group_kind`, 'POST', {dry:true});
-      if (!r.units){ toast('台帳にグループ種別の単位はありません（移行済み）', 5000); return; }
-      let h = `<div style="margin-bottom:8px">試算：グループ種別の単位 ${r.units} 件のうち，移せるもの ${r.moved.length} 件（直接メンバーを ${r.rows_added} 行追加・管理者の付け替え ${r.managers_set} 件・グループ新規 ${r.groups_created} 件）．残るもの ${r.kept.length} 件．</div>`;
-      h += r.diffs.length ? `<div style="color:var(--bad);margin-bottom:6px">いまの構成員が変わるグループが ${r.diffs.length} 件あります</div><table class="nm-table"><tr><th>グループ</th><th>増える人</th><th>減る人</th></tr>` + r.diffs.map(d => `<tr><td>${esc(d.group)}</td><td>${esc(d.added.join('，'))}</td><td>${esc(d.removed.join('，'))}</td></tr>`).join('') + '</table>'
-        : '<div style="color:var(--acc);margin-bottom:6px">いまの構成員は全グループで変わりません</div>';
-      if (r.kept.length) h += '<div class="sec" style="margin-top:8px">移さずに残るもの</div><table class="nm-table">' + r.kept.map(k => `<tr><td>${esc(k.name)}</td><td>${esc(k.reason)}</td></tr>`).join('') + '</table>';
-      if (r.moved.length) h += `<div style="margin-top:10px"><button class="btn pri" id="grpRetireGo">この内容で移す（${r.moved.length} 件）</button></div>`;
-      $('grpBody').innerHTML = h;
-    }catch(e){ toast('失敗：'+e.message, 5000); }
-  };
-  $('grpBody').addEventListener('click', async ev => {
-    if (ev.target.id !== 'grpRetireGo') return;
-    if (!confirm('台帳のグループ種別を直接メンバーに移し，移した単位を台帳から消します．よろしいですか')) return;
-    try{ const r = await api(`${GM}/retire_group_kind`, 'POST', {dry:false});
-      toast(`移しました：${r.moved.length} 件（直接メンバー ${r.rows_added} 行）${r.kept.length ? `｜残り ${r.kept.length} 件` : ''}${r.diffs.length ? `｜構成員が変わったグループ ${r.diffs.length} 件` : ''}`, 8000);
-      $('grpBody').innerHTML = ''; loadGrp();
-    }catch(e){ toast('失敗：'+e.message, 5000); }
-  });
+// ── 移動 ──
+let mv = null;
+function openMove(id, linkId, key){
+  const n = byId[id]; mv = {id, linkId};
+  const fromName = linkId ? (byId[(T.links.find(l => l.id === linkId) || {}).parent] || {}).name : null;
+  $('moveTitle').textContent = `「${n.name}」を移動`;
+  $('moveFrom').textContent = fromName ? `いまの親：${fromName}` + (n.parents > 1 ? '（ほかの親の下にもあります．移すのはこの親の下からだけです）' : '') : 'いまはトップレベルです';
+  const opts = T.nodes.filter(x => x.id !== id && x.valid).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('moveTo').innerHTML = '<option value="">（トップレベルへ）</option>' + opts;
+  $('moveDate').value = $('fy').value ? `${$('fy').value}-04-01` : TODAY;
+  document.querySelector('input[name=moveWhen][value=always]').checked = true;
+  show('ovMove'); $('moveTo').focus();
 }
+$('moveDo').onclick = async () => {
+  const when = document.querySelector('input[name=moveWhen]:checked').value;
+  const to = $('moveTo').value;
+  const label = to ? `「${byId[Number(to)].name}」の下へ` : 'トップレベルへ';
+  if (!confirm(`${label}移動します．よろしいですか`)) return;
+  try{ await api(`${API}/nodes/${mv.id}/move`, 'POST', {parent_id: to ? Number(to) : null, from_link_id: mv.linkId, date: when === 'date' ? $('moveDate').value : ''});
+    hide('ovMove'); if (to) opened.add(String(to)); toast('移動しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
 
-function fitWrap(){ const w = $('wrap'); const top = w.getBoundingClientRect().top + window.scrollY; w.style.height = Math.max(200, window.innerHeight - top - 8) + 'px'; }
-window.addEventListener('resize', fitWrap);
-new ResizeObserver(fitWrap).observe(document.querySelector('.bar'));
-new ResizeObserver(fitWrap).observe($('summary'));
-new ResizeObserver(fitWrap).observe($('personBox'));
-fitWrap();
+// ── メンバー ──
+let curMem = null, memUser = null, memTimer = null;
+function roleOpts(selId){
+  const list = T.roles.slice();
+  if (selId && !list.some(r => r.id === selId)){ const own = T.roles_all.find(r => r.id === selId); if (own) list.unshift(own); }
+  return list.map(r => `<option value="${r.id}" ${r.id===selId?'selected':''}>${esc(r.name)}</option>`).join('') + '<option value="new">（新しい立場を作る）</option>';
+}
+function showPicked(){
+  $('memPicked').innerHTML = memUser ? `<span class="picked">users #${memUser.id} ${esc(memUser.full_name)}${memUser.email ? ' <small>' + esc(memUser.email) + '</small>' : ''}<span class="x" id="memUnpick">✕</span></span>` : '<span style="color:var(--sub)">ユーザに紐づいていません</span>';
+  const u = $('memUnpick'); if (u) u.onclick = () => { memUser = null; showPicked(); };
+}
+function openMem(aid){
+  const n = D.node, m = aid ? D.items.find(x => x.id === aid) : null;
+  curMem = aid;
+  $('memTitle').textContent = m ? 'メンバーを編集' : 'メンバーを追加';
+  $('memWhere').textContent = n.name;
+  $('memRole').innerHTML = roleOpts(m ? m.role_id : null);
+  memUser = m && m.resolved ? {id:m.user_id, full_name:m.name, email:m.email} : null; showPicked();
+  $('memSearch').value = ''; $('memCand').style.display = 'none';
+  $('memName').value = m ? m.ledger_name || m.name : '';
+  $('memFrom').value = m ? m.from.slice(0,10) : fyStartForNew(); $('memUntil').value = m ? m.until.slice(0,10) : '';
+  $('memNote').value = m ? m.note : ''; $('memSource').value = m ? m.source : '組織情報管理';
+  $('memDel').style.display = $('memEnd').style.display = m ? '' : 'none';
+  show('ovMem'); $('memSearch').focus();
+}
+$('memRole').onchange = async () => {
+  if ($('memRole').value !== 'new') return;
+  const name = prompt('新しい立場の名前'); if (!name){ $('memRole').selectedIndex = 0; return; }
+  try{ const r = await api(`${API}/roles`, 'POST', {kind: 'org', name}); const nr = {id:r.id, kind:'org', name, rank:99}; T.roles.push(nr); T.roles_all.push(nr);
+    $('memRole').innerHTML = roleOpts(r.id); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('memSearch').oninput = () => { clearTimeout(memTimer); const q = $('memSearch').value.trim(); if (!q){ $('memCand').style.display='none'; return; }
+  memTimer = setTimeout(async () => { try{ const r = await api(`${API}/users?q=${encodeURIComponent(q)}`);
+    $('memCand').innerHTML = r.items.length ? r.items.map(u => `<div class="cand" data-u='${esc(JSON.stringify(u))}'>#${u.id} <b>${esc(u.full_name)}</b> <small>${esc(u.email)}${u.inactive ? '（停止中）' : ''}</small></div>`).join('') : '<div class="cand"><small>該当なし</small></div>';
+    $('memCand').style.display = ''; }catch(e){} }, 250); };
+$('memCand').onclick = ev => { const d = ev.target.closest('[data-u]'); if (!d) return; memUser = JSON.parse(d.dataset.u); $('memName').value = memUser.full_name; $('memSearch').value=''; $('memCand').style.display='none'; showPicked(); };
+$('memSave').onclick = async () => {
+  if ($('memRole').value === 'new' || !$('memRole').value){ toast('立場を選んでください'); return; }
+  const body = {unit_id:D.node.id, role_id:Number($('memRole').value), person_name:$('memName').value, user_id: memUser ? memUser.id : null,
+                valid_from:$('memFrom').value, valid_until:$('memUntil').value, note:$('memNote').value, source:$('memSource').value};
+  try{ if (curMem) await api(`${API}/appointments/${curMem}`, 'PUT', body); else await api(`${API}/appointments`, 'POST', body);
+    hide('ovMem'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('memEnd').onclick = async () => { if (!confirm('いま終えますか（記録は残ります）')) return;
+  try{ await api(`${API}/appointments/${curMem}`, 'PUT', {valid_until: nowStamp()}); hide('ovMem'); toast('終えました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); } };
+$('memDel').onclick = async () => { if (!confirm('この発令の記録を消しますか（誤って入れたときだけ）')) return;
+  try{ await api(`${API}/appointments/${curMem}`, 'DELETE'); hide('ovMem'); toast('削除しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); } };
+
+// ── 年度の引き継ぎ ──
+$('btnCarry').onclick = () => { const base = Number($('fy').value) || CUR_FY; $('carryFrom').innerHTML = fyOpts(base - 1); $('carryTo').innerHTML = fyOpts(base);
+  $('carryOut').style.display = 'none'; $('carryApply').disabled = true; show('ovCarry'); };
+['carryFrom','carryTo'].forEach(id => $(id).onchange = () => { $('carryApply').disabled = true; $('carryOut').style.display = 'none'; });
+async function runCarry(mode){
+  const body = {kind:'tree', from_fy:Number($('carryFrom').value), to_fy:Number($('carryTo').value), mode};
+  $('carryOut').style.display = 'block'; $('carryOut').textContent = mode === 'check' ? '検証中…' : '写しています…';
+  try{ const r = await api(`${API}/carryover`, 'POST', body);
+    $('carryOut').textContent = `[${mode === 'check' ? '検証' : '実行'}] 写す発令 ${r.copied} 件（出典「${r.source}」）\n写し先に既にあるので飛ばす ${r.skipped_existing} 件・ノードが閉じているので飛ばす ${r.skipped_closed} 件\n期限なしでそのまま続く発令 ${r.open_ended} 件` + (r.sample.length ? '\n\n例：\n' + r.sample.map(x => '・' + x).join('\n') : '');
+    if (mode === 'check') $('carryApply').disabled = !r.copied; else { $('carryApply').disabled = true; toast(`${r.copied} 件を写しました`); $('fy').value = String(body.to_fy); $('asof').value = `${body.to_fy}-04-01`; load(); }
+  }catch(e){ $('carryOut').textContent = '失敗：' + e.message; }
+}
+$('carryCheck').onclick = () => runCarry('check');
+$('carryApply').onclick = () => { if (confirm('発令を写します．よろしいですか')) runCarry('apply'); };
+
+
 load();
 </script>
 </body>

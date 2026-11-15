@@ -1,0 +1,336 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>グループ管理統括</title>
+<style>
+  :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fafbfc; font-size:14px; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { margin-left:12px; color:var(--acc); text-decoration:none; font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:4px; }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  #reqTabs .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .bar input[type=text], .bar input[type=date], .bar input[type=search] { padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+  .bar .sp { flex:1; }
+  .btn { border:1px solid var(--line); background:#fff; padding:6px 12px; cursor:pointer; border-radius:4px; font-size:13px; }
+  .btn.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btn.warn { color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .summary { padding:6px 16px; color:var(--sub); font-size:12px; }
+  .wrap { padding:0 16px 8px; overflow:auto; }   /* 高さは JS で画面内に収め，横スクロールバーを常に見せる */
+  table.grid { border-collapse:separate; border-spacing:0; min-width:100%; background:#fff; }
+  table.grid th, table.grid td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:4px 6px; vertical-align:top; }
+  table.grid th { background:var(--head); position:sticky; top:0; z-index:5; text-align:left; white-space:nowrap; }
+  table.grid th:first-child, table.grid td:first-child { position:sticky; left:0; background:#fff; z-index:6; border-left:1px solid var(--line); min-width:260px; max-width:420px; }
+  table.grid th:first-child { z-index:7; background:var(--head); }
+  td.unit { white-space:normal; }
+  td.unit .nm { cursor:default; }
+  td.unit .note { color:var(--sub); font-size:11px; margin-left:6px; }
+  tr.d0 td { background:#f3f6fa; font-weight:600; }
+  tr.d1 td { font-weight:500; }
+  tr.d0 td:first-child { background:#f3f6fa; }
+  .ind { display:inline-block; }
+  .chip { display:inline-block; margin:1px 4px 1px 0; padding:1px 7px; border-radius:10px; border:1px solid #b8bec6; background:#e4e7eb; color:#555; font-size:13px; white-space:nowrap; }
+  .chip.res { border-color:var(--acc); background:#e8f0fb; color:var(--ink); }
+  .chip.vac { border:1px dotted #c9ced5; color:#aab; background:#fff; }
+  .chip.hit { outline:2px solid #f6ad55; }
+  .editing .chip { cursor:pointer; }
+  .editing .chip:hover { background:#ffe9c7; }
+  .editing td.unit .nm { cursor:pointer; text-decoration:underline dotted; }
+  .editing th.role { cursor:pointer; }
+  .add { display:none; color:var(--acc); cursor:pointer; font-size:12px; margin-left:4px; }
+  .editing td:hover .add { display:inline; }
+  tr.hide { display:none; }
+  tr.dim td { opacity:.55; }
+  .empty { padding:30px; color:var(--sub); }
+  /* modal */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.on { display:flex; }
+  .md { background:#fff; border-radius:8px; padding:18px 20px; width:520px; max-width:95vw; max-height:90vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+  .md > *:not(.foot) { flex:0 0 auto; }
+  .md .foot { position:sticky; bottom:-18px; margin-left:-20px; margin-right:-20px; margin-bottom:-18px; padding:10px 20px; background:#fff; border-top:1px solid var(--line); z-index:2; }
+  .md h2 { font-size:16px; margin:0 0 12px; }
+  .md label { display:block; font-size:12px; color:var(--sub); margin-top:8px; }
+  .md input[type=text], .md input[type=date], .md input[type=number], .md select, .md textarea { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+  .md .row { display:flex; gap:10px; }
+  .md .row > div { flex:1; }
+  .md .foot { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .md .foot .left { margin-right:auto; }
+  .imp pre { background:#f6f8fa; padding:10px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  .person { padding:8px 16px; }
+  .person table { border-collapse:collapse; background:#fff; }
+  .person td, .person th { border:1px solid var(--line); padding:3px 8px; font-size:13px; }
+  .nm-table { border-collapse:collapse; width:100%; }
+  .nm-table th, .nm-table td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; vertical-align:middle; }
+  .nm-table select { max-width:220px; padding:3px; }
+  .nm-table .btn { padding:3px 8px; font-size:12px; }
+  .cand { padding:4px 8px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .cand:hover { background:#e8f0fb; }
+  .cand small { color:var(--sub); }
+  .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
+  .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
+</style>
+<style>
+  table.list { border-collapse:collapse; width:100%; background:#fff; }
+  table.list th, table.list td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; font-size:13px; }
+  table.list th { background:var(--head); position:sticky; top:0; z-index:2; white-space:nowrap; }
+  tr.closed td { color:#999; }
+  .chip a { color:var(--bad); text-decoration:none; margin-left:4px; font-size:11px; }
+  .mini { padding:2px 8px; font-size:12px; }
+  .pane { padding:8px 16px; }
+  .lead { font-size:12px; color:var(--sub); padding:6px 16px 0; margin:0; }
+</style>
+
+</head>
+<body>
+<header>
+  <h1>👥 グループ管理統括</h1>
+  <span style="color:var(--sub);font-size:12px">グループの改廃と管理者の任命</span>
+  <nav style="margin-left:auto">
+    <a href="{{ url_for('user_groups.my_groups_page') }}">ユーザとグループ（閲覧）へ</a>
+    {% if me.admin %}<a href="{{ url_for('user_groups.ledger_page') }}">組織情報管理</a>
+    <a href="{{ url_for('user_groups.users_page') }}">ユーザ管理</a>
+    <a href="{{ url_for('user_groups.system_page') }}">システム管理</a>{% endif %}
+    <a href="{{ url_for('user_groups.return_to_fujin') }}">FUJINダッシュボードへ戻る</a>
+  </nav>
+</header>
+
+<div class="bar">
+  <span class="tabs" id="tabs">
+    <button data-t="groups" class="on">グループ</button>
+    <button data-t="derived">組織・会議体から導くグループ</button>
+  </span>
+  <span id="barGroups" style="display:flex;gap:8px;align-items:center;margin-left:12px">
+    <button class="btn pri" id="btnNew">＋グループ</button>
+    <label><input type="checkbox" id="showClosed"> 廃止済も表示</label>
+    <input type="search" id="filter" placeholder="絞り込み（グループ名・管理者）" style="width:240px">
+  </span>
+</div>
+
+<div id="tabGroups">
+  <p class="lead">グループは台帳（種別グループ）に記録されます．作ると同時に user_groups の行ができ，他のアプリから使えます．改名しても行の番号は変わりません．廃止すると管理者・メンバーの発令がいま終わり，行は残ります．メンバーの出入りと表示順は「ユーザとグループ」の画面で，各グループの管理者（と統括・admin）が行います．</p>
+  <div class="pane"><div id="groupList">読み込み中…</div></div>
+</div>
+
+<div id="tabDerived" style="display:none">
+  <p class="lead">組織・会議体の発令から構成員を導くグループです．「反映」を押すと台帳の全単位について user_groups とルールを揃えます（何度押しても同じ結果）．名簿から users を作るのは admin の「ユーザ管理」の仕事で，ここでは行いません．</p>
+  <div class="bar" id="grpTabs" style="border:0">
+    <button class="btn on" data-t="list">いまのグループ <span></span></button>
+    <button class="btn" data-t="prop">候補 <span></span></button>
+    <span style="flex:1"></span>
+    <button class="btn pri" id="grpSync">台帳を user_groups に反映する</button>
+    <button class="btn" id="grpSnap" title="いまの構成員を控えます">控えを取る</button>
+    <button class="btn" id="grpCmp" title="控えといまを突き合わせます">控えと照合</button>
+    <button class="btn pri" id="grpGen" style="display:none">選んだ候補を作る</button>
+  </div>
+  <div class="pane"><div id="grpBody"></div></div>
+</div>
+
+<!-- 新しいグループ -->
+<div class="ov" id="ovNew"><div class="md">
+  <h2>新しいグループ</h2>
+  <label>グループ名</label><input type="text" id="newName" maxlength="255">
+  <label>説明（任意）</label><input type="text" id="newNote">
+  <label>管理者（1人以上．検索して選ぶ）</label>
+  <input type="text" id="newSearch" placeholder="氏名の一部または users ID" autocomplete="off">
+  <div id="newCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="newPicked" style="margin-top:6px"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovNew')">閉じる</button><button class="btn pri" id="newSave">作る</button></div>
+</div></div>
+
+<!-- グループの編集 -->
+<div class="ov" id="ovEdit"><div class="md">
+  <h2 id="editTitle">グループ</h2>
+  <label>グループ名（改名しても user_groups の番号は変わりません）</label><input type="text" id="editName" maxlength="255">
+  <label>説明</label><input type="text" id="editNote">
+  <div style="margin-top:12px">
+    <div style="font-size:12px;color:var(--sub)">管理者</div>
+    <div id="editMgrs" style="margin:4px 0"></div>
+    <input type="text" id="mgrSearch" placeholder="管理者を任命：氏名の一部または users ID" autocomplete="off">
+    <div id="mgrCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  </div>
+  <div class="foot"><button class="btn warn left" id="editClose">廃止</button><button class="btn left" id="editReopen" style="display:none">再開</button><button class="btn" onclick="hide('ovEdit')">閉じる</button><button class="btn pri" id="editSave">保存</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SAPI = '{{ url_for("user_groups.steward_groups") }}'.replace(/\/groups$/, '');
+const LAPI = '{{ url_for("user_groups.ledger_groups") }}'.replace(/\/groups$/, '');
+const MANAGE = '{{ url_for("user_groups.my_groups_page") }}';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id){ $(id).classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+function toast(msg, ms=2400){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null){
+  const opt = {method, headers:{}};
+  if (body !== null){ opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const res = await fetch(url, opt);
+  let j = null; try{ j = await res.json(); }catch(e){ throw new Error(`HTTP ${res.status}`); }
+  if (!res.ok || j.success === false) throw new Error(j.error || `HTTP ${res.status}`);
+  return j;
+}
+// 人を選ぶ：入力欄と候補欄を結び，選んだら onPick(user)
+function userPicker(input, box, onPick){
+  let timer = null;
+  input.oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
+    const q = input.value.trim(); if (!q){ box.style.display='none'; return; }
+    try{ const r = await api(`${SAPI}/users?q=${encodeURIComponent(q)}`);
+      box.innerHTML = r.items.map(u => `<div class="cand" data-u='${esc(JSON.stringify(u))}'>${esc(u.full_name)} <small>#${u.id}${u.email ? ' ' + esc(u.email) : ''}</small></div>`).join('') || '<div class="cand">該当なし</div>';
+      box.style.display = '';
+    }catch(e){ box.innerHTML = `<div class="cand">${esc(e.message)}</div>`; box.style.display=''; } }, 250); };
+  box.onclick = ev => { const d = ev.target.closest('[data-u]'); if (!d) return; onPick(JSON.parse(d.dataset.u)); input.value=''; box.style.display='none'; };
+}
+
+let groups = [], cur = null, picked = [];
+
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  const g = b.dataset.t === 'groups';
+  $('tabGroups').style.display = g ? '' : 'none'; $('barGroups').style.display = g ? 'flex' : 'none';
+  $('tabDerived').style.display = g ? 'none' : '';
+  if (!g) loadGrp();
+});
+
+async function load(){
+  try{ const r = await api(`${SAPI}/groups`); groups = r.items; render(); }
+  catch(e){ $('groupList').innerHTML = '失敗：' + esc(e.message); }
+}
+function render(){
+  const q = $('filter').value.trim();
+  const rows = groups.filter(g => ($('showClosed').checked || !g.closed) &&
+    (!q || g.name.includes(q) || g.managers.some(m => m.name.includes(q))));
+  const open = groups.filter(g => !g.closed).length;
+  $('groupList').innerHTML = `<div style="font-size:12px;color:var(--sub);margin-bottom:6px">グループ ${open} 件（廃止済 ${groups.length - open} 件）</div>` +
+    '<table class="list"><tr><th>グループ</th><th>管理者</th><th>メンバー</th><th>期間</th><th>user_groups</th><th></th></tr>' +
+    rows.map(g => `<tr class="${g.closed ? 'closed' : ''}">
+      <td><b>${esc(g.name)}</b>${g.note ? `<br><small style="color:var(--sub)">${esc(g.note)}</small>` : ''}</td>
+      <td>${g.managers.length ? g.managers.map(m => `<span class="chip res" title="${esc(m.from)}〜">${esc(m.name)}</span>`).join('') : (g.closed ? '' : '<span style="color:var(--bad)">管理者なし</span>')}</td>
+      <td>${g.member_count} 名</td>
+      <td style="white-space:nowrap">${esc(g.from)}〜${esc(g.until)}${g.closed ? '<br><small>廃止</small>' : ''}</td>
+      <td>${g.group_id ? '#' + g.group_id : '<span style="color:var(--bad)">未作成</span>'}</td>
+      <td style="white-space:nowrap"><button class="btn mini" data-edit="${g.unit_id}">編集</button> <a class="btn mini" href="${MANAGE}?unit=${g.unit_id}">メンバーを見る</a></td></tr>`).join('') + '</table>';
+}
+$('filter').oninput = render;
+$('showClosed').onchange = render;
+$('groupList').addEventListener('click', ev => { const t = ev.target; if (t.dataset.edit) openEdit(Number(t.dataset.edit)); });
+
+// 新しいグループ
+$('btnNew').onclick = () => { $('newName').value=''; $('newNote').value=''; picked=[]; showPicked(); show('ovNew'); $('newName').focus(); };
+function showPicked(){
+  $('newPicked').innerHTML = picked.map(u => `<span class="picked">${esc(u.full_name)}<span class="x" data-x="${u.id}">×</span></span> `).join('') || '<span style="color:var(--sub);font-size:12px">まだ選んでいません</span>';
+}
+$('newPicked').onclick = ev => { const x = ev.target.dataset.x; if (!x) return; picked = picked.filter(u => u.id != x); showPicked(); };
+userPicker($('newSearch'), $('newCand'), u => { if (!picked.some(p => p.id === u.id)) picked.push(u); showPicked(); });
+$('newSave').onclick = async () => {
+  try{ await api(`${SAPI}/groups`, 'POST', {name: $('newName').value.trim(), note: $('newNote').value.trim(), manager_user_ids: picked.map(u => u.id)});
+    hide('ovNew'); toast('作りました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 編集
+function openEdit(uid){
+  cur = groups.find(g => g.unit_id === uid); if (!cur) return;
+  $('editTitle').textContent = cur.name + (cur.closed ? '（廃止）' : '');
+  $('editName').value = cur.name; $('editNote').value = cur.note;
+  $('editMgrs').innerHTML = cur.managers.map(m => `<span class="chip res" title="${esc(m.from)}〜">${esc(m.name)}<a href="#" data-end="${m.id}">解任</a></span>`).join('') || '<span style="color:var(--sub);font-size:12px">いまの管理者はいません</span>';
+  $('editClose').style.display = cur.closed ? 'none' : ''; $('editReopen').style.display = cur.closed ? '' : 'none';
+  $('mgrSearch').disabled = cur.closed;
+  show('ovEdit');
+}
+$('editMgrs').addEventListener('click', async ev => { const t = ev.target; if (!t.dataset.end) return; ev.preventDefault();
+  if (!confirm('この管理者を解任しますか（記録は残ります）')) return;
+  try{ await api(`${SAPI}/appointments/${t.dataset.end}/end`, 'POST', {}); toast('解任しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); } });
+userPicker($('mgrSearch'), $('mgrCand'), async u => {
+  if (!confirm(`${u.full_name} を「${cur.name}」の管理者に任命しますか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/managers`, 'POST', {user_id: u.id}); toast('任命しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); }
+});
+$('editSave').onclick = async () => {
+  try{ await api(`${SAPI}/groups/${cur.unit_id}`, 'PUT', {name: $('editName').value.trim(), note: $('editNote').value.trim()});
+    hide('ovEdit'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('editClose').onclick = async () => {
+  if (!confirm(`「${cur.name}」を廃止します．管理者とメンバーの発令はいま終わり，user_groups の行は残ります．よろしいですか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/close`, 'POST', {}); hide('ovEdit'); toast('廃止しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('editReopen').onclick = async () => {
+  if (!confirm(`「${cur.name}」を再開します．管理者は改めて任命してください．よろしいですか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/reopen`, 'POST', {}); toast('再開しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 組織・会議体から導くグループ
+let grpTab = 'list';
+document.querySelectorAll('#grpTabs button[data-t]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#grpTabs button[data-t]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  grpTab = b.dataset.t; $('grpGen').style.display = grpTab==='prop' ? '' : 'none'; loadGrp();
+});
+async function loadGrp(){
+  $('grpBody').innerHTML = '読み込み中…';
+  try{
+    if (grpTab === 'list'){
+      const r = await api(`${LAPI}/groups`);
+      document.querySelector('#grpTabs button[data-t=list] span').textContent = r.items.length;
+      $('grpBody').innerHTML = '<table class="list"><tr><th>グループ</th><th>ルール（台帳から導く）</th><th>直接メンバー</th><th>いまの構成員</th></tr>' +
+        r.items.map(g => `<tr><td><b>${esc(g.name)}</b> <small>#${g.id}</small><br><small style="color:var(--sub)">${esc(g.description)}</small></td>
+          <td>${g.rules.length ? g.rules.map(x => `<div><span class="chip res">${esc(x.kind)}：${esc(x.unit)}／${esc(x.role)}${x.recurse?'（配下も）':''}${x.mode==='exclude'?'（除外）':''}</span> <button class="btn mini" data-rdel="${x.id}">×</button></div>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
+          <td>${g.direct_names.length ? g.direct_names.map(n => `<span class="chip">${esc(n)}</span>`).join('') : '<span style="color:var(--sub)">なし</span>'}</td>
+          <td><b>${g.members.length}</b>名 ${g.member_names.slice(0,8).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${g.member_names.length>8 ? ` <small>ほか${g.member_names.length-8}名</small>` : ''}</td></tr>`).join('') + '</table>';
+    } else {
+      const r = await api(`${LAPI}/groups/proposals`);
+      document.querySelector('#grpTabs button[data-t=prop] span').textContent = r.items.filter(x=>!x.done).length;
+      $('grpBody').innerHTML = '<table class="list"><tr><th><input type="checkbox" id="grpAll"></th><th>作るグループ名</th><th>種別</th><th>もとの単位／役割</th><th>いまの構成員</th><th>状態</th></tr>' +
+        r.items.map(x => `<tr><td>${x.done ? '' : `<input type="checkbox" class="grpChk" data-n="${esc(x.group_name)}" ${x.members.length?'checked':''}>`}</td>
+          <td><b>${esc(x.group_name)}</b></td><td>${esc(x.kind)}</td><td>${esc(x.unit)}／${esc(x.role_label)}${x.recurse?'（配下も）':''}</td>
+          <td><b>${x.members.length}</b>名 ${x.member_names.slice(0,6).map(n => `<span class="chip res">${esc(n)}</span>`).join('')}${x.member_names.length>6 ? ` <small>ほか${x.member_names.length-6}名</small>` : ''}</td>
+          <td>${x.done ? '<span style="color:var(--acc)">作成済</span>' : x.exists ? '同名のグループあり（ルールを足します）' : ''}</td></tr>`).join('') + '</table>';
+      const all = $('grpAll'); if (all) all.onchange = () => document.querySelectorAll('.grpChk').forEach(c => c.checked = all.checked);
+    }
+  }catch(e){ $('grpBody').innerHTML = '失敗：' + esc(e.message); }
+}
+$('grpBody').addEventListener('click', async ev => {
+  const t = ev.target; if (t.dataset.rdel === undefined) return;
+  if (!confirm('このルールを外しますか（グループの行は残ります）')) return;
+  try{ await api(`${LAPI}/groups/rules/${t.dataset.rdel}`, 'DELETE'); toast('外しました'); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
+});
+$('grpGen').onclick = async () => {
+  const names = [...document.querySelectorAll('.grpChk')].filter(c => c.checked).map(c => c.dataset.n);
+  if (!names.length){ toast('作るグループを選んでください'); return; }
+  if (!confirm(`${names.length} 件のグループを作り，台帳からのルールを足します．よろしいですか`)) return;
+  try{ const r = await api(`${LAPI}/groups/generate`, 'POST', {names}); toast(`グループ ${r.groups_created} 件・ルール ${r.rules_added} 本を追加`, 5000); loadGrp(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('grpSync').onclick = async () => {
+  if (!confirm('台帳の単位ごとに user_groups とルールを揃えます．既にあるものは壊しません．よろしいですか')) return;
+  try{ const r = await api(`${LAPI}/groups/sync`, 'POST', {groups_only: true});
+    let msg = `グループ：台帳の ${r.from_ledger} 件に対して新規 ${r.groups_created}・改名 ${r.groups_renamed||0}・ルール追加 ${r.rules_added}`;
+    if (r.pids_linked && (r.pids_linked.person || r.pids_linked.group)) msg += `｜永続IDの付け直し 人 ${r.pids_linked.person}・グループ ${r.pids_linked.group}`;
+    if (r.extras.length) msg += `｜台帳に対応の無いグループ ${r.extras.length} 件（${r.extras.slice(0,5).map(x=>x.name).join('，')}${r.extras.length>5?' ほか':''}）`;
+    toast(msg, 9000); loadGrp(); load();
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('grpSnap').onclick = async () => { if (!confirm('いまの全グループの構成員を控えます（前の控えは消えます）．よろしいですか')) return;
+  try{ const r = await api(`${LAPI}/groups/snapshot`, 'POST', {}); toast(`控えました（${r.rows} 行 ${r.taken_at}）`, 5000); }catch(e){ toast('失敗：'+e.message, 5000); } };
+$('grpCmp').onclick = async () => {
+  try{ const r = await api(`${LAPI}/groups/compare`);
+    if (r.identical){ toast(`控え（${r.taken_at}）と完全に一致．グループ ${r.groups} 件`, 6000); return; }
+    $('grpBody').innerHTML = `<div style="margin-bottom:8px">控え（${esc(r.taken_at)}）との差：${r.diffs.length} グループ${r.groups_gone.length ? `，消えたグループ ${esc(r.groups_gone.join('，'))}` : ''}</div>` +
+      '<table class="list"><tr><th>グループ</th><th>増えた人</th><th>減った人</th></tr>' +
+      r.diffs.map(d => `<tr><td><b>${esc(d.group)}</b></td><td>${d.added.map(n=>`<span class="chip res">${esc(n)}</span>`).join('')}</td><td>${d.removed.map(n=>`<span class="chip">${esc(n)}</span>`).join('')}</td></tr>`).join('') + '</table>';
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+load();
+</script>
+</body>
+</html>

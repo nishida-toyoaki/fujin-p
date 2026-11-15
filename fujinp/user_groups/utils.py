@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 user_groups/utils.py
@@ -85,21 +85,42 @@ def _load_rules(cursor, group_id, at):
     return [r for r in cursor.fetchall() if _valid_at(r['valid_from'], r['valid_until'], at)]
 
 
-def _descendant_unit_ids(cursor, unit_id):
-    """その単位と配下すべての単位 id"""
-    ids, queue = [unit_id], [unit_id]
+def _links_ready(cursor):
+    """親子の表（ug_unit_links）が使えるか．無いか空なら旧来の parent_id でたどる"""
+    try:
+        cursor.execute("SELECT 1 FROM ug_unit_links LIMIT 1")
+        return bool(cursor.fetchall())
+    except Exception:
+        return False
+
+
+def _descendant_unit_ids(cursor, unit_id, at=None):
+    """
+    その単位と配下すべての単位 id．
+    2026-10-20：組織ツリー（ug_unit_links：親子は共有可・期間つき）があればそれを使い，
+    at の時点で有効な親子だけをたどる．同じ単位は二度通らない（循環しても止まる）．
+    """
+    ids, seen, queue = [unit_id], {unit_id}, [unit_id]
+    use_links = _links_ready(cursor)
     while queue:
         pid = queue.pop()
-        cursor.execute("SELECT id FROM ug_units WHERE parent_id = %s", (pid,))
-        for r in cursor.fetchall():
-            ids.append(r['id'])
-            queue.append(r['id'])
+        if use_links:
+            cursor.execute("SELECT child_id AS id, valid_from, valid_until FROM ug_unit_links WHERE parent_id = %s", (pid,))
+            rows = [r for r in cursor.fetchall() if at is None or _valid_at(r['valid_from'], r['valid_until'], at)]
+        else:
+            cursor.execute("SELECT id FROM ug_units WHERE parent_id = %s", (pid,))
+            rows = cursor.fetchall()
+        for r in rows:
+            if r['id'] not in seen:
+                seen.add(r['id'])
+                ids.append(r['id'])
+                queue.append(r['id'])
     return ids
 
 
 def _rule_member_ids(cursor, rule, at):
     """1本のルールが指す user_id の集合"""
-    unit_ids = _descendant_unit_ids(cursor, rule['unit_id']) if rule['recurse'] else [rule['unit_id']]
+    unit_ids = _descendant_unit_ids(cursor, rule['unit_id'], at) if rule['recurse'] else [rule['unit_id']]
     if not unit_ids:
         return set()
     fmt = ','.join(['%s'] * len(unit_ids))

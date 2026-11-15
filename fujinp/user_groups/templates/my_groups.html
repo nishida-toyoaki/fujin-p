@@ -1,0 +1,482 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ユーザとグループ</title>
+<style>
+  :root { --line:#d9dee5; --head:#eef3f8; --ink:#222; --sub:#667; --acc:#2b6cb0; --warn:#b7791f; --bad:#c53030; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fafbfc; font-size:14px; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { margin-left:12px; color:var(--acc); text-decoration:none; font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; background:#fff; border-bottom:1px solid var(--line); }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:4px; }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  #reqTabs .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .bar input[type=text], .bar input[type=date], .bar input[type=search] { padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+  .bar .sp { flex:1; }
+  .btn { border:1px solid var(--line); background:#fff; padding:6px 12px; cursor:pointer; border-radius:4px; font-size:13px; }
+  .btn.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btn.warn { color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .summary { padding:6px 16px; color:var(--sub); font-size:12px; }
+  .wrap { padding:0 16px 8px; overflow:auto; }   /* 高さは JS で画面内に収め，横スクロールバーを常に見せる */
+  table.grid { border-collapse:separate; border-spacing:0; min-width:100%; background:#fff; }
+  table.grid th, table.grid td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:4px 6px; vertical-align:top; }
+  table.grid th { background:var(--head); position:sticky; top:0; z-index:5; text-align:left; white-space:nowrap; }
+  table.grid th:first-child, table.grid td:first-child { position:sticky; left:0; background:#fff; z-index:6; border-left:1px solid var(--line); min-width:260px; max-width:420px; }
+  table.grid th:first-child { z-index:7; background:var(--head); }
+  td.unit { white-space:normal; }
+  td.unit .nm { cursor:default; }
+  td.unit .note { color:var(--sub); font-size:11px; margin-left:6px; }
+  tr.d0 td { background:#f3f6fa; font-weight:600; }
+  tr.d1 td { font-weight:500; }
+  tr.d0 td:first-child { background:#f3f6fa; }
+  .ind { display:inline-block; }
+  .chip { display:inline-block; margin:1px 4px 1px 0; padding:1px 7px; border-radius:10px; border:1px solid #b8bec6; background:#e4e7eb; color:#555; font-size:13px; white-space:nowrap; }
+  .chip.res { border-color:var(--acc); background:#e8f0fb; color:var(--ink); }
+  .chip.vac { border:1px dotted #c9ced5; color:#aab; background:#fff; }
+  .chip.hit { outline:2px solid #f6ad55; }
+  .editing .chip { cursor:pointer; }
+  .editing .chip:hover { background:#ffe9c7; }
+  .editing td.unit .nm { cursor:pointer; text-decoration:underline dotted; }
+  .editing th.role { cursor:pointer; }
+  .add { display:none; color:var(--acc); cursor:pointer; font-size:12px; margin-left:4px; }
+  .editing td:hover .add { display:inline; }
+  tr.hide { display:none; }
+  tr.dim td { opacity:.55; }
+  .empty { padding:30px; color:var(--sub); }
+  /* modal */
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.on { display:flex; }
+  .md { background:#fff; border-radius:8px; padding:18px 20px; width:520px; max-width:95vw; max-height:90vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+  .md > *:not(.foot) { flex:0 0 auto; }
+  .md .foot { position:sticky; bottom:-18px; margin-left:-20px; margin-right:-20px; margin-bottom:-18px; padding:10px 20px; background:#fff; border-top:1px solid var(--line); z-index:2; }
+  .md h2 { font-size:16px; margin:0 0 12px; }
+  .md label { display:block; font-size:12px; color:var(--sub); margin-top:8px; }
+  .md input[type=text], .md input[type=date], .md input[type=number], .md select, .md textarea { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+  .md .row { display:flex; gap:10px; }
+  .md .row > div { flex:1; }
+  .md .foot { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
+  .md .foot .left { margin-right:auto; }
+  .imp pre { background:#f6f8fa; padding:10px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  .person { padding:8px 16px; }
+  .person table { border-collapse:collapse; background:#fff; }
+  .person td, .person th { border:1px solid var(--line); padding:3px 8px; font-size:13px; }
+  .nm-table { border-collapse:collapse; width:100%; }
+  .nm-table th, .nm-table td { border-bottom:1px solid var(--line); padding:4px 6px; font-size:13px; text-align:left; vertical-align:middle; }
+  .nm-table select { max-width:220px; padding:3px; }
+  .nm-table .btn { padding:3px 8px; font-size:12px; }
+  .cand { padding:4px 8px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .cand:hover { background:#e8f0fb; }
+  .cand small { color:var(--sub); }
+  .picked { display:inline-block; padding:2px 8px; border-radius:10px; border:1px solid var(--acc); background:#e8f0fb; }
+  .picked .x { margin-left:6px; cursor:pointer; color:var(--bad); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:6px; display:none; z-index:60; }
+</style>
+<style>
+  .layout { display:flex; gap:0; min-height:calc(100vh - 100px); }
+  .side { width:280px; flex:0 0 280px; border-right:1px solid var(--line); background:#fff; padding:8px 10px; overflow:auto; max-height:calc(100vh - 100px); position:sticky; top:96px; }
+  .side label { display:flex; gap:6px; align-items:flex-start; padding:3px 0; font-size:13px; cursor:pointer; }
+  .side label small { color:var(--sub); }
+  .side .grp-h { font-size:11px; color:var(--sub); margin:8px 0 2px; }
+  .main { flex:1; padding:10px 16px; min-width:0; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-bottom:12px; }
+  .card h3 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .card h3 .sp { flex:1; }
+  .card .mg { font-size:12px; color:var(--sub); margin-bottom:6px; }
+  .chip.past { background:#fff; border-style:dashed; color:#999; }
+  table.mem { border-collapse:collapse; width:100%; font-size:13px; }
+  table.mem th, table.mem td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:middle; }
+  table.mem th { background:var(--head); font-weight:600; white-space:nowrap; }
+  table.mem td.num, table.mem th.num { width:56px; text-align:right; }
+  table.mem td.id { width:70px; color:var(--sub); font-variant-numeric:tabular-nums; }
+  table.mem td.per { white-space:nowrap; font-variant-numeric:tabular-nums; }
+  table.mem td.ops { white-space:nowrap; width:1%; }
+  table.mem tr.past td { color:#999; }
+  table.mem tr.fut td { background:#fffbea; }
+  table.mem input.ord { width:52px; text-align:right; padding:2px 4px; border:1px solid var(--line); border-radius:4px; }
+  table.mem tr.moved td { background:#eef6ff; }
+  .ordbar { display:none; gap:6px; align-items:center; margin:6px 0; font-size:12px; color:var(--sub); }
+  .ordbar.on { display:flex; }
+  .chip.fut { background:#fffbea; border-color:#d69e2e; color:#744210; }
+  .card.ro .chip { cursor:default; }
+  .card:not(.ro) .chip.m { cursor:pointer; }
+  .card:not(.ro) .chip.m:hover { background:#ffe9c7; }
+  .mini { padding:2px 8px; font-size:12px; }
+  @media (max-width:760px){ .layout { flex-direction:column; } .side { width:auto; flex:none; position:static; max-height:none; border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+
+</head>
+<body>
+{% include '_nav.html' %}
+
+<div class="bar">
+  <label>期間 <select id="period" style="padding:4px">
+    <option value="now">いまのメンバー</option>
+    <option value="future">いまと予定</option>
+    <option value="all">すべて（過去も）</option>
+  </select></label>
+  <label><input type="checkbox" id="showClosed"> 廃止したグループも一覧に出す</label>
+  {% if me.can_steward %}<button class="btn pri" id="btnNew" title="システム用グループを作ります（グループ管理統括）">＋グループ</button>{% endif %}
+  {% if me.admin %}<label class="btn" title="グループの表示順を決めます（admin）"><input type="checkbox" id="orderMode"> 表示順を編集</label>{% endif %}
+  <input type="search" id="filter" placeholder="表示中のメンバーを絞り込み（氏名）" style="width:240px;margin-left:12px">
+  <span class="sp"></span>
+  <span id="count" style="color:var(--sub);font-size:12px"></span>
+</div>
+
+<div class="layout">
+  <div class="side">
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button class="btn mini" id="selAll">すべて</button>
+      {% if me.managed %}<button class="btn mini" id="selMine">自分の管理</button>{% endif %}
+      <button class="btn mini" id="selNone">なし</button>
+    </div>
+    <input type="search" id="sideFilter" placeholder="グループ名・氏名で絞り込み" style="width:100%;padding:4px 6px;border:1px solid var(--line);border-radius:4px">
+    <div id="side">読み込み中…</div>
+  </div>
+  <div class="main" id="main"></div>
+</div>
+
+<!-- メンバーを追加 -->
+<div class="ov" id="ovAdd"><div class="md">
+  <h2 id="addTitle">メンバーを追加</h2>
+  <label>人を検索（氏名の一部または users ID）</label>
+  <input type="text" id="addSearch" autocomplete="off">
+  <div id="addCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="addPicked" style="margin-top:6px"></div>
+  <div class="row"><div><label>開始</label><input type="date" id="addFrom"></div><div><label>終了（空なら期限なし）</label><input type="date" id="addUntil"></div></div>
+  <label>備考</label><input type="text" id="addNote">
+  <div class="foot"><button class="btn" onclick="hide('ovAdd')">閉じる</button><button class="btn pri" id="addSave">追加</button></div>
+</div></div>
+
+<!-- メンバーの編集 -->
+<div class="ov" id="ovMem"><div class="md">
+  <h2 id="memTitle">メンバー</h2>
+  <div id="memWho" style="font-size:13px;color:var(--sub)"></div>
+  <div class="row"><div><label>開始</label><input type="date" id="memFrom"></div><div><label>終了（空なら期限なし）</label><input type="date" id="memUntil"></div></div>
+  <label>備考</label><input type="text" id="memNote">
+  <div class="foot"><button class="btn warn left" id="memDel" title="誤って入れたときだけ．記録も消えます">取り消し</button><button class="btn left" id="memEnd" title="いま終える（記録は残る）">いま退出</button><button class="btn" onclick="hide('ovMem')">閉じる</button><button class="btn pri" id="memSave">保存</button></div>
+</div></div>
+
+<!-- 新しいグループ -->
+<div class="ov" id="ovNew"><div class="md">
+  <h2>新しいグループ</h2>
+  <label>グループ名</label><input type="text" id="newName" maxlength="255">
+  <label>説明（任意）</label><input type="text" id="newNote">
+  <label>管理者（1人以上．検索して選ぶ）</label>
+  <input type="text" id="newSearch" placeholder="氏名の一部または users ID" autocomplete="off">
+  <div id="newCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  <div id="newPicked" style="margin-top:6px"></div>
+  <div class="foot"><button class="btn" onclick="hide('ovNew')">閉じる</button><button class="btn pri" id="newSave">作る</button></div>
+</div></div>
+
+<!-- グループの編集 -->
+<div class="ov" id="ovEdit"><div class="md">
+  <h2 id="editTitle">グループ</h2>
+  <label>グループ名（改名しても user_groups の番号は変わりません）</label><input type="text" id="editName" maxlength="255">
+  <label>説明</label><input type="text" id="editNote">
+  <div style="margin-top:12px">
+    <div style="font-size:12px;color:var(--sub)">管理者</div>
+    <div id="editMgrs" style="margin:4px 0"></div>
+    <input type="text" id="mgrSearch" placeholder="管理者を任命：氏名の一部または users ID" autocomplete="off">
+    <div id="mgrCand" style="border:1px solid var(--line);border-radius:4px;max-height:160px;overflow:auto;display:none"></div>
+  </div>
+  <div class="foot"><button class="btn warn left" id="editClose">廃止</button><button class="btn left" id="editReopen" style="display:none">再開</button><button class="btn" onclick="hide('ovEdit')">閉じる</button><button class="btn pri" id="editSave">保存</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SAPI = '{{ url_for("user_groups.steward_groups") }}'.replace(/\/groups$/, '');
+const TODAY = '{{ today }}';
+const FOCUS = '{{ focus }}';
+const CAN_STEWARD = {{ 'true' if me.can_steward else 'false' }};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function show(id){ $(id).classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+function toast(msg, ms=2400){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+async function api(url, method='GET', body=null){
+  const opt = {method, headers:{}};
+  if (body !== null){ opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const res = await fetch(url, opt);
+  let j = null; try{ j = await res.json(); }catch(e){ throw new Error(`HTTP ${res.status}`); }
+  if (!res.ok || j.success === false) throw new Error(j.error || `HTTP ${res.status}`);
+  return j;
+}
+// 人を選ぶ：入力欄と候補欄を結び，選んだら onPick(user)
+function userPicker(input, box, onPick){
+  let timer = null;
+  input.oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
+    const q = input.value.trim(); if (!q){ box.style.display='none'; return; }
+    try{ const r = await api(`${SAPI}/users?q=${encodeURIComponent(q)}`);
+      box.innerHTML = r.items.map(u => `<div class="cand" data-u='${esc(JSON.stringify(u))}'>${esc(u.full_name)} <small>#${u.id}${u.email ? ' ' + esc(u.email) : ''}</small></div>`).join('') || '<div class="cand">該当なし</div>';
+      box.style.display = '';
+    }catch(e){ box.innerHTML = `<div class="cand">${esc(e.message)}</div>`; box.style.display=''; } }, 250); };
+  box.onclick = ev => { const d = ev.target.closest('[data-u]'); if (!d) return; onPick(JSON.parse(d.dataset.u)); input.value=''; box.style.display='none'; };
+}
+
+let items = [], derived = [], sel = new Set(), addUnit = null, addUser = null, curMem = null;
+const KEY = 'ug_view_sel';
+const keyU = g => 'u' + g.unit_id, keyG = g => 'g' + g.group_id;
+
+function saveSel(){ try{ localStorage.setItem(KEY, JSON.stringify([...sel])); }catch(e){} }
+function loadSel(){ try{ const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return Array.isArray(v) ? v : null; }catch(e){ return null; } }
+function allKeys(){ return [...items.map(keyU), ...derived.map(keyG)]; }
+
+async function load(first=false){
+  try{
+    const r = await api(`${SAPI}/my?closed=${$('showClosed').checked ? 1 : 0}`);
+    items = r.items; derived = r.derived;
+    if (first){
+      const all = new Set(allKeys());
+      if (FOCUS) sel = new Set(['u' + FOCUS]);
+      else { const s = loadSel(); sel = new Set(s ? s.filter(k => all.has(k)) : []); }
+      if (!sel.size) items.filter(g => g.mine).forEach(g => sel.add(keyU(g)));
+      if (!sel.size) items.forEach(g => sel.add(keyU(g)));        // 管理していない人には台帳のグループを全部
+    }
+    renderSide(); renderMain();
+  }catch(e){ $('main').innerHTML = '失敗：' + esc(e.message); }
+}
+function hitSide(g, q, names){ return !q || g.name.includes(q) || names.some(n => n.includes(q)); }
+let orderList = null;        // 表示順の編集中：グループの並び（{k, gid, name}）
+function orderMode(){ return !!($('orderMode') && $('orderMode').checked); }
+function startOrder(){
+  const all = [...items.map(g => ({k: keyU(g), gid: g.group_id, name: g.name, order: g.order, sys: true})),
+               ...derived.map(g => ({k: keyG(g), gid: g.group_id, name: g.name, order: g.order, sys: false}))];
+  orderList = all.map((x, i) => ({...x, i})).sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || (a.i - b.i));
+}
+function renderSide(){
+  if (orderMode()){
+    if (!orderList) startOrder();
+    $('side').innerHTML = `<div class="grp-h">表示順（上から順に表示）</div>
+      <div style="display:flex;gap:6px;margin:4px 0 8px"><button class="btn mini pri" id="ordSave">表示順を保存</button><button class="btn mini" id="ordCancel">やめる</button></div>` +
+      orderList.map((x, n) => `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:13px">
+        <span style="width:24px;text-align:right;color:var(--sub)">${n + 1}</span>
+        <button class="btn mini" data-oup="${n}">↑</button><button class="btn mini" data-odn="${n}">↓</button>
+        <span>${esc(x.name)}${x.sys ? '' : ' <small style="color:var(--sub)">（導出）</small>'}${x.gid ? '' : ' <small style="color:var(--bad)">未作成</small>'}</span></div>`).join('');
+    return;
+  }
+  const q = $('sideFilter').value.trim();
+  const row = (k, name, n, extra='') => `<label><input type="checkbox" data-k="${k}" ${sel.has(k)?'checked':''}><span>${esc(name)}${extra} <small>${n}名</small></span></label>`;
+  const vis = items.filter(g => hitSide(g, q, g.members.filter(m => m.now).map(m => m.name).concat(g.managers.map(m => m.name))));
+  const mine = vis.filter(g => g.mine), other = vis.filter(g => !g.mine);
+  const der = derived.filter(g => hitSide(g, q, g.member_names));
+  const sec = (title, arr) => arr.length ? `<div class="grp-h">${title}（${arr.length}）</div>` + arr.join('') : '';
+  $('side').innerHTML = (sec('管理しているグループ', mine.map(g => row(keyU(g), g.name, g.member_count, g.closed ? '（廃止）' : ''))) +
+    sec(mine.length ? 'そのほかのシステム用グループ' : 'システム用グループ', other.map(g => row(keyU(g), g.name, g.member_count, g.closed ? '（廃止）' : ''))) +
+    sec('組織・会議体から導かれたグループ', der.map(g => row(keyG(g), g.name, g.member_count, g.system ? '（システム）' : '')))) ||
+    '<div style="color:var(--sub);font-size:12px;margin-top:8px">該当するグループがありません</div>';
+}
+$('side').addEventListener('click', async ev => {
+  const t = ev.target.closest('button'); if (!t || !orderList) return;
+  if (t.id === 'ordCancel'){ orderList = null; $('orderMode').checked = false; renderSide(); return; }
+  if (t.id === 'ordSave'){
+    try{ await api(`${SAPI}/group_order`, 'POST', {ids: orderList.filter(x => x.gid).map(x => x.gid)}); toast('表示順を保存しました'); orderList = null; $('orderMode').checked = false; load(); }
+    catch(e){ toast('失敗：'+e.message, 5000); }
+    return;
+  }
+  const n = Number(t.dataset.oup ?? t.dataset.odn), k = t.dataset.oup !== undefined ? n - 1 : n + 1;
+  if (Number.isNaN(n) || k < 0 || k >= orderList.length) return;
+  [orderList[n], orderList[k]] = [orderList[k], orderList[n]]; renderSide();
+});
+if ($('orderMode')) $('orderMode').onchange = () => { orderList = null; renderSide(); };
+$('side').addEventListener('change', ev => { const k = ev.target.dataset.k; if (!k) return; ev.target.checked ? sel.add(k) : sel.delete(k); saveSel(); renderMain(); });
+$('sideFilter').oninput = renderSide;
+$('selAll').onclick = () => { allKeys().forEach(k => sel.add(k)); saveSel(); renderSide(); renderMain(); };
+if ($('selMine')) $('selMine').onclick = () => { sel = new Set(items.filter(g => g.mine).map(keyU)); saveSel(); renderSide(); renderMain(); };
+$('selNone').onclick = () => { sel.clear(); saveSel(); renderSide(); renderMain(); };
+
+function inPeriod(m){
+  const p = $('period').value;
+  if (p === 'all') return true;
+  if (p === 'future') return m.now || m.future;
+  return m.now;
+}
+function stateLabel(m){ return m.now ? '' : (m.future ? '予定' : '終了'); }
+let pending = {};          // unit_id → 並べ替え中の発令 id の並び（保存前）
+
+function memberRows(g){
+  const q = $('filter').value.trim();
+  let mem = g.members.filter(m => inPeriod(m) && (!q || m.name.includes(q)));
+  if (pending[g.unit_id]){ const pos = new Map(pending[g.unit_id].map((id, i) => [id, i])); mem = mem.slice().sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9)); }
+  return mem;
+}
+function groupCard(g){
+  const mem = memberRows(g), ed = g.can_edit, dirty = !!pending[g.unit_id];
+  const rows = mem.map((m, i) => `<tr class="${m.now ? '' : (m.future ? 'fut' : 'past')}" data-row="${m.id}">
+      <td class="num">${ed ? `<input class="ord" type="number" min="1" value="${i + 1}" data-ord="${m.id}">` : (i + 1)}</td>
+      <td class="id">${m.user_id ?? '—'}</td>
+      <td>${esc(m.name)}${m.resolved ? '' : ' <span title="アカウントと結びついていません">★</span>'}${m.note ? ` <small style="color:var(--sub)">${esc(m.note)}</small>` : ''}</td>
+      <td class="per">${esc(m.from || '…')} 〜 ${esc(m.until)}</td>
+      <td>${stateLabel(m)}</td>
+      ${ed ? `<td class="ops"><button class="btn mini" data-up="${m.id}" title="一つ上へ">↑</button><button class="btn mini" data-down="${m.id}" title="一つ下へ">↓</button> <button class="btn mini" data-m="${m.id}">編集</button>${(m.now || m.future) ? ` <button class="btn mini" data-end="${m.id}">退出</button>` : ''}</td>` : ''}
+    </tr>`).join('');
+  return `<div class="card ${ed ? '' : 'ro'}" data-g="${g.unit_id}">
+    <h3>${esc(g.name)}${g.closed ? '<small style="color:var(--bad)">（廃止）</small>' : ''}<span class="sp"></span>
+      <small style="color:var(--sub);font-weight:normal">いま ${g.member_count} 名</small>
+      ${ed ? `<button class="btn mini pri" data-add="${g.unit_id}">＋メンバー</button>` : ''}
+      ${CAN_STEWARD ? `<button class="btn mini" data-gedit="${g.unit_id}" title="改名・管理者の任命・廃止">グループ編集</button>` : ''}</h3>
+    ${g.note ? `<div class="mg">${esc(g.note)}</div>` : ''}
+    <div class="mg">管理者：${g.managers.map(m => esc(m.name)).join('，') || 'なし'}</div>
+    ${ed ? `<div class="ordbar ${dirty ? 'on' : ''}">表示順を変えました（まだ保存していません）<button class="btn mini pri" data-osave="${g.unit_id}">順位を保存</button><button class="btn mini" data-oreset="${g.unit_id}">元に戻す</button></div>` : ''}
+    ${mem.length ? `<table class="mem"><tr><th class="num">順位</th><th>ID</th><th>氏名</th><th>有効期間</th><th>状態</th>${ed ? '<th></th>' : ''}</tr>${rows}</table>`
+                 : '<span style="color:var(--sub);font-size:12px">この期間のメンバーはいません</span>'}
+  </div>`;
+}
+function derivedCard(g){
+  const q = $('filter').value.trim();
+  const mem = g.members.filter(m => !q || m.name.includes(q));
+  return `<div class="card ro">
+    <h3>${esc(g.name)}${g.system ? '<small style="color:var(--sub)">（システム）</small>' : ''}<span class="sp"></span>
+      <small style="color:var(--sub);font-weight:normal">いま ${g.member_count} 名</small></h3>
+    ${g.description ? `<div class="mg">${esc(g.description)}</div>` : ''}
+    <div class="mg">組織・会議体から導かれたグループです．構成員は台帳の発令で決まり，ここでは変えられません（定義は組織情報管理の「グループとの対応表」）．${g.rules.length ? '<br>導出：' + g.rules.map(esc).join('，') : '<br><span style="color:var(--bad)">導出の定義がありません（旧来のグループ）</span>'}</div>
+    ${mem.length ? `<table class="mem"><tr><th class="num">#</th><th>ID</th><th>氏名</th></tr>${mem.map((m, i) => `<tr><td class="num">${i + 1}</td><td class="id">${m.user_id}</td><td>${esc(m.name)}</td></tr>`).join('')}</table>`
+                 : '<span style="color:var(--sub);font-size:12px">構成員はいません</span>'}
+  </div>`;
+}
+function renderMain(){
+  let total = 0, ng = 0;
+  const cards = items.filter(g => sel.has(keyU(g))).map(g => { ng++; total += g.member_count; return groupCard(g); });
+  derived.filter(g => sel.has(keyG(g))).forEach(g => { ng++; total += g.member_count; cards.push(derivedCard(g)); });
+  $('main').innerHTML = cards.join('') || '<div class="empty">左の一覧から表示するグループを選んでください</div>';
+  $('count').textContent = `表示中 ${ng} グループ／いまの構成員 延べ ${total} 名`;
+}
+function curOrder(g){ return pending[g.unit_id] ? pending[g.unit_id].slice() : memberRows(g).map(m => m.id); }
+function setOrder(g, ids){ pending[g.unit_id] = ids; renderMain(); }
+$('period').onchange = () => { pending = {}; renderMain(); };
+$('filter').oninput = renderMain;
+$('showClosed').onchange = () => load();
+$('main').addEventListener('change', ev => {
+  const t = ev.target; if (!t.dataset.ord) return;
+  const card = t.closest('[data-g]'); const g = items.find(x => x.unit_id === Number(card.dataset.g));
+  // 入力された順位で並べ直す（同じ数なら元の並びを保つ）
+  const ids = curOrder(g), want = {};
+  card.querySelectorAll('input.ord').forEach(inp => { want[inp.dataset.ord] = Number(inp.value) || 1e9; });
+  const idx = new Map(ids.map((id, i) => [id, i]));
+  ids.sort((a, b) => (want[a] - want[b]) || (idx.get(a) - idx.get(b)));
+  setOrder(g, ids);
+});
+$('main').addEventListener('click', async ev => {
+  const t = ev.target.closest('button'); if (!t) return;
+  const card = t.closest('[data-g]'); const g = card ? items.find(x => x.unit_id === Number(card.dataset.g)) : null;
+  if (t.dataset.add){ openAdd(Number(t.dataset.add)); return; }
+  if (t.dataset.gedit){ openEdit(Number(t.dataset.gedit)); return; }
+  if (t.dataset.m){ openMem(g.unit_id, Number(t.dataset.m)); return; }
+  if (t.dataset.up || t.dataset.down){
+    const id = Number(t.dataset.up || t.dataset.down), ids = curOrder(g), i = ids.indexOf(id), k = t.dataset.up ? i - 1 : i + 1;
+    if (i < 0 || k < 0 || k >= ids.length) return;
+    [ids[i], ids[k]] = [ids[k], ids[i]]; setOrder(g, ids); return;
+  }
+  if (t.dataset.oreset){ delete pending[g.unit_id]; renderMain(); return; }
+  if (t.dataset.osave){
+    // 画面に出ている人を新しい順に，出ていない人（期間外）はその後ろに元の順で
+    const shown = curOrder(g), rest = g.members.map(m => m.id).filter(id => !shown.includes(id));
+    try{ await api(`${SAPI}/groups/${g.unit_id}/order`, 'POST', {ids: [...shown, ...rest]}); delete pending[g.unit_id]; toast('順位を保存しました'); load(); }
+    catch(e){ toast('失敗：'+e.message, 5000); }
+    return;
+  }
+  if (t.dataset.end){
+    const m = g.members.find(x => x.id === Number(t.dataset.end));
+    if (!confirm(`${m.name} をいま退出させますか（記録は残ります）`)) return;
+    try{ await api(`${SAPI}/appointments/${m.id}/end`, 'POST', {}); toast('退出させました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+  }
+});
+
+// 追加
+function openAdd(unit){
+  addUnit = items.find(g => g.unit_id === unit); addUser = null;
+  $('addTitle').textContent = `「${addUnit.name}」にメンバーを追加`;
+  $('addSearch').value=''; $('addCand').style.display='none'; $('addPicked').innerHTML='';
+  $('addFrom').value = TODAY; $('addUntil').value=''; $('addNote').value='';
+  show('ovAdd'); $('addSearch').focus();
+}
+userPicker($('addSearch'), $('addCand'), u => { addUser = u; $('addPicked').innerHTML = `<span class="picked">${esc(u.full_name)} <small>#${u.id}${u.email ? ' ' + esc(u.email) : ''}</small></span>`; });
+$('addSave').onclick = async () => {
+  if (!addUser){ toast('人を選んでください'); return; }
+  try{ await api(`${SAPI}/groups/${addUnit.unit_id}/members`, 'POST', {user_id: addUser.id, valid_from: $('addFrom').value, valid_until: $('addUntil').value, note: $('addNote').value.trim()});
+    toast(`${addUser.full_name} を追加しました`); addUser = null; $('addPicked').innerHTML=''; load();
+    $('addSearch').focus();       // 続けて追加できるように閉じない
+  }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 編集
+function openMem(unit, aid){
+  const g = items.find(x => x.unit_id === unit); curMem = g.members.find(m => m.id === aid); if (!curMem) return;
+  $('memTitle').textContent = curMem.name; $('memWho').textContent = g.name + (curMem.email ? '　' + curMem.email : '');
+  $('memFrom').value = curMem.from.slice(0,10); $('memUntil').value = curMem.until.slice(0,10); $('memNote').value = curMem.note;
+  $('memEnd').style.display = curMem.now || curMem.future ? '' : 'none';
+  show('ovMem');
+}
+$('memSave').onclick = async () => {
+  try{ await api(`${SAPI}/appointments/${curMem.id}`, 'PUT', {valid_from: $('memFrom').value, valid_until: $('memUntil').value, note: $('memNote').value.trim()});
+    hide('ovMem'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('memEnd').onclick = async () => {
+  if (!confirm(`${curMem.name} をいま退出させますか（記録は残ります）`)) return;
+  try{ await api(`${SAPI}/appointments/${curMem.id}/end`, 'POST', {}); hide('ovMem'); toast('退出させました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('memDel').onclick = async () => {
+  if (!confirm(`${curMem.name} のこの記録を取り消します（誤って入れたときだけ使ってください）．よろしいですか`)) return;
+  try{ await api(`${SAPI}/appointments/${curMem.id}`, 'DELETE'); hide('ovMem'); toast('取り消しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+let cur = null, picked = [];
+if (CAN_STEWARD){
+// 新しいグループ
+$('btnNew').onclick = () => { $('newName').value=''; $('newNote').value=''; picked=[]; showPicked(); show('ovNew'); $('newName').focus(); };
+function showPicked(){
+  $('newPicked').innerHTML = picked.map(u => `<span class="picked">${esc(u.full_name)}<span class="x" data-x="${u.id}">×</span></span> `).join('') || '<span style="color:var(--sub);font-size:12px">まだ選んでいません</span>';
+}
+$('newPicked').onclick = ev => { const x = ev.target.dataset.x; if (!x) return; picked = picked.filter(u => u.id != x); showPicked(); };
+userPicker($('newSearch'), $('newCand'), u => { if (!picked.some(p => p.id === u.id)) picked.push(u); showPicked(); });
+$('newSave').onclick = async () => {
+  try{ await api(`${SAPI}/groups`, 'POST', {name: $('newName').value.trim(), note: $('newNote').value.trim(), manager_user_ids: picked.map(u => u.id)});
+    hide('ovNew'); toast('作りました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+// 編集
+function openEdit(uid){
+  cur = items.find(g => g.unit_id === uid); if (!cur) return;
+  $('editTitle').textContent = cur.name + (cur.closed ? '（廃止）' : '');
+  $('editName').value = cur.name; $('editNote').value = cur.note;
+  $('editMgrs').innerHTML = cur.managers.map(m => `<span class="chip res" title="${esc(m.from)}〜">${esc(m.name)}<a href="#" data-end="${m.id}">解任</a></span>`).join('') || '<span style="color:var(--sub);font-size:12px">いまの管理者はいません</span>';
+  $('editClose').style.display = cur.closed ? 'none' : ''; $('editReopen').style.display = cur.closed ? '' : 'none';
+  $('mgrSearch').disabled = cur.closed;
+  show('ovEdit');
+}
+$('editMgrs').addEventListener('click', async ev => { const t = ev.target; if (!t.dataset.end) return; ev.preventDefault();
+  if (!confirm('この管理者を解任しますか（記録は残ります）')) return;
+  try{ await api(`${SAPI}/appointments/${t.dataset.end}/end`, 'POST', {}); toast('解任しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); } });
+userPicker($('mgrSearch'), $('mgrCand'), async u => {
+  if (!confirm(`${u.full_name} を「${cur.name}」の管理者に任命しますか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/managers`, 'POST', {user_id: u.id}); toast('任命しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); }
+});
+$('editSave').onclick = async () => {
+  try{ await api(`${SAPI}/groups/${cur.unit_id}`, 'PUT', {name: $('editName').value.trim(), note: $('editNote').value.trim()});
+    hide('ovEdit'); toast('保存しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('editClose').onclick = async () => {
+  if (!confirm(`「${cur.name}」を廃止します．管理者とメンバーの発令はいま終わり，user_groups の行は残ります．よろしいですか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/close`, 'POST', {}); hide('ovEdit'); toast('廃止しました'); load(); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+$('editReopen').onclick = async () => {
+  if (!confirm(`「${cur.name}」を再開します．管理者は改めて任命してください．よろしいですか`)) return;
+  try{ await api(`${SAPI}/groups/${cur.unit_id}/reopen`, 'POST', {}); toast('再開しました'); await load(); openEdit(cur.unit_id); }catch(e){ toast('失敗：'+e.message, 5000); }
+};
+
+}
+load(true);
+</script>
+</body>
+</html>
