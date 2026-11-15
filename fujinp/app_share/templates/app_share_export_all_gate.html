@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/u-fukuchiyama/fujin-p
+  Source: https://github.com/nishida-toyoaki/fujin-p
 #}
 <!DOCTYPE html>
 <html lang="ja">
@@ -68,7 +68,7 @@ td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
       <a class="home" href="{{ url_for('app_share.return_to_fujin') }}">🏠 ダッシュボード</a>
     </div>
     <h1>⬇ 全アプリパッケージのエクスポート — 文書の点検</h1>
-    <div class="subtitle">kind=app の全アプリ（アプシャとカーネルは対象外）．点検 {{ checked_at }}</div>
+    <div class="subtitle">カーネル・admin・アプシャと，kind=app の全アプリ．点検 {{ checked_at }}</div>
   </div>
 
   <div class="panel">
@@ -80,12 +80,11 @@ td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
     </div>
 
     <div class="excl">
-      📦 <b>アプシャ（app_share）自身とカーネルは，この一覧に含めません．</b>
-      書き出しと取り込みを担うアプリを一括で入れ替えると，作業の足場が途中で崩れるためです．
-      アプシャを配布するときは，アプシャのカードから個別に 📦 エクスポートしてください．
-      書き出した JSON にも，この除外を記録します．
+      📦 <b>一覧の先頭のカーネル・admin・アプシャ（app_share）は，一般のアプリと同じく点検したうえで，書き出す JSON の bootstrap 欄に入ります．</b>
+      新しいサイトはまず bootstrap からカーネルとアプシャまでを立ち上げ，そのあとアプシャでこの一覧のアプリを取り込みます．
+      入らないのは config.py だけです．
       {%- if excluded %}
-      <span class="names">対象外：{% for e in excluded %}{{ e.icon }} {{ e.display_name }}（{{ e.app_name }}）{% if not loop.last %}，{% endif %}{% endfor %}</span>
+      <span class="names">bootstrap に入るもの：{% for e in excluded %}{{ e.icon }} {{ e.display_name }}（{{ e.app_name }}）{% if not loop.last %}，{% endif %}{% endfor %}</span>
       {%- endif %}
     </div>
 
@@ -139,9 +138,10 @@ td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
     return LATER[a.app_name] ? 'later' : '';
   }
   function render() {
-    var h = '', nOk = 0, nLater = 0, nTodo = 0;
+    var h = '', nOk = 0, nLater = 0, nTodo = 0, nBoot = 0;
     APPS.forEach(function (a) {
       var d = decision(a);
+      if (a.bootstrap) { nBoot++; }
       if (d === 'ok') { nOk++; } else if (d === 'later') { nLater++; } else { nTodo++; }
       var cls = a.stale ? (d ? 'stale' : 'todo') : '';
       var verdict = !a.stale ? '<span class="pill p-ok">✅ 一致</span>'
@@ -157,7 +157,7 @@ td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
         sel = '<span class="hint">そのまま通ります</span>';
       }
       h += '<tr class="' + cls + '">'
-        + '<td class="app">' + esc(a.icon) + ' ' + esc(a.display_name) + '<span class="dir">' + esc(a.app_name) + (a.enabled ? '' : '　（無効）') + '</span></td>'
+        + '<td class="app">' + esc(a.icon) + ' ' + esc(a.display_name) + (a.bootstrap ? ' <span class="pill p-gray">bootstrap</span>' : '') + '<span class="dir">' + esc(a.app_name) + (a.enabled ? '' : '　（無効）') + '</span></td>'
         + '<td class="dt">' + (a.code_files ? a.code_files + ' 本' : '（対象なし）') + '</td>'
         + '<td class="dt">' + docCell(a.manual) + '</td>'
         + '<td class="dt">' + docCell(a.spec) + '</td>'
@@ -165,7 +165,7 @@ td.dt .c{color:#999;font-size:.75rem;margin-left:4px}
         + '<td>' + sel + '</td></tr>';
     });
     rows.innerHTML = h;
-    sum.innerHTML = '<span><b>' + APPS.length + '</b> 本<span class="note">（アプシャ・カーネルを除く）</span></span>'
+    sum.innerHTML = '<span><b>' + APPS.length + '</b> 本<span class="note">（うち bootstrap ' + nBoot + ' 本）</span></span>'
       + '<span class="pill p-ok">一致 ' + nOk + '</span>'
       + '<span class="pill p-warn">古いまま出す ' + nLater + '</span>'
       + '<span class="pill p-todo">要確認 ' + nTodo + '</span>';

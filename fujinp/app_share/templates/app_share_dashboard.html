@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/u-fukuchiyama/fujin-p
+  Source: https://github.com/nishida-toyoaki/fujin-p
 #}
 
 <!DOCTYPE html>
@@ -188,6 +188,7 @@
             <span style="float:right;display:inline-flex;gap:8px">
                 {% if is_admin %}
                 <button class="btn-import" onclick="location.href='{{ url_for('app_share.package_import_page') }}'">📦 新規アプリ取り込み</button>
+                <button class="btn-import" onclick="location.href='{{ url_for('app_share.kernel_import_page') }}'" title="カーネル（ホーム直下のコード・templates・配布用静的ファイル）を入れ替える．全アプリパッケージの JSON をそのまま選べる">🧩 カーネル取り込み</button>
                 <button class="success" onclick="publishRegistry(false)" title="正本（DB）を fujinp/app_registry.json に写す">📢 発行</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.sections_page') }}'" title="ダッシュボードの区画">🗂 区画</button>
                 <button class="secondary" onclick="location.href='{{ url_for('app_share.ledger_page') }}'" title="コード・台帳・DB の突き合わせ（テーブルの台帳のずれを直す）">🧱 台帳点検</button>
@@ -209,7 +210,7 @@
     {% if is_admin %}
     <div id="admin-tab" class="tab-content">
         <h2>📥 全アプリパッケージからの取り込み</h2>
-        <div class="info-box">「⬇ 全アプリパッケージエクスポート」で出力した JSON（fujinp_apps_overview）を選ぶと，含まれるアプリの一覧と新旧が出ます．取り込むアプリにチェックして「取り込む」．各アプリは 📥 取り込み画面と同じ手順（退避 → 配置 → 正本 → 文書 → 台帳 → テーブル → 不具合 → 発行）で順に処理されます．</div>
+        <div class="info-box">「⬇ 全アプリパッケージエクスポート」で出力した JSON（fujinp_apps_overview）を選ぶと，含まれるアプリ（admin・アプシャを含む）の一覧と新旧が出ます．カーネルは一番上の行から「カーネル取り込み」へ進みます．アプシャ自身を選んだときは最後に取り込みます．取り込むアプリにチェックして「取り込む」．各アプリは 📥 取り込み画面と同じ手順（退避 → 配置 → 正本 → 文書 → 台帳 → テーブル → 不具合 → 発行）で順に処理されます．</div>
         <div class="form-group"><label>JSONファイル:</label><input type="file" id="ov-file" accept=".json,application/json"></div>
         <div id="ov-meta" class="success-box" style="display:none"></div>
         <div id="ov-wrap" style="display:none">
@@ -320,8 +321,10 @@ function loadLocalApps(){
                 <div class="card-actions">
                     <button class="btn-manual" onclick="openManual('${a.app_name}')">📖 マニュアル</button>
                     <button class="btn-spec" onclick="location.href='/app_share/spec/'+encodeURIComponent('${a.app_name}')" title="正本と仕様書メモから組み立てた技術仕様書">📋 仕様書</button>
-                    <button class="btn-export" onclick="exportApp('${a.app_name}')" title="アプリ一式をJSONパッケージでダウンロード">📦 エクスポート</button>
-                    ${IS_ADMIN?`<button class="btn-import" onclick="location.href='/app_share/package/import?app='+encodeURIComponent('${a.app_name}')" title="パッケージで差し替え（検証→適用→発行）">📥 取り込み</button>`:''}
+                    <button class="btn-export" onclick="exportApp('${a.app_name}')" title="${a.app_name==='_platform'?'カーネルだけを JSON で書き出す（config.py は含まない）':'アプリ一式をJSONパッケージでダウンロード'}">📦 エクスポート</button>
+                    ${IS_ADMIN?(a.app_name==='_platform'
+                      ? `<button class="btn-import" onclick="location.href='/app_share/kernel/import'" title="カーネルを入れ替える．カーネルの JSON でも全アプリパッケージの JSON でも選べる">📥 取り込み</button>`
+                      : `<button class="btn-import" onclick="location.href='/app_share/package/import?app='+encodeURIComponent('${a.app_name}')" title="${(a.app_name==='admin'||a.app_name==='app_share')?'ふつうのアプリと同じ手順で差し替える（アプシャ自身も可．適用後に Reload）':'パッケージで差し替え（検証→適用→発行）'}">📥 取り込み</button>`):''}
                     ${IS_ADMIN&&a.disclosed!==undefined?`<button class="btn-disc" onclick="toggleDisclose(${a.id},${a.disclosed===0?0:1},event)" title="アプシャでのこのアプリの情報（一覧・マニュアル・仕様書）を admin 以外に見せるかどうか">${a.disclosed===0?'🔓 非公開→公開':'🔒 公開→非公開'}</button>`:''}
                     ${IS_ADMIN?`<button class="btn-mgmt" onclick="location.href='/app_share/app/'+encodeURIComponent('${a.app_name}')" title="正本の管理（起動・ランチャ・テーブル・ライブラリ・定数・文書・版・不具合）">🛠 管理</button>`:''}
                     <span class="card-badges" data-app="${a.app_name}"></span>
@@ -346,7 +349,17 @@ function loadSummary(){
             else if(!s.enabled)b+='<span class="badge badge-danger">無効</span> ';
             else if(s.running===false)b+='<span class="badge badge-danger" title="正本にあるが起動中に未登録（発行＋Reload が必要）">未起動</span> ';
             const g=s.git;
-            if(g&&!g.error){
+            const st=s.stage;
+            if(st&&!st.error){
+                // 作業の段階（2026-10-31）：いまの段階と次にすること．押すと，それをする画面へ
+                const STY={docs:'badge-danger',version:'badge-info',commit:'badge-warning',push:'badge-info',done:'badge-success'};
+                const ICO={docs:'📝',version:'🏷',commit:'⬆',push:'🚀',done:'✔'};
+                const chain=st.steps.map(x=>(x.state==='done'?'✔':x.state==='current'?'▶':'・')+x.label).join(' → ');
+                const tip=[st.title,'次：'+st.next].concat(st.reasons||[]).concat([chain]).join('\n');
+                const go=(st.step==='docs')?`/app_share/package/export/${encodeURIComponent(name)}`:`/app_share/app/${encodeURIComponent(name)}#ver`;
+                b+=`<span class="badge ${STY[st.step]||'badge-gray'}" title="${esc(tip)}" style="cursor:pointer" onclick="location.href='${go}'">${ICO[st.step]||''} ${esc(st.title)}</span> `;
+            }
+            else if(g&&!g.error){
                 if(g.needs_commit){
                     const onlyDel=(g.changed+g.added===0&&g.deleted>0);
                     b+=`<span class="badge badge-warning" title="変更 ${g.changed} / 新規 ${g.added} / 削除 ${g.deleted}" style="cursor:pointer" onclick="location.href='/app_share/app/${name}#ver'">${onlyDel?'🔶 関所の整理（削除 '+g.deleted+'）':'🔶 要commit '+esc(g.last_change||'')}</span> `;
@@ -517,6 +530,11 @@ $('#ov-file').on('change',function(){
 function renderOv(r){
     $('#ov-meta').html(`出所: ${esc(r.site.site_name||'-')}　${esc(r.site.generated_at||'')}　${esc(r.site.generated_by||'')}　アプリ ${OVROWS.length} 件`).show();
     const $tb=$('#ov-table tbody').empty();
+    if(r.kernel){const k=r.kernel;
+        $tb.append(`<tr style="background:#f8fafc"><td></td><td>🧩 <b>カーネル</b><br><code>_platform</code></td>
+            <td><code>${esc(k.package_version||'未確定')}</code></td><td><code>${esc(k.local_version||'未確定')}</code></td>
+            <td>${k.package_version&&k.package_version===k.local_version?ST_BADGE.same:'<span class="badge badge-warning">版が違う</span>'}</td>
+            <td><a href="/app_share/kernel/import" style="font-size:.8rem">カーネル取り込みへ</a><br><span style="font-size:.72rem;color:#64748b">同じ JSON を選ぶ</span></td></tr>`);}
     OVROWS.forEach((a,i)=>{
         const chk=(a.status==='new'||a.status==='newer');
         $tb.append(`<tr><td><input type="checkbox" class="ov-chk" data-i="${i}" ${chk?'checked':''}></td>
@@ -533,19 +551,28 @@ function ovSelect(which){$('.ov-chk').each(function(){const a=OVROWS[+$(this).da
 function ovCount(){$('#ov-count').text('選択 '+$('.ov-chk:checked').length+' 件')}
 function ovOne(i){
     // 個別の取り込み画面で検証する（1アプリ分のパッケージを一時的にセッションストレージへ）
-    const pkg=OV.apps.find(p=>p.app_name===OVROWS[i].app_name);
+    const pkg=ovPkg(OVROWS[i].app_name);
     try{sessionStorage.setItem('apsha_pkg',JSON.stringify(pkg));location.href='/app_share/package/import?app='+encodeURIComponent(pkg.app_name)+'&from=session'}
     catch(e){showResult('パッケージが大きすぎます．個別に📦エクスポート→📥取り込みで．',true)}
 }
+// 全アプリパッケージの中の1アプリ分（apps[] と bootstrap の admin・app_share を同じに扱う）
+function ovPkg(name){
+    const b=(OV&&OV.bootstrap)||{};
+    if(name==='admin'&&b.admin)return b.admin;
+    if(name==='app_share'&&b.app_share)return b.app_share;
+    return (OV.apps||[]).find(p=>p.app_name===name);
+}
 async function ovApply(){
-    const sel=$('.ov-chk:checked').map(function(){return +$(this).data('i')}).get();
+    // アプシャ自身は最後に入れる（取り込みの途中で取り込む側のコードを入れ替えない）
+    const sel=$('.ov-chk:checked').map(function(){return +$(this).data('i')}).get()
+        .sort((x,y)=>(OVROWS[x].app_name==='app_share')-(OVROWS[y].app_name==='app_share'));
     if(!sel.length){showResult('取り込むアプリを選んでください',true);return}
     if(!confirm(`${sel.length} 件を順に取り込みます（ファイル配置・正本・文書・台帳・テーブル・不具合・発行）．\n既存ディレクトリは import_backups に退避されます．\nよろしいですか？`))return;
     const applyTables=$('#ov-tables').is(':checked');
     let h='';let needReload=false;
     $('#ov-result').html('<p>⏳ 取り込み中…</p>').show();
     for(const i of sel){
-        const a=OVROWS[i];const pkg=OV.apps.find(p=>p.app_name===a.app_name);
+        const a=OVROWS[i];const pkg=ovPkg(a.app_name);
         try{
             const r=await fetch('/app_share/package/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({package:pkg,options:{apply_tables:applyTables}})});
             const j=await r.json();

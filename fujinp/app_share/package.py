@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 app_share.package — アプリパッケージの輸出入（段階6c，format_version 3）
@@ -39,6 +39,17 @@ app_info.json／version.json／manifest.json は含めない（情報は正本�
   GET  /app_share/api/docs/status_all           全アプリの文書の新旧（点検ページの再確認用）
   GET  /app_share/package/export_all/public     全アプリパッケージをそのまま書き出す（ログインした全員）
   POST /app_share/package/site/check            全アプリパッケージの一覧検証（新規／更新／同じ／古い）
+
+全アプリパッケージ（fujinp_apps_overview）は，2026-10-31 からサイト1つ分の全部を持つ．
+  apps[]     一般アプリ（kind='app'）
+  bootstrap  サイトの立ち上げに要るもの（kind='kernel' の行）
+     kernel     カーネルパッケージ（routes._build_kernel_package と同じ．ホーム直下のコード・
+                templates/・static_for_distribution/・fujinp/registry.py）
+     platform   _platform 行のアプリパッケージ（共通テーブル users などの DDL を tables[] に持つ）
+     admin      admin のアプリパッケージ
+     app_share  アプシャのアプリパッケージ
+入らないのは config.py だけ．テーブルの中身（データ）は入らない（配るデータは *_for_distribution/ のファイルだけ）．
+立ち上げは bootstrap でカーネルからアプシャまでを立て，そのあとアプシャで apps[] を取り込む．
 書き出し（GET の3本）はログインした全員に開いている．それ以外は admin．
 
 format_version 2（旧形式）のパッケージも読める（正本部分は推定して candidate 扱い）．
@@ -450,10 +461,18 @@ def package_export(app_name):
     """?docs= が無ければ確認ゲートを表示し，ok／later／draft／final が付いていればダウンロードする．"""
     if not _m._valid_app(app_name):
         return "アプリ名が不正です", 400
-    # カーネル（_platform 行）はアプリのパッケージではなくカーネルパッケージで書き出す（2026-09-23）
-    if app_name == _m.PLATFORM_ROW:
-        return redirect(url_for('app_share.export_kernel_package'))
     choice = (request.args.get('docs') or '').strip().lower()
+    # カーネル（_platform 行）はカーネルパッケージで書き出す（2026-09-23）．
+    # admin には一般のアプリと同じ文書の点検ゲートを通す（2026-10-31）．
+    # ok／later／final でカーネルパッケージを，draft で文書作成用の暫定パッケージ（カーネルのファイル入り）を返す．
+    if app_name == _m.PLATFORM_ROW and (not _is_admin() or choice in ('ok', 'later', 'final')):
+        resp = _m._routes.export_kernel_package()
+        token = re.sub(r'[^A-Za-z0-9]', '', request.args.get('t') or '')[:32]
+        if token and getattr(resp, 'headers', None) is not None:
+            m = re.search(r'filename="([^"]+)"', resp.headers.get('Content-Disposition') or '')
+            resp.set_cookie('fujinp_export', f'{token}|{m.group(1) if m else ""}',
+                            max_age=180, path='/', samesite='Lax')
+        return resp
 
     if not _is_admin():
         return _public_export(app_name)
@@ -483,6 +502,12 @@ def package_export(app_name):
         pkg = build_package(cur, app_name, generated_by=(u or {}).get('full_name'), docs_choice=choice)
     if not pkg:
         return "レジストリにありません", 404
+    if app_name == _m.PLATFORM_ROW:
+        # _platform 行のファイルはアプリ配下に無いので，カーネルパッケージのファイルを入れる
+        kp = _m._routes._build_kernel_package(generated_by=(u or {}).get('full_name'),
+                                               site_url=request.host_url.rstrip('/'), public=False)
+        pkg['files'] = kp.get('files') or []
+        pkg['file_count'] = len(pkg['files'])
     suffix = {'final': '_docs', 'draft': '_draft'}.get(choice, '')
     fn = f'app_package_{app_name}_{_m._now().strftime("%Y%m%d_%H%M%S")}{suffix}.json'
     resp = Response(json.dumps(pkg, ensure_ascii=False, indent=2), mimetype='application/json',
@@ -1107,6 +1132,9 @@ def package_apply():
             conn2 = mysql.connector.connect(**DatabaseConfig.get_config(item['database']))
             try:
                 cu = conn2.cursor()
+                # 外部キーの相手が同じパッケージの後ろの表や，まだ無い表でも作れるようにする（2026-10-31）．
+                # 新しいサイトに一括で取り込むと，表の並び順によっては errno 150 で作れなかった
+                cu.execute('SET FOREIGN_KEY_CHECKS=0')
                 for s in sqls:
                     try:
                         cu.execute(s)
@@ -1199,13 +1227,22 @@ def api_app_delete(app_name):
 
 OVERVIEW_TYPE = 'fujinp_apps_overview'
 
+BOOTSTRAP_ROWS = ('_platform', 'admin', 'app_share')
 
-def _all_app_doc_status(cur, tidy=False):
+
+def _all_app_doc_status(cur, tidy=False, with_kernel=False):
     """kind='app' の全アプリについて，文書とコードの整合を並べる（点検ページ用）．
-    tidy=True なら判定の前に各アプリを整形する（admin の点検ページから呼ぶとき）"""
-    cur.execute("""SELECT app_name, display_name, icon, enabled, version_id
+    tidy=True なら判定の前に各アプリを整形する（admin の点検ページから呼ぶとき）．
+    with_kernel=True なら，bootstrap に入るカーネル・admin・アプシャの3行も先頭に並べる（2026-10-31）．
+    各行の bootstrap が True ならその行は bootstrap 欄に入り，apps[] には入らない．"""
+    cur.execute("""SELECT app_name, display_name, icon, enabled, version_id, kind
                    FROM app_share_registry WHERE kind='app' ORDER BY sort_order, id""")
     rows = cur.fetchall()
+    if with_kernel:
+        cur.execute("""SELECT app_name, display_name, icon, enabled, version_id, kind
+                       FROM app_share_registry WHERE kind='kernel'""")
+        kr = {r['app_name']: r for r in cur.fetchall()}
+        rows = [kr[n] for n in BOOTSTRAP_ROWS if n in kr] + list(rows)
     skew = _db_clock_skew(cur)
     out = []
     for r in rows:
@@ -1215,6 +1252,7 @@ def _all_app_doc_status(cur, tidy=False):
         out.append({'app_name': r['app_name'], 'display_name': r.get('display_name') or r['app_name'],
                     'icon': r.get('icon') or '📦', 'enabled': int(r.get('enabled') or 0),
                     'version_id': r.get('version_id'),
+                    'bootstrap': r['app_name'] in BOOTSTRAP_ROWS,
                     'latest_file_mtime': st['latest_file_mtime'],
                     'code_files': st['code_files'], 'judged_by': st['judged_by'],
                     'diff_count': len(st['diff']['added']) + len(st['diff']['removed']) + len(st['diff']['changed']),
@@ -1223,9 +1261,28 @@ def _all_app_doc_status(cur, tidy=False):
     return out
 
 
-EXCLUDED_NOTE = ('アプシャ（app_share）自身とカーネルは，一括の書き出しに含めない．'
-                 '書き出しと取り込みを担うアプリを一括で入れ替えると，作業の足場が'
-                 '途中で崩れるため．配布は個別のアプリパッケージで行う．')
+EXCLUDED_NOTE = ('カーネル（_platform）・admin・アプシャ（app_share）は apps[] に入れず，'
+                 'bootstrap に入れる（2026-10-31）．立ち上げでは bootstrap からカーネルとアプシャまでを立て，'
+                 'そのあとアプシャで apps[] を取り込む．入らないのは config.py だけ．')
+
+def _bootstrap_section(cur, by, site_url, public, decisions=None):
+    """全アプリパッケージの bootstrap 欄（カーネル・_platform・admin・アプシャ）を組み立てる．
+    public=True（admin 以外の書き出し）ではカーネルを公開用の絞り込み版にする．
+    decisions={app_name: 'ok'|'later'} があれば，点検ページで決めた文書の扱いを使う（2026-10-31）．
+    無ければサーバの判定で決める．"""
+    out = {'kernel': _m._routes._build_kernel_package(generated_by=by, site_url=site_url, public=public)}
+    for name, key in (('_platform', 'platform'), ('admin', 'admin'), ('app_share', 'app_share')):
+        pkg = build_package(cur, name, generated_by=by, site_url=site_url,
+                            docs_choice=((decisions or {}).get(name) or _public_choice(cur, name)))
+        if pkg:
+            if name == '_platform':
+                pkg['files'] = []          # _platform 行のファイルは kernel 側に入っている
+                pkg['file_count'] = 0
+            out[key] = pkg
+    out['note'] = ('立ち上げに要るもの．kernel=カーネルパッケージ（fujinp_kernel_package），'
+                   'platform=共通テーブルの DDL を持つ _platform 行，admin・app_share=アプリパッケージ．'
+                   'config.py は入らない．')
+    return out
 
 
 def _excluded_apps(cur):
@@ -1241,7 +1298,7 @@ def _excluded_apps(cur):
 @login_required
 def api_docs_status_all():
     with _m._db() as (cur, conn):
-        apps = _all_app_doc_status(cur, tidy=_is_admin())
+        apps = _all_app_doc_status(cur, tidy=_is_admin(), with_kernel=True)
     return _m._ok(apps=apps, checked_at=_m._fmt(_m._now()))
 
 
@@ -1250,7 +1307,7 @@ def api_docs_status_all():
 def package_export_all():
     """全アプリの文書を1本ずつ点検するページ．書き出しは POST（点検済みの選択を添える）."""
     with _m._db() as (cur, conn):
-        apps = _all_app_doc_status(cur, tidy=True)
+        apps = _all_app_doc_status(cur, tidy=True, with_kernel=True)
         excluded = _excluded_apps(cur)
     return render_template('app_share_export_all_gate.html', apps=apps,
                            excluded=excluded, excluded_note=EXCLUDED_NOTE,
@@ -1273,7 +1330,7 @@ def package_export_all_download():
         cur.execute("SELECT full_name FROM users WHERE id=%s", (session.get('user_id'),))
         u = cur.fetchone()
         by = (u or {}).get('full_name')
-        status = _all_app_doc_status(cur, tidy=True)
+        status = _all_app_doc_status(cur, tidy=True, with_kernel=True)
         excluded = _excluded_apps(cur)
         problems = []
         for a in status:
@@ -1287,21 +1344,28 @@ def package_export_all_download():
                             'problems': problems}), 409
         apps = []
         for a in status:
+            if a['bootstrap']:
+                continue
             pkg = build_package(cur, a['app_name'], generated_by=by,
                                 docs_choice=(decisions.get(a['app_name']) or '').lower())
             if pkg:
                 apps.append(pkg)
-    n_later = sum(1 for a in status if (decisions.get(a['app_name']) or '').lower() == 'later')
+        dec = {a['app_name']: (decisions.get(a['app_name']) or '').lower() for a in status}
+        bootstrap = _bootstrap_section(cur, by, request.host_url.rstrip('/'), public=False,
+                                       decisions={n: dec[n] for n in BOOTSTRAP_ROWS if n in dec})
+    n_later = sum(1 for a in status if not a['bootstrap'] and dec[a['app_name']] == 'later')
     out = {'export_type': OVERVIEW_TYPE, 'format_version': FORMAT_VERSION,
            'site_name': getattr(Config, 'DB_ACCOUNT', ''),
            'site_url': request.host_url.rstrip('/'),
            'generated_at': _m._fmt(_m._now()), 'generated_by': by,
            'app_count': len(apps), 'apps': apps,
-           'excluded': excluded, 'excluded_note': EXCLUDED_NOTE,
+           'bootstrap': bootstrap,
+           'excluded': [], 'excluded_note': EXCLUDED_NOTE,
            'doc_review': {'reviewed': True, 'reviewed_at': _m._fmt(_m._now()),
                           'current': len(apps) - n_later, 'deferred': n_later,
                           'deferred_apps': [a['app_name'] for a in status
-                                            if (decisions.get(a['app_name']) or '').lower() == 'later']}}
+                                            if not a['bootstrap'] and dec[a['app_name']] == 'later'],
+                          'bootstrap': {n: dec[n] for n in BOOTSTRAP_ROWS if n in dec}}}
     fn = f'fujinp_apps_overview_{_m._now().strftime("%Y%m%d_%H%M%S")}.json'
     return Response(json.dumps(out, ensure_ascii=False, indent=2), mimetype='application/json',
                     headers={'Content-Disposition': f'attachment; filename="{fn}"'})
@@ -1332,12 +1396,14 @@ def package_export_all_public():
                 apps.append(pkg)
                 if choice == 'later':
                     deferred.append(a['app_name'])
+        bootstrap = _bootstrap_section(cur, by, request.host_url.rstrip('/'), public=not _is_admin())
     out = {'export_type': OVERVIEW_TYPE, 'format_version': FORMAT_VERSION,
            'site_name': getattr(Config, 'DB_ACCOUNT', ''),
            'site_url': request.host_url.rstrip('/'),
            'generated_at': _m._fmt(_m._now()), 'generated_by': by,
            'app_count': len(apps), 'apps': apps,
-           'excluded': excluded, 'excluded_note': EXCLUDED_NOTE,
+           'bootstrap': bootstrap,
+           'excluded': [], 'excluded_note': EXCLUDED_NOTE,
            'public_download': True,
            'doc_review': {'reviewed': False, 'reviewed_at': None,
                           'note': '点検を経ずに書き出した版．文書の新旧はサーバの判定による．',
@@ -1356,8 +1422,16 @@ def package_site_check():
     if not isinstance(ov, dict) or ov.get('export_type') != OVERVIEW_TYPE:
         return _m._err('全アプリパッケージ（fujinp_apps_overview）ではありません')
     rows = []
+    boot = ov.get('bootstrap') if isinstance(ov.get('bootstrap'), dict) else {}
+    # bootstrap の admin・アプシャも，一般アプリと同じ行として並べる（2026-10-31）
+    pkgs = list(ov.get('apps') or []) + [boot[k] for k in ('admin', 'app_share') if isinstance(boot.get(k), dict)]
     with _m._db() as (cur, conn):
-        for pkg in ov.get('apps') or []:
+        kernel_info = None
+        if isinstance(boot.get('kernel'), dict):
+            prow = _m._load_registry_row(cur, _m.PLATFORM_ROW)
+            kernel_info = {'package_version': boot['kernel'].get('version_id'),
+                           'local_version': (prow or {}).get('version_id')}
+        for pkg in pkgs:
             if not isinstance(pkg, dict) or pkg.get('export_type') != EXPORT_TYPE:
                 continue
             name = pkg.get('app_name') or ''
@@ -1378,5 +1452,6 @@ def package_site_check():
                          'package_updated_at': pkg.get('updated_at'), 'local_updated_at': _m._fmt(local_ts),
                          'dir_exists': os.path.isdir(_m._app_path(name)),
                          'file_count': len(pkg.get('files') or []), 'status': st})
-    return _m._ok(apps=rows, site={'site_name': ov.get('site_name'), 'generated_at': ov.get('generated_at'),
-                                   'generated_by': ov.get('generated_by')})
+    return _m._ok(apps=rows, kernel=kernel_info,
+                  site={'site_name': ov.get('site_name'), 'generated_at': ov.get('generated_at'),
+                        'generated_by': ov.get('generated_by')})

@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/u-fukuchiyama/fujin-p
+  Source: https://github.com/nishida-toyoaki/fujin-p
 #}
 <!DOCTYPE html>
 <html lang="ja">
@@ -175,13 +175,14 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
   <!-- 版 -->
   <div class="panel" id="p-ver">
     <h2>版</h2>
+    <div id="stage-body" style="margin-bottom:12px"></div>
     <div id="ver-body"></div>
     <div class="row" style="margin-top:10px">
       <button class="btn gray" onclick="tidyApp()">🧹 整形</button>
       <button class="btn green" onclick="confirmVersion()">🏷 版確定</button>
       {% if app_name == '_platform' %}
-      <a class="btn sky" href="{{ url_for('app_share.export_kernel_package') }}" title="config.py を除くカーネル一式を JSON で書き出す">📦 カーネルエクスポート</a>
-      <a class="btn amber" href="{{ url_for('app_share.kernel_import_page') }}" title="カーネルパッケージでこのサイトのカーネルを入れ替える">📥 カーネル取り込み</a>
+      <a class="btn sky" href="{{ url_for('app_share.package_export', app_name='_platform') }}" title="config.py を除くカーネル一式を JSON で書き出す">📦 カーネルエクスポート</a>
+      <a class="btn amber" href="{{ url_for('app_share.kernel_import_page') }}" title="カーネルを入れ替える．カーネルの JSON でも全アプリパッケージの JSON でも選べる">📥 カーネル取り込み</a>
       {% else %}
       <a class="btn sky" href="{{ url_for('app_share.package_export', app_name=app_name) }}">📦 エクスポート</a>
       <a class="btn amber" href="{{ url_for('app_share.package_import_page', app=app_name) }}">📥 取り込み（パッケージ）</a>
@@ -195,7 +196,7 @@ code{font-family:Consolas,Monaco,monospace;font-size:.82em;background:#f1f5f9;pa
       <button class="btn amber" onclick="gitPush()">🚀 GitHubへpush</button>
     </div>
     <div id="git-out"></div>
-    <div class="hint" style="margin-top:8px">commit はこのアプリのファイルだけ（fujinp/&lt;app&gt;/ と app_registry.json・registry.py）を関所へ写して行います．他のアプリの未整理な変更は巻き込みません．push は確認してから実行します．</div>
+    <div class="hint" style="margin-top:8px">commit はこのアプリのファイルだけ（fujinp/&lt;app&gt;/ と registry.py．カーネルではホーム直下の .py と追跡中のファイル，templates/，registry.py）を関所へ写して行います．app_registry.json はサイトごとの発行物なので関所には写しません．他のアプリの未整理な変更は巻き込みません．push は確認してから実行します．</div>
   </div>
 
   <!-- 不具合 -->
@@ -527,6 +528,27 @@ function issEdit(id){const i=D.issues.find(x=>x.id===id);const el=document.getEl
 async function issSave(id){try{await POST(API+'/issues/'+id,{title:document.getElementById('ie-t-'+id).value,detail:document.getElementById('ie-d-'+id).value});loadAll()}catch(e){toast(e.message,true)}}
 
 // ---- 初期化 ----
+// ── 作業の段階（2026-10-31）：改修 → 文書 → 版確定 →（エクスポート可）→ commit → push ──
+async function loadStage(){
+  const el=document.getElementById('stage-body');if(!el)return;
+  try{
+    const r=await (await fetch(API+'/stage')).json();
+    if(!r.success){el.innerHTML='';return}
+    const st=r.stage;
+    const COL={done:'#16a34a',current:'#dc2626',todo:'#94a3b8'};
+    const chain=st.steps.map(x=>`<span style="color:${COL[x.state]};font-weight:${x.state==='current'?700:400}">${x.state==='done'?'✔':x.state==='current'?'▶':'○'} ${esc(x.label)}</span>`).join(' <span style="color:#94a3b8">→</span> ');
+    const bg=st.step==='done'?'#f0fdf4':'#fff7ed', bd=st.step==='done'?'#86efac':'#fdba74';
+    let h=`<div style="border:1px solid ${bd};background:${bg};border-radius:8px;padding:10px 12px">`;
+    h+=`<div style="font-size:.85rem">${chain}</div>`;
+    h+=`<div style="margin-top:6px"><b>いまの段階：</b>${esc(st.title)}</div>`;
+    h+=`<div><b>次にすること：</b>${esc(st.next)}</div>`;
+    if(st.reasons&&st.reasons.length)h+=`<div style="font-size:.8rem;color:#64748b;margin-top:4px">${st.reasons.map(esc).join('　／　')}</div>`;
+    if(st.step==='docs')h+=`<div style="margin-top:6px"><a class="btn sky" href="/app_share/package/export/${encodeURIComponent(APP)}">📝 文書の確認画面へ</a></div>`;
+    el.innerHTML=h+'</div>';
+  }catch(e){el.innerHTML=''}
+}
+{const _la=loadAll;loadAll=async function(){const x=await _la.apply(this,arguments);loadStage();return x}}
+{const _gs=gitStatus;gitStatus=async function(){const x=await _gs.apply(this,arguments);loadStage();return x}}
 loadAll().then(()=>{const h=location.hash.replace('#','');const b=document.querySelector(`.tab[data-p="${h}"]`);if(b)b.click()});
 </script>
 </body>

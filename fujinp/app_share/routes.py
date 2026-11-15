@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 App Share (アプシャ) - FUJIN-Pアプリケーション共有システム
@@ -1170,7 +1170,7 @@ def _build_kernel_package(generated_by=None, site_url=None, public=False):
         'export_type': KERNEL_EXPORT_TYPE,
         'format_version': 1,
         'display_name': 'FUJIN-P カーネル',
-        'description': 'プラットフォーム共通部（ホーム直下のコードと templates/）。'
+        'description': 'プラットフォーム共通部（ホーム直下のコード，templates/，static_for_distribution/）。'
                        'アプリは含まない。config.py は同梱せず、設定名のみ config_keys に載せる。',
         'public_download': bool(public),
         'site_name': os.path.basename(SITE_CODE_ROOT),
@@ -1190,7 +1190,8 @@ def _build_kernel_package(generated_by=None, site_url=None, public=False):
         'required_apps': required,
         'warnings': warnings,
         'package_note': (
-            'FUJIN-P カーネルパッケージ。files[]=SITE_CODE_ROOT直下のコードと templates/ '
+            'FUJIN-P カーネルパッケージ。files[]=SITE_CODE_ROOT直下のコードと templates/ と static_for_distribution/'
+            '（配布用静的ファイルの原本。画像などはbase64。取り込み側で static/ にも写す）'
             '（config.py・static・fujinp・アップロード領域は除外）/ '
             'config_keys=config.py が定義している設定名の一覧（値は含まない）/ '
             'config_keys_used=カーネルのコードが実際に参照している設定名'
@@ -1199,7 +1200,7 @@ def _build_kernel_package(generated_by=None, site_url=None, public=False):
             '（app キーがアプリ名。受け入れ側で実在を照合すること）/ '
             'warnings=秘密らしき記述の検出結果（値は含まない）。'
             'static_excluded=配布対象外とした static の件数（投稿データ混在のため一切配らない。'
-            '必要な静的ファイルは admin が手作業で移すこと）。'
+            '配布する静的ファイルは static_for_distribution/ に置けば運ばれる）。'
         ),
     }
 

@@ -22,7 +22,8 @@
 """
 app_share.kernel — カーネルの取り込み（2026-09-23）
 
-カーネルパッケージ（⚙カーネルエクスポートの出力，export_type=fujinp_kernel_package）を
+カーネルパッケージ（export_type=fujinp_kernel_package）か，それを bootstrap.kernel に含む
+全アプリパッケージ（fujinp_apps_overview．2026-10-31 から）を
 読み，ホーム直下のカーネルファイル一式を入れ替える．admin 専用
 （routes.py の before_request が既定で admin 必須にする）．
 
@@ -35,6 +36,12 @@ app_share.kernel — カーネルの取り込み（2026-09-23）
   ・config.py は書かない（パッケージにも入っていない）
 書き込みを止めるのは，.py の構文エラーとパッケージの形の不正だけ
 （壊れたパッケージでサイトが起動しなくなるのを防ぐため）．
+
+static_for_distribution/ の各ファイルは，そのまま書いたうえで static/ の同じ相対位置にも
+上書きで写す（2026-10-31）．static_for_distribution/ は配布する静的ファイル（規約類・
+ファビコンなどの images/）の原本で，static/ はサイトが実際に配信する場所．static/ に
+既にあって原本に無いファイル（投稿物など）には触らない．写した static/ のファイルも
+バックアップと restore.py の対象になる．
 
 パッケージに版（version_id）があれば，正本の _platform 行に写す（2026-09-23）．
 ファイルが手元と同じでも，版が違えば版だけを記録できる．
@@ -75,6 +82,9 @@ NEVER_WRITE = {
 # fujinp/ 直下の __init__.py と registry.py）．パッケージの形の検査で，運用上の制約ではない
 _FUJINP_FILES = ('fujinp/__init__.py', 'fujinp/registry.py')
 _DIR_PREFIXES = ('templates/', 'static_for_distribution/')
+# 配布用静的ファイルの原本と，それを写す配信先（2026-10-31）
+STATIC_SRC = 'static_for_distribution/'
+STATIC_DST = 'static/'
 _HOME_RE = re.compile(r'/home/([A-Za-z0-9_.\-]+)/')
 
 
@@ -151,6 +161,28 @@ def _analyze(pkg):
                                 site_notes.append({'path': rel, 'line': i, 'user': m.group(1)})
         counts[item['status']] += 1
         items.append(item)
+    # 配布用静的ファイル → static/ への写し（2026-10-31）．原本が手元と同じでも，
+    # static/ 側が違えば写す（static_for_distribution/ だけ先に置いてあったサイトなど）
+    static_copies = []
+    for f in files:
+        rel = (f.get('path') or '').strip()
+        if not rel.startswith(STATIC_SRC) or not _safe_rel(rel):
+            continue
+        raw = _file_bytes(f)
+        if raw is None:
+            continue
+        dst = STATIC_DST + rel[len(STATIC_SRC):]
+        lp = os.path.join(ROOT, dst)
+        if not os.path.exists(lp):
+            st = 'new'
+        else:
+            try:
+                with open(lp, 'rb') as fh:
+                    st = 'same' if fh.read() == raw else 'changed'
+            except Exception:
+                st = 'changed'
+        if st != 'same':
+            static_copies.append({'path': dst, 'from': rel, 'status': st})
     # 設定：カーネルのコードが参照するのに，このサイトの config.py に無い名前
     missing_keys = [k for k in (pkg.get('config_keys_used') or []) if not hasattr(Config, k)]
     # app.py が登録する Blueprint の由来が手元にあるか（パッケージ内のファイルも数える）
@@ -179,7 +211,9 @@ def _analyze(pkg):
         'site_notes': site_notes[:50],
         'missing_config_keys': missing_keys,
         'missing_apps': missing_apps,
-        'can_apply': not syntax_errors and ((counts['new'] + counts['changed']) > 0 or version_differs),
+        'static_copies': static_copies,
+        'can_apply': not syntax_errors and ((counts['new'] + counts['changed']) > 0
+                                            or bool(static_copies) or version_differs),
         'version': {'package': pkg_ver, 'package_confirmed_at': pkg.get('version_confirmed_at'),
                     'package_confirmed_by': pkg.get('version_confirmed_by'),
                     'local': local_ver.get('version_id'), 'differs': version_differs},
@@ -263,6 +297,9 @@ def _record_version(pkg):
 def _load_pkg():
     body = request.get_json(silent=True) or {}
     pkg = body.get('package') if isinstance(body.get('package'), dict) else body
+    # 全アプリパッケージ（fujinp_apps_overview）を選んだときは，その bootstrap.kernel を使う（2026-10-31）
+    if isinstance(pkg, dict) and pkg.get('export_type') == 'fujinp_apps_overview':
+        pkg = (pkg.get('bootstrap') or {}).get('kernel')
     if not isinstance(pkg, dict) or pkg.get('export_type') != KERNEL_TYPE:
         return None, body
     return pkg, body
@@ -279,7 +316,7 @@ def kernel_import_page():
 def kernel_check():
     pkg, _ = _load_pkg()
     if pkg is None:
-        return _m._err('FUJIN-P のカーネルパッケージではありません（export_type）')
+        return _m._err('FUJIN-P のカーネルパッケージでも，カーネルを含む全アプリパッケージでもありません')
     return _m._ok(result=_analyze(pkg))
 
 
@@ -294,13 +331,14 @@ def kernel_apply():
         return _m._err('構文エラーのある .py が含まれているため，何も書き込みませんでした', 400)
     by_path = {f.get('path'): f for f in pkg.get('files') or []}
     targets = [i['path'] for i in res['files'] if i['status'] in ('new', 'changed')]
-    if not targets:
+    copies = res.get('static_copies') or []
+    if not targets and not copies:
         vid = _record_version(pkg) if res['version']['differs'] else None
         msg = '手元と同じでした．書き込みはありません'
         if vid:
             msg = f'ファイルは手元と同じでした．版 {vid} を記録しました'
         return _m._ok(result={'written': 0, 'message': msg, 'version_recorded': vid})
-    bdir, script = _backup(targets)
+    bdir, script = _backup(targets + [c['path'] for c in copies])
     written, errors = [], []
     for rel in targets:
         raw = _file_bytes(by_path[rel])
@@ -314,12 +352,27 @@ def kernel_apply():
             written.append(rel)
         except Exception as e:
             errors.append(f'{rel}: {e}')
+    # 配布用静的ファイルを static/ へ写す（上書き．原本に無い static/ のファイルには触らない）
+    static_written = []
+    for c in copies:
+        raw = _file_bytes(by_path[c['from']])
+        lp = os.path.join(ROOT, c['path'])
+        try:
+            os.makedirs(os.path.dirname(lp), exist_ok=True)
+            tmp = lp + '.kernel_tmp'
+            with open(tmp, 'wb') as fh:
+                fh.write(raw)
+            os.replace(tmp, lp)
+            static_written.append(c['path'])
+        except Exception as e:
+            errors.append(f"{c['path']}: {e}")
     try:
         vid = _record_version(pkg)
     except Exception as e:
         vid = None
         errors.append(f'版の記録: {e}')
-    result = {'written': len(written), 'written_files': written, 'errors': errors,
+    result = {'written': len(written) + len(static_written), 'written_files': written,
+              'static_written': static_written, 'errors': errors,
               'version_recorded': vid,
               'backup_dir': bdir, 'restore_command': f'python3 {script}',
               'missing_config_keys': res['missing_config_keys'], 'missing_apps': res['missing_apps']}

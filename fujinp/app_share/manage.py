@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 app_share.manage — アプリ正本の管理画面（段階6a）
@@ -1394,6 +1394,121 @@ def api_reload():
 # 一覧用の要約
 # ============================================================
 
+
+
+# ============================================================
+# 作業の段階（2026-10-31）
+# ============================================================
+# 改修 → 文書 → 版確定 →（エクスポート可）→ commit → push の流れのどこにいるかと，次にすること．
+#   文書   … マニュアルと仕様書がいまのコードと一致しているか（エクスポートの確認画面と同じ指紋の判定）
+#   版     … 版が確定していて，確定したときのファイル構成（版IDの末尾6桁）といまが同じか
+#   commit … 稼働ツリーと関所に差が無いか（一覧の「要commit」と同じ判定）
+#   push   … このアプリのファイルに触れた未 push の commit が無いか
+# 前の段が済んでいなければ，後ろの段は見ない（前の段から順に片づける）．
+STAGE_STEPS = (('docs', '文書'), ('version', '版確定'), ('export', 'エクスポート可'),
+               ('commit', 'commit'), ('push', 'push'))
+_VER_RE = re.compile(r'^v\d{8}\.\d{6}-([0-9a-f]{6})$')
+_DOC_STATE_JA = {'missing': '未登録', 'unchecked': '未照合', 'changed': 'コードが変わっています', 'match': '一致'}
+
+
+def stage_for(cur, app_name, row, git_entry=None, unpushed=None, skew=None, repo_ok=None):
+    """1アプリの段階．戻り値 dict(step, title, next, reasons[], exportable, steps[], …)"""
+    from . import package as _p
+    reasons = []
+    st = _p._doc_status(cur, app_name, skew=skew)
+    docs_ok = not st['any_stale']
+    doc_states = {k: st['docs'][k].get('state') for k in ('manual', 'spec')}
+    if not docs_ok:
+        for k, ja in (('manual', 'マニュアル'), ('spec', '仕様書')):
+            stt = doc_states.get(k)
+            if stt != 'match':
+                reasons.append(f'{ja}：{_DOC_STATE_JA.get(stt, stt or "?")}')
+        n = len(st['diff']['added']) + len(st['diff']['removed']) + len(st['diff']['changed'])
+        if n:
+            reasons.append(f'文書を書いた後に変わったファイル {n} 本')
+    vid = (row or {}).get('version_id')
+    cur_hash = _content_hash6(app_name)
+    m = _VER_RE.match(vid or '')
+    if not vid:
+        ver_ok, ver_note = False, '版が未確定'
+    elif not m:
+        ver_ok, ver_note = True, None          # 形式の違う古い版IDは比べない（擬陽性を出さない）
+    else:
+        ver_ok = (m.group(1) == cur_hash)
+        ver_note = None if ver_ok else f'版を確定した後にファイルが変わった（版 {m.group(1)}／いま {cur_hash}）'
+    if repo_ok is None:
+        from . import gitsync as _g
+        repo_ok = _g._repo_ok()
+    g = git_entry if (git_entry and not git_entry.get('error')) else None
+    needs_commit = bool(repo_ok and g and g.get('needs_commit'))
+    n_unpushed = int((unpushed or {}).get(app_name, 0)) if repo_ok else 0
+    if not docs_ok:
+        step = 'docs'
+        title = '改修中／文書待ち'
+        nxt = '改修が終わったら，📦 エクスポートの確認画面でマニュアルと仕様書を作成する（コードを変えていなければ「照合済み」で記録する）'
+    elif not ver_ok:
+        step = 'version'
+        title = '版確定待ち'
+        nxt = '🛠 管理の版タブで「🏷 版確定」を押す'
+        reasons.append(ver_note)
+    elif needs_commit:
+        step = 'commit'
+        title = 'commit待ち（エクスポート可）'
+        nxt = '🛠 管理の版タブで「⬆ GitHubへcommit」を押す'
+        reasons.append('関所との差：変更 {}・新規 {}・削除 {}'.format(
+            len(g.get('changed') or []) if isinstance(g.get('changed'), list) else g.get('changed', 0),
+            len(g.get('added') or []) if isinstance(g.get('added'), list) else g.get('added', 0),
+            len(g.get('deleted') or []) if isinstance(g.get('deleted'), list) else g.get('deleted', 0)))
+    elif n_unpushed:
+        step = 'push'
+        title = 'push待ち（エクスポート可）'
+        nxt = '「🚀 push」を押す（一覧画面の見出しか，版タブ）'
+        reasons.append(f'このアプリに触れた未 push の commit {n_unpushed} 件')
+    else:
+        step = 'done'
+        title = '完了（エクスポート可）'
+        nxt = 'なし．次に改修したら，文書作成から'
+        if not repo_ok:
+            reasons.append('関所が無いので commit・push の段は見ていない')
+    order = [k for k, _ in STAGE_STEPS]
+    cur_i = order.index('commit') if step == 'commit' else (order.index(step) if step in order else len(order))
+    steps = []
+    for i, (k, label) in enumerate(STAGE_STEPS):
+        if k == 'export':
+            state = 'done' if (docs_ok and ver_ok) else 'todo'
+        elif step == 'done' or i < cur_i:
+            state = 'done'
+        elif i == cur_i:
+            state = 'current'
+        else:
+            state = 'todo'
+        steps.append({'key': k, 'label': label, 'state': state})
+    return {'step': step, 'title': title, 'next': nxt, 'reasons': [r for r in reasons if r],
+            'exportable': bool(docs_ok and ver_ok), 'steps': steps,
+            'docs': doc_states, 'judged_by': st.get('judged_by'),
+            'version': {'id': vid, 'ok': ver_ok, 'current_hash': cur_hash},
+            'git': {'repo_ok': bool(repo_ok), 'needs_commit': needs_commit, 'unpushed': n_unpushed}}
+
+
+@app_share_bp.route('/api/app/<app_name>/stage')
+@login_required
+def api_app_stage(app_name):
+    if not _valid_app(app_name):
+        return _err('アプリ名が不正です')
+    from . import gitsync as _g
+    from . import package as _p
+    repo_ok = _g._repo_ok()
+    with _db() as (cur, conn):
+        row = _load_registry_row(cur, app_name)
+        if not row:
+            return _err('レジストリにありません', 404)
+        git_entry = _g._diff_for(app_name) if repo_ok else None
+        res = stage_for(cur, app_name, row, git_entry=git_entry,
+                        unpushed=_g.unpushed_by_app([app_name]) if repo_ok else {},
+                        skew=_p._db_clock_skew(cur), repo_ok=repo_ok)
+    return _ok(stage=res)
+
+
 @app_share_bp.route('/api/summary')
 @login_required
 def api_summary():
@@ -1408,7 +1523,19 @@ def api_summary():
     rt = _runtime_blueprints()
     reg = {a['app_name']: a for a in _reg.load_registry().get('apps', [])}
     from . import gitsync
+    from . import package as _p
     git = gitsync.git_summary_all([r['app_name'] for r in rows])
+    repo_ok = gitsync._repo_ok()
+    unpushed = gitsync.unpushed_by_app([r['app_name'] for r in rows]) if repo_ok else {}
+    stages = {}
+    with _db() as (cur, conn):
+        skew = _p._db_clock_skew(cur)
+        for r in rows:
+            try:
+                stages[r['app_name']] = stage_for(cur, r['app_name'], r, git_entry=git.get(r['app_name']),
+                                                  unpushed=unpushed, skew=skew, repo_ok=repo_ok)
+            except Exception as e:
+                stages[r['app_name']] = {'error': str(e)}
     apps = {}
     for r in rows:
         a = reg.get(r['app_name'], {})
@@ -1420,6 +1547,7 @@ def api_summary():
             'git_commit': r['git_commit'],
             'git_committed_at': _fmt(r['git_committed_at']),
             'git': git.get(r['app_name']),
+            'stage': stages.get(r['app_name']),
         }
     return _ok(apps=apps, stale=stale, repo_ok=gitsync._repo_ok())
 

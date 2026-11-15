@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 app_share.gitsync — 関所（ローカル git リポジトリ）への写しと GitHub 連携（段階6b）
@@ -69,8 +69,17 @@ ROOT_EXCLUDE_FILES = {'app_info.json', 'version.json', 'manifest.json'}
 EXCLUDE_DIRS = {'static', '__pycache__', 'import_staging', 'import_backups', '.git'}
 MAX_FILE = 5 * 1024 * 1024
 
-# 稼働ツリー（fujinp/ 配下）と関所（fujinp/ 配下）で常に一緒に写すカーネル側ファイル
-KERNEL_FUJINP_FILES = ('registry.py', 'app_registry.json')
+# fujinp/ の下でカーネルが受け持つファイル（アプリの commit でも一緒に写す）．
+# app_registry.json はサイトごとの発行物で，発行のたびに書き直される（generated_at も変わる）ので，
+# 関所の対象にしない（2026-10-31．発行のたびに「要commit」が出る擬陽性をなくす）
+KERNEL_FUJINP_FILES = ('__init__.py', 'registry.py')
+# 関所から外す（追跡をやめる）ファイル．次のカーネルの commit で git rm する
+KERNEL_UNTRACK = ('fujinp/app_registry.json',)
+# カーネルの対象にするホーム直下のディレクトリ（配下を全部）
+KERNEL_DIRS = ('templates',)
+# ホーム直下で対象にしないファイル（秘密情報・関所の設定）
+KERNEL_ROOT_SKIP = {'config.py', '.gitignore'}
+KERNEL_ROOT_SKIP_PREFIXES = ('client_secret', 'credentials', 'service_account')
 PLATFORM_ROW = _m.PLATFORM_ROW
 
 
@@ -190,24 +199,74 @@ def _repo_tracked(prefix):
     return set(l.strip() for l in out.splitlines() if l.strip())
 
 
+def _kernel_site_files():
+    """カーネルの写しの対象 {関所ルート基準の相対パス: 稼働側の絶対パス}（2026-10-31）．
+      ・ホーム直下の .py 全部（config.py，ドットで始まる名前，資格情報ファイルの名前を除く）．
+        カーネルの版のハッシュ・カーネルの書き出しと同じ範囲で，新しく足した .py も漏れない
+      ・ホーム直下の .py 以外は，関所で追跡中のものだけ（README.md・requirements.txt など）．
+        一度きりの .sql や作業メモの .txt が勝手に GitHub に載らないようにする
+      ・templates/ の配下全部（__pycache__・ドットで始まる名前・.pyc を除く）
+      ・fujinp/ の __init__.py と registry.py（app_registry.json は対象外）"""
+    tracked_root = {t for t in _repo_tracked('.') if '/' not in t}
+    site = {}
+    for name in os.listdir(SITE_CODE_ROOT):
+        p = os.path.join(SITE_CODE_ROOT, name)
+        if not os.path.isfile(p):
+            continue
+        if name.startswith('.') or name in KERNEL_ROOT_SKIP or name.startswith(KERNEL_ROOT_SKIP_PREFIXES):
+            continue
+        if not (name.endswith('.py') or name in tracked_root):
+            continue
+        try:
+            if os.path.getsize(p) <= MAX_FILE:
+                site[name] = p
+        except OSError:
+            pass
+    for d in KERNEL_DIRS:
+        droot = os.path.join(SITE_CODE_ROOT, d)
+        if not os.path.isdir(droot):
+            continue
+        for root, dirs, files in os.walk(droot):
+            dirs[:] = [x for x in dirs if x != '__pycache__' and not x.startswith('.')]
+            for fn in files:
+                if fn.startswith('.') or fn.endswith('.pyc'):
+                    continue
+                p = os.path.join(root, fn)
+                try:
+                    if os.path.getsize(p) <= MAX_FILE:
+                        site[os.path.relpath(p, SITE_CODE_ROOT).replace(os.sep, '/')] = p
+                except OSError:
+                    pass
+    for kf in KERNEL_FUJINP_FILES:
+        p = os.path.join(BASE_DIR, kf)
+        if os.path.isfile(p):
+            site['fujinp/' + kf] = p
+    return site
+
+
+def _kernel_removed(site):
+    """関所で追跡中だが，カーネルとしてはもう写さないもの（commit で git rm する）．
+      ・KERNEL_UNTRACK（app_registry.json）
+      ・templates/ と fujinp/ のカーネル2件のうち，稼働側から消えたもの
+    ホーム直下の追跡ファイルは，稼働側に無くても消さない（LICENSE など関所にだけ置くものがあるため）"""
+    out = []
+    for t in sorted(_repo_tracked('.')):
+        if t in site:
+            continue
+        if t in KERNEL_UNTRACK:
+            out.append(t)
+            continue
+        top = t.split('/')[0] if '/' in t else ''
+        in_scope = top in KERNEL_DIRS or t in tuple('fujinp/' + kf for kf in KERNEL_FUJINP_FILES)
+        if in_scope and not os.path.exists(os.path.join(SITE_CODE_ROOT, t)):
+            out.append(t)
+    return out
+
+
 def _scope_for(app_name):
     """(稼働側 {rel: abs}, 関所側 prefix, 関所側の相対パスに変換する関数)"""
     if app_name == PLATFORM_ROW:
-        # カーネル：関所ルート直下で追跡中のファイル（fujinp/・dist/・static/ を除く）＋ fujinp の2件
-        tracked = [t for t in _repo_tracked('.')
-                   if '/' not in t.rstrip('/') and t not in ('.gitignore',)]
-        site = {}
-        for t in tracked:
-            p = os.path.join(SITE_CODE_ROOT, t)
-            if t in ('config.py',):
-                continue
-            if os.path.isfile(p):
-                site[t] = p
-        for kf in KERNEL_FUJINP_FILES:
-            p = os.path.join(BASE_DIR, kf)
-            if os.path.isfile(p):
-                site['fujinp/' + kf] = p
-        return site, None, (lambda rel: rel)
+        return _kernel_site_files(), None, (lambda rel: rel)
     site = _site_app_files(app_name)
     prefix = f'fujinp/{app_name}/'
     return site, prefix, (lambda rel: prefix + rel)
@@ -240,6 +299,8 @@ def _diff_for(app_name):
         else:
             same.append(rel)
     outside = []
+    if app_name == PLATFORM_ROW:
+        deleted = _kernel_removed(site)
     if prefix:
         tracked = _repo_tracked(prefix)
         site_repo_paths = set(to_repo(r) for r in site)
@@ -289,6 +350,14 @@ def _copy_scope(app_name):
                 f.write(raw)
             written.append(to_repo(rel))
     removed = []
+    if app_name == PLATFORM_ROW:
+        for t in _kernel_removed(site):
+            _git(['rm', '-q', '--cached', '--', t])
+            try:
+                os.remove(os.path.join(rd, t))
+            except OSError:
+                pass
+            removed.append(t)
     if prefix:
         for rel in _diff_for(app_name)['deleted']:
             t = prefix + rel
@@ -381,7 +450,11 @@ def api_git_commit(app_name):
     if rc != 0:
         return _m._ok(committed=False, steps=steps, written=written, removed=removed,
                       error='git add に失敗')
-    rc, staged, _ = _git(['diff', '--cached', '--name-status', '--'] + add_paths)
+    # カーネルで git rm したものは add の対象外（もう無い）なので，差の確認と commit のパスに足す
+    commit_paths = list(add_paths)
+    if app_name == PLATFORM_ROW:
+        commit_paths += [r for r in removed if r not in commit_paths]
+    rc, staged, _ = _git(['diff', '--cached', '--name-status', '--'] + commit_paths)
     staged_lines = [l for l in staged.splitlines() if l.strip()]
     if not staged_lines:
         return _m._ok(committed=False, steps=steps, written=written, removed=removed,
@@ -393,9 +466,9 @@ def api_git_commit(app_name):
     args = ['commit', '-q', '-m', title]
     if body:
         args += ['-m', body]
-    args += ['--'] + add_paths
+    args += ['--'] + commit_paths
     rc, out, err = _git(args, env_extra=_author_env())
-    steps.append({'cmd': 'git commit -m "%s"%s -- %s' % (title, ' -m "<known issues>"' if body else '', ' '.join(add_paths)),
+    steps.append({'cmd': 'git commit -m "%s"%s -- %s' % (title, ' -m "<known issues>"' if body else '', ' '.join(commit_paths)),
                   'rc': rc, 'out': (out + err).strip()})
     if rc != 0:
         return _m._ok(committed=False, steps=steps, written=written, removed=removed, error='git commit に失敗')
@@ -445,6 +518,37 @@ def api_git_push():
 # ============================================================
 # 一覧用：全アプリの要 commit 状態（api/summary に合成）
 # ============================================================
+
+def unpushed_by_app(app_names):
+    """未 push の commit（origin/<branch>..HEAD）を，触れたファイルからアプリごとに数える（2026-10-31）．
+    fujinp/<app>/ の下はそのアプリ，それ以外（ホーム直下・templates/・fujinp/registry.py）はカーネル．
+    戻り値 {app_name: 件数}．関所が無い・origin が無いときは {}"""
+    out = {}
+    if not _repo_ok():
+        return out
+    rc, branch, _ = _git(['rev-parse', '--abbrev-ref', 'HEAD'])
+    if rc != 0:
+        return out
+    rc, log, _ = _git(['log', '--format=@@%H', '--name-only', 'origin/' + branch.strip() + '..HEAD'])
+    if rc != 0:
+        return out
+    names = set(app_names)
+    cur, seen = None, set()
+    for line in log.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith('@@'):
+            cur = line[2:]
+            continue
+        parts = line.split('/')
+        app = parts[1] if (len(parts) >= 3 and parts[0] == 'fujinp' and parts[1] in names) else PLATFORM_ROW
+        if (app, cur) in seen:
+            continue
+        seen.add((app, cur))
+        out[app] = out.get(app, 0) + 1
+    return out
+
 
 def git_summary_all(app_names):
     """{app_name: {'needs_commit', 'last_change', 'changed', 'added', 'deleted'}}"""
