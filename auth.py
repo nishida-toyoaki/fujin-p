@@ -28,9 +28,71 @@ from db import get_db_cursor
 from decorators import login_required
 from app import oauth
 from utils import create_password_reset_token, send_password_reset_email, hash_password, verify_password
+try:
+    from utils import hash_reset_token
+except ImportError:          # 古い utils.py のとき（DB に元のトークンを置く旧方式）
+    def hash_reset_token(token):
+        return token
 
 
 auth_bp = Blueprint('auth', __name__)
+
+
+# ── 規約類の表示（2026-10-31）──
+# 規約類の原本は static_for_distribution/ の .html で，組織名などは {{ORGANIZATION}} の形の
+# 記号で書いてある（どのサイトにも同じ雛形を配るため）．/terms/<name> で開くと，記号を
+# このサイトの config.py の値に置き換えて返す．置き換えるのは TERMS_PLACEHOLDER_KEYS に
+# 挙げた名前だけ（config.py のほかの値，とくに秘密情報が記号経由で漏れないようにする）．
+# config.py に値が無い記号はそのまま残す（設定漏れが画面で見える）．
+# 原本が無いサイトでは static/ の同名ファイルを使う．ログインは要らない．
+import os as _os
+import re as _re
+import html as _html
+from flask import Response, abort
+
+TERMS_PLACEHOLDER_KEYS = ('ORGANIZATION', 'ORGANIZATION_EN')
+_TERMS_NAME_RE = _re.compile(r'^[A-Za-z0-9_\-]+$')
+_TERMS_TOKEN_RE = _re.compile(r'\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}')
+_SITE_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+_TERMS_DIRS = ('static_for_distribution', 'static')
+
+
+def _terms_value(key):
+    v = getattr(Config, key, None)
+    if v is None:
+        return None
+    v = str(v).strip()
+    if not v or v.startswith('<YOUR_'):
+        return None
+    return v
+
+
+def render_terms_text(text):
+    """規約類の本文の記号を config.py の値に置き換える（ほかのアプリからも使える）"""
+    def _sub(m):
+        key = m.group(1)
+        if key.upper() not in TERMS_PLACEHOLDER_KEYS:
+            return m.group(0)
+        v = _terms_value(key.upper())
+        return _html.escape(v, quote=True) if v is not None else m.group(0)
+    return _TERMS_TOKEN_RE.sub(_sub, text)
+
+
+@auth_bp.route('/terms/<name>')
+def terms_page(name):
+    """規約類を組織名入りで表示する（例：/terms/alliance_regulation）"""
+    if name.endswith('.html'):
+        name = name[:-5]
+    if not _TERMS_NAME_RE.match(name):
+        abort(404)
+    for d in _TERMS_DIRS:
+        p = _os.path.join(_SITE_ROOT, d, name + '.html')
+        if _os.path.isfile(p):
+            with open(p, encoding='utf-8') as fh:
+                text = fh.read()
+            return Response(render_terms_text(text), mimetype='text/html')
+    abort(404)
+
 
 def record_user_event(user_id, event_type, event_data=None):
     """ユーザイベントを記録"""
@@ -49,12 +111,62 @@ def record_user_event(user_id, event_type, event_data=None):
         """, (user_id, event_type, event_data_json, jst_now, ip_address))
         conn.commit()
 
+# ── ログインの守り（2026-10-26，脆弱性点検 §7）──
+LOGIN_FAIL_LIMIT = 10          # この回数を超えて失敗したら
+LOGIN_FAIL_WINDOW_MIN = 15     # この分数のあいだ，そのアカウントのパスワードログインを止める
+NAME_MAX = 100
+AFFILIATION_MAX = 200
+
+
+def safe_next_url(next_url):
+    """ログイン後の戻り先として使える，このサイトの中のパスだけを返す（だめなら None）．
+    /\\evil.com や https:evil.com のように，ブラウザが外部サイトと読む書き方を通さない"""
+    if not next_url:
+        return None
+    u = str(next_url).strip()
+    if '\\' in u or any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in u):
+        return None
+    if u.startswith(('http://', 'https://')):
+        # このサイトのホスト名の URL なら，パス以降だけを使う
+        from urllib.parse import urlsplit
+        p = urlsplit(u)
+        if p.netloc.lower() != (request.host or '').lower():
+            return None
+        u = (p.path or '/') + ('?' + p.query if p.query else '')
+    if not u.startswith('/') or u.startswith('//'):
+        return None
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in u):
+        return None
+    return u
+
+
+def _client_ip():
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.headers.get('X-Real-IP') or request.remote_addr
+
+
+def _recent_login_failures(user_id):
+    from datetime import timedelta
+    since = (datetime.now(Config.JST) - timedelta(minutes=LOGIN_FAIL_WINDOW_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT COUNT(*) AS n FROM user_events
+            WHERE user_id = %s AND event_type = 'login_failed' AND occurred_at > %s
+        """, (user_id, since))
+        r = cursor.fetchone() or {}
+        return int(r.get('n') or 0)
+
+
 def set_user_session(user):
-    """ユーザーセッションを設定"""
+    """ユーザーセッションを設定．前の人のセッションの残り（アプリが覚えた権限の写しなど）を消してから入れる"""
+    session.clear()
     session['user_id'] = user['id']
     session['user_email'] = user['email']
     session['user_name'] = user['full_name']
     session['user_category'] = user['category']
+    session['login_at'] = datetime.now(Config.JST).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def is_blacklisted(email):
@@ -161,29 +273,30 @@ def login():
             """, (email,))
             user = cursor.fetchone()
 
-            if not user:
-                flash('メールアドレスまたはパスワードが正しくありません', 'error')
+            if not user or not user['password_hash']:
+                # アカウントの有無・Google 専用かどうかは知らせない（存在の探り出しを防ぐ）
+                flash('メールアドレスまたはパスワードが正しくありません．'
+                      '大学の Google アカウントの方は「Google でログイン」をお使いください', 'error')
                 return render_template('login.html')
 
-            if not user['password_hash']:
-                flash('このアカウントはGoogle認証専用です', 'error')
+            if _recent_login_failures(user['id']) >= LOGIN_FAIL_LIMIT:
+                flash(f'ログインの失敗が続いたため，このアカウントは {LOGIN_FAIL_WINDOW_MIN} 分間ログインできません．'
+                      '時間をおいてやり直すか，パスワードを再設定してください', 'error')
                 return render_template('login.html')
 
             if not verify_password(password, user['password_hash']):
-                flash('メールアドレスまたはパスワードが正しくありません', 'error')
+                record_user_event(user['id'], 'login_failed', {'method': 'password', 'ip': _client_ip()})
+                flash('メールアドレスまたはパスワードが正しくありません．'
+                      '大学の Google アカウントの方は「Google でログイン」をお使いください', 'error')
                 return render_template('login.html')
 
             # ログイン成功
             set_user_session(user)
             record_user_event(user['id'], 'login', {'method': 'password'})
 
-            next_url = request.args.get('next') or request.form.get('next')
+            next_url = safe_next_url(request.args.get('next') or request.form.get('next'))
             if next_url:
-                # オープンリダイレクト対策：自ドメインのみ許可
-                from urllib.parse import urlparse
-                parsed = urlparse(next_url)
-                if not parsed.netloc or parsed.netloc == request.host:
-                    return redirect(next_url)
+                return redirect(next_url)
 
             return redirect_to_dashboard()
 
@@ -196,7 +309,7 @@ def google_login():
     session['google_auth_nonce'] = nonce
 
     # ★ next を保存（OAuthリダイレクト中にURLパラメータが消えるため）
-    next_url = request.args.get('next')
+    next_url = safe_next_url(request.args.get('next'))
     if next_url:
         session['login_next_url'] = next_url
 
@@ -213,6 +326,11 @@ def google_callback():
 
         if not userinfo or not userinfo.get('email'):
             flash('Google認証に失敗しました', 'error')
+            return redirect(url_for('auth.login'))
+
+        # Google が確認済みとしたメールアドレスだけを信じる（未確認のアドレスで他人になりすまさせない）
+        if userinfo.get('email_verified') is not True:
+            flash('Google アカウントのメールアドレスが確認済みではありません', 'error')
             return redirect(url_for('auth.login'))
 
         email = userinfo['email']
@@ -232,17 +350,13 @@ def google_callback():
             user = cursor.fetchone()
 
             if user:
-                # 既存ユーザー：ログイン成功
+                # 既存ユーザー：ログイン成功（set_user_session がセッションを消すので，戻り先は先に取り出す）
+                next_url = safe_next_url(session.pop('login_next_url', None))
                 set_user_session(user)
                 record_user_event(user['id'], 'login', {'method': 'google'})
 
-                # ★ next_url があればそちらへ
-                next_url = session.pop('login_next_url', None)
                 if next_url:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(next_url)
-                    if not parsed.netloc or parsed.netloc == request.host:
-                        return redirect(next_url)
+                    return redirect(next_url)
 
                 return redirect_to_dashboard()
 
@@ -270,7 +384,7 @@ def google_callback():
                     print(f"承認済みユーザー処理エラー: {str(e)}")
                     import traceback
                     traceback.print_exc()
-                    flash(f'エラーが発生しました: {str(e)}', 'error')
+                    flash('エラーが発生しました．管理者にお問い合わせください', 'error')
                     return redirect(url_for('auth.login'))
 
             # 3. 新規ユーザー：外部登録申請（承認制）へ一本化
@@ -285,7 +399,7 @@ def google_callback():
         print(f"Google認証エラー: {str(e)}")
         import traceback
         traceback.print_exc()
-        flash(f'認証エラー: {str(e)}', 'error')
+        flash('Google 認証でエラーが発生しました．もう一度お試しください', 'error')
         return redirect(url_for('auth.login'))
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -329,7 +443,7 @@ def forgot_password():
                     print(f"メール送信エラー: {str(e)}")
                     import traceback
                     traceback.print_exc()
-                    flash(f'メール送信エラー: {str(e)}', 'error')
+                    flash('メールを送れませんでした．管理者にお問い合わせください', 'error')
                     return render_template('forgot_password.html')
 
             # 2. 承認済みユーザーテーブルチェック
@@ -356,7 +470,7 @@ def forgot_password():
                     print(f"承認済みユーザー処理エラー: {str(e)}")
                     import traceback
                     traceback.print_exc()
-                    flash(f'エラーが発生しました: {str(e)}', 'error')
+                    flash('エラーが発生しました．管理者にお問い合わせください', 'error')
                     return render_template('forgot_password.html')
 
             # 3. 新規ユーザー：外部登録申請（承認制）へ一本化
@@ -389,11 +503,14 @@ def register_external():
         return redirect(url_for('auth.forgot_password'))
 
     if request.method == 'POST':
-        full_name = request.form.get('full_name')
-        affiliation = request.form.get('affiliation')
+        full_name = (request.form.get('full_name') or '').strip()
+        affiliation = (request.form.get('affiliation') or '').strip()
 
         if not full_name or not affiliation:
             flash('すべての項目を入力してください', 'error')
+            return render_template('register_external.html', email=email)
+        if len(full_name) > NAME_MAX or len(affiliation) > AFFILIATION_MAX:
+            flash(f'氏名は{NAME_MAX}文字，所属は{AFFILIATION_MAX}文字までにしてください', 'error')
             return render_template('register_external.html', email=email)
 
         try:
@@ -416,7 +533,7 @@ def register_external():
             print(f"外部登録申請エラー: {str(e)}")
             import traceback
             traceback.print_exc()
-            flash(f'エラーが発生しました: {str(e)}', 'error')
+            flash('エラーが発生しました．管理者にお問い合わせください', 'error')
             return render_template('register_external.html', email=email)
 
     return render_template('register_external.html', email=email)
@@ -430,7 +547,7 @@ def reset_password(token):
         cursor.execute("""
             SELECT user_id FROM password_reset_tokens
             WHERE token = %s AND expires_at > %s AND used = FALSE
-        """, (token, jst_now))
+        """, (hash_reset_token(token), jst_now))
         token_data = cursor.fetchone()
 
         if not token_data:
@@ -448,8 +565,8 @@ def reset_password(token):
             return redirect(url_for('auth.login'))
 
         if request.method == 'POST':
-            password = request.form.get('password')
-            password_confirm = request.form.get('password_confirm')
+            password = request.form.get('password') or ''
+            password_confirm = request.form.get('password_confirm') or ''
 
             if password != password_confirm:
                 flash('パスワードが一致しません', 'error')
@@ -464,9 +581,10 @@ def reset_password(token):
                 UPDATE users SET password_hash = %s WHERE id = %s
             """, (password_hash, token_data['user_id']))
 
+            # この人の未使用のトークンをすべて無効にする（古いメールのリンクも使えなくする）
             cursor.execute("""
-                UPDATE password_reset_tokens SET used = TRUE WHERE token = %s
-            """, (token,))
+                UPDATE password_reset_tokens SET used = TRUE WHERE user_id = %s AND used = FALSE
+            """, (token_data['user_id'],))
 
             conn.commit()
 

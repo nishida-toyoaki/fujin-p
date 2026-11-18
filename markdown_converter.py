@@ -19,17 +19,361 @@
 #
 # Source: https://github.com/nishida-toyoaki/fujin-p
 
+# 2026-10-25 セキュリティ改修（C-1）
+#   Markdown 本文中の ```sql および ```sql_md_texts ブロックを DB で実行する機能を撤去した．
+#   旧版は「開いた人が admin なら実行」「sql_md_texts は区分を問わず実行」だったため，
+#   他人が書いた本文を admin が開く，あるいは公開ページを誰かが開くだけで任意の SQL が走った．
+#   以後，```sql は他の言語名と同じ単なるコードブロックとして表示する．
+#   引数 user_category は呼び出し側との互換のために残すが，描画結果には影響しない．
+#   DB 接続（mysql.connector / DatabaseConfig）はこのモジュールから無くなった．
+#
+# 2026-10-26 セキュリティ改修（R-1）
+#   変換結果の HTML を許可リスト方式で無害化する（sanitize_html）．本文中の生の HTML
+#   （<script>，<img onerror=…>，javascript: リンク，SVG 内のスクリプト等）は取り除かれる．
+#   mermaid ブロックの中身は文字として埋め込み，mermaid の securityLevel を strict にした．
+#
+# 2026-10-26 セキュリティ改修（R-2）
+#   アップロードされた SVG ファイルの無害化 sanitize_svg_bytes を加えた（コレポ・マイノート・えふえふが使う）．
+#
+# 2026-11-09 無害化の不具合修正
+#   <meta charset="utf-8"> のように閉じタグを持たない meta・link・base を「中身ごと捨てる」扱いにしていたため，
+#   捨てる状態が解けず，それ以降の本文がすべて消えていた（HTML 文書を丸ごと貼ったノートやコレポの統合レポートが白紙になる）．
+#   これらは単独のタグとして捨てるだけにした．あわせて <style> は，url( ・@import・expression 等の危険な記述と
+#   「<」を含まないものに限って残すことにした（文書を丸ごと貼ったときの見た目を保つため）．
+
 from flask import Blueprint, request, render_template, jsonify, session, redirect, url_for, flash
 from auth import login_required
-import mysql.connector
 import markdown
 import re
 import os
 import logging
-# from db import base_db_config, default_db_config
-from config import Config
-from db import DatabaseConfig, Tables
 
+
+# ────────────────────────────────────────────────────────────
+# HTML サニタイザ（2026-10-26 セキュリティ改修 R-1）
+#   Markdown から作った HTML を，許可リストにあるタグ・属性だけに絞る．
+#   本文に書かれた <script>，<img onerror=…>，javascript: リンク，SVG の中のスクリプト等を
+#   取り除き，他人の書いた本文を開いた人のブラウザでスクリプトが動かないようにする．
+#   外部ライブラリ（bleach 等）に頼らず Python 標準の html.parser で組んである
+#   （カーネルの部品が import に失敗すると全アプリが止まるため）．
+#   他のアプリからも sanitize_html(html_text) として使える．
+# ────────────────────────────────────────────────────────────
+from html.parser import HTMLParser as _HTMLParser
+import html as _html
+
+# 中身ごと捨てるタグ
+_SAN_DROP_CONTENT = {
+    'script', 'style', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
+    'noscript', 'noembed', 'noframes', 'template', 'textarea', 'xmp', 'plaintext',
+    'foreignobject', 'form', 'select', 'button', 'audio', 'video', 'math', 'base',
+    'link', 'meta', 'head',
+}
+# 閉じタグを持たないので，捨てても「中身ごと」にはならない要素（2026-11-09）
+_SAN_DROP_VOID = {'meta', 'link', 'base'}
+# 中身のない（閉じタグを持たない）HTML 要素
+_SAN_VOID = {'br', 'hr', 'img', 'col', 'wbr'}
+
+_SAN_HTML_TAGS = {
+    'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'b', 'em', 'i', 'u',
+    's', 'strike', 'del', 'ins', 'sub', 'sup', 'small', 'mark', 'code', 'pre', 'kbd',
+    'samp', 'var', 'q', 'cite', 'blockquote', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+    'a', 'img', 'span', 'div', 'abbr', 'details', 'summary', 'figure', 'figcaption',
+    'center', 'wbr', 'ruby', 'rt', 'rp',
+}
+_SAN_SVG_TAGS = {
+    'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
+    'text', 'tspan', 'textpath', 'defs', 'lineargradient', 'radialgradient', 'stop',
+    'marker', 'title', 'desc', 'use', 'clippath', 'mask', 'pattern', 'symbol', 'a',
+    'image',
+}
+
+_SAN_GLOBAL_ATTRS = {'class', 'id', 'title', 'style', 'lang', 'dir'}
+_SAN_HTML_ATTRS = {
+    'a': {'href', 'name', 'target', 'rel'},
+    'img': {'src', 'alt', 'width', 'height', 'loading'},
+    'td': {'colspan', 'rowspan', 'align', 'valign', 'width'},
+    'th': {'colspan', 'rowspan', 'align', 'valign', 'width', 'scope'},
+    'col': {'span', 'width'}, 'colgroup': {'span', 'width'},
+    'ol': {'start', 'type', 'reversed'}, 'li': {'value'},
+    'table': {'border', 'width', 'align', 'cellpadding', 'cellspacing'},
+    'details': {'open'},
+    'p': {'align'}, 'div': {'align'}, 'h1': {'align'}, 'h2': {'align'},
+    'h3': {'align'}, 'h4': {'align'}, 'h5': {'align'}, 'h6': {'align'},
+}
+_SAN_SVG_ATTRS = {
+    'viewbox', 'width', 'height', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r',
+    'rx', 'ry', 'd', 'points', 'fill', 'fill-rule', 'clip-rule', 'stroke',
+    'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray',
+    'stroke-dashoffset', 'stroke-miterlimit', 'opacity', 'fill-opacity',
+    'stroke-opacity', 'transform', 'font-size', 'font-family', 'font-weight',
+    'font-style', 'text-anchor', 'dominant-baseline', 'alignment-baseline',
+    'xmlns', 'xmlns:xlink', 'version', 'preserveaspectratio', 'offset', 'stop-color',
+    'stop-opacity', 'gradientunits', 'gradienttransform', 'spreadmethod', 'fx', 'fy',
+    'marker-end', 'marker-start', 'marker-mid', 'markerwidth', 'markerheight',
+    'refx', 'refy', 'orient', 'markerunits', 'clip-path', 'mask', 'clippathunits',
+    'maskunits', 'patternunits', 'patterntransform', 'dx', 'dy', 'rotate',
+    'letter-spacing', 'word-spacing', 'text-decoration', 'visibility', 'display',
+    'href', 'xlink:href', 'textlength', 'lengthadjust', 'startoffset', 'role',
+    'aria-label', 'vector-effect', 'shape-rendering', 'paint-order',
+}
+_SAN_URL_ATTRS = {'href', 'src', 'xlink:href'}
+# data-* は既定で残す（マイノートの data-att 等が使う）．Bootstrap 等が解釈する名前は落とす
+_SAN_DATA_RE = re.compile(r'^data-[a-z0-9_-]{1,40}$')
+_SAN_DATA_DENY = ('data-bs-', 'data-toggle', 'data-target', 'data-content',
+                  'data-template', 'data-html', 'data-url', 'data-src', 'data-href')
+_SAN_SCHEME_RE = re.compile(r'^[a-z][a-z0-9+.\-]*:')
+_SAN_IMG_DATA_RE = re.compile(r'^data:image/(png|jpe?g|gif|webp);base64,')
+_SAN_BAD_CSS_RE = re.compile(r'expression|javascript|vbscript|url\s*\(|@import|behavior|-moz-binding', re.I)
+
+
+def _san_url_ok(value, tag, attr, in_svg):
+    s = re.sub(r'[\x00-\x20\x7f]+', '', value or '').lower()
+    if in_svg and attr in ('href', 'xlink:href') and tag in ('use', 'textpath'):
+        return s.startswith('#')                 # SVG 内参照は文書内の id だけ
+    if in_svg and tag == 'image':
+        return bool(_SAN_IMG_DATA_RE.match(s)) or s.startswith(('http://', 'https://', '/'))
+    if tag == 'img' and _SAN_IMG_DATA_RE.match(s):
+        return True
+    if not _SAN_SCHEME_RE.match(s):
+        return True                              # 相対URL・#・/ で始まるもの
+    return s.startswith(('http:', 'https:', 'mailto:'))
+
+
+class _Sanitizer(_HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self.stack = []          # 出力した開きタグ
+        self.skip = 0            # 中身ごと捨てている深さ
+        self.svg = 0             # svg の中にいる深さ
+        self.css = None          # 残す候補の <style> の中身（2026-11-09）
+
+    def _attrs(self, tag, attrs, in_svg):
+        allowed = set(_SAN_GLOBAL_ATTRS)
+        allowed |= (_SAN_SVG_ATTRS if in_svg else _SAN_HTML_ATTRS.get(tag, set()))
+        if in_svg and tag == 'a':
+            allowed |= {'href', 'xlink:href', 'target'}
+        kept, blank = [], False
+        for name, value in attrs:
+            name = (name or '').lower()
+            value = '' if value is None else value
+            if name.startswith('on'):
+                continue
+            if name not in allowed:
+                if not (_SAN_DATA_RE.match(name) and not name.startswith(_SAN_DATA_DENY)):
+                    continue
+            if name in _SAN_URL_ATTRS and not _san_url_ok(value, tag, name, in_svg):
+                continue
+            if name == 'style' and _SAN_BAD_CSS_RE.search(value):
+                continue
+            if name == 'target':
+                if value != '_blank':
+                    continue
+                blank = True
+            if name == 'rel':
+                continue                          # 下で付け直す
+            kept.append((name, value))
+        if blank:
+            kept.append(('rel', 'noopener noreferrer'))
+        return ''.join(' %s="%s"' % (n, _html.escape(v, quote=True)) for n, v in kept)
+
+    def _open(self, tag, attrs, selfclose):
+        if tag in _SAN_DROP_VOID:
+            selfclose = True                      # 閉じタグが来ない要素は単独で捨てる
+        if self.skip:
+            if tag in _SAN_DROP_CONTENT and not selfclose:
+                self.skip += 1
+            return
+        if tag == 'style' and not selfclose and not self.svg:
+            self.css = []                         # 中身を見てから残すか決める
+            self.skip = 1
+            return
+        if tag in _SAN_DROP_CONTENT or (tag == 'title' and not self.svg):
+            if not selfclose:
+                self.skip = 1
+            return
+        in_svg = self.svg > 0 or tag == 'svg'
+        if not (tag in _SAN_SVG_TAGS if in_svg else tag in _SAN_HTML_TAGS):
+            return                                # タグだけ捨てて中身の文字は残す
+        a = self._attrs(tag, attrs, in_svg)
+        if selfclose or (tag in _SAN_VOID and not in_svg):
+            self.out.append('<%s%s%s>' % (tag, a, ' /' if in_svg else ''))
+            return
+        self.out.append('<%s%s>' % (tag, a))
+        self.stack.append(tag)
+        if tag == 'svg':
+            self.svg += 1
+
+    def handle_starttag(self, tag, attrs):
+        self._open(tag, attrs, False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._open(tag, attrs, True)
+
+    def handle_endtag(self, tag):
+        if self.skip:
+            if tag in _SAN_DROP_CONTENT or (tag == 'title' and not self.svg):
+                self.skip -= 1
+                if self.skip == 0 and tag == 'style' and self.css is not None:
+                    css = ''.join(self.css)
+                    self.css = None
+                    if '<' not in css and not _SAN_BAD_CSS_RE.search(css):
+                        self.out.append('<style>%s</style>' % css)
+            return
+        if tag not in self.stack:
+            return
+        while self.stack:
+            t = self.stack.pop()
+            self.out.append('</%s>' % t)
+            if t == 'svg':
+                self.svg -= 1
+            if t == tag:
+                break
+
+    def handle_data(self, data):
+        if self.css is not None and self.skip == 1:
+            self.css.append(data)
+            return
+        if not self.skip:
+            self.out.append(_html.escape(data, quote=False))
+
+    def handle_comment(self, data):
+        pass
+
+    def handle_decl(self, decl):
+        pass
+
+    def handle_pi(self, data):
+        pass
+
+    def unknown_decl(self, data):
+        pass
+
+    def result(self):
+        self.close()
+        while self.stack:
+            t = self.stack.pop()
+            self.out.append('</%s>' % t)
+        return ''.join(self.out)
+
+
+def sanitize_html(html_text):
+    """許可リスト方式で HTML を無害化して返す。"""
+    if not html_text:
+        return html_text or ''
+    p = _Sanitizer()
+    p.feed(html_text)
+    return p.result()
+
+
+
+# ────────────────────────────────────────────────────────────
+# SVG ファイルのサニタイザ（2026-10-26 セキュリティ改修 R-2）
+#   アップロードされた SVG ファイルを XML として読み，許可リストにある要素・属性だけを残す．
+#   <script>，<foreignObject>，アニメーション要素（set・animate），on* 属性，
+#   javascript: や外部への参照は取り除く．SVG ファイルは XML として表示されるので，
+#   大文字小文字（viewBox 等）を保つため html.parser ではなく xml.etree を使う．
+#   DOCTYPE・ENTITY を含むもの，XML として読めないもの，svg で始まらないものは，
+#   中身のない SVG（読み込めなかった旨の表示）に置き換える．
+# ────────────────────────────────────────────────────────────
+import xml.etree.ElementTree as _ET
+
+_SVG_NS = 'http://www.w3.org/2000/svg'
+_XLINK_NS = 'http://www.w3.org/1999/xlink'
+_XML_NS = 'http://www.w3.org/XML/1998/namespace'
+_ET.register_namespace('', _SVG_NS)
+_ET.register_namespace('xlink', _XLINK_NS)
+
+_SVGF_ELEMENTS = {
+    'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
+    'text', 'tspan', 'textPath', 'defs', 'linearGradient', 'radialGradient', 'stop',
+    'marker', 'title', 'desc', 'use', 'clipPath', 'mask', 'pattern', 'symbol', 'image',
+    'a', 'switch', 'filter', 'feGaussianBlur', 'feOffset', 'feBlend', 'feColorMatrix',
+    'feMerge', 'feMergeNode', 'feFlood', 'feComposite', 'feDropShadow', 'feMorphology',
+}
+_SVGF_PLACEHOLDER = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="40" viewBox="0 0 320 40">'
+    '<rect width="320" height="40" fill="#fdecea"/>'
+    '<text x="10" y="25" font-size="14" fill="#7b1d13">SVG を安全に読み込めませんでした</text>'
+    '</svg>').encode('utf-8')
+
+
+def _svgf_href_ok(local_tag, value):
+    s = re.sub(r'[\x00-\x20\x7f]+', '', value or '').lower()
+    if s.startswith('#'):
+        return True                               # 文書内の参照
+    if local_tag == 'image':
+        return bool(_SAN_IMG_DATA_RE.match(s))     # 埋め込みのラスタ画像だけ
+    if local_tag == 'a':
+        return s.startswith(('http://', 'https://'))
+    return False
+
+
+def _svgf_clean(el):
+    local = el.tag.split('}')[-1] if isinstance(el.tag, str) else ''
+    for name in list(el.attrib.keys()):
+        value = el.attrib[name]
+        ns, _, lname = name[1:].partition('}') if name.startswith('{') else ('', '', name)
+        lname_l = lname.lower()
+        keep = True
+        if ns not in ('', _XLINK_NS, _XML_NS):
+            keep = False
+        elif lname_l.startswith('on'):
+            keep = False
+        elif lname_l == 'href':
+            keep = _svgf_href_ok(local, value)
+        elif ns == _XLINK_NS:
+            keep = False
+        elif lname_l == 'style' and _SAN_BAD_CSS_RE.search(value):
+            keep = False
+        elif re.search(r'javascript\s*:|vbscript\s*:|data\s*:\s*text', value, re.I):
+            keep = False
+        elif lname_l in ('attributename', 'begin', 'values', 'to', 'from', 'by'):
+            keep = False
+        if not keep:
+            del el.attrib[name]
+    for child in list(el):
+        if not isinstance(child.tag, str):        # コメント・処理命令
+            el.remove(child)
+            continue
+        cns, _, clocal = child.tag[1:].partition('}') if child.tag.startswith('{') else ('', '', child.tag)
+        if cns not in (_SVG_NS, '') or clocal not in _SVGF_ELEMENTS:
+            # 許可外の要素は中身ごと除く（直後の文字は残す）
+            tail = child.tail
+            idx = list(el).index(child)
+            el.remove(child)
+            if tail:
+                if idx == 0:
+                    el.text = (el.text or '') + tail
+                else:
+                    prev = list(el)[idx - 1]
+                    prev.tail = (prev.tail or '') + tail
+            continue
+        _svgf_clean(child)
+
+
+def sanitize_svg_bytes(data):
+    """アップロードされた SVG（bytes）を無害化して bytes で返す。"""
+    try:
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        head = data[:4096].decode('utf-8', errors='replace')
+        if re.search(r'<!DOCTYPE|<!ENTITY', data.decode('utf-8', errors='replace'), re.I):
+            return _SVGF_PLACEHOLDER
+        root = _ET.fromstring(data)
+        if root.tag not in ('{%s}svg' % _SVG_NS, 'svg'):
+            return _SVGF_PLACEHOLDER
+        if root.tag == 'svg':                     # 名前空間なしの SVG は付け直す
+            for el in root.iter():
+                if isinstance(el.tag, str) and not el.tag.startswith('{'):
+                    el.tag = '{%s}%s' % (_SVG_NS, el.tag)
+        _svgf_clean(root)
+        out = _ET.tostring(root, encoding='unicode')
+        return ('<?xml version="1.0" encoding="UTF-8"?>\n' + out).encode('utf-8')
+    except Exception as e:
+        logging.warning("sanitize_svg_bytes: %s", e)
+        return _SVGF_PLACEHOLDER
 
 markdown_converter_bp = Blueprint('markdown_converter', __name__)
 
@@ -40,23 +384,6 @@ def escape_dollar_signs(text):
     # 単一のドル記号をエスケープする（ただし、既にエスケープされているものは除く）
     text = re.sub(r'(?<!\\)\$', r'\\$', text)
     return text
-
-def sanitize_sql_blocks_for_guest(markdown_content):
-    """
-    guestユーザー用：```sqlブロックを無効化してセキュリティリスクを軽減
-    """
-    if not markdown_content:
-        return markdown_content
-
-    def replace_sql_block(match):
-        sql_code = match.group(1)
-        # 警告文をコードブロックの外（前）に配置
-        return f"⚠️ **セキュリティ保護**: 元のコード記法 `\u0060\u0060\u0060sql` は管理者のみ表示可能です（このコードは実行できません）\n\n```\n{sql_code}```"
-
-    pattern = r'```(?i:sql)\s*[\r\n]+(.*?)```'
-    result = re.sub(pattern, replace_sql_block, markdown_content, flags=re.DOTALL)
-
-    return result
 
 #  内部リンク拡張は使用しない
 #
@@ -69,55 +396,6 @@ def sanitize_sql_blocks_for_guest(markdown_content):
 #    # 新しい形式 [テキスト]{ID} に対応する正規表現
 #    pattern = r'\[([^\]]+)\]\{(\d+)\}'
 #    return re.sub(pattern, replacement, content)
-
-def process_sql_md_texts(md_content, connection):
-    """
-    sql_md_textsブロックを処理する新しい関数
-    SQLクエリを実行し、結果をMarkdownとして処理してHTMLに変換
-    """
-    sql_md_pattern = re.compile(r'```sql_md_texts\s*\n(.*?)\n\s*```', re.DOTALL)
-    cursor = connection.cursor(dictionary=True)
-
-    def replace_sql_md_block(match):
-        sql_query = match.group(1).strip()
-        try:
-            cursor.execute(sql_query)
-            result = cursor.fetchall()
-
-            # 結果を結合（複数行の場合は改行で繋ぐ）
-            if result:
-                # 最初のカラムの値を取得して結合
-                first_column_name = list(result[0].keys())[0] if result[0] else None
-                if first_column_name:
-                    md_texts = []
-                    for row in result:
-                        value = row[first_column_name]
-                        if value is not None:
-                            md_texts.append(str(value))
-
-                    combined_md = '\n'.join(md_texts)
-
-                    # 再帰的にMarkdown処理を行う（sql_md_textsブロックの無限ループを防ぐため、この部分では通常のMarkdown処理のみ）
-                    processed_html = markdown.markdown(combined_md, extensions=[
-                        'extra', 'nl2br', 'sane_lists', 'fenced_code'    #,'pymdownx.tasklist'
-                    ])
-
-                    return processed_html
-                else:
-                    return "<p>No columns found in result</p>"
-            else:
-                return "<p>No results found</p>"
-
-        except mysql.connector.Error as e:
-            return f"<p class='text-danger'>Error executing SQL query: {str(e)}</p>"
-        except Exception as e:
-            return f"<p class='text-danger'>Error processing sql_md_texts: {str(e)}</p>"
-
-    # sql_md_textsブロックを処理
-    processed_content = sql_md_pattern.sub(replace_sql_md_block, md_content)
-    cursor.close()
-
-    return processed_content
 
 def process_mermaid(md_content):
     """
@@ -155,7 +433,7 @@ def process_mermaid(md_content):
             mermaid.initialize({
                 startOnLoad: true,
                 theme: 'default',
-                securityLevel: 'loose',
+                securityLevel: 'strict',
                 htmlLabels: true,
                 flowchart: { useMaxWidth: true, htmlLabels: true },
                 clickable: true
@@ -175,43 +453,16 @@ def process_mermaid(md_content):
 def process_markdown_for_preview(md_content, user_category='guest'):
     """
     プレビュー用に、HTMLの本体部分のみを生成する
+    user_category は互換のために受け取るだけで，描画には使わない（SQL 実行機能は撤去済み）．
     """
-    if user_category != 'admin':
-        md_content = sanitize_sql_blocks_for_guest(md_content)
-
     # 既存のprocess_markdownのロジックを再利用し、最後のHTMLテンプレート部分だけを省略する
     try:
         # 1. 基本的な前処理
-        md_content = md_content.replace('\r', '')
+        md_content = (md_content or '').replace('\r', '')
         md_content = escape_dollar_signs(md_content)
         # md_content = process_internal_links(md_content)  #  内部リンク拡張は使用しない
 
-        # データベース接続を作成
-        # connection = mysql.connector.connect(**fujinp_db_config)
-        connection = mysql.connector.connect(**DatabaseConfig.fujinp())
-
-
-        # 2. sql_md_textsクエリの処理（新機能）
-        md_content = process_sql_md_texts(md_content, connection)
-
-        # 3. 通常のSQLクエリの処理
-        sql_pattern = re.compile(r'```sql\n(.*?)(?:\n---\nColumn widths: ([\d%, ]+))?\n```', re.DOTALL)
-        cursor = connection.cursor(dictionary=True)
-        sql_matches = sql_pattern.finditer(md_content)
-        for sql_match in sql_matches:
-            sql_query = sql_match.group(1).strip()
-            column_widths = sql_match.group(2)
-            try:
-                cursor.execute(sql_query)
-                result = cursor.fetchall()
-                table_content = process_sql_result(result, column_widths)
-                md_content = md_content.replace(sql_match.group(0), table_content)
-            except mysql.connector.Error as e:
-                md_content = md_content.replace(sql_match.group(0), f"<p class='text-danger'>Error executing SQL query: {str(e)}</p>")
-        cursor.close()
-        connection.close()
-
-        # 4. Mermaid, SVGブロックをプレースホルダーに置き換え
+        # 2. Mermaid, SVGブロックをプレースホルダーに置き換え
         mermaid_blocks = {}
         mermaid_counter = 0
         mermaid_pattern = re.compile(r'```mermaid\s*\n(.*?)\n\s*```', re.DOTALL)
@@ -220,7 +471,7 @@ def process_markdown_for_preview(md_content, user_category='guest'):
             mermaid_counter += 1
             content = match.group(1).strip()
             placeholder = f"MERMAID_PLACEHOLDER_{mermaid_counter}"
-            mermaid_blocks[placeholder] = f'<div class="mermaid">{content}</div>'
+            mermaid_blocks[placeholder] = f'<div class="mermaid">{_html.escape(content, quote=False)}</div>'
             return placeholder
         md_content = mermaid_pattern.sub(mermaid_replace, md_content)
 
@@ -236,19 +487,19 @@ def process_markdown_for_preview(md_content, user_category='guest'):
             return placeholder
         md_content = svg_pattern.sub(svg_replace, md_content)
 
-        # 5. 標準Markdownの変換
+        # 3. 標準Markdownの変換
         html_content = markdown.markdown(md_content, extensions=[
             'extra', 'nl2br', 'sane_lists', 'fenced_code' # , 'pymdownx.tasklist'
         ])
 
-        # 6. プレースホルダーをHTMLに置き換え
+        # 4. プレースホルダーをHTMLに置き換え
         for placeholder, block_html in mermaid_blocks.items():
             html_content = html_content.replace(f'<p>{placeholder}</p>', block_html)
         for placeholder, block_html in svg_blocks.items():
             html_content = html_content.replace(f'<p>{placeholder}</p>', block_html)
 
-        # 7. 数式の後処理
-        return html_content
+        # 5. 無害化（許可リスト）
+        return sanitize_html(html_content)
 
     except Exception as e:
         return f"<p class='text-danger'>Markdown処理中にエラーが発生しました: {str(e)}</p>"
@@ -256,11 +507,10 @@ def process_markdown_for_preview(md_content, user_category='guest'):
 def process_markdown(md_content, user_category='guest'):
     """
     Markdownコンテンツを処理してHTMLに変換する
+    user_category は互換のために受け取るだけで，描画には使わない（SQL 実行機能は撤去済み）．
     """
     # 基本的な前処理
-    md_content = md_content.replace('\r', '')
-    if user_category != 'admin':
-        md_content = sanitize_sql_blocks_for_guest(md_content)
+    md_content = (md_content or '').replace('\r', '')
     # md_content = escape_dollar_signs(md_content) # $記号はエスケープせずそのままにする
     # md_content = process_internal_links(md_content)  #  内部リンク拡張は使用しない
 
@@ -350,44 +600,11 @@ def process_markdown(md_content, user_category='guest'):
             max-width: 100%;
             height: auto;
         }
-        /* sql_md_texts結果用のスタイル */
-        .sql-md-content {
-            margin: 10px 0;
-        }
     </style>
     """
 
     try:
-        # データベース接続を作成
-        # connection = mysql.connector.connect(**fujinp_db_config)
-        connection = mysql.connector.connect(**DatabaseConfig.fujinp())
-
-
-        # 1. sql_md_textsクエリの処理（新機能）
-        md_content = process_sql_md_texts(md_content, connection)
-
-        # 2. 通常のSQLクエリの処理
-        sql_pattern = re.compile(r'```sql\n(.*?)(?:\n---\nColumn widths: ([\d%,]+))?\n```', re.DOTALL)
-        sql_matches = sql_pattern.finditer(md_content)
-
-        cursor = connection.cursor(dictionary=True)
-
-        for sql_match in sql_matches:
-            sql_query = sql_match.group(1).strip()
-            column_widths = sql_match.group(2)
-
-            try:
-                cursor.execute(sql_query)
-                result = cursor.fetchall()
-                table_content = process_sql_result(result, column_widths)
-                md_content = md_content.replace(sql_match.group(0), table_content)
-            except mysql.connector.Error as e:
-                md_content = md_content.replace(sql_match.group(0), f"<p>Error executing SQL query: {str(e)}</p>")
-
-        cursor.close()
-        connection.close()
-
-        # 3. Mermaid図の処理部分を修正
+        # 1. Mermaid図の処理
         mermaid_blocks = {}  # Mermaidブロックを一時的に保存
         diagram_counter = 0
 
@@ -406,7 +623,7 @@ def process_markdown(md_content, user_category='guest'):
             placeholder = f"MERMAID_PLACEHOLDER_{diagram_counter}"
             mermaid_blocks[placeholder] = f"""
             <div class="mermaid" id="mermaid-{diagram_counter}">
-        {content}
+        {_html.escape(content, quote=False)}
             </div>
             """
 
@@ -431,7 +648,7 @@ def process_markdown(md_content, user_category='guest'):
         </style>
         """
 
-        # SVGブロックの処理を追加
+        # 2. SVGブロックの処理
         svg_blocks = {}
         svg_counter = 0
         svg_pattern = re.compile(r'```svg\s*\n(.*?)\n\s*```', re.DOTALL)
@@ -450,24 +667,27 @@ def process_markdown(md_content, user_category='guest'):
 
         md_content = svg_pattern.sub(svg_replace, md_content)
 
-        # 4. Markdownの変換（fenced_code拡張を含める）
+        # 3. Markdownの変換（fenced_code拡張を含める）
         html_content = markdown.markdown(md_content, extensions=[
             'extra', 'nl2br', 'sane_lists',
             ##'pymdownx.tasklist',
             'fenced_code'  # 明示的にfenced_code拡張を追加
         ])
 
-        # 5. プレースホルダーをMermaid HTMLに置き換え
+        # 4. プレースホルダーをMermaid HTMLに置き換え
         for placeholder, mermaid_html in mermaid_blocks.items():
             html_content = html_content.replace(placeholder, mermaid_html)
 
-        # SVGの置き換え（新規追加）
+        # SVGの置き換え
         for placeholder, svg_html in svg_blocks.items():
             html_content = html_content.replace(placeholder, svg_html)
 
-        # 6. 数式の処理（既存の処理）
+        # 5. 数式の処理（既存の処理）
         html_content = re.sub(r'\\∖\((.*?)\\∖\)', r'$\1$', html_content)
         html_content = re.sub(r'\\∖\[(.*?)\\∖\]', r'$$\1$$', html_content)
+
+        # 6. 無害化（許可リスト）
+        html_content = sanitize_html(html_content)
 
         mermaid_script = """
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.8.0/dist/mermaid.min.js"></script>
@@ -476,7 +696,7 @@ def process_markdown(md_content, user_category='guest'):
                 mermaid.initialize({
                     startOnLoad: true,
                     theme: 'default',
-                    securityLevel: 'loose',
+                    securityLevel: 'strict',
                     htmlLabels: true,
                     flowchart: { useMaxWidth: true },
                     mindmap: { padding: 10 }
@@ -490,7 +710,7 @@ def process_markdown(md_content, user_category='guest'):
         </script>
         """
 
-        # 7. 最終的なHTML生成
+        # 6. 最終的なHTML生成
         full_html_content = f"""
         <!DOCTYPE html>
         <html lang="ja">
@@ -514,47 +734,12 @@ def process_markdown(md_content, user_category='guest'):
     except Exception as e:
         return f"<p>An error occurred: {str(e)}</p>"
 
-def process_sql_result(result, column_widths):
-    """SQLクエリ結果をHTML表に変換する補助関数"""
-    if not result:
-        return "<div class='table-container'><table class='sql-result-table'><tr><td>No results found</td></tr></table></div>"
-
-    columns = result[0].keys()
-    widths = []
-    if column_widths:
-        widths = [float(w.strip('%').strip()) for w in column_widths.split(',') if w.strip()]
-    else:
-        widths = [100 / len(columns)] * len(columns)
-
-    table_html = "<div class='table-container'><table class='sql-result-table'>"
-
-    # ヘッダー行
-    table_html += "<tr>"
-    for i, col_name in enumerate(columns):
-        width_style = f"width: {widths[i]}%;"
-        table_html += f"<th style='{width_style}'>{col_name}</th>"
-    table_html += "</tr>"
-
-    # データ行
-    for row in result:
-        table_html += "<tr>"
-        for i, col_name in enumerate(columns):
-            width_style = f"width: {widths[i]}%;"
-            display_value = row[col_name] if row[col_name] is not None else ''
-            table_html += f"<td style='{width_style}'>{display_value}</td>"
-        table_html += "</tr>"
-
-    table_html += "</table></div>"
-    return table_html
-
 
 @markdown_converter_bp.route('/')
 @login_required
 def index():
-    print('markdown converter index')
     return_to = request.args.get('return_to')
     if not return_to:
-        print('return to not given at markdown converter')
         return_to = url_for('auth.dashboard')
     return render_template('markdown_converter.html', return_to = return_to)
 
@@ -571,16 +756,12 @@ def convert_markdown():
             'html_content': output_html
         })
     else:
-        # 元の機能を保持（ファイルからの読み込み）
-        md_file_path = '/home/nishida/markdowns/DatabookPublic.md'
-        output_file = '/home/nishida/markdowns/DatabookPublic.html'
-
-        output_html = process_markdown_file(md_file_path, output_file)
+        # 2026-10-25: 旧版はここで固定パス（/home/nishida/markdowns/）のファイルを変換して
+        # サーバに書き出していた．ログイン済みの誰でもサーバのファイルを書かせられる経路なので撤去．
         return jsonify({
-            'success': True,
-            'message': f"HTML file has been written to {output_file}",
-            'output_path': output_file
-        })
+            'success': False,
+            'error': 'markdown_content が空です'
+        }), 400
 
 
 def process_markdown_file(md_file_path, output_file):

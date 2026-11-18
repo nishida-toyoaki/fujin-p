@@ -232,10 +232,10 @@
 
         <div class="dropdown-panel" id="panel-policy">
             <ul class="policy-list">
-                <li><a href="/static/alliance_regulation.html">FUJIN-Pアライアンス運用規程</a></li>
-                <li><a href="/static/terms_sommelier_consent.html">FUJIN-Pソムリエ同意書</a></li>
-                <li><a href="/static/terms_user.html">利用規約</a></li>
-                <li><a href="/static/privacy_policy.html">プライバシーポリシー</a></li>
+                <li><a href="{{ url_for('auth.terms_page', name='alliance_regulation') }}">FUJIN-Pアライアンス運用規程</a></li>
+                <li><a href="{{ url_for('auth.terms_page', name='terms_sommelier_consent') }}">FUJIN-Pソムリエ同意書</a></li>
+                <li><a href="{{ url_for('auth.terms_page', name='terms_user') }}">利用規約</a></li>
+                <li><a href="{{ url_for('auth.terms_page', name='privacy_policy') }}">プライバシーポリシー</a></li>
                 <li><a href="https://github.com/nishida-toyoaki/fujin-p" target="_blank" rel="noopener">ソースコード（GitHub / AGPL v3）</a></li>
             </ul>
         </div>
@@ -304,42 +304,16 @@
     <div class="guest-section">
         <div class="section-label"><span>🌐</span><span>ゲスト向け公開アプリ</span></div>
         <div class="apps-grid">
-            <a class="app-card" href="{{ url_for('document_archive.dashboard', doc_id=8) }}" rel="noopener">
-                <div class="app-emoji">🏛️️</div>
-                <div class="app-name">文書アーカイブ</div>
-                <div class="app-desc">文書アーカイブの閲覧と管理</div>
+            {# ★2026-08-27 正本のランチャで使用区分「公開（ログイン不要）」のカードを並べる．
+               手で編集せず，アプシャの管理画面（ランチャ）で使用区分を設定し「発行」する #}
+            {% for c in public_launcher_cards() %}
+            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id=c.app_name) }}">
+                <div class="app-emoji">{{ c.icon }}</div>
+                <div class="app-name">{{ c.label }}</div>
+                <div class="app-desc">{{ c.description }}</div>
                 <div class="ext-badge">本サイト</div>
             </a>
-            {% if config.get('TAG_CHASE_PUBLIC') %}
-            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='tag_chase') }}">
-                <div class="app-emoji">👹</div>
-                <div class="app-name">鬼ごっこ3D</div>
-                <div class="app-desc">鬼はブロックの陰に隠れて逃げ回る</div>
-                <div class="ext-badge">本サイト</div>
-            </a>
-            {% endif %}
-            {% if config.get('SORAKARA_PUBLIC') %}
-            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='sorakara') }}">
-                <div class="app-emoji">🪂</div>
-                <div class="app-name">そらから</div>
-                <div class="app-desc">福知山の空をグライダーで遊覧飛行</div>
-                <div class="ext-badge">本サイト</div>
-            </a>
-            {% endif %}
-            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='free_hand_curve') }}">
-                <div class="app-emoji">➿</div>
-                <div class="app-name">フリーハンド曲線</div>
-                <div class="app-desc">おたのしみ</div>
-                <div class="ext-badge">本サイト</div>
-            </a>
-
-            <a class="app-card guest-link" href="{{ url_for('guest.go', app_id='ts_solvers') }}">
-                <div class="app-emoji">😮‍💨</div>
-                <div class="app-name">巡回セールスマン<br>問題ソルバー</div>
-                <div class="app-desc">NP困難問題に挑戦！</div>
-                <div class="ext-badge">本サイト</div>
-            </a>
-
+            {% endfor %}
         </div>
     </div>
     <script>

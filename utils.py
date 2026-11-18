@@ -20,6 +20,9 @@
 # Source: https://github.com/nishida-toyoaki/fujin-p
 
 import secrets
+import hashlib
+import base64
+import html as _html
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, time, timedelta
 from config import Config
@@ -132,8 +135,16 @@ def generate_reset_token():
     """パスワードリセットトークン生成"""
     return secrets.token_urlsafe(32)
 
+def hash_reset_token(token):
+    """再設定トークンを DB に置く形にする（SHA-256 を URL 安全な base64 で 43 文字．2026-10-26）．
+    DB には元のトークンを置かないので，DB の中身を読まれてもリンクは作れない．
+    長さは元のトークン（token_urlsafe(32)）と同じ 43 文字なので，列の長さはそのままでよい"""
+    digest = hashlib.sha256((token or '').encode('utf-8')).digest()
+    return base64.urlsafe_b64encode(digest).decode('ascii').rstrip('=')
+
+
 def create_password_reset_token(user_id):
-    """パスワードリセットトークンをDBに保存"""
+    """パスワードリセットトークンを作り，DB にはハッシュを保存する．返すのは元のトークン（メールに載せる）"""
     token = generate_reset_token()
     jst_now = datetime.now(Config.JST)
     expires_at = (jst_now + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
@@ -143,16 +154,15 @@ def create_password_reset_token(user_id):
         cursor.execute("""
             INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at)
             VALUES (%s, %s, %s, %s)
-        """, (user_id, token, expires_at, created_at))
+        """, (user_id, hash_reset_token(token), expires_at, created_at))
         conn.commit()
 
     return token
 
 def send_password_reset_email(email, token):
     """パスワードリセットメールを送信"""
-    print(f"=== メール送信開始 ===")
-    print(f"送信先: {email}")
-    print(f"トークン: {token}")
+    # トークンはログに出さない（サーバのログからリンクを作れてしまうため．2026-10-26）
+    print(f"=== パスワード設定メール送信開始: {email} ===")
 
     reset_url = f"{Config.BASE_URL}/reset_password/{token}"
 
@@ -228,6 +238,8 @@ def send_approval_notification_email(email, full_name):
         bool: 送信成功時True
     """
     subject = '【FUJIN-P】アカウント登録申請が承認されました'
+    full_name_h = _html.escape(full_name or '')
+    email_h = _html.escape(email or '')
 
     # メール本文（HTML）
     html_body = f"""
@@ -253,7 +265,7 @@ def send_approval_notification_email(email, full_name):
     <body>
         <div class="container">
             <div class="content">
-                <h2>{full_name} 様</h2>
+                <h2>{full_name_h} 様</h2>
 
                 <p>FUJIN-Pへのアカウント登録申請が承認されました。</p>
 
@@ -272,7 +284,7 @@ def send_approval_notification_email(email, full_name):
                     <strong>ログイン方法：</strong><br>
                     1. 上記ボタンをクリックしてログイン画面を開く<br>
                     2. 「Googleでログイン」ボタンをクリック<br>
-                    3. 登録したGoogleアカウント（{email}）でログイン
+                    3. 登録したGoogleアカウント（{email_h}）でログイン
                 </p>
 
                 <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
@@ -357,6 +369,8 @@ def send_rejection_notification_email(email, full_name, reason=''):
     subject = '【FUJIN-P】アカウント登録申請について'
 
     reason_text = f"\n不承認理由: {reason}\n" if reason else ""
+    full_name_h = _html.escape(full_name or '')
+    reason_h = _html.escape(reason or '')
 
     html_body = f"""
     <!DOCTYPE html>
@@ -376,12 +390,12 @@ def send_rejection_notification_email(email, full_name, reason=''):
     <body>
         <div class="container">
             <div class="content">
-                <h2>{full_name} 様</h2>
+                <h2>{full_name_h} 様</h2>
 
                 <p>FUJIN-Pへのアカウント登録申請につきまして、
                    誠に申し訳ございませんが、今回は承認を見送らせていただくこととなりました。</p>
 
-                {f'<p style="background: #f5f5f5; padding: 15px; border-left: 4px solid #999;">{reason}</p>' if reason else ''}
+                {f'<p style="background: #f5f5f5; padding: 15px; border-left: 4px solid #999;">{reason_h}</p>' if reason else ''}
 
                 <p>ご不明な点がございましたら、管理者までお問い合わせください。</p>
             </div>
