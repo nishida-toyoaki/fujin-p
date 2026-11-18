@@ -76,8 +76,11 @@ STORAGE_DIR = os.path.realpath(
 )
 
 UNLOCK_MINUTES = 30          # パスワードを通したあと開いておく時間
-FAIL_LIMIT = 10              # この回数だけ失敗すると
-FAIL_WINDOW_MINUTES = 60     # この時間のあいだ受け付けない
+FAIL_WINDOW_MINUTES = 60     # 失敗を数える時間幅（この時間のあいだ受け付けない）
+# 連続失敗の締め出しは「箱×接続元」の単位で行う（2026-11-01）．
+# 以前は箱単位だったため，第三者がわざと失敗を重ねると正規の相手まで締め出せた．
+FAIL_LIMIT = 10              # 同じ接続元からこの回数失敗すると，その接続元だけ止める
+FAIL_LIMIT_BOX = 100         # 箱全体でこの回数失敗すると，箱ごと止める（多数の接続元からの総当たり対策）
 CHUNK = 1024 * 1024
 
 KIND_LABELS = {'download': '渡す箱', 'upload': '受け取る箱'}
@@ -126,10 +129,16 @@ def gen_password(n=12):
 
 
 def client_ip():
+    """接続元の IP．締め出しの単位に使うので，利用者が書き換えられない値を優先する．
+    X-Real-IP はサイトの前段のプロキシが付ける．X-Forwarded-For は先頭を利用者が
+    自由に書けるので，プロキシが最後に足した末尾の値を使う（2026-11-01）．"""
+    real = (request.headers.get('X-Real-IP') or '').strip()
+    if real:
+        return real[:45]
     fwd = request.headers.get('X-Forwarded-For', '')
     if fwd:
-        return fwd.split(',')[0].strip()[:45]
-    return (request.headers.get('X-Real-IP') or request.remote_addr or '')[:45]
+        return fwd.split(',')[-1].strip()[:45]
+    return (request.remote_addr or '')[:45]
 
 
 def public_url(token):
@@ -644,12 +653,26 @@ def is_unlocked(box):
         return False
 
 
-def recent_failures(box):
+def recent_failures(box, ip=None):
+    """直近 FAIL_WINDOW_MINUTES 分の失敗回数．ip を渡せばその接続元の分だけ数える"""
     since = now_jst() - timedelta(minutes=FAIL_WINDOW_MINUTES)
+    sql = "SELECT COUNT(*) AS n FROM fc_events WHERE box_id=%s AND event='auth_fail' AND created_at>=%s"
+    params = [box['id'], since]
+    if ip is not None:
+        sql += " AND ip=%s"
+        params.append(ip)
     with get_db_cursor(database=DB) as (cursor, conn):
-        cursor.execute("SELECT COUNT(*) AS n FROM fc_events WHERE box_id=%s AND event='auth_fail' AND created_at>=%s",
-                       (box['id'], since))
+        cursor.execute(sql, tuple(params))
         return int(cursor.fetchone()['n'])
+
+
+def lock_reason(box):
+    """締め出し中なら理由（'ip' か 'box'）を返す．受け付けてよければ None"""
+    if recent_failures(box, client_ip()) >= FAIL_LIMIT:
+        return 'ip'
+    if recent_failures(box) >= FAIL_LIMIT_BOX:
+        return 'box'
+    return None
 
 
 def _closed_page():
@@ -664,9 +687,11 @@ def public_entry(token):
         return _closed_page()
 
     if request.method == 'POST' and request.form.get('action') == 'unlock':
-        if recent_failures(box) >= FAIL_LIMIT:
+        reason = lock_reason(box)
+        if reason:
             with get_db_cursor(database=DB) as (cursor, conn):
-                log_event(cursor, box['id'], 'locked')
+                log_event(cursor, box['id'], 'locked',
+                          detail='接続元の連続失敗' if reason == 'ip' else '箱全体の失敗が上限')
                 conn.commit()
             flash(f'パスワードの誤りが続いたため，しばらく受け付けません（{FAIL_WINDOW_MINUTES}分ほどおいてください）', 'error')
             return redirect(url_for('file_container.public_entry', token=token))

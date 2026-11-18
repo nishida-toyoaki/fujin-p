@@ -10,7 +10,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<meta name="referrer" content="no-referrer">
+{# no-referrer だとブラウザが同じサイトへの送信にも Origin: null を付け，カーネルの一括防御に拒否される．
+   same-origin なら自サイト内の送信には正しい Origin が付き，外部サイトへは Referer（URL の鍵）を渡さない（2026-11-01） #}
+<meta name="referrer" content="same-origin">
 <title>{% block title %}ファイルの受け渡し{% endblock %}</title>
 <style>
   * { box-sizing:border-box; }
