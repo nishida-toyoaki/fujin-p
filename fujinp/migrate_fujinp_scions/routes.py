@@ -131,7 +131,9 @@ def get_jst_now():
 #       開示を求めていない。ステップ2のチェックをすべて外す）。
 #     - 同梱ファイルへの秘密情報の直書きが「公開」になる。ステップ4の
 #       警告を force で握りつぶさないこと。
-ALLOW_GUEST_DOWNLOAD = True
+# 2026-10-26（R-11）：admin のみに閉じた．プログラムの移し替えはアプシャ，テーブルは別のアプリで
+# マイグレートする運用に移ったため，guest への配布窓口としての役目を終えた．
+ALLOW_GUEST_DOWNLOAD = False
 
 # まるっとコピーの対象とするトップレベルディレクトリ（ホワイトリスト）
 WHITELIST_DIRS = ['fujinp', 'apps', 'templates']
