@@ -19,8 +19,11 @@
 #
 # Source: https://github.com/nishida-toyoaki/fujin-p
 
-"""Block Breaker - ルート定義"""
-# @login_required   は外しています．
+"""Block Breaker - ルート定義
+
+ゲーム画面は未ログインでも遊べる（公開）．
+スコアの記録はログインした人だけ．ランキングの名前もログインした人にだけ見せる（R-8）．
+"""
 
 
 import datetime
@@ -77,14 +80,17 @@ def return_to_fujin():
 def api_save_score():
     """スコア保存API（ゲームオーバー／クリア時に呼ばれる）"""
     try:
-        data = request.json or {}
         user_id = session.get('user_id')
+        if not user_id:
+            # 未ログインでは記録しない（ゲーム自体は遊べる）
+            return jsonify({'success': False, 'error': 'ログインするとスコアを記録できます'})
+        data = request.get_json(silent=True) or {}
 
         score = data.get('score')
         cleared = 1 if data.get('cleared') else 0
 
         # 入力検証
-        if not isinstance(score, int) or score < 0 or score > 1000000:
+        if not isinstance(score, int) or isinstance(score, bool) or score < 0 or score > 1000000:
             return jsonify({'success': False, 'error': '不正なスコアです'}), 400
 
         conn = mysql.connector.connect(**DatabaseConfig.default())
@@ -101,7 +107,7 @@ def api_save_score():
         logging.error("block_breaker api_save_score error: %s", e)
         if 'conn' in locals():
             conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': '記録に失敗しました'}), 500
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -137,6 +143,8 @@ def api_ranking():
         # 日時はバックエンドで文字列化してから返す
         for row in ranking:
             row['best_at'] = fmt_datetime(row.get('best_at'))
+            if not user_id:
+                row['full_name'] = '（ログインすると表示）'   # 未ログインには実名を見せない
 
         # 自己ベスト
         cursor.execute("""
@@ -155,7 +163,7 @@ def api_ranking():
 
     except Exception as e:
         logging.error("block_breaker api_ranking error: %s", e)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'ランキングを取得できませんでした'}), 500
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
