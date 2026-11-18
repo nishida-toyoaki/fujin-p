@@ -22,10 +22,11 @@
 # colrep/__init__.py
 # CoRePo (Collaborative Report Composer) Blueprint初期化
 
-from .scripts.colrep import colrep_bp
-from .scripts.colrep_public import colrep_public_bp
+from .colrep import colrep_bp
+from .colrep_public import colrep_public_bp
+from .excel_helper import excel_helper_bp
 
-__all__ = ['colrep_bp']
+__all__ = ['colrep_bp', 'colrep_public_bp', 'excel_helper_bp']
 
 # Blueprint情報
 BLUEPRINT_NAME = 'colrep'

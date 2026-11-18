@@ -156,12 +156,12 @@
                             <div class="input-group">
                                 <span class="input-group-text">nishida$fujinp.</span>
                                 <input type="text" class="form-control" id="table_name" name="table_name"
-                                       value="{{ project.テーブル名 }}" required maxlength="64"
+                                       value="{{ project.テーブル名 }}" readonly maxlength="64"
                                        pattern="^[a-zA-Z][a-zA-Z0-9_]*$">
                             </div>
                             <div class="form-text">
-                                英字で始まり、英数字とアンダースコアのみ使用可能です。
-                                <br><strong>注意:</strong> テーブル名の変更は既存データに影響する可能性があります。
+                                テーブル名はシステムが付けたもので，変更できません（2026-10-25 以降）。
+                                
                             </div>
                             <div class="invalid-feedback">
                                 テーブル名は英字で始まり、英数字とアンダースコアのみ使用してください。

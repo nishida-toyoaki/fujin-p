@@ -31,7 +31,7 @@ from auth import login_required
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Alignment
 
-excel_helper_bp = Blueprint('excel_helper', __name__, url_prefix='/excel_helper', template_folder='../templates')
+excel_helper_bp = Blueprint('excel_helper', __name__, url_prefix='/excel_helper', template_folder='templates')
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.DEBUG)
 @login_required
 def index():
     """エクセル→HTMLヘルパーのメイン画面"""
-    return render_template('excel_helper.html')
+    return render_template('colrep/excel_helper.html')
 
 
 @excel_helper_bp.route('/convert', methods=['POST'])

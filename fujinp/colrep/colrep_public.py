@@ -69,7 +69,7 @@ def serialize_for_json(obj):
 
 colrep_public_bp = Blueprint('colrep_public', __name__,
                             url_prefix='/colrep_public',
-                            template_folder='../templates')
+                            template_folder='templates')
 
 # 2026-08-03: 未ログイン公開を廃止。全ルートを @login_required とした。
 # CoRePo は執筆用アプリであり、執筆物をそのままインターネットへ出さない方針。
@@ -84,7 +84,7 @@ logging.basicConfig(level=logging.DEBUG)
 @login_required
 def public_projects_list():
     """公開プロジェクト一覧ページ"""
-    return render_template('colrep_public_list.html')
+    return render_template('colrep/colrep_public_list.html')
 
 @colrep_public_bp.route('/api/projects')
 @login_required
@@ -140,11 +140,11 @@ def project_detail(project_id):
         project = cursor.fetchone()
 
         if not project:
-            return render_template('error.html', error='公開プロジェクトが見つかりません。'), 404
+            return render_template('colrep/error.html', error='公開プロジェクトが見つかりません。'), 404
 
         # テーブル情報を取得
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         table_exists = cursor.fetchone() is not None
 
         components = []
@@ -159,14 +159,14 @@ def project_detail(project_id):
             """)
             components = cursor.fetchall()
 
-        return render_template('colrep_public_project_detail.html',
+        return render_template('colrep/colrep_public_project_detail.html',
                               project=project,
                               table_exists=table_exists,
                               components=components)
 
     except Exception as e:
         logging.error(f"Error in project_detail: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
+        return render_template('colrep/error.html', error=str(e)), 500
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -243,7 +243,7 @@ def get_components(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するかチェック
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             return jsonify({
                 'success': True,
@@ -373,7 +373,7 @@ def get_integrated_preview(project_id):
             return Response("<p>プロジェクトが見つかりません。</p>", mimetype='text/html'), 404
 
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             return Response("<p>プロジェクトテーブルが見つかりません。</p>", mimetype='text/html'), 404
 

@@ -1,0 +1,17 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends "colrep/base.html" %}
+{% block content %}
+<div class="container" style="max-width:720px;margin:40px auto;padding:0 16px;">
+  <h2>エラー</h2>
+  <p style="margin:16px 0;padding:12px;background:#fff3f3;border-left:4px solid #d9534f;">
+    {{ error or 'エラーが発生しました．' }}
+  </p>
+  <p><a href="{{ url_for('colrep.index') }}">コレポのトップへ戻る</a></p>
+  <p><a href="{{ url_for('colrep.return_to_fujin') }}">FUJINダッシュボードに戻る</a></p>
+</div>
+{% endblock %}

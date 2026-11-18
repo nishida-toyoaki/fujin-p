@@ -105,7 +105,7 @@ def build_project_export_json(project, rows, table_name):
 
 colrep_bp = Blueprint('colrep', __name__,
                      url_prefix='/colrep',
-                     template_folder='../templates')
+                     template_folder='templates')
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -135,22 +135,16 @@ def allowed_file(filename):
 
 
 def _sanitize_svg(data):
-    """アップロードされた SVG から script / on* / javascript: を除去する簡易サニタイズ"""
+    """アップロードされた SVG を無害化する（2026-10-26 セキュリティ改修 R-2）．
+    旧版の正規表現による除去は，引用符なしの on* 属性・foreignObject・SMIL・
+    文字参照で隠した javascript: を通していた．カーネルの markdown_converter が持つ
+    XML 方式の許可リスト型サニタイザに委ねる．読み込めなければ中身のない SVG にする．"""
     try:
-        text = data.decode('utf-8', errors='replace')
+        from markdown_converter import sanitize_svg_bytes
     except Exception:
-        return data
-    # <script>...</script> 除去
-    text = re.sub(r'<script\b[^>]*>.*?</script\s*>', '', text,
-                  flags=re.IGNORECASE | re.DOTALL)
-    # 自己終端の <script .../> 除去
-    text = re.sub(r'<script\b[^>]*/\s*>', '', text, flags=re.IGNORECASE)
-    # on*="..." イベントハンドラ除去
-    text = re.sub(r'\son\w+\s*=\s*"[^"]*"', '', text, flags=re.IGNORECASE)
-    text = re.sub(r"\son\w+\s*=\s*'[^']*'", '', text, flags=re.IGNORECASE)
-    # javascript: URI 除去
-    text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
-    return text.encode('utf-8')
+        return (b'<svg xmlns="http://www.w3.org/2000/svg" width="320" height="40">'
+                b'<text x="10" y="25" font-size="14">SVG could not be loaded safely</text></svg>')
+    return sanitize_svg_bytes(data)
 
 def get_user_info():
     """ユーザー情報を取得する関数"""
@@ -193,11 +187,36 @@ def get_user_info():
 
     return user_info
 
+# まいぐる（user_groups）の公開API。構成員の判定はここに任せる。
+# 台帳のルールから作られたグループ（総務課など）は user_group_memberships に
+# 行を持たないため、このテーブルを直接引くと構成員が0人になる。
+# 取り込みは初回の呼び出し時に行う（起動時の読み込み順に左右されないようにするため）。
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す。無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
+
 def get_user_active_group_names(user_id):
     """ユーザーが現在所属している有効なユーザーグループ名のリストを取得
     （default DB の user_groups / user_group_memberships を参照、有効期間チェック付き）"""
     if not user_id:
         return []
+    _fn = _ug('get_user_group_names')
+    if _fn is not None:
+        try:
+            return list(_fn(user_id))
+        except Exception as e:
+            logging.error(f"Error in user_groups.get_user_group_names: {str(e)}")
     try:
         now = get_jst_now()
         conn = mysql.connector.connect(**DatabaseConfig.default())
@@ -224,9 +243,19 @@ VALID_ACCESS_POLICIES = {'public', 'domestic', 'private', 'group', 'domestic_gro
 
 
 def get_user_active_group_ids(user_id):
-    """ユーザーが現在有効に所属しているグループIDのリスト（default DB）"""
+    """ユーザーが現在有効に所属しているグループIDのリスト
+
+    まいぐるの get_user_group_ids に委ねる（直接メンバー ∪ 台帳のルール由来 − 除外）。
+    それが使えない環境では、従来どおり user_group_memberships を直接引く
+    （この場合、台帳のルールで作られたグループは効かない）。"""
     if not user_id:
         return []
+    _fn = _ug('get_user_group_ids')
+    if _fn is not None:
+        try:
+            return list(_fn(user_id))
+        except Exception as e:
+            logging.error(f"Error in user_groups.get_user_group_ids: {str(e)}")
     try:
         now = get_jst_now()
         conn = mysql.connector.connect(**DatabaseConfig.default())
@@ -396,7 +425,7 @@ def index():
             'table': COLREP_PROJECTS_TABLE.split('.')[-1],
         }
 
-        return render_template('colrep_dashboard.html',
+        return render_template('colrep/colrep_dashboard.html',
                               projects=projects,
                               stats=stats,
                               system_info=system_info,
@@ -404,7 +433,7 @@ def index():
 
     except Exception as e:
         logging.error(f"Error in colrep index: {str(e)}")
-        return render_template('colrep_dashboard.html',
+        return render_template('colrep/colrep_dashboard.html',
                               error=str(e),
                               projects=[],
                               stats={'total_projects': 0, 'recent_projects': 0},
@@ -438,7 +467,7 @@ def create_project():
             cursor.execute(f"SELECT id, full_name FROM {Tables.USERS} ORDER BY full_name")
             users = cursor.fetchall()
 
-            return render_template('create_colrep_project.html',
+            return render_template('colrep/create_colrep_project.html',
                                  users=users,
                                  current_user_id=session.get('user_id'))
 
@@ -792,7 +821,7 @@ def view_project(project_id):
         table_info = None
         if project['テーブル名']:
             try:
-                cursor.execute(f"SHOW TABLES LIKE '{project['テーブル名']}'")
+                cursor.execute("SHOW TABLES LIKE %s", (project['テーブル名'],))
                 table_exists = cursor.fetchone() is not None
 
                 if table_exists:
@@ -817,7 +846,7 @@ def view_project(project_id):
         now_date = now_dt.strftime('%Y%m%d')
         now_datetime = now_dt.strftime('%Y年%m月%d日 %H:%M')
 
-        return render_template('colrep_project_detail.html',
+        return render_template('colrep/colrep_project_detail.html',
                               project=project,
                               table_exists=table_exists,
                               table_info=table_info,
@@ -875,7 +904,7 @@ def edit_project(project_id):
             cursor.execute(f"SELECT id, full_name FROM {Tables.USERS} ORDER BY full_name")
             users = cursor.fetchall()
 
-            return render_template('edit_colrep_project.html',
+            return render_template('colrep/edit_colrep_project.html',
                                  project=project,
                                  users=users,
                                  permissions=permissions)
@@ -883,18 +912,19 @@ def edit_project(project_id):
         elif request.method == 'POST':
             project_name = request.form.get('project_name')
             responsible_user = request.form.get('responsible_user')
-            table_name = request.form.get('table_name')
+            # 2026-10-25 セキュリティ改修（C-5）：テーブル名はシステムが発番した値に固定し，
+            # フォームからは受け取らない（旧版は任意の文字列を保存でき，全クエリに識別子として入った）
             composer = request.form.get('composer', '')
             is_public = request.form.get('is_public') == 'on'
 
-            if not project_name or not responsible_user or not table_name:
+            if not project_name or not responsible_user:
                 flash('必須項目を入力してください。', 'error')
                 return redirect(url_for('colrep.edit_project', project_id=project_id))
 
             now = get_jst_now()
             update_query = f"""
                 UPDATE {COLREP_PROJECTS_TABLE}
-                SET プロジェクト名 = %s, 更新日時 = %s, 責任者 = %s, テーブル名 = %s, Composer = %s, is_public = %s
+                SET プロジェクト名 = %s, 更新日時 = %s, 責任者 = %s, Composer = %s, is_public = %s
                 WHERE id = %s
             """
 
@@ -902,7 +932,6 @@ def edit_project(project_id):
                 project_name,
                 now,
                 responsible_user,
-                table_name,
                 composer,
                 is_public,
                 project_id
@@ -972,6 +1001,8 @@ def delete_project(project_id):
                 cursor.execute(f"SHOW TABLES LIKE %s", (table_name,))
                 if cursor.fetchone():
                     # テーブルを削除
+                    if not re.fullmatch(r'colrep_[0-9a-f]{12}', table_name or ''):
+                        raise ValueError(f'コレポの作成したテーブル名ではないため削除しません: {table_name}')
                     cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
                     conn.commit()
                     logging.info(f"プロジェクト {project_id} のテーブル削除: {table_name}")
@@ -1041,7 +1072,7 @@ def manage_project_table(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するかチェック
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         table_exists = cursor.fetchone() is not None
 
         if not table_exists:
@@ -1069,7 +1100,7 @@ def manage_project_table(project_id):
         cursor_users.close()
         conn_users.close()
 
-        return render_template('manage_project_table.html',
+        return render_template('colrep/manage_project_table.html',
                               project=project,
                               table_exists=table_exists,
                               table_data=table_data,
@@ -1263,7 +1294,7 @@ def worker_dashboard():
 
             try:
                 # テーブルが存在するかチェック
-                cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+                cursor.execute("SHOW TABLES LIKE %s", (table_name,))
                 if not cursor.fetchone():
                     logging.warning(f"Table {table_name} does not exist")
                     continue
@@ -1340,7 +1371,7 @@ def worker_dashboard():
         logging.info(f"Final stats: {stats}")
         logging.info(f"Total tasks retrieved: {len(all_tasks)}")
 
-        return render_template('worker_dashboard.html',
+        return render_template('colrep/worker_dashboard.html',
                               tasks=all_tasks,
                               stats=stats,
                               user_info=user_info,
@@ -1348,7 +1379,7 @@ def worker_dashboard():
 
     except Exception as e:
         logging.error(f"Error in worker_dashboard: {str(e)}")
-        return render_template('worker_dashboard.html',
+        return render_template('colrep/worker_dashboard.html',
                               tasks=[],
                               stats={'total_tasks': 0, 'completed_tasks': 0, 'pending_tasks': 0, 'projects_count': 0},
                               user_info=user_info,
@@ -1461,7 +1492,7 @@ def get_integrated_preview(project_id):
             return Response("<p>プロジェクトが見つかりません。</p>", mimetype='text/html'), 404
 
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             return Response("<p>プロジェクトテーブルが見つかりません。</p>", mimetype='text/html'), 404
 
@@ -1595,7 +1626,7 @@ def edit_composer_external(project_id):
 
         project = cursor.fetchone()
         if not project:
-            return render_template('error.html', error='プロジェクトが見つかりません。')
+            return render_template('colrep/error.html', error='プロジェクトが見つかりません。')
 
         # ★★★ 権限チェックの修正箇所 ★★★
         # 「システムAdminではない」かつ「プロジェクト責任者でもない」場合に拒否する
@@ -1603,21 +1634,21 @@ def edit_composer_external(project_id):
         is_owner = (project['責任者'] == user_id)
 
         if not (is_system_admin or is_owner):
-            return render_template('error.html',
+            return render_template('colrep/error.html',
                                   error='Composerの編集はプロジェクト責任者またはシステム管理者のみ実行可能です。')
         # ★★★★★★★★★★★★★★★★★★★★★
 
         current_date = get_jst_now().strftime('%Y-%m-%d')
 
         # Composer外部エディタページを表示
-        return render_template('colrep_composer_external.html',
+        return render_template('colrep/colrep_composer_external.html',
                                project=project,
                                project_id=project_id,
                                current_date=current_date)
 
     except Exception as e:
         logging.error(f"Error in edit_composer_external: {str(e)}")
-        return render_template('error.html', error=str(e))
+        return render_template('colrep/error.html', error=str(e))
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -1776,7 +1807,7 @@ def export_project(project_id):
 
         # テーブルが存在するかチェック
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             flash('プロジェクトテーブルが存在しません。', 'error')
             return redirect(url_for('colrep.view_project', project_id=project_id))
@@ -1912,7 +1943,7 @@ def get_task_content_admin(project_id, task_id):
                             'error': 'この操作はプロジェクト責任者または管理者のみ実行可能です'}), 403
 
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             return jsonify({'success': False,
                             'error': 'プロジェクトテーブルがまだ作成されていません'}), 404
@@ -1965,7 +1996,7 @@ def edit_content_external(project_id, task_id):
         project = cursor.fetchone()
         if not project:
             flash('プロジェクトが見つかりません。', 'error')
-            return render_template('error.html', error='プロジェクトが見つかりません。')
+            return render_template('colrep/error.html', error='プロジェクトが見つかりません。')
 
         table_name = project['テーブル名']
 
@@ -1977,10 +2008,10 @@ def edit_content_external(project_id, task_id):
 
         task = cursor.fetchone()
         if not task:
-            return render_template('error.html', error='タスクが見つからないか、あなたにアサインされていません。')
+            return render_template('colrep/error.html', error='タスクが見つからないか、あなたにアサインされていません。')
 
         # medit external エディタページを表示
-        return render_template('colrep_external_editor.html',
+        return render_template('colrep/colrep_external_editor.html',
                               project=project,
                               task=task,
                               project_id=project_id,
@@ -1988,7 +2019,7 @@ def edit_content_external(project_id, task_id):
 
     except Exception as e:
         logging.error(f"Error in edit_content_external: {str(e)}")
-        return render_template('error.html', error=str(e))
+        return render_template('colrep/error.html', error=str(e))
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -2164,7 +2195,7 @@ def preview_integrated(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するかチェック
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         table_exists = cursor.fetchone() is not None
 
         if not table_exists:
@@ -2423,7 +2454,7 @@ def shared_preview(project_id):
             return Response("<p>プロジェクトが見つかりません。</p>", mimetype='text/html'), 404
 
         table_name = project['テーブル名']
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             return Response("<p>プロジェクトテーブルがまだ作成されていません。</p>",
                             mimetype='text/html'), 400
@@ -2619,7 +2650,7 @@ def archive_project(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するかチェック
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         table_exists = cursor.fetchone() is not None
 
         if not table_exists:
@@ -3017,7 +3048,7 @@ def get_project_info(project_id):
 @login_required
 def public_documents():
     """公開ドキュメントビューア（全ユーザーアクセス可能）"""
-    return render_template('public_documents_viewer.html')
+    return render_template('colrep/public_documents_viewer.html')
 
 
 @colrep_bp.route('/list_public_projects')
@@ -3242,7 +3273,7 @@ def export_project_data(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するか確認
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             flash('プロジェクトテーブルが存在しません。', 'error')
             return redirect(url_for('colrep.view_project', project_id=project_id))
@@ -3568,7 +3599,7 @@ def export_project_data_json(project_id):
         table_name = project['テーブル名']
 
         # テーブルが存在するか確認
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         if not cursor.fetchone():
             flash('プロジェクトテーブルが存在しません。', 'error')
             return redirect(url_for('colrep.view_project', project_id=project_id))
@@ -4092,7 +4123,7 @@ def edit_description_external(project_id, task_id):
             flash('説明の編集はプロジェクト責任者のみ実行可能です。', 'error')
             return redirect(url_for('colrep.manage_project_table', project_id=project_id))
 
-        return render_template('colrep_description_editor.html',
+        return render_template('colrep/colrep_description_editor.html',
                               project_id=project_id,
                               task_id=task_id)
 
