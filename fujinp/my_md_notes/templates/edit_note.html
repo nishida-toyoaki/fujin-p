@@ -396,14 +396,14 @@
                 <button onclick="insertMarkdown('$$\n', '\n$$')">数式ブロック</button>
                 <button onclick="insertMarkdown('- ')">リスト</button>
                 <button onclick="insertMarkdown('[', '](url)')">リンク</button>
-                <button type="button" onclick="document.getElementById('imageUpload').click()">画像の添付（リンク）</button>
-                <button type="button" onclick="document.getElementById('pdfUpload').click()">PDFの添付（リンク）</button>
-                <button type="button" onclick="publishAtt()" title="カーソル位置のリンク [名前](/my_md_notes/file/N) を公開します．画像は画像表示に，PDFなどは公開リンクに変わります">添付を公開（画像は画像表示）</button>
-                <button type="button" onclick="unpublishAtt()" title="カーソル位置の公開した添付（&lt;img&gt; や &lt;a&gt;）をリンクに戻し，公開複製を消します">添付を非公開に戻す</button>
+                <button type="button" onclick="document.getElementById('imageUpload').click()" title="画像をアップロードし，このノートを見られる人だけが開けるリンクを挿入します">画像の添付（ノート内リンク）</button>
+                <button type="button" onclick="document.getElementById('mediaUpload').click()" title="PDF（20MBまで）またはMP4（100MBまで）をアップロードしてその場で公開し，https://…/….pdf や https://…/….mp4 の公開リンクを挿入します．URL を知る誰でも開けます">メディアのアップロード（PDF・MP4）</button>
+                <button type="button" onclick="publishAtt()" title="カーソル位置のノート内リンク [名前](/my_md_notes/file/N) を公開します．画像は画像表示に，PDFなどは https://…/….pdf の公開リンクに変わります">添付を公開（画像は画像表示）</button>
+                <button type="button" onclick="unpublishAtt()" title="カーソル位置の公開した添付（画像表示や公開リンク）をノート内リンクに戻し，公開複製を消します">添付を非公開に戻す</button>
             </div>
 
             <div class="attach-hint">
-                添付はこのノートを見られる人だけが開けるリンクとして入ります．画像を本文中に表示したいとき，PDFなどをノートの外へ渡したいときは「添付を公開（画像は画像表示）」を使います（そのファイルは URL を知る誰でも見られるようになります）．
+                PDFとMP4は「メディアのアップロード（PDF・MP4）」でアップロードと同時に公開され，https://…/….pdf や https://…/….mp4 の形のリンクとして入ります（そのファイルは URL を知る誰でも，ログインしなくても見られます）．上限はPDFが20MB，MP4が100MBです．画像は「画像の添付（ノート内リンク）」でこのノートを見られる人だけが開けるリンクとして入り，本文中に表示したいときは「添付を公開（画像は画像表示）」を使います．公開をやめるときは「添付を非公開に戻す」を使います．
             </div>
 
             <div class="editor-area">
@@ -490,7 +490,7 @@
                     </div>
 
                     <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="uploadFile(this)">
-                    <input type="file" id="pdfUpload" accept=".pdf,application/pdf" style="display:none" onchange="uploadFile(this)">
+                    <input type="file" id="mediaUpload" accept=".pdf,.mp4,application/pdf,video/mp4" style="display:none" onchange="uploadMedia(this)">
                 </form>
             </div>
         </div>
@@ -705,12 +705,79 @@
             .finally(() => { input.value = ''; });
         }
 
+        // ===== メディアのアップロード（PDF・MP4）=====
+        // アップロードと同時に公開し、拡張子付きのフルURLを本文に書く。
+        // 拡張子はサーバが中身から判定した形式で付ける（.pdf / .mp4）。
+        const MEDIA_LIMITS = { pdf: 20 * 1024 * 1024, mp4: 100 * 1024 * 1024 };
+
+        function uploadMedia(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            if (!(ext in MEDIA_LIMITS) || !file.name.includes('.')) {
+                alert('メディアは PDF（.pdf）と MP4（.mp4）だけです。');
+                input.value = '';
+                return;
+            }
+            if (file.size > MEDIA_LIMITS[ext]) {
+                alert(`${ext.toUpperCase()}のサイズが上限（${MEDIA_LIMITS[ext] / 1024 / 1024}MB）を超えています。`);
+                input.value = '';
+                return;
+            }
+            if (!confirm(`「${file.name}」をアップロードして公開します。\nURL を知る誰でも（ログインしていなくても）見られるようになります。よろしいですか？`)) {
+                input.value = '';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            showStatus(`${file.name} をアップロードしています…`);
+
+            fetch("{{ url_for('my_md_notes.upload_media') }}?note={{ note.id }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('アップロードに失敗しました: ' + data.error);
+                    return;
+                }
+                // フルURLはブラウザの origin（https://…）から組み立てる
+                const full = window.location.origin + data.public_path;
+                insertMarkdown(`${PUB}[${attLabel(data.filename)}](${full})`);
+                showStatus(`${data.kind.toUpperCase()}をアップロードして公開し、公開リンクを挿入しました。公開を確認しています…`);
+                verifyPublic(full);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('アップロードに失敗しました');
+            })
+            .finally(() => { input.value = ''; });
+        }
+
         // ===== 添付の公開／非公開 =====
         // 保護領域の添付は本文にリンクで入る。公開すると、画像なら
         // <img data-att="N">、PDFなどなら公開リンク <a data-att="N"> になる。
         // 4.0より前に貼った添付（/static/mdimgs/ を直接指すもの）は台帳に
         // 無いので、非公開に戻すときにサーバ側でその場で取り込む。
         const CLIP = '📎 ';
+        const PUB = '🌐 ';
+
+        // 公開URLがログインなしで開けるかを確かめる（Cookie を送らずに HEAD で問い合わせる）
+        async function verifyPublic(url) {
+            try {
+                const r = await fetch(url, { method: 'HEAD', credentials: 'omit', cache: 'no-store' });
+                const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+                if (r.ok && !ct.includes('text/html')) {
+                    showStatus('公開を確認しました（ログインなしで開けます）: ' + url);
+                } else {
+                    alert('公開リンクを挿入しましたが、ログインなしで開けることを確認できませんでした（HTTP ' + r.status + '）。\n' + url);
+                }
+            } catch (e) {
+                alert('公開の確認に失敗しました: ' + e.message + '\n' + url);
+            }
+        }
         const ATT_RE_LINK = /\[([^\]]*)\]\((?:https?:\/\/[^\/]+)?\/my_md_notes\/file\/(\d+)\)/g;
         const ATT_RE_IMG = /<img\b[^>]*data-att="(\d+)"[^>]*>/g;
         const ATT_RE_A = /<a\b[^>]*data-att="(\d+)"[^>]*>[\s\S]*?<\/a>/g;
@@ -747,7 +814,7 @@
         }
 
         function attLabel(name) {
-            return (name || '').replace(/[<>"]/g, '').trim() || 'ファイル';
+            return (name || '').replace(/[<>"\[\]]/g, '').trim() || 'ファイル';
         }
 
         async function publishAtt() {
@@ -776,8 +843,9 @@
                     replaceRange(s0, end, `<img class="k-img" src="${full}" style="width:100%;" alt="${label}" data-att="${aid}">`);
                     showStatus('公開して画像表示にしました');
                 } else {
-                    replaceRange(s0, end, `<a class="mn-pub" href="${full}" target="_blank" rel="noopener" data-att="${aid}">🌐 ${label}</a>`);
-                    showStatus('公開リンクにしました（URL を知る誰でも開けます）');
+                    replaceRange(s0, end, `${PUB}[${label}](${full})`);
+                    showStatus('公開リンクにしました。公開を確認しています…');
+                    verifyPublic(full);
                 }
             } catch (e) {
                 alert('失敗しました: ' + e.message);
@@ -808,7 +876,9 @@
                 });
                 const d = await r.json();
                 if (!d.success) { alert(d.error); return; }
-                replaceRange(m.index, m.index + m[0].length, `${CLIP}[${d.name}](${d.url})`);
+                const t = document.getElementById('content');
+                const s0 = t.value.slice(0, m.index).endsWith(PUB) ? m.index - PUB.length : m.index;
+                replaceRange(s0, m.index + m[0].length, `${CLIP}[${d.name}](${d.url})`);
                 showStatus(d.adopted ? '公開領域から引き取り、非公開に戻しました' : '非公開に戻しました');
             } catch (e) {
                 alert('失敗しました: ' + e.message);
