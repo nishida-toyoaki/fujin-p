@@ -60,8 +60,37 @@ def _get_user_info(user_id):
         if 'conn' in locals() and conn.is_connected():
             cursor.close(); conn.close()
 
+# 構成員の判定はまいぐるの公開APIに任せる。台帳のルールから作られたグループ
+# （総務課など）は user_group_memberships に行を持たないため、このテーブルを
+# 直接引くと構成員が0人になる。取り込みは初回の呼び出し時に行う
+# （起動時の読み込み順に左右されないようにするため）。
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す。無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
 def _user_group_ids(user_id):
-    """現在有効な user_groups の id リストを返す。NULL の期間端は無期限。"""
+    """現在有効な user_groups の id リストを返す。NULL の期間端は無期限。
+
+    まいぐるの get_user_group_ids に委ねる（直接メンバー ∪ 台帳のルール由来 − 除外）。
+    """
+    if not user_id:
+        return []
+    _fn = _ug('get_user_group_ids')
+    if _fn is not None:
+        try:
+            return list(_fn(user_id))
+        except Exception:
+            logging.exception("user_groups.get_user_group_ids failed")
     try:
         conn = mysql.connector.connect(**DatabaseConfig.default())
         cursor = conn.cursor()
@@ -111,6 +140,12 @@ def _can_create_story(user_id):
     info = _get_user_info(user_id)
     if info and info['category'] == 'admin':
         return True
+    _fn = _ug('user_is_in_group')
+    if _fn is not None:
+        try:
+            return bool(_fn(user_id, STORY_CREATOR_GROUP_NAME))
+        except Exception:
+            logging.exception("user_groups.user_is_in_group failed")
     try:
         conn = mysql.connector.connect(**DatabaseConfig.default())
         cursor = conn.cursor()
@@ -985,4 +1020,3 @@ def api_source_download():
 def return_to_fujin():
     """FUJIN-Pダッシュボードに戻る"""
     return redirect_to_dashboard()
-
