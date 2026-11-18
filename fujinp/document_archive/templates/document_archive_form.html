@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/u-fukuchiyama/fujin-p
+  Source: https://github.com/nishida-toyoaki/fujin-p
 #}
 
 {% extends "document_archive_base.html" %}
@@ -119,7 +119,7 @@
                         アップロード可能: HTML のみ．1ファイル {{ upload_max_label }} まで
                     </div>
                     {% endif %}
-                    <textarea name="content" class="form-control" rows="10">{{ document.content if document else '' }}</textarea>
+                    <textarea name="content" class="form-control" rows="10">{{ (document.content or '') if document else '' }}</textarea>
                     {% if document and document.file_path %}
                     <div class="alert alert-info mt-2 mb-0 py-2">
                         <i class="fas fa-paperclip"></i>

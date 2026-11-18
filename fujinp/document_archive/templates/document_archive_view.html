@@ -2,7 +2,7 @@
   This file is part of FUJIN-P.
   SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
   SPDX-License-Identifier: AGPL-3.0-or-later
-  Source: https://github.com/u-fukuchiyama/fujin-p
+  Source: https://github.com/nishida-toyoaki/fujin-p
 #}
 
 {% extends "document_archive_base.html" %}
@@ -133,10 +133,10 @@
                 <div class="card-body p-0">
                     <div class="html-content">
                         {% if content_html %}
-                            <iframe srcdoc="{{ content_html|e }}" style="width: 100%; min-height: 600px; border: none;"></iframe>
+                            <iframe srcdoc="{{ content_html|e }}" style="width: 100%; min-height: 600px; border: none;"{% if sandbox_attr %} sandbox="{{ sandbox_attr }}"{% endif %}></iframe>
                         {% elif document.file_path and document.file_type and document.file_type.startswith('text/html') %}
                             {# 大きなHTMLはファイルとして保存しているので，プレーン表示のURLで読み込む #}
-                            <iframe src="{{ url_for('document_archive.plain_view', doc_id=document.id) }}" style="width: 100%; min-height: 600px; border: none;" allowfullscreen></iframe>
+                            <iframe src="{{ url_for('document_archive.plain_view', doc_id=document.id) }}" style="width: 100%; min-height: 600px; border: none;" allowfullscreen{% if sandbox_attr %} sandbox="{{ sandbox_attr }}"{% endif %}></iframe>
                         {% else %}
                             <div class="p-3">
                                 <p class="text-muted">文書の内容がありません</p>
