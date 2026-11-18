@@ -2676,22 +2676,25 @@ def api_seed_fetch(canvas_id):
         cursor.close()
         conn.close()
 
-    req = urllib.request.Request(url, headers={
-        'User-Agent': 'FUJIN-P awami seed_fetch',
-        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8'})
+    # 取りに行くのはカーネルの safe_fetch（内部アドレスへの接続を接続の瞬間に断る．R-11，2026-10-26）
     try:
-        with urllib.request.urlopen(req, timeout=SEED_FETCH_TIMEOUT) as res:
-            final_url = res.geturl()
-            status = res.status
-            ctype = res.headers.get('Content-Type', '')
-            raw = res.read(SEED_FETCH_MAX_BYTES + 1)
-    except urllib.error.HTTPError as e:
-        return jsonify({'success': True, 'status': e.code, 'final_url': url,
-                        'content_type': '', 'html': None})
+        from safe_fetch import fetch as _safe_fetch, FetchBlocked
+    except ImportError:
+        return jsonify({'success': False, 'error': '取得部品（safe_fetch）が入っていません'}), 503
+    try:
+        r = _safe_fetch(url, max_bytes=SEED_FETCH_MAX_BYTES, timeout=SEED_FETCH_TIMEOUT, headers={
+            'User-Agent': 'FUJIN-P awami seed_fetch',
+            'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8'})
+    except FetchBlocked as e:
+        return jsonify({'success': False, 'error': f'取得しませんでした（{e}）'}), 400
     except Exception as e:
         logging.warning("awami seed_fetch error %s: %s", url, e)
-        return jsonify({'success': False, 'error': '取得に失敗しました（' + str(e)[:120] + '）'}), 502
-    if len(raw) > SEED_FETCH_MAX_BYTES:
+        return jsonify({'success': False, 'error': '取得に失敗しました（' + e.__class__.__name__ + '）'}), 502
+    final_url, status, ctype, raw = r.url, r.status, r.content_type, r.content
+    if status >= 400:
+        return jsonify({'success': True, 'status': status, 'final_url': url,
+                        'content_type': '', 'html': None})
+    if r.too_large:
         return jsonify({'success': True, 'status': status, 'final_url': final_url,
                         'content_type': ctype, 'html': None, 'too_large': True})
     html = None
