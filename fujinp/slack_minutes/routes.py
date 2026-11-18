@@ -221,10 +221,35 @@ def _is_admin() -> bool:
     return session.get('user_category') == 'admin'
 
 
+# 構成員の判定はまいぐるの公開APIに任せる．台帳のルールから作られたグループ
+# （総務課など）は user_group_memberships に行を持たないため，このテーブルを
+# 直接引くと構成員が0人になる．取り込みは初回の呼び出し時に行う
+# （起動時の読み込み順に左右されないようにするため）．
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す．無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
+
 def _user_active_group_ids(cur, user_id) -> set:
-    """ユーザが現在有効に所属しているグループID（まいぐる．有効期間チェック付き）"""
+    """ユーザが現在有効に所属しているグループID（まいぐる．台帳のルール由来も含む）"""
     if not user_id:
         return set()
+    _fn = _ug('get_user_group_ids')
+    if _fn is not None:
+        try:
+            return set(_fn(user_id))
+        except Exception as e:
+            logging.warning("slack_minutes: user_groups.get_user_group_ids: %s", e)
     try:
         now = get_jst_now()
         cur.execute("""
