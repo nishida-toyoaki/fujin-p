@@ -35,3 +35,4 @@ from . import routes
 from . import routes_view_editor  # 新規: ビューエディタ
 from . import routes_archive      # 新規: アーカイブ装置
 from . import routes_project
+from . import routes_schema       # 2026-10-10：スキーマ一覧（admin 専用．オール経由で Claude も読む）

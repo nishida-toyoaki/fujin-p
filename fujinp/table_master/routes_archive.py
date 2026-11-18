@@ -30,6 +30,21 @@ from db import DatabaseConfig
 from . import table_master_bp
 from .routes import check_edit_permission, run_readonly_query
 
+try:
+    from markdown_converter import sanitize_html as _sanitize_html
+except ImportError:
+    _sanitize_html = None
+
+
+def _clean(html_text):
+    """公開アーカイブの HTML を無害化する．サニタイザが使えなければ文字として出す"""
+    t = html_text or ''
+    if _sanitize_html is not None:
+        return _sanitize_html(t)
+    import html as _h
+    return _h.escape(t)
+
+
 ARCHIVES_TABLE = "table_master_archives"
 VIEWS_TABLE    = "table_master_views"
 
@@ -83,6 +98,10 @@ def archive_view(archive_number):
                 status_code=403,
                 page_title='このテーブルは非公開です'
             ), 403
+
+        # 公開ページに出す HTML は無害化する（R-10，2026-10-26）
+        archive['description'] = _clean(archive.get('description'))
+        archive['html_content'] = _clean(archive.get('html_content'))
 
         if archive['created_at']:
             archive['created_at'] = archive['created_at'].isoformat()

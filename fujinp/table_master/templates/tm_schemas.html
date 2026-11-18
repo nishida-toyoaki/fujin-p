@@ -1,0 +1,79 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{# スキーマ一覧（admin 専用）．JavaScript を使わずサーバ側で組み立てる．オールが読む #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スキーマ一覧{% if selected %}（{{ selected }}）{% endif %} - テーブルマスター</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f4f6f9;margin:0;padding:16px;color:#1f2937}
+.wrap{max-width:1200px;margin:0 auto}
+.head{background:#fff;border-radius:8px;padding:14px 20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+h1{font-size:1.3rem;margin:0 0 4px}
+h2{font-size:1.1rem;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #2e6da4}
+h3{font-size:.95rem;margin:16px 0 4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.sub{color:#6b7280;font-size:.84rem;line-height:1.7;margin:2px 0}
+.nav{float:right;display:flex;gap:8px;flex-wrap:wrap}
+.nav a{padding:6px 12px;border-radius:4px;text-decoration:none;font-size:.8rem;font-weight:700;color:#fff;background:#2e6da4}
+.nav a.home{background:#ef4444}
+.panel{background:#fff;border-radius:8px;padding:12px 20px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+table{border-collapse:collapse;width:100%;font-size:.8rem;margin:4px 0}
+th,td{border-bottom:1px solid #e5e7eb;padding:3px 6px;text-align:left;vertical-align:top}
+th{background:#f8fafc;color:#4b5563;font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:6px}
+a{color:#2e6da4}
+.badge{display:inline-block;padding:0 6px;border-radius:8px;font-size:.7rem;font-weight:700;background:#fef3c7;color:#92400e}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="head">
+  <div class="nav">
+    <a href="{{ url_for('table_master.dashboard') }}">📝 テーブルマスター</a>
+    <a class="home" href="{{ url_for('table_master.return_to_fujin') }}">🏠 ダッシュボード</a>
+  </div>
+  <h1>🧾 スキーマ一覧{% if selected %}（{{ selected }}）{% endif %}</h1>
+  <p class="sub">このサイトのデータベースにあるテーブル {{ n_tables }} 本のスキーマ（列・索引・説明・行数の概数）を，データベース別に並べています．中身のデータは載せていません．{{ generated_at }} 現在．admin 専用．</p>
+  <p class="sub">データベース：
+    {% for s in summary %}<a href="{{ url_for('table_master.schema_list', db=s.short) }}">{{ s.name }}</a>{% if counts.get(s.name) %}（{{ counts[s.name][0] }} 表）{% endif %}{{ '，' if not loop.last }}{% endfor %}
+    {% if selected %}　<a href="{{ url_for('table_master.schema_list') }}">全部を表示</a>{% endif %}
+    　{% if with_ddl %}<a href="{{ url_for('table_master.schema_list', db=selected or None) }}">CREATE 文を外す</a>{% else %}<a href="{{ url_for('table_master.schema_list', db=selected or None, ddl=1) }}">CREATE 文も表示</a>{% endif %}</p>
+</div>
+
+{% for d in data %}
+<div class="panel" id="db-{{ d.short }}">
+  <h2>{{ d.name }}（{{ d.tables|length }} 表，{{ d.n_columns }} 列）</h2>
+  {% if d.error %}<p class="sub">CREATE 文の取得で問題がありました：{{ d.error }}</p>{% endif %}
+  <p class="sub">表：{% for t in d.tables %}<a class="mono" href="#{{ d.short }}.{{ t.name }}">{{ t.name }}</a>{{ '，' if not loop.last }}{% else %}ありません{% endfor %}</p>
+
+  {% for t in d.tables %}
+  <h3 id="{{ d.short }}.{{ t.name }}">{{ d.short }}.{{ t.name }}{% if t.view %} <span class="badge">ビュー</span>{% endif %}</h3>
+  <p class="sub">行数（概数）{{ t.rows if t.rows is not none else '不明' }}{% if t.engine %}，{{ t.engine }}{% endif %}{% if t.collation %}，{{ t.collation }}{% endif %}{% if t.updated %}，更新 {{ t.updated }}{% endif %}{% if t.comment %}．説明：{{ t.comment }}{% endif %}</p>
+  <table>
+    <tr><th>#</th><th>列名</th><th>型</th><th>NULL</th><th>キー</th><th>既定値</th><th>付加</th><th>コメント</th></tr>
+    {% for c in t.columns %}
+    <tr><td class="num">{{ loop.index }}</td><td class="mono">{{ c.COLUMN_NAME }}</td><td class="mono">{{ c.COLUMN_TYPE }}</td>
+      <td>{{ c.IS_NULLABLE }}</td><td>{{ c.COLUMN_KEY }}</td>
+      <td class="mono">{{ c.COLUMN_DEFAULT if c.COLUMN_DEFAULT is not none else '' }}</td>
+      <td>{{ c.EXTRA }}</td><td>{{ c.COLUMN_COMMENT }}</td></tr>
+    {% endfor %}
+  </table>
+  {% if t.indexes %}
+  <p class="sub">索引：{% for i in t.indexes %}{{ i.name }}{% if i.name != 'PRIMARY' and i.unique %}（一意）{% endif %}＝<span class="mono">{{ i.columns|join(', ') }}</span>{{ '，' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+  {% if with_ddl and t.ddl %}<pre>{{ t.ddl }}</pre>{% endif %}
+  {% endfor %}
+</div>
+{% endfor %}
+</div>
+</body>
+</html>

@@ -921,6 +921,15 @@
             📋 ビューエディタ
         </a>
         &nbsp;
+        {% if session.get('user_category') == 'admin' %}
+        <a href="{{ url_for('table_master.schema_list') }}"
+           style="padding: 6px 14px; background: #475569; color: #fff;
+                  border-radius: 4px; text-decoration: none; font-size: 13px;
+                  font-weight: bold;">
+            🧾 スキーマ一覧
+        </a>
+        &nbsp;
+        {% endif %}
         <a href="{{ url_for('table_master.return_to_fujin') }}" class="btn-return">🏠 FUJIN-Pダッシュボードに戻る</a>
     </p>
     <div class="info-box">
