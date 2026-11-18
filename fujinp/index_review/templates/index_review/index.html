@@ -882,6 +882,12 @@ function rebuildChart(){
   renderLegend();
 }
 
+// HTML に差し込む文字列のエスケープ（R-10，2026-10-26）
+function esc(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function renderLegend(){
   const keys=Object.keys(activeDatasets);
   const container=$('#chart-legend');
@@ -889,7 +895,7 @@ function renderLegend(){
   if(!keys.length)return;
   keys.forEach(k=>{
     const ds=activeDatasets[k],color=PALETTE[ds.colorIdx%PALETTE.length],hidden=hiddenDatasets.has(k);
-    container.append(`<button class="legend-btn ${hidden?'legend-hidden':''}" data-dskey="${k}" style="--lc:${color}"><span class="legend-dot"></span><span class="legend-name">${ds.label}</span></button>`);
+    container.append(`<button class="legend-btn ${hidden?'legend-hidden':''}" data-dskey="${k}" style="--lc:${color}"><span class="legend-dot"></span><span class="legend-name">${esc(ds.label)}</span></button>`);
   });
   const allHidden=keys.every(k=>hiddenDatasets.has(k));
   container.append(`<button id="btn-legend-hide-all" style="margin-left:auto;padding:2px 9px;border:1.5px solid var(--gray-300);border-radius:20px;background:#fff;font-size:.68rem;color:var(--gray-600);cursor:pointer;white-space:nowrap;">${allHidden?'◎ 全表示':'◉ 全非表示'}</button>`);
@@ -927,7 +933,7 @@ function renderStats(){
     const color=PALETTE[ds.colorIdx%PALETTE.length];
     const cagrHtml=s.cagr!==null?`<span class="${s.cagr>=0?'pos':'neg'}">${fmtPct(s.cagr)}/年</span>`:'—';
     const trendHtml=s.avgAnnual!==null?`<span class="${s.avgAnnual>=0?'pos':'neg'}">${s.avgAnnual>=0?'+':''}${fmt(s.avgAnnual,s.unit)}/年</span>`:'—';
-    const card=$(`<div class="stat-card"><div class="stat-label"><span class="stat-dot" style="background:${color}"></span>${s.label}<span style="font-size:.61rem;color:var(--gray-400)">(${s.n}年分)</span></div><div class="stat-grid"><div class="stat-item">最新(${s.latestYear})<br><span class="val">${fmt(s.latest,s.unit)}</span></div><div class="stat-item">平均<br><span class="val">${fmt(s.mean,s.unit)}</span></div><div class="stat-item">最大(${s.maxYear})<br><span class="val">${fmt(s.max,s.unit)}</span></div><div class="stat-item">最小(${s.minYear})<br><span class="val">${fmt(s.min,s.unit)}</span></div><div class="stat-item">平均年増<br><span class="val">${trendHtml}</span></div><div class="stat-item">CAGR<br><span class="val">${cagrHtml}</span></div></div></div>`);
+    const card=$(`<div class="stat-card"><div class="stat-label"><span class="stat-dot" style="background:${color}"></span>${esc(s.label)}<span style="font-size:.61rem;color:var(--gray-400)">(${s.n}年分)</span></div><div class="stat-grid"><div class="stat-item">最新(${s.latestYear})<br><span class="val">${fmt(s.latest,s.unit)}</span></div><div class="stat-item">平均<br><span class="val">${fmt(s.mean,s.unit)}</span></div><div class="stat-item">最大(${s.maxYear})<br><span class="val">${fmt(s.max,s.unit)}</span></div><div class="stat-item">最小(${s.minYear})<br><span class="val">${fmt(s.min,s.unit)}</span></div><div class="stat-item">平均年増<br><span class="val">${trendHtml}</span></div><div class="stat-item">CAGR<br><span class="val">${cagrHtml}</span></div></div></div>`);
     card.css('border-left-color',color);
     bar.append(card);
   });
@@ -951,7 +957,7 @@ function renderProjectSelector(projects){
   sel.empty().append('<option value="">— プロジェクトを選択 —</option>');
   projects.forEach(p=>{
     const icon={'public':'🔓','domestic':'🏫','group':'👥','private':'🔒'}[p.access_policy]||'🔒';
-    sel.append(`<option value="${p.id}">${icon} ${p.name} (${p.indicator_count}件)</option>`);
+    sel.append(`<option value="${p.id}">${icon} ${esc(p.name)} (${p.indicator_count}件)</option>`);
   });
   if(prevId) sel.val(prevId);
 }
@@ -961,9 +967,9 @@ function renderProjectInfo(p){
     const policyLabel={'public':'🔓 ゲストにも','domestic':'🏫 構成員だけ','group':'👥 グループ','private':'🔒 プライベート'}[p.access_policy]||p.access_policy;
     const policyClass={'public':'policy-public','domestic':'policy-domestic','group':'policy-group','private':'policy-private'}[p.access_policy]||'policy-public';
   let html=`<div><span class="pi-policy ${policyClass}">${policyLabel}</span></div>`;
-  if(p.group_name) html+=`<div style="font-size:.67rem;color:var(--gray-500);">👥 ${p.group_name}</div>`;
-  html+=`<div style="font-size:.67rem;color:var(--gray-500);">👤 ${p.owner_name||'—'}</div>`;
-  if(p.description) html+=`<div style="font-size:.67rem;color:var(--gray-500);margin-top:3px;">${p.description}</div>`;
+  if(p.group_name) html+=`<div style="font-size:.67rem;color:var(--gray-500);">👥 ${esc(p.group_name)}</div>`;
+  html+=`<div style="font-size:.67rem;color:var(--gray-500);">👤 ${esc(p.owner_name||'—')}</div>`;
+  if(p.description) html+=`<div style="font-size:.67rem;color:var(--gray-500);margin-top:3px;">${esc(p.description)}</div>`;
   if(p.can_edit){
     html+=`<div class="pi-actions"><button class="btn btn-outline" id="btn-edit-project" style="font-size:.67rem;padding:2px 7px;">✏️ 編集</button><button class="btn" id="btn-delete-project" style="font-size:.67rem;padding:2px 7px;background:#fee2e2;color:#b91c1c;border:none;">🗑 削除</button></div>`;
   }
@@ -1027,13 +1033,13 @@ function openProjectModal(project=null){
     agList.empty();
     if(res.success){
       res.groups.forEach(g => {
-        sel.append(`<option value="${g.id}">${g.name}</option>`);
+        sel.append(`<option value="${g.id}">${esc(g.name)}</option>`);
         const checked = (project && (project.access_group_ids||[]).includes(g.id)) ? 'checked' : '';
         agList.append(`
           <label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;">
             <input type="checkbox" class="ag-check" value="${g.id}" ${checked}
                    style="width:13px;height:13px;accent-color:var(--primary);">
-            ${g.name}
+            ${esc(g.name)}
           </label>`);
       });
     }
@@ -1138,8 +1144,8 @@ function renderIndicatorList(indicators, canEdit, pid){
       <div class="ind-row" data-id="${ind.id}" data-pid="${pid}">
         <input type="checkbox">
         <span class="ind-color-dot"></span>
-        <span class="ind-row-label">${ind.name}
-          ${ind.description?`<div class="ind-meta" style="font-size:.61rem;color:var(--gray-400);">${ind.description}</div>`:''}
+        <span class="ind-row-label">${esc(ind.name)}
+          ${ind.description?`<div class="ind-meta" style="font-size:.61rem;color:var(--gray-400);">${esc(ind.description)}</div>`:''}
         </span>
         ${canEdit?`<button class="ind-edit-btn" data-id="${ind.id}" title="編集">✏️</button><button class="ind-del-btn" data-id="${ind.id}" title="削除">🗑</button>`:''}
       </div>`);
@@ -1362,7 +1368,7 @@ function loadTableList(){
     const box=$('#table-list-box');
     box.empty();
     res.tables.forEach(t=>{
-      const span=$(`<span class="tname">\`${t}\`</span>`);
+      const span=$(`<span class="tname">\`${esc(t)}\`</span>`);
       span.on('click',function(){
         const ta=document.getElementById('sql-editor');
         const s=ta.selectionStart,ins='`'+t+'`';
@@ -1413,13 +1419,13 @@ $('#btn-sql-run').on('click',function(){
           prepSaveForm(res.columns);
         }
       }else{
-        $('#sql-result').html(`<div class="err-msg">⚠️ ${res.error}</div>`);
+        $('#sql-result').html(`<div class="err-msg">⚠️ ${esc(res.error)}</div>`);
       }
     })
     .fail(xhr=>{
       let msg='通信エラー';
       try{const r=JSON.parse(xhr.responseText);if(r&&r.error)msg=r.error;}catch(e){}
-      $('#sql-result').html(`<div class="err-msg">⚠️ ${msg}</div>`);
+      $('#sql-result').html(`<div class="err-msg">⚠️ ${esc(msg)}</div>`);
     })
     .always(()=>$btn.prop('disabled',false).html('▶ SQLを実行'));
 });
@@ -1440,11 +1446,11 @@ $('#btn-sql-clear').on('click',function(){
 function renderSqlResult(res){
   if(!res.rows.length){$('#sql-result').html('<div class="result-info">✅ 実行成功（0件）</div>');return;}
   let html=`<div class="result-info">✅ ${res.rows.length}行（最大20行）</div><div class="result-table-wrap"><table class="result-table"><thead><tr>`;
-  res.columns.forEach(c=>{html+=`<th>${c}</th>`;});
+  res.columns.forEach(c=>{html+=`<th>${esc(c)}</th>`;});
   html+='</tr></thead><tbody>';
   res.rows.forEach(r=>{
     html+='<tr>';
-    res.columns.forEach(c=>{const v=r[c];html+=`<td>${v===null?'<span style="color:#ccc">NULL</span>':v}</td>`;});
+    res.columns.forEach(c=>{const v=r[c];html+=`<td>${v===null?'<span style="color:#ccc">NULL</span>':esc(v)}</td>`;});
     html+='</tr>';
   });
   html+='</tbody></table></div>';
@@ -1454,7 +1460,7 @@ function renderSqlResult(res){
 function prepSaveForm(columns){
   const yearSel=$('#f-year-col'),valSel=$('#f-val-col');
   yearSel.empty();valSel.empty();
-  columns.forEach(c=>{yearSel.append(`<option value="${c}">${c}</option>`);valSel.append(`<option value="${c}">${c}</option>`);});
+  columns.forEach(c=>{yearSel.append(`<option value="${esc(c)}">${esc(c)}</option>`);valSel.append(`<option value="${esc(c)}">${esc(c)}</option>`);});
   yearSel.val(columns.find(c=>c.includes('年度')||c.toLowerCase().includes('year'))||columns[0]);
   valSel.val(columns.find(c=>c==='値'||c.includes('値'))||columns[columns.length-1]);
   $('#save-form').addClass('show');
@@ -1530,10 +1536,10 @@ function startEditIndicator(iid, opts){
         const columns=sr.success?sr.columns:[g.year_column,g.value_column];
         const yearSel=$('#f-year-col'),valSel=$('#f-val-col');
         yearSel.empty();valSel.empty();
-        columns.forEach(c=>{yearSel.append(`<option value="${c}">${c}</option>`);valSel.append(`<option value="${c}">${c}</option>`);});
+        columns.forEach(c=>{yearSel.append(`<option value="${esc(c)}">${esc(c)}</option>`);valSel.append(`<option value="${esc(c)}">${esc(c)}</option>`);});
         yearSel.val(g.year_column);valSel.val(g.value_column);
         if(sr.success){lastSqlTestResult=sr;renderSqlResult(sr);$('#edit-action-sep,#btn-update-confirm,#btn-update-cancel').show();$('#save-form-btns').hide();}
-        else{$('#sql-result').html(`<div class="err-msg">⚠️ 保存されているSQLの実行に失敗しています：${sr.error||''}<br>SQLを修正して「SQLを実行」→「更新する」で修復できます。</div>`);}
+        else{$('#sql-result').html(`<div class="err-msg">⚠️ 保存されているSQLの実行に失敗しています：${esc(sr.error||'')}<br>SQLを修正して「SQLを実行」→「更新する」で修復できます。</div>`);}
       });
     $('#save-form').addClass('show');
     if(opts.scroll!==false){
@@ -1737,10 +1743,10 @@ function renderAnnotationList() {
       <div style="display:flex;align-items:center;gap:5px;padding:3px 5px;
                   border-radius:4px;background:var(--gray-50);margin-bottom:3px;">
         <span style="width:11px;height:11px;border-radius:2px;flex-shrink:0;
-                     background:${ann.color};border:1px solid rgba(0,0,0,.12);"></span>
+                     background:${esc(ann.color)};border:1px solid rgba(0,0,0,.12);"></span>
         <span style="flex:1;font-size:.71rem;color:var(--gray-700);">
-          ${ann.label}
-          <span style="color:var(--gray-400)">= ${ann.value}</span>
+          ${esc(ann.label)}
+          <span style="color:var(--gray-400)">= ${esc(ann.value)}</span>
         </span>
         ${editBtn}
       </div>`);
@@ -2019,13 +2025,13 @@ $('#import-execute').on('click',function(){
         let html=`<div style="color:var(--success);font-weight:600;">✅ ${res.imported}件をインポートしました（スキップ: ${res.skipped}件）</div>`;
         if(res.messages&&res.messages.length){
           html+=`<ul style="margin-top:4px;font-size:.68rem;color:var(--gray-500);">`;
-          res.messages.forEach(m=>{html+=`<li>${m}</li>`;});
+          res.messages.forEach(m=>{html+=`<li>${esc(m)}</li>`;});
           html+=`</ul>`;
         }
         $('#import-result').html(html);
         loadProjectIndicators(currentProjectId);
         setTimeout(()=>$('#import-modal').removeClass('open'),2000);
-      }else $('#import-result').html(`<div class="err-msg">⚠️ ${res.error}</div>`);
+      }else $('#import-result').html(`<div class="err-msg">⚠️ ${esc(res.error)}</div>`);
     })
     .fail(()=>$('#import-result').html('<div class="err-msg">⚠️ 通信エラー</div>'))
     .always(()=>$btn.prop('disabled',false).html('📥 インポート実行'));
@@ -2070,21 +2076,21 @@ const TBrowser=(()=>{
 
   function loadTables(){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserTables).done(res=>{if(res.success){allTables=res.tables;renderTableList();}else $('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
 
-  function renderTableList(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allTables;if(kw)filtered=allTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database.toLowerCase().includes(kw));const byDb={};filtered.forEach(t=>(byDb[t.database]=byDb[t.database]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${db}</div>`);byDb[db].sort((a,b)=>a.table_name.localeCompare(b.table_name)).forEach(t=>{const active=(currentDb===t.database&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${t.database}" data-tbl="${t.table_name}"><span class="tb-name">${t.table_name}</span><span class="tb-cnt">${t.row_count}行</span></div>`);});});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">該当なし</div>');}
+  function renderTableList(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allTables;if(kw)filtered=allTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database.toLowerCase().includes(kw));const byDb={};filtered.forEach(t=>(byDb[t.database]=byDb[t.database]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${esc(db)}</div>`);byDb[db].sort((a,b)=>a.table_name.localeCompare(b.table_name)).forEach(t=>{const active=(currentDb===t.database&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${esc(t.database)}" data-tbl="${esc(t.table_name)}"><span class="tb-name">${esc(t.table_name)}</span><span class="tb-cnt">${t.row_count}行</span></div>`);});});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">該当なし</div>');}
 
   function loadProjects_tb(){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserProjects).done(res=>{if(res.success){allProjects=res.projects;renderProjectList_tb();}else $('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
 
-  function renderProjectList_tb(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allProjects;if(kw)filtered=allProjects.filter(p=>p.name.toLowerCase().includes(kw));filtered.forEach(p=>{const active=(selectedProj&&selectedProj.id===p.id)?' active':'';$list.append(`<div class="tb-proj-card${active}" data-proj-id="${p.id}"><span class="tb-proj-name">📁 ${p.name}</span>${p.description?`<span class="tb-proj-desc">${p.description}</span>`:''}<span class="tb-proj-meta">テーブル ${p.table_count}件 / ビュー ${p.view_count}件</span></div>`);});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">プロジェクトなし</div>');}
+  function renderProjectList_tb(){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();let filtered=allProjects;if(kw)filtered=allProjects.filter(p=>p.name.toLowerCase().includes(kw));filtered.forEach(p=>{const active=(selectedProj&&selectedProj.id===p.id)?' active':'';$list.append(`<div class="tb-proj-card${active}" data-proj-id="${p.id}"><span class="tb-proj-name">📁 ${esc(p.name)}</span>${p.description?`<span class="tb-proj-desc">${esc(p.description)}</span>`:''}<span class="tb-proj-meta">テーブル ${p.table_count}件 / ビュー ${p.view_count}件</span></div>`);});if(!filtered.length)$list.html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">プロジェクトなし</div>');}
 
   function loadProjectTables_tb(projId){$('#tb-list').html('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">読込中...</div>');$.get(API.browserProjectTables+'?project_id='+projId).done(res=>{if(!res.success){$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">取得失敗</div>');return;}projTables=res.tables||[];renderProjectTables_tb(selectedProj?selectedProj.name:'');}).fail(()=>$('#tb-list').html('<div style="padding:20px;color:#e74c3c;font-size:.78rem;">通信エラー</div>'));}
 
-  function renderProjectTables_tb(projName){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();$list.append(`<div class="tb-back-btn" id="tb-proj-back">← プロジェクト一覧</div>`);let filtered=projTables;if(kw)filtered=projTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database_name.toLowerCase().includes(kw));if(!filtered.length){$list.append('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">テーブルなし</div>');return;}const byDb={};filtered.forEach(t=>(byDb[t.database_name]=byDb[t.database_name]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${db}</div>`);byDb[db].forEach(t=>{const active=(currentDb===t.database_name&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${t.database_name}" data-tbl="${t.table_name}"><span class="tb-name">${t.table_name}</span></div>`);});});}
+  function renderProjectTables_tb(projName){const kw=$('#tb-left-search').val().toLowerCase();const $list=$('#tb-list');$list.empty();$list.append(`<div class="tb-back-btn" id="tb-proj-back">← プロジェクト一覧</div>`);let filtered=projTables;if(kw)filtered=projTables.filter(t=>t.table_name.toLowerCase().includes(kw)||t.database_name.toLowerCase().includes(kw));if(!filtered.length){$list.append('<div style="padding:20px;color:#aaa;text-align:center;font-size:.78rem;">テーブルなし</div>');return;}const byDb={};filtered.forEach(t=>(byDb[t.database_name]=byDb[t.database_name]||[]).push(t));Object.keys(byDb).sort().forEach(db=>{$list.append(`<div class="tb-group-hd">📁 ${esc(db)}</div>`);byDb[db].forEach(t=>{const active=(currentDb===t.database_name&&currentTbl===t.table_name)?' active':'';$list.append(`<div class="tb-item${active}" data-db="${esc(t.database_name)}" data-tbl="${esc(t.table_name)}"><span class="tb-name">${esc(t.table_name)}</span></div>`);});});}
 
   function selectTable(db,tbl){currentDb=db;currentTbl=tbl;$('.tb-item').removeClass('active');$(`.tb-item[data-db="${db}"][data-tbl="${tbl}"]`).addClass('active');$('#tb-right-placeholder').hide();$('#tb-tabs,#tb-pane').show();$('#tb-table-label').text(`${db}.${tbl}`);showPane(currentPane);}
   function resetRight(){currentDb=currentTbl=null;$('#tb-right-placeholder').show();$('#tb-tabs,#tb-pane').hide();$('#tb-table-label').text('');}
   function showPane(pane){currentPane=pane;$('.tb-tab').removeClass('active');$(`.tb-tab[data-pane="${pane}"]`).addClass('active');$('#tb-pane-schema,#tb-pane-data').hide();if(pane==='schema'){$('#tb-pane-schema').show();loadSchema();}else{$('#tb-pane-data').show();loadData();}}
   function loadSchema(){$('#tb-schema-pre').text('取得中...');$.ajax({url:API.browserSchema,method:'POST',contentType:'application/json',data:JSON.stringify({database:currentDb,table_name:currentTbl})}).done(res=>$('#tb-schema-pre').text(res.success?res.schema:'エラー: '+res.error)).fail(()=>$('#tb-schema-pre').text('通信エラー'));}
-  function loadData(){$('#tb-data-info').text('取得中...');$('#tb-data-table').empty();$.ajax({url:API.browserData,method:'POST',contentType:'application/json',data:JSON.stringify({database:currentDb,table_name:currentTbl,limit:500,offset:0})}).done(res=>{if(!res.success){$('#tb-data-info').html(`<span style="color:#e74c3c;">エラー: ${res.error}</span>`);return;}const{columns,rows,total_count}=res;$('#tb-data-info').html(`<span>${rows.length} 行表示（全 ${total_count} 行）</span><span style="color:var(--gray-400);font-size:.66rem;">※最大500行 / 読み取り専用</span>`);let html='<thead><tr>'+columns.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';rows.forEach(row=>{html+='<tr>'+columns.map(c=>{const v=row[c];return v===null||v===undefined?'<td><span class="tb-null">NULL</span></td>':`<td title="${String(v).replace(/"/g,'&quot;')}">${String(v)}</td>`;}).join('')+'</tr>';});html+='</tbody>';$('#tb-data-table').html(html);}).fail(()=>$('#tb-data-info').html('<span style="color:#e74c3c;">通信エラー</span>'));}
+  function loadData(){$('#tb-data-info').text('取得中...');$('#tb-data-table').empty();$.ajax({url:API.browserData,method:'POST',contentType:'application/json',data:JSON.stringify({database:currentDb,table_name:currentTbl,limit:500,offset:0})}).done(res=>{if(!res.success){$('#tb-data-info').html(`<span style="color:#e74c3c;">エラー: ${esc(res.error)}</span>`);return;}const{columns,rows,total_count}=res;$('#tb-data-info').html(`<span>${rows.length} 行表示（全 ${total_count} 行）</span><span style="color:var(--gray-400);font-size:.66rem;">※最大500行 / 読み取り専用</span>`);let html='<thead><tr>'+columns.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr></thead><tbody>';rows.forEach(row=>{html+='<tr>'+columns.map(c=>{const v=row[c];return v===null||v===undefined?'<td><span class="tb-null">NULL</span></td>':`<td title="${esc(v)}">${esc(v)}</td>`;}).join('')+'</tr>';});html+='</tbody>';$('#tb-data-table').html(html);}).fail(()=>$('#tb-data-info').html('<span style="color:#e74c3c;">通信エラー</span>'));}
 
   function init(){
     $('#tb-close').on('click',close);
@@ -2189,8 +2195,8 @@ $('#btn-export-chart').on('click', function() {
       drawnAnns.set(dupKey, true);
       if (displayValue < yMin || displayValue > yMax) return;
       const yPx = yPos(displayValue);
-      svg += `<line x1="${ML}" y1="${yPx}" x2="${ML+PW}" y2="${yPx}" stroke="${ann.color}" stroke-width="1.5" stroke-dasharray="6,3"/>`;
-      svg += `<text x="${ML+PW-4}" y="${yPx-3}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="bold" fill="${ann.color}">${ann.label}</text>`;
+      svg += `<line x1="${ML}" y1="${yPx}" x2="${ML+PW}" y2="${yPx}" stroke="${esc(ann.color)}" stroke-width="1.5" stroke-dasharray="6,3"/>`;
+      svg += `<text x="${ML+PW-4}" y="${yPx-3}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="bold" fill="${esc(ann.color)}">${esc(ann.label)}</text>`;
     });
   });
 
@@ -2272,7 +2278,7 @@ $('#btn-export-chart').on('click', function() {
       // 折れ線凡例：丸
       svg += `<rect x="${legX}" y="${legY-9}" width="12" height="12" rx="6" fill="${s.color}"/>`;
     }
-    svg += `<text x="${legX+16}" y="${legY}" font-family="sans-serif" font-size="11" fill="#374151">${s.label}</text>`;
+    svg += `<text x="${legX+16}" y="${legY}" font-family="sans-serif" font-size="11" fill="#374151">${esc(s.label)}</text>`;
     legX += 16 + s.label.length * 7 + 20;
   });
 

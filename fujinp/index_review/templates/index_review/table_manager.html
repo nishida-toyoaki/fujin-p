@@ -478,6 +478,11 @@ body {
 <div id="toast-container"></div>
 
 <script>
+// HTML に差し込む文字列のエスケープ（R-10，2026-10-26）
+function esc(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 /* ====================================================
    定数・状態
    ==================================================== */
@@ -556,8 +561,8 @@ function renderTableSetList() {
     const $item = $(`
       <div class="ts-item${active}" data-id="${ts.id}">
         <div style="flex:1; min-width:0;">
-          <div class="ts-item-name">${ts.name}</div>
-          <div class="ts-item-meta">${ts.owner_name} ／ ${ts.created_at || ''}</div>
+          <div class="ts-item-name">${esc(ts.name)}</div>
+          <div class="ts-item-meta">${esc(ts.owner_name)} ／ ${esc(ts.created_at || '')}</div>
         </div>
         <span class="ts-item-cnt">${ts.item_count}件</span>
       </div>`);
@@ -649,9 +654,9 @@ function renderItems(items, canEdit) {
   items.forEach(it => {
     const mgrCell = canEdit
       ? `<button class="btn btn-outline btn-sm btn-set-mgr"
-             data-id="${it.id}" data-tbl="${it.table_name}" data-mgr="${it.manager_group_id || ''}"
+             data-id="${it.id}" data-tbl="${esc(it.table_name)}" data-mgr="${it.manager_group_id || ''}"
              title="責任グループを変更">
-           ${it.manager_group_name}
+           ${esc(it.manager_group_name)}
          </button>`
       : it.manager_group_name;
 
@@ -670,8 +675,8 @@ function renderItems(items, canEdit) {
 
     $tbody.append(`
       <tr>
-        <td>${it.database_name}</td>
-        <td><code style="font-size:.72rem;">${it.table_name}</code></td>
+        <td>${esc(it.database_name)}</td>
+        <td><code style="font-size:.72rem;">${esc(it.table_name)}</code></td>
         <td>${mgrCell}</td>
         <td style="font-size:.68rem; color:var(--gray-400);">${it.added_at || ''}</td>
         ${showOps ? `<td>${opsCell}</td>` : ''}
@@ -692,7 +697,7 @@ function setupDbSelect() {
   const $dbSel = $('#add-db-select');
   $dbSel.empty().append('<option value="">DB を選択…</option>');
   const dbs = [...new Set(allBrowserTbls.map(t => t.database))].sort();
-  dbs.forEach(db => $dbSel.append(`<option value="${db}">${db}</option>`));
+  dbs.forEach(db => $dbSel.append(`<option value="${esc(db)}">${esc(db)}</option>`));
   $('#add-tbl-select').empty().append('<option value="">テーブルを選択…</option>').prop('disabled', true);
 }
 
@@ -702,7 +707,7 @@ $('#add-db-select').on('change', function() {
   $tbl.empty().append('<option value="">テーブルを選択…</option>');
   if (!db) { $tbl.prop('disabled', true); return; }
   const tables = allBrowserTbls.filter(t => t.database === db).sort((a,b) => a.table_name.localeCompare(b.table_name));
-  tables.forEach(t => $tbl.append(`<option value="${t.table_name}">${t.table_name}（${t.row_count}行）</option>`));
+  tables.forEach(t => $tbl.append(`<option value="${esc(t.table_name)}">${esc(t.table_name)}（${t.row_count}行）</option>`));
   $tbl.prop('disabled', false);
 });
 
@@ -723,7 +728,7 @@ function setupMgrSelect(selector) {
   const $sel = $(selector);
   const cur = $sel.val();
   $sel.empty().append('<option value="">― 未設定 ―</option>');
-  allUsers.forEach(g => $sel.append(`<option value="${g.id}">${g.name}</option>`));
+  allUsers.forEach(g => $sel.append(`<option value="${g.id}">${esc(g.name)}</option>`));
   if (cur) $sel.val(cur);
 }
 
@@ -911,16 +916,16 @@ function renderTbList(kw) {
   Object.keys(byDb).sort().forEach(db => {
     $list.append(`<div style="background:#34495e; color:#ecf0f1; padding:4px 11px;
                               font-size:.68rem; font-weight:700; cursor:pointer;"
-                      class="tb-db-hd">${db}</div>`);
+                      class="tb-db-hd">${esc(db)}</div>`);
     byDb[db].sort().forEach(tbl => {
       const active = (tbCurrentDb === db && tbCurrentTbl === tbl) ? 'background:#d0e4f7;border-left:3px solid #2e6da4;font-weight:600;' : '';
       $list.append(`<div class="tb-item-row"
-                        data-db="${db}" data-tbl="${tbl}"
+                        data-db="${esc(db)}" data-tbl="${esc(tbl)}"
                         style="padding:6px 11px; cursor:pointer; border-bottom:1px solid #eee;
                                ${active} transition:background .1s;"
                         onmouseover="this.style.background='#e8f0fe'"
                         onmouseout="this.style.background='${active?'#d0e4f7':'#fff'}'"
-                        >${tbl}</div>`);
+                        >${esc(tbl)}</div>`);
     });
   });
 }
@@ -964,12 +969,12 @@ function showTbPane(pane) {
       if (!res.success) { $('#tb-data-info').text('エラー: ' + res.error); return; }
       const {columns, rows, total_count} = res;
       $('#tb-data-info').html(`${rows.length} 行表示（全 ${total_count} 行）`);
-      let html = '<thead><tr>' + columns.map(c=>`<th style="background:#2e6da4;color:#fff;padding:6px 9px;white-space:nowrap;">${c}</th>`).join('') + '</tr></thead><tbody>';
+      let html = '<thead><tr>' + columns.map(c=>`<th style="background:#2e6da4;color:#fff;padding:6px 9px;white-space:nowrap;">${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
       rows.forEach(row => {
         html += '<tr>' + columns.map(c => {
           const v = row[c];
           return v===null||v===undefined ? '<td style="padding:5px 9px;border-bottom:1px solid #eee;color:#e74c3c;font-style:italic;">NULL</td>'
-                                        : `<td style="padding:5px 9px;border-bottom:1px solid #eee;white-space:nowrap;">${String(v)}</td>`;
+                                        : `<td style="padding:5px 9px;border-bottom:1px solid #eee;white-space:nowrap;">${esc(v)}</td>`;
         }).join('') + '</tr>';
       });
       html += '</tbody>';
