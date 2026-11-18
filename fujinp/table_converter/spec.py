@@ -57,6 +57,15 @@ import re
 
 RE_NAME = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
 RE_IDENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+# 列型の許可リスト（R-11，2026-10-26）．DDL に連結するので，これ以外は受け付けない
+RE_COLTYPE = re.compile(
+    r'^\s*(?:'
+    r'(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)(?:\(\d{1,3}\))?(?:\s+UNSIGNED)?'
+    r'|(?:DECIMAL|NUMERIC)\(\d{1,2}(?:\s*,\s*\d{1,2})?\)'
+    r'|(?:VARCHAR|CHAR)\(\d{1,5}\)'
+    r'|FLOAT|DOUBLE|DATE|DATETIME|TIMESTAMP|TIME|YEAR'
+    r'|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|JSON|BOOLEAN|BOOL'
+    r')\s*$', re.I)
 RE_FIELD = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')
 
 SPEC_VERSION = 1
@@ -100,6 +109,9 @@ def check(d):
         e.append('name は小文字英数と下線で 2〜41 文字')
     if not d.get('sheet'):
         e.append('sheet（対象のシート名）が要ります')
+    dsc = d.get('dataset_col', DEFAULT_DATASET_COL)
+    if dsc and not RE_IDENT.match(str(dsc)):
+        e.append('dataset_col「%s」が使えません' % str(dsc)[:40])
     tables = d.get('tables')
     if not isinstance(tables, dict) or not tables:
         e.append('tables が空です')
@@ -113,9 +125,14 @@ def check(d):
         if not isinstance(cols, dict) or not cols:
             e.append('%s: columns が空です' % alias)
             continue
-        for c in cols:
+        for c, ty in cols.items():
             if not RE_IDENT.match(c):
                 e.append('%s: 列名「%s」が使えません' % (alias, c))
+            if ty and not RE_COLTYPE.match(str(ty)):
+                e.append('%s: 列「%s」の型「%s」は使えません（INT・VARCHAR(n)・TEXT・DATE・DECIMAL(m,n) など）'
+                         % (alias, c, str(ty)[:40]))
+        if any(ch in str(t.get('note') or '') for ch in '\r\n'):
+            e.append('%s: note に改行は入れられません' % alias)
         seq = t.get('seq')
         if seq and seq not in cols:
             e.append('%s: seq「%s」が columns にありません' % (alias, seq))
@@ -249,11 +266,19 @@ TYPE_DEFAULT = 'TEXT'
 
 
 def ddl(d):
-    """対応式が要求するテーブルの CREATE 文。MySQL コンソールに貼れる形で返す。"""
+    """対応式が要求するテーブルの CREATE 文。MySQL コンソールに貼れる形で返す。
+    識別子・列型が許可の形でなければ ValueError（R-11）。"""
     ds = d.get('dataset_col', DEFAULT_DATASET_COL)
+    if ds and not RE_IDENT.match(str(ds)):
+        raise ValueError('dataset_col が使えません')
     out = []
     for alias, t in sorted((d.get('tables') or {}).items()):
         name = t['table']
+        if not RE_NAME.match(str(alias)) or not RE_IDENT.match(str(name)):
+            raise ValueError('テーブルの別名か名前が使えません')
+        for c, ty in t['columns'].items():
+            if not RE_IDENT.match(str(c)) or (ty and not RE_COLTYPE.match(str(ty))):
+                raise ValueError('列名か列型が使えません')
         lines = ['CREATE TABLE IF NOT EXISTS `%s` (' % name,
                  '  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,']
         if ds:
@@ -269,7 +294,8 @@ def ddl(d):
         keys.append('`_ord`')
         lines.append('  KEY `ix_%s_ord` (%s)' % (name[:48], ', '.join(keys)))
         lines.append(') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;')
-        head = '-- %s%s\n' % (alias, ('（%s）' % t['note']) if t.get('note') else '')
+        note = re.sub(r'[\r\n;]+', ' ', str(t.get('note') or ''))
+        head = '-- %s%s\n' % (alias, ('（%s）' % note) if note else '')
         out.append(head + '\n'.join(lines))
     return '\n\n'.join(out)
 

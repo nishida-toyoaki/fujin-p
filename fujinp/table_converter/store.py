@@ -293,7 +293,10 @@ def missing_tables(d):
 
 
 def create_tables(d):
-    """対応式の求めるテーブルを作る（無いものだけ）。"""
+    """対応式の求めるテーブルを作る（無いものだけ）。対応式に誤りがあれば作らない（R-11）。"""
+    errs = sp.check(d)
+    if errs:
+        raise ValueError('対応式に誤りがあります：' + ' / '.join(errs[:3]))
     made = []
     with db() as (cur, conn):
         for stmt in sp.ddl(d).split(';'):
