@@ -10,7 +10,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>公式データ集（内容確認中） - FUJIN-P</title>
+<title>公式データ集 - FUJIN-P</title>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -178,7 +178,7 @@ body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
 .bak-name{font-family:Consolas,Monaco,monospace;font-size:10px;color:#555;
           word-break:break-all}
 
-/* 一括ダウンロード */
+/* データマイグレーション／一括取り出し */
 .bulk-wrap{flex:1;overflow:auto;min-height:0;background:#fff;padding:16px 20px}
 .bulk-intro{font-size:12.5px;color:#555;line-height:1.7;margin:0 0 16px;
             max-width:880px}
@@ -198,6 +198,15 @@ body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
           border-top:1px solid #2c3a44}
 .bulk-pre.b-loading{color:#9fb3c8;font-style:italic}
 .bulk-pre.b-error{color:#ffb4b4}
+.bulk-card.bulk-import,.bulk-card.bulk-export{border-color:#c0392b;background:#fff7f6}
+.bulk-card.bulk-import .bulk-title,.bulk-card.bulk-export .bulk-title{color:#c0392b}
+.mig-h{font-size:14.5px;color:#1a3a5c;margin:4px 0 8px;max-width:980px}
+.mig-section{margin-bottom:26px;padding-bottom:6px;border-bottom:1px dashed #d5dbe1;max-width:980px}
+.bulk-import-body{padding:10px 15px;font-size:12.5px;line-height:1.6}
+.bulk-import-body ul{margin:6px 0 10px;padding-left:20px;max-height:320px;overflow:auto}
+.bulk-import-body .bi-q{font-weight:700;margin:4px 0}
+.rep-url{padding:7px 15px;font-family:Consolas,Monaco,'Courier New',monospace;font-size:11.5px;
+         color:#555;word-break:break-all;background:#fdfdfe}
 
 /* ページャー */
 #pager{display:none;align-items:center;gap:6px;padding:6px 12px;
@@ -265,7 +274,7 @@ body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
   <button class="tab active" data-tab="tables">📁 公式テーブル</button>
   <button class="tab" data-tab="indicator-views">📈 単一指標</button>
   <button class="tab" data-tab="composites">📉 複合指標</button>
-  <button class="tab" data-tab="bulk">📦 一括ダウンロード</button>
+  <button class="tab" data-tab="bulk">🚚 データマイグレーション</button>
   <button class="tab" data-tab="updates">🔄 データ更新</button>
 </div>
 
@@ -442,10 +451,76 @@ body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
 </div><!-- /pane-composites -->
 
 <!-- ============================================================
-     タブ：一括ダウンロード
+     タブ：データマイグレーション（上部）＋定義情報の一括取り出し（下部）
 ============================================================ -->
 <div class="tab-pane hidden" id="pane-bulk">
   <div class="bulk-wrap">
+
+    <div class="mig-section hidden" id="mig-section">
+      <h3 class="mig-h">🚚 データマイグレーション（全体管理者のみ）</h3>
+      <p class="bulk-intro">
+        公式テーブル（登録簿・DDL・全行）と単一指標・複合指標を1本のJSON（全部一括）にまとめて書き出し，別のサイトで読み込んで丸ごと再現します．
+        どちらもテーブル単位で少しずつやり取りするので，大きなテーブルがあっても途中で止まりません．
+      </p>
+
+      <div class="bulk-card bulk-export" id="mig-export">
+        <div class="bulk-head">
+          <div class="bulk-title">⬇ 全部一括（JSON）の書き出し</div>
+          <div class="bulk-desc">登録簿に載っている全テーブルの定義と全行，単一指標，複合指標を書き出します</div>
+          <div class="bulk-ops">
+            <button class="btn-toggle" id="mig-export-go">書き出す</button>
+          </div>
+        </div>
+        <div class="bulk-import-body hidden" id="mig-export-body"></div>
+      </div>
+
+      <div class="bulk-card bulk-import" id="bulk-import">
+        <div class="bulk-head">
+          <div class="bulk-title">⬆ 全部一括（JSON）の取り込み</div>
+          <div class="bulk-desc">このサイトの公式データ集（公式テーブル・登録簿・単一指標・複合指標・データ更新の記録）をすべて消してから，全部一括（JSON）の内容で作り直します（admin のみ）</div>
+          <div class="bulk-ops">
+            <input type="file" id="bulk-import-file" accept=".json,application/json" style="display:none">
+            <button class="btn-toggle" id="bulk-import-pick">📂 ファイルを選ぶ</button>
+          </div>
+        </div>
+        <div class="bulk-import-body hidden" id="bulk-import-body"></div>
+      </div>
+    </div>
+
+    <h3 class="mig-h">📄 一覧ドキュメント（Web文書）</h3>
+    <p class="bulk-intro">
+      指標のグラフとテーブルの定義を，それぞれ1本のWeb文書として公開しています．
+      下のURLにアクセスすると，その時点の最新状態からHTML文書が返されます（閲覧権限のあるログイン中の利用者が読めます）．
+      「開く」で別タブに表示し，「⬇ ダウンロード」でHTMLファイルとして保存します．
+    </p>
+
+    <div class="bulk-card">
+      <div class="bulk-head">
+        <div class="bulk-title">📈 指標の動き</div>
+        <div class="bulk-desc">単一指標と複合指標のグラフ（SVG）を，指標名の見出しつきで並べた文書（HTML＋SVG＋CSS）</div>
+        <div class="bulk-ops">
+          <a class="btn-toggle rep-open" data-rep="iv" href="#" target="_blank" rel="noopener">開く</a>
+          <a class="btn-toggle rep-dl" data-rep="iv" href="#">⬇ ダウンロード</a>
+          <button class="btn-toggle rep-copy" data-rep="iv">📋 URLコピー</button>
+        </div>
+      </div>
+      <div class="rep-url" data-rep="iv"></div>
+    </div>
+
+    <div class="bulk-card">
+      <div class="bulk-head">
+        <div class="bulk-title">🧱 テーブル一覧</div>
+        <div class="bulk-desc">登録簿に載っている公式テーブルの名前と，列構成・DDL（スキーマ）の一覧</div>
+        <div class="bulk-ops">
+          <a class="btn-toggle rep-open" data-rep="tb" href="#" target="_blank" rel="noopener">開く</a>
+          <a class="btn-toggle rep-dl" data-rep="tb" href="#">⬇ ダウンロード</a>
+          <button class="btn-toggle rep-copy" data-rep="tb">📋 URLコピー</button>
+        </div>
+      </div>
+      <div class="rep-url" data-rep="tb"></div>
+    </div>
+
+    <h3 class="mig-h">📦 定義情報の一括取り出し</h3>
     <p class="bulk-intro">
       登録されている公式テーブル・指標の定義情報を、種類ごとにまとめて取り出せます。
       各項目とも「表示」で本文を読み込み、📋 でクリップボードにコピー、⬇ でファイルとして保存できます。
@@ -673,6 +748,14 @@ const URL_UP_APPLY    = '{{ url_for("official_data_archive.api_update_apply") }}
 const URL_UP_REJECT   = '{{ url_for("official_data_archive.api_update_reject") }}';
 const URL_BULK        = '{{ url_for("official_data_archive.api_bulk") }}';
 const URL_BULK_DL     = '{{ url_for("official_data_archive.api_bulk_download") }}';
+const URL_MIG_TABLE = '{{ url_for("official_data_archive.api_migration_import_table") }}';
+const URL_MIG_DEFS  = '{{ url_for("official_data_archive.api_migration_import_definitions") }}';
+const URL_MIG_PLAN  = '{{ url_for("official_data_archive.api_migration_import_plan") }}';
+const URL_MIG_WIPE  = '{{ url_for("official_data_archive.api_migration_import_wipe") }}';
+const URL_MIG_MANIFEST = '{{ url_for("official_data_archive.api_migration_manifest") }}';
+const URL_MIG_EXPORT   = '{{ url_for("official_data_archive.api_migration_table") }}';
+const URL_REP_IV       = '{{ url_for("official_data_archive.report_indicators") }}';
+const URL_REP_TABLES   = '{{ url_for("official_data_archive.report_tables") }}';
 
 const PAGE_SIZE = 500;
 let allRows    = [];
@@ -682,7 +765,8 @@ let currentDb     = '';
 let currentOffset = 0;
 
 function esc(s){
-  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');   // 属性値にも使うので引用符も（R-10）
 }
 function toast(msg,isError){
   const $t=$('#toast');
@@ -753,6 +837,7 @@ function loadTableList(){
       return;
     }
     $('#btn-add').toggle(!!data.can_add);
+    $('#mig-section').toggleClass('hidden', !data.is_global);
 
     // 追加モーダルのDB選択肢
     const $sel = $('#in-db').empty();
@@ -1184,6 +1269,11 @@ function buildIvSvg(){
   if(!ivChartData) return null;
   const s = extractSeries(ivChartData.columns, ivChartData.rows);
   if(!s) return null;
+  return svgSingle(ivCurrent ? ivCurrent.name : s.yLabel, s, ivChartMode);
+}
+
+// 単一指標のSVG（純関数：タイトル・系列・グラフ種別から組み立てる．一覧ドキュメントでも使う）
+function svgSingle(title, s, mode){
   const nums = s.values.filter(v => v !== null);
   if(!nums.length) return null;
 
@@ -1196,7 +1286,6 @@ function buildIvSvg(){
   const n  = s.labels.length;
   const X  = i => mL + pw * (i + 0.5) / n;
   const Y  = v => mT + ph * (1 - (v - ymin) / (ymax - ymin));
-  const title = ivCurrent ? ivCurrent.name : s.yLabel;
 
   const o = [];
   o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
@@ -1219,7 +1308,7 @@ function buildIvSvg(){
   o.push('<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' +
          (mT + ph) + '" stroke="#9ca3af" stroke-width="1"/>');
   // データ
-  if(ivChartMode === 'bar'){
+  if(mode === 'bar'){
     const bw = pw / n * 0.6;
     s.values.forEach(function(v, i){
       if(v === null) return;
@@ -1640,9 +1729,15 @@ function renderCpChart(){
 // ── SVGアウトプット（複数系列・凡例付き、縦軸0〜最大値） ──
 function buildCpSvg(){
   if(!cpSeries || !cpSeries.length) return null;
-  const labels = unionLabels(cpSeries);
+  return svgMulti(cpCurrent ? cpCurrent.name : '複合指標', cpSeries);
+}
+
+// 複合指標のSVG（純関数：タイトルと抽出済み系列の配列から組み立てる．一覧ドキュメントでも使う）
+function svgMulti(title, seriesList){
+  if(!seriesList || !seriesList.length) return null;
+  const labels = unionLabels(seriesList);
   let vmax = -Infinity;
-  const mapped = cpSeries.map(function(s){
+  const mapped = seriesList.map(function(s){
     const map = {};
     s.labels.forEach(function(l,i){ map[l] = s.values[i]; });
     const data = labels.map(function(l){
@@ -1669,7 +1764,7 @@ function buildCpSvg(){
   o.push('<rect width="' + W + '" height="' + H + '" fill="#ffffff"/>');
   o.push('<text x="' + (W/2) + '" y="22" text-anchor="middle" font-size="14" ' +
          'font-weight="bold" fill="#1a3a5c">' +
-         esc(cpCurrent ? cpCurrent.name : '複合指標') + '</text>');
+         esc(title) + '</text>');
   // 凡例
   mapped.forEach(function(s, i){
     const ly = 38 + i * 18;
@@ -1725,7 +1820,7 @@ function buildCpSvg(){
   });
   o.push('<text x="' + (mL + pw/2) + '" y="' + (H - 10) +
          '" text-anchor="middle" font-size="11" fill="#6b7280">' +
-         esc(cpSeries[0].xLabel) + '</text>');
+         esc(seriesList[0].xLabel) + '</text>');
   o.push('</svg>');
   return o.join('\n');
 }
@@ -1879,15 +1974,335 @@ function deleteComposite(c){
 }
 
 // ============================================================
-// 各種データ一括ダウンロード
+// 一覧ドキュメント（Web文書）
+//   サーバが所定のURLでHTML文書を返す．ここではURLを表示し，リンクを張るだけ．
+// ============================================================
+(function(){
+  const urls = {iv: URL_REP_IV, tb: URL_REP_TABLES};
+  Object.keys(urls).forEach(function(k){
+    const abs = new URL(urls[k], location.href).href;
+    $('.rep-open[data-rep="'+k+'"]').attr('href', urls[k]);
+    $('.rep-dl[data-rep="'+k+'"]').attr('href', urls[k] + '?dl=1');
+    $('.rep-url[data-rep="'+k+'"]').text(abs);
+  });
+  $('#pane-bulk').on('click', '.rep-copy', function(){
+    const k = $(this).data('rep');
+    const text = new URL(urls[k], location.href).href;
+    const ok = function(){ toast('URLをコピーしました'); };
+    const fallback = function(){
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy') ? ok() : toast('コピーに失敗しました', true); }
+      catch(e){ toast('コピーに失敗しました', true); }
+      ta.remove();
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(ok, fallback);
+    } else { fallback(); }
+  });
+})();
+
+// ============================================================
+// 定義情報の一括取り出し
 // ============================================================
 // カードごとに読み込んだ本文を保持（コピー用）
 const bulkText = {};
 
 // ダウンロードリンクの href を組み立てる
-$('#pane-bulk .bulk-card').each(function(){
+$('#pane-bulk .bulk-card[data-kind]').each(function(){
   const kind = $(this).data('kind');
   $(this).find('.b-dl').attr('href', URL_BULK_DL + '?kind=' + encodeURIComponent(kind));
+});
+
+
+// ============================================================
+// データマイグレーション（全部一括JSONの書き出しと取り込み）
+//   サーバとはテーブル単位の短いリクエストでやり取りし，
+//   JSONの組み立て・分解はブラウザ側で行う
+// ============================================================
+const MIG_POST_BYTES   = 2 * 1024 * 1024;   // 取り込み：1回の送信の目安
+const MIG_FETCH_BYTES  = 3 * 1024 * 1024;   // 書き出し：1回の受信の目安
+const MIG_FIRST_LIMIT  = 100;               // 書き出し：各テーブル最初の行数
+const MIG_WAIT_MS      = 300;               // 送受信の間合い
+const MIG_RETRY        = 3;                 // 1回あたりの試行回数
+
+function migSleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+// 1回のやり取り（失敗したら間を空けて再試行）
+async function migCall(method, url, payload){
+  let lastErr = '';
+  for(let k = 1; k <= MIG_RETRY; k++){
+    try{
+      const opt = (method === 'GET')
+        ? {url: url, method: 'GET', data: payload}
+        : {url: url, method: 'POST', contentType: 'application/json',
+           data: JSON.stringify(payload)};
+      const d = await $.ajax(opt);
+      if(d && d.success) return d;
+      lastErr = (d && d.error) || '不明なエラー';
+    }catch(xhr){
+      lastErr = (xhr.responseJSON && xhr.responseJSON.error) ||
+                ('通信エラー（' + (xhr.status||'-') + '）');
+    }
+    await migSleep(MIG_WAIT_MS * 5 * k);
+  }
+  throw new Error(lastErr);
+}
+
+// ---------- 書き出し ----------
+$('#mig-export-go').on('click', async function(){
+  const $btn  = $(this).prop('disabled', true);
+  const $body = $('#mig-export-body').removeClass('hidden').empty();
+  const $st   = $('<div class="bi-q">').appendTo($body);
+  const $ul   = $('<ul>').appendTo($body);
+  try{
+    $st.text('目次を取得しています…');
+    const m = await migCall('GET', URL_MIG_MANIFEST, {});
+    const regs = m.registry || [];
+    const parts = [];       // Blob にする断片（巨大な1本の文字列を作らない）
+    let nTables = 0, nRows = 0, fail = 0;
+
+    for(let i = 0; i < regs.length; i++){
+      const reg  = regs[i];
+      const name = reg.database_name + ' / ' + reg.table_name;
+      const $li  = $('<li>').text(name + '　…').appendTo($ul);
+      $ul.scrollTop($ul[0].scrollHeight);
+      if(i > 0) parts.push(',');
+      if((m.db_choices||[]).indexOf(reg.database_name) < 0){
+        parts.push(JSON.stringify({registry: reg, error: '未対応のデータベース指定'}));
+        $li.text(name + '　対象外（未対応のデータベース）');
+        continue;
+      }
+      const chunks = [];
+      let offset = 0, limit = MIG_FIRST_LIMIT, ddl = null, columns = null, fkOut = 0;
+      try{
+        while(true){
+          $st.text('書き出し中 ' + (i+1) + '/' + regs.length + '：' + name +
+                   (offset ? '（' + offset + '行）' : ''));
+          const d = await migCall('GET', URL_MIG_EXPORT,
+            {table: reg.table_name, db: reg.database_name, offset: offset, limit: limit});
+          if(offset === 0){ ddl = d.ddl; columns = d.columns;
+                          fkOut = (d.dropped_foreign_keys||[]).length; }
+          if(d.rows.length) chunks.push(JSON.stringify(d.rows).slice(1, -1));
+          offset += d.rows.length;
+          if(d.done) break;
+          limit = Math.max(1, Math.min(5000,
+                    Math.floor(limit * MIG_FETCH_BYTES / Math.max(1, d.bytes || 1))));
+          await migSleep(MIG_WAIT_MS);
+        }
+        parts.push('{"registry":' + JSON.stringify(reg) +
+                   ',"ddl":' + JSON.stringify(ddl) +
+                   ',"columns":' + JSON.stringify(columns) +
+                   ',"row_count":' + offset + ',"rows":[');
+        chunks.forEach(function(c, k){ if(k) parts.push(','); parts.push(c); });
+        parts.push(']}');
+        nTables++; nRows += offset;
+        $li.text(name + '　' + offset + '行' +
+                 (fkOut ? '（外部キー ' + fkOut + ' 本を外して書き出し）' : ''));
+      }catch(e){
+        fail++;
+        parts.push(JSON.stringify({registry: reg, error: e.message}));
+        $li.text(name + '　失敗：' + e.message).css('color', '#c0392b');
+      }
+      await migSleep(MIG_WAIT_MS);
+    }
+
+    const h = m.header;
+    h.counts = {tables: nTables, rows: nRows,
+                indicator_views: (m.indicator_views||[]).length,
+                composites: (m.composites||[]).length};
+    h.package_note = '公式データ集の移行用スナップショット。tables[]=登録簿情報（registry）'
+      + '＋DDL（外部キーは外してある）＋列名＋全行（rows は columns の順）。管理グループは名前で持ち運ぶ。'
+      + '取り込み先では同名テーブルを DROP して DDL から作り直し全行を INSERT、'
+      + '登録簿・単一指標・複合指標・データ更新の記録は全削除のうえ再作成する（破壊的再現）。';
+    const headJson = JSON.stringify(h);
+    const out = [headJson.slice(0, -1) + ',"tables":['].concat(parts);
+    out.push('],"indicator_views":' + JSON.stringify(m.indicator_views || []) +
+             ',"composites":' + JSON.stringify(m.composites || []) + '}');
+    const blob = new Blob(out, {type: 'application/json'});
+    const fname = 'official_data_archive_migration_' +
+      (h.generated_at || '').replace(/[-: ]/g, '').replace(/^(\d{8})(\d{6})$/, '$1_$2') + '.json';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 60000);
+    $st.text((fail ? '書き出しました（失敗 ' + fail + ' テーブル）．' : '書き出しました．') +
+      '　' + nTables + 'テーブル・' + nRows + '行／単一指標 ' + h.counts.indicator_views +
+      '件／複合指標 ' + h.counts.composites + '件　' + fname);
+    toast(fail ? ('失敗 ' + fail + ' テーブル') : '書き出しました', !!fail);
+  }catch(e){
+    $st.text('エラー：' + e.message);
+    toast('エラー: ' + e.message, true);
+  }finally{
+    $btn.prop('disabled', false);
+  }
+});
+
+// ---------- 取り込み ----------
+//   ファイルを読んで，消えるものと上書きするテーブル名を並べ，確認のうえ送る．
+//   順序：全消去 → テーブル → 登録簿・指標（2026-10-26 から全消去を先に行う）．
+//   各テーブルは最初の送信で DROP → CREATE するので，途中で止まっても
+//   最初からやり直せば同じ結果になる（冪等）．
+let importPkg = null;
+
+function migImportable(t){
+  return t && t.ddl && !t.error && t.registry && t.registry.table_name;
+}
+
+$('#bulk-import-pick').on('click', function(){
+  $('#bulk-import-file').val('').trigger('click');
+});
+
+$('#bulk-import-file').on('change', function(){
+  const f = this.files && this.files[0];
+  if(!f) return;
+  const $body = $('#bulk-import-body').removeClass('hidden').text('読み込み中…');
+  const rd = new FileReader();
+  rd.onload = function(){
+    let pkg;
+    try{ pkg = JSON.parse(rd.result); }
+    catch(e){ $body.text('JSONとして読めません'); return; }
+    if(!pkg || pkg.export_type !== 'official_data_archive_migration'){
+      $body.text('全部一括（JSON）のファイルではありません'); return;
+    }
+    importPkg = pkg;
+    const items = (pkg.tables||[]).filter(migImportable);
+    const skippedN = (pkg.tables||[]).length - items.length;
+    // 移行先の現状を取り，全消去で消えるものを示す
+    $.get(URL_MIG_PLAN).done(function(plan){
+      if(!plan.success){ $body.text('エラー：' + plan.error); importPkg = null; return; }
+      const incoming = {};
+      items.forEach(function(t){ incoming[t.registry.database_name + '/' + t.registry.table_name] = 1; });
+      const goneOnly = (plan.registry||[]).filter(function(r){
+        return !incoming[r.database_name + '/' + r.table_name]; });
+      const c = plan.counts || {};
+      const $ul = $('<ul>');
+      items.forEach(function(t){
+        $ul.append($('<li>').text(t.registry.database_name + ' / ' +
+          t.registry.table_name + '（' + (t.row_count||0) + '行）'));
+      });
+      const $gone = $('<ul>');
+      goneOnly.forEach(function(r){
+        $gone.append($('<li>').text(r.database_name + ' / ' + r.table_name).css('color', '#c0392b'));
+      });
+      $body.empty()
+        .append($('<div>').text('読み込み元：' + (pkg.site_name||'') + '　' + (pkg.generated_at||'')))
+        .append($('<div class="bi-q">').css('color', '#c0392b').text(
+          'このサイトの公式データ集をすべて消してから取り込みます．' +
+          '消えるもの：登録簿 ' + (plan.registry||[]).length + '件とその公式テーブル，' +
+          'データ更新の記録 ' + (c.updates||0) + '件とバックアップ表 ' + (plan.backups||0) + '本，' +
+          '単一指標 ' + (c.indicator_views||0) + '件，複合指標 ' + (c.composites||0) + '件．'))
+        .append(goneOnly.length
+          ? $('<div class="bi-q">').text('うち，取り込むファイルに無いため消えたままになるテーブル ' + goneOnly.length + ' 本：')
+          : $('<div>').text('取り込むファイルに無いため消えたままになるテーブルはありません．'))
+        .append(goneOnly.length ? $gone : '')
+        .append($('<div class="bi-q">').text('取り込むテーブル ' + items.length + ' 本' +
+          (skippedN ? '（検査を通らず取り込まないもの ' + skippedN + ' 本）' : '') + '：'))
+        .append($ul)
+        .append($('<button class="btn-toggle" id="bulk-import-go">').text('すべて消して取り込む'))
+        .append(' ')
+        .append($('<button class="btn-toggle" id="bulk-import-cancel">').text('やめる'));
+    }).fail(function(xhr){
+      importPkg = null;
+      $body.text('エラー：' + ((xhr.responseJSON && xhr.responseJSON.error) || '通信エラー'));
+    });
+  };
+  rd.readAsText(f, 'utf-8');
+});
+
+$('#pane-bulk').on('click', '#bulk-import-cancel', function(){
+  importPkg = null;
+  $('#bulk-import-body').addClass('hidden').empty();
+});
+
+// 行を送信の目安の大きさで切り分ける（空のテーブルも1回は送る）
+function migSplitRows(rows){
+  const chunks = [];
+  let cur = [], size = 0;
+  rows.forEach(function(r){
+    const n = JSON.stringify(r).length;
+    if(cur.length && size + n > MIG_POST_BYTES){ chunks.push(cur); cur = []; size = 0; }
+    cur.push(r); size += n;
+  });
+  chunks.push(cur);
+  return chunks;
+}
+
+$('#pane-bulk').on('click', '#bulk-import-go', async function(){
+  if(!importPkg) return;
+  const pkg = importPkg;
+  const items = (pkg.tables||[]).filter(migImportable);
+  const $body = $('#bulk-import-body').empty();
+  const $st  = $('<div class="bi-q">').appendTo($body);
+  const $ul  = $('<ul>').appendTo($body);
+  let fail = 0;
+
+  // ── 1. 全消去（何度実行しても同じ結果になる） ──
+  $st.text('このサイトの公式データ集を消しています…');
+  try{
+    const w = await migCall('POST', URL_MIG_WIPE, {confirm: 'wipe'});
+    const x = w.wiped || {};
+    $('<li>').text('全消去：テーブル ' + (x.dropped||0) + '本を削除，登録簿 ' + (x.registry||0) +
+      '件・単一指標 ' + (x.indicator_views||0) + '件・複合指標 ' + (x.composites||0) +
+      '件・データ更新の記録 ' + (x.updates||0) + '件を消去' +
+      ((x.skipped||[]).length ? '（名前が保護対象のため残したもの：' + x.skipped.join('，') + '）' : ''))
+      .appendTo($ul);
+  }catch(e){
+    $st.text('全消去に失敗しました．何も取り込んでいません：' + e.message);
+    toast('エラー: ' + e.message, true);
+    return;
+  }
+
+  // ── 2. テーブル（各テーブルは最初の送信で DROP → CREATE） ──
+  for(let i = 0; i < items.length; i++){
+    const t = items[i];
+    const name = t.registry.database_name + ' / ' + t.registry.table_name;
+    const rows = t.rows || [];
+    const $li = $('<li>').text(name + '　…').appendTo($ul);
+    $ul.scrollTop($ul[0].scrollHeight);
+    try{
+      const chunks = migSplitRows(rows);
+      let done = 0, fkNote = '';
+      for(let k = 0; k < chunks.length; k++){
+        $st.text('取り込み中 ' + (i+1) + '/' + items.length + '：' + name +
+                 (chunks.length > 1 ? '（' + done + '/' + rows.length + '行）' : ''));
+        const d = await migCall('POST', URL_MIG_TABLE, {
+          registry: t.registry, ddl: t.ddl, columns: t.columns,
+          rows: chunks[k], reset: k === 0
+        });
+        done += d.rows || 0;
+        if(k === 0 && (d.dropped_foreign_keys||[]).length){
+          fkNote = '（外部キー ' + d.dropped_foreign_keys.length + ' 本を外して作成）';
+        }
+        await migSleep(MIG_WAIT_MS);
+      }
+      $li.text(name + '　' + done + '行' + fkNote);
+    }catch(e){
+      fail++;
+      $li.text(name + '　失敗：' + e.message).css('color', '#c0392b');
+    }
+  }
+
+  // ── 3. 登録簿・単一指標・複合指標 ──
+  $st.text('登録簿・単一指標・複合指標を作り直しています…');
+  try{
+    const d = await migCall('POST', URL_MIG_DEFS, {
+      tables: (pkg.tables||[]).map(function(t){ return {registry: t.registry}; }),
+      indicator_views: pkg.indicator_views || [],
+      composites: pkg.composites || []
+    });
+    const c = d.counts || {};
+    $st.text((fail ? '終了（失敗 ' + fail + ' テーブル．もう一度実行すれば最初からやり直します）'
+                   : '取り込みました．') +
+      '　登録簿 ' + (c.registry||0) + '件／単一指標 ' +
+      (c.indicator_views||0) + '件／複合指標 ' + (c.composites||0) + '件');
+    toast(fail ? ('失敗 ' + fail + ' テーブル') : '取り込みました', !!fail);
+  }catch(e){
+    $st.text('エラー：' + e.message);
+    toast('エラー: ' + e.message, true);
+  }
+  loadTableList(); loadIvList(); loadCpList();
 });
 
 // 「表示」：本文を読み込んで <pre> に表示し、コピーを有効化する

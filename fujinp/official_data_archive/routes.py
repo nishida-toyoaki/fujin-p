@@ -114,17 +114,39 @@ def can_view(user_id):
     return _get_user_category(user_id) in VIEW_CATEGORIES
 
 
+# 構成員の判定はまいぐるの公開APIに任せる。台帳のルールから作られたグループ
+# （総務課など）は user_group_memberships に行を持たないため、このテーブルを
+# 直接引くと構成員が0人になる。取り込みは初回の呼び出し時に行う
+# （起動時の読み込み順に左右されないようにするため）。
+_UG_UTILS = None
+
+
+def _ug(name):
+    """まいぐるの utils から関数を取り出す。無ければ None（呼び出し元が従来処理に落ちる）"""
+    global _UG_UTILS
+    if _UG_UTILS is None:
+        try:
+            from fujinp.user_groups import utils as _u
+        except Exception:
+            _u = False
+        _UG_UTILS = _u
+    return getattr(_UG_UTILS, name, None) if _UG_UTILS else None
+
+
 def _user_effective_group_ids(user_id):
     """
     ユーザの有効な所属グループID集合。
-    まいぐるが公開する get_user_effective_group_ids() を使い、
+    まいぐるの get_user_group_ids()（直接メンバー ∪ 台帳のルール由来 − 除外）を使い、
     取得できない場合のみ有効期間つき所属を直接照合する。
     """
-    try:
-        from ..user_groups.utils import get_user_effective_group_ids
-        return set(get_user_effective_group_ids(user_id))
-    except Exception:
-        pass
+    if not user_id:
+        return set()
+    _fn = _ug('get_user_group_ids')
+    if _fn is not None:
+        try:
+            return set(_fn(user_id))
+        except Exception as e:
+            logging.error("official_data_archive user_groups.get_user_group_ids: %s", e)
     try:
         now = get_jst_now()
         conn = mysql.connector.connect(**DatabaseConfig.default())
@@ -666,7 +688,94 @@ def _validate_select(query):
     for bad in ('into outfile', 'into dumpfile'):
         if bad in low:
             return None, f'許可されない構文が含まれています：{bad}'
+    # 2026-10-26 セキュリティ改修（R-4）：読めるのは登録簿に載った公式テーブルだけにする
+    err = _check_query_scope(q)
+    if err:
+        return None, err
     return q, None
+
+
+# ── 指標クエリの読み取り範囲の検査（2026-10-26 R-4）──
+#   旧版は SELECT で始まりさえすれば，users など同じDBの任意の表，他のDB
+#   （fujinp$default.users のような修飾），information_schema，LOAD_FILE()・SLEEP() 等が通った．
+#   ここでは文字列リテラルとコメントを除いた本文を調べ，
+#     ・危険な関数・システムスキーマ・他DBの修飾（$ を含む名前）・INTO・ロック句を拒否し，
+#     ・クエリに現れる名前のうち「実行先DBに実在するが登録簿に載っていない表」の名前があれば拒否する．
+#   表を読むには名前を書くしかないので，名前の照合で読み取り範囲を登録簿に閉じ込められる．
+#   （列名がたまたま未登録の表と同名だと誤って拒否されるが，安全側に倒す）
+_Q_STRIP_RE = re.compile(
+    r"'(?:[^'\\]|\\.|'')*'"          # '...'
+    r'|"(?:[^"\\]|\\.|"")*"'         # "..."
+    r'|/\*.*?\*/'                      # /* ... */
+    r'|(?:--\s|#)[^\n]*',               # -- ... / # ...
+    re.S)
+_Q_DENY_RE = re.compile(
+    r'\b(load_file|sleep|benchmark|get_lock|release_lock|release_all_locks|is_free_lock|'
+    r'is_used_lock|master_pos_wait|source_pos_wait|sys_exec|sys_eval|load_data)\s*\('
+    r'|`?\b(information_schema|performance_schema|mysql|sys)\b`?\s*\.'
+    r'|\binto\b|\bfor\s+update\b|\block\s+in\s+share\s+mode\b|\bfor\s+share\b'
+    r'|\bhandler\b|\bprocedure\b',
+    re.I)
+_Q_IDENT_RE = re.compile(r'`([^`]+)`|([0-9A-Za-z_$\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]+)')
+_scope_cache = {'at': 0.0, 'forbidden': None}
+_SCOPE_TTL = 5    # 登録簿の追加直後でも待たずに使えるよう短く保つ
+
+
+def _forbidden_tables():
+    """実行先DBにあって登録簿に載っていない表の名前（小文字）の集合。5秒キャッシュ。"""
+    import time
+    now = time.time()
+    if _scope_cache['forbidden'] is not None and now - _scope_cache['at'] < _SCOPE_TTL:
+        return _scope_cache['forbidden']
+    conn = mysql.connector.connect(**DB_CHOICES[INDICATOR_DB]())
+    try:
+        cur = conn.cursor()
+        cur.execute("SHOW TABLES")
+        actual = {r[0] for r in cur.fetchall()}
+        cur.close()
+    finally:
+        conn.close()
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT table_name FROM official_data_archive_tables "
+                    "WHERE database_name = %s", (INDICATOR_DB,))
+        registered = {r[0].lower() for r in cur.fetchall()}
+        cur.close()
+    finally:
+        conn.close()
+    forbidden = {t.lower() for t in actual} - registered
+    _scope_cache.update(at=now, forbidden=forbidden)
+    return forbidden
+
+
+def _check_query_scope(q):
+    """読み取り範囲の検査。問題があればエラーメッセージ，なければ None。"""
+    # MySQL は /*! ... */ の中身を実行する（バージョン付きコメント）．コメントとして
+    # 読み飛ばすと検査をすり抜けるので，この形は使わせない．
+    if '/*!' in q:
+        return 'バージョン付きコメント（/*! … */）は使えません'
+    body = _Q_STRIP_RE.sub(' ', q)
+    m = _Q_DENY_RE.search(body)
+    if m:
+        return '許可されない構文・関数が含まれています：' + m.group(0).strip()
+    if '$' in body:
+        return '他のデータベースを指す名前は使えません（登録簿の公式テーブルだけを読めます）'
+    try:
+        forbidden = _forbidden_tables()
+    except Exception as e:
+        logging.error("official_data_archive _forbidden_tables: %s", e)
+        return '読み取り範囲を確認できないため実行しません'
+    for a, b in _Q_IDENT_RE.findall(body):
+        name = (a or b).lower()
+        if name in forbidden:
+            return f'登録簿に載っていないテーブルは読めません：{a or b}'
+    # 二重引用符を名前として扱う設定（ANSI_QUOTES）への備え：
+    # "..." の中身がそのまま未登録の表の名前なら拒否する
+    for lit in re.findall(r'"((?:[^"\\]|\\.|"")*)"', q):
+        if lit.lower() in forbidden:
+            return f'登録簿に載っていないテーブルは読めません：{lit}'
+    return None
 
 
 def _run_indicator_query(query, max_rows):
@@ -1662,6 +1771,550 @@ def api_bulk_download():
 
 
 # ────────────────────────────────────────────
+# データマイグレーション（全部一括JSONの書き出しと取り込み）
+#   公式テーブル（登録簿・DDL・全行）、単一指標、複合指標を1本のJSONで
+#   持ち運び、移行先で破壊的に再現する。全体管理者のみ。
+#   書き出しも取り込みもブラウザが組み立て役になり、サーバとはテーブル単位
+#   （大きい表は行を分割）の短いリクエストでやり取りする（タイムアウト対策）。
+#   管理グループは名前で持ち運ぶ（グループ id はサイト間で一致しないため）。
+#   2026-10-26：fujinpshowcase の廃止にあわせ，この版（format_version 3）を正本とする．
+#   format_version 3 では，DDL から外部キー（FOREIGN KEY 制約）を外して持ち運ぶ．
+#   公式テーブルは年度ごとのスナップショットで，表どうしの参照整合は保証されない
+#   （例：時間割の科目コードが科目一覧で一意でない・存在しない）ため，外部キーは
+#   取り込み先で作成に失敗する原因になる．取り込みでも同じ処理をかけるので，
+#   古い版（format_version 1・2）のファイルもそのまま取り込める．
+# ────────────────────────────────────────────
+
+MIGRATION_FORMAT_VERSION = 3
+MIGRATION_PAGE_MAX = 5000     # 書き出し1回あたりの最大行数
+MIGRATION_EXPORT_TYPE = 'official_data_archive_migration'
+MIGRATION_INSERT_CHUNK = 500
+
+
+_FK_LINE_RE = re.compile(r'^\s*(CONSTRAINT\s+`[^`]*`\s+)?FOREIGN\s+KEY\b', re.IGNORECASE)
+
+
+def _strip_foreign_keys(ddl):
+    """CREATE TABLE 文から外部キー制約の行を取り除く。(新しいDDL, 外した制約の行のlist) を返す。
+    SHOW CREATE TABLE の出力（1制約1行）を前提にし，残った最後の定義行の末尾カンマを整える。"""
+    if not ddl:
+        return ddl, []
+    lines = ddl.split('\n')
+    kept, removed = [], []
+    for ln in lines:
+        if _FK_LINE_RE.match(ln):
+            removed.append(ln.strip().rstrip(','))
+        else:
+            kept.append(ln)
+    if not removed:
+        return ddl, []
+    # 閉じ括弧の行（") ENGINE=..." 等）の直前の定義行から末尾カンマを外す
+    for i, ln in enumerate(kept):
+        if ln.lstrip().startswith(')') and i > 0:
+            kept[i - 1] = kept[i - 1].rstrip().rstrip(',')
+            break
+    return '\n'.join(kept), removed
+
+
+def _migration_val(v):
+    """行データの値をJSON化可能にする（日時は文字列、Decimalは文字列で桁を保持）。"""
+    import decimal
+    if isinstance(v, decimal.Decimal):
+        return str(v)
+    return safe_val(v)
+
+
+def _migration_indicators():
+    """単一指標の全定義。"""
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT v.id, v.name, v.query, v.sort_order, v.chart_type,
+                   g.name AS manager_group_name
+            FROM official_data_archive_indicator_views v
+            LEFT JOIN user_groups g ON v.manager_group_id = g.id
+            ORDER BY v.sort_order, v.name
+        """)
+        views = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
+    return [{
+        'id': v['id'],
+        'name': v['name'],
+        'query': v['query'],
+        'sort_order': _migration_val(v['sort_order']),
+        'chart_type': v.get('chart_type') or 'bar',
+        'manager_group_name': v.get('manager_group_name'),
+    } for v in views]
+
+
+def _migration_composites():
+    """複合指標の全定義と構成（単一指標は id と名前の両方で参照）。"""
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT c.id, c.name, c.sort_order, g.name AS manager_group_name
+            FROM official_data_archive_composites c
+            LEFT JOIN user_groups g ON c.manager_group_id = g.id
+            ORDER BY c.sort_order, c.name
+        """)
+        composites = cursor.fetchall()
+        cursor.execute("""
+            SELECT cc.composite_id, cc.color, cc.seq,
+                   cc.indicator_view_id, v.name AS indicator_name
+            FROM official_data_archive_composite_components cc
+            LEFT JOIN official_data_archive_indicator_views v
+                   ON cc.indicator_view_id = v.id
+            ORDER BY cc.composite_id, cc.seq
+        """)
+        comp_rows = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
+    by_comp = {}
+    for r in comp_rows:
+        by_comp.setdefault(r['composite_id'], []).append({
+            'seq': r['seq'],
+            'color': r['color'],
+            'indicator_view_id': r['indicator_view_id'],
+            'indicator_name': r['indicator_name'],
+        })
+    return [{
+        'id': c['id'],
+        'name': c['name'],
+        'sort_order': _migration_val(c['sort_order']),
+        'manager_group_name': c.get('manager_group_name'),
+        'components': by_comp.get(c['id'], []),
+    } for c in composites]
+
+
+@official_data_archive_bp.route('/api/migration/manifest', methods=['GET'])
+@login_required
+def api_migration_manifest():
+    """書き出しの目次：JSONの見出し情報、登録簿、単一指標、複合指標。
+    テーブルの中身は /api/migration/table で1本ずつ取る。全体管理者のみ。"""
+    user_id = session.get('user_id')
+    if not is_global_manager(user_id):
+        return jsonify({'success': False,
+                        'error': '全体管理者のみ実行できます'}), 403
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT full_name FROM users WHERE id = %s", (user_id,))
+            u = cursor.fetchone() or {}
+            cursor.close()
+        finally:
+            conn.close()
+        registry = [{
+            'table_name': r['table_name'],
+            'database_name': r['database_name'],
+            'display_name': r.get('display_name'),
+            'note': r.get('note'),
+            'manager_group_name': r.get('manager_group_name'),
+        } for r in _registered_tables()]
+        return jsonify({
+            'success': True,
+            'header': {
+                'export_type': MIGRATION_EXPORT_TYPE,
+                'format_version': MIGRATION_FORMAT_VERSION,
+                'app_name': 'official_data_archive',
+                'site_name': getattr(Config, 'SITE_NAME', None) or request.host,
+                'site_url': request.host_url.rstrip('/'),
+                'generated_at': get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
+                'generated_by': u.get('full_name'),
+            },
+            'registry': registry,
+            'db_choices': list(DB_CHOICES.keys()),
+            'indicator_views': _migration_indicators(),
+            'composites': _migration_composites(),
+        })
+    except Exception as e:
+        logging.error("api_migration_manifest error: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@official_data_archive_bp.route('/api/migration/table', methods=['GET'])
+@login_required
+def api_migration_table():
+    """登録済みテーブル1本の一部を返す。全体管理者のみ。
+    パラメータ: table, db, offset, limit。offset=0 のときだけ DDL と列名を付ける。
+    行の順序は主キー順（主キーが無ければ格納順）。"""
+    import json
+    user_id = session.get('user_id')
+    if not is_global_manager(user_id):
+        return jsonify({'success': False,
+                        'error': '全体管理者のみ実行できます'}), 403
+    table = (request.args.get('table') or '').strip()
+    db = (request.args.get('db') or '').strip()
+    if db not in DB_CHOICES or not _registry_lookup(table, db):
+        return jsonify({'success': False,
+                        'error': '登録簿にないテーブルです'}), 404
+    try:
+        offset = max(0, int(request.args.get('offset') or 0))
+        limit = min(MIGRATION_PAGE_MAX,
+                    max(1, int(request.args.get('limit') or 100)))
+    except ValueError:
+        return jsonify({'success': False, 'error': '数値の指定が不正です'}), 400
+
+    conn = mysql.connector.connect(**DB_CHOICES[db]())
+    try:
+        cur = conn.cursor()
+        out = {'success': True}
+        if offset == 0:
+            cur.execute('SHOW CREATE TABLE `%s`' % table)
+            row = cur.fetchone()
+            ddl = row[1] if row and len(row) > 1 else None
+            out['ddl'], out['dropped_foreign_keys'] = _strip_foreign_keys(ddl)
+        cur.execute("SHOW KEYS FROM `%s` WHERE Key_name = 'PRIMARY'" % table)
+        keys = sorted(cur.fetchall(), key=lambda k: k[3])   # Seq_in_index
+        order = (' ORDER BY ' + ', '.join('`%s`' % k[4] for k in keys)) if keys else ''
+        cur.execute('SELECT * FROM `%s`%s LIMIT %d OFFSET %d'
+                    % (table, order, limit, offset))
+        cols = [d[0] for d in cur.description]
+        rows = [[_migration_val(v) for v in rec] for rec in cur.fetchall()]
+        cur.close()
+        if offset == 0:
+            out['columns'] = cols
+        out['rows'] = rows
+        out['done'] = len(rows) < limit
+        out['bytes'] = len(json.dumps(rows, ensure_ascii=False, default=str))
+        return jsonify(out)
+    except Exception as e:
+        logging.error("api_migration_table %s: %s", table, e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ── 2026-10-26 改修：取り込みの安全化と全消去 ──
+#   ・取り込み（全消去・テーブル・定義）は admin のみ（旧版は全体管理者＝まいぐるの役割でも可で，
+#     リクエストの DDL を無検査で実行し，任意テーブルを DROP できた）．
+#   ・DDL は「同名テーブルの CREATE TABLE 1 文」に限る．
+#   ・カーネルや他アプリの表の名前は，取り込みでも全消去でも扱わない．
+#   ・全消去：移行先の登録簿にある公式テーブル，データ更新のバックアップ表，
+#     登録簿・単一指標・複合指標・データ更新の記録をすべて消す（何度実行しても同じ結果）．
+
+# 取り込み・全消去で決して触らない表（カーネルと主要アプリの表）
+MIG_PROTECTED_TABLES = {
+    'users', 'user_groups', 'user_group_memberships', 'features', 'user_features',
+    'password_reset_tokens', 'user_events', 'registration_requests', 'approved_users',
+    'apps', 'app_permission_labels', 'app_feature_permissions', 'notify_ledger',
+}
+MIG_PROTECTED_PREFIXES = ('official_data_archive_', 'app_share_', 'user_group')
+MIG_BACKUP_RE = re.compile(r'^[^\s`\'\"%;\\./]{1,43}_bak_\d{14}$')
+
+
+def _mig_is_admin(user_id):
+    """取り込み系は admin カテゴリのみ（DB の区分で判定）。"""
+    return _get_user_category(user_id) == 'admin'
+
+
+def _mig_table_ok(name):
+    """取り込み・全消去で扱ってよいテーブル名か。"""
+    if not name or not TABLE_NAME_RE.match(name):
+        return False
+    low = name.lower()
+    if low in MIG_PROTECTED_TABLES:
+        return False
+    return not any(low.startswith(p) for p in MIG_PROTECTED_PREFIXES)
+
+
+def _mig_ddl_ok(ddl, table_name):
+    """DDL が「同名テーブルの CREATE TABLE 1 文」か。"""
+    if not ddl or ';' in ddl:
+        return False
+    m = re.match(r'\s*CREATE\s+TABLE\s+`([^`]+)`\s*\(', ddl, re.IGNORECASE)
+    if not m or m.group(1) != table_name:
+        return False
+    # CREATE TABLE ... SELECT / LIKE で他表を読む形を拒む
+    if re.search(r'\)\s*(AS\s+)?SELECT\b', ddl, re.IGNORECASE):
+        return False
+    if re.search(r'\bLIKE\s+`', ddl, re.IGNORECASE):
+        return False
+    return True
+
+
+def _migration_importable(item):
+    """取り込み対象のテーブル項目か（DDLが同名表のCREATE 1文で，所在DBがこのサイトにあり，
+    名前が保護対象でない）。外部キーを外したあとの DDL で判定する。"""
+    reg = item.get('registry') or {}
+    tbl = reg.get('table_name')
+    ddl, _ = _strip_foreign_keys(item.get('ddl'))
+    return bool(not item.get('error') and ddl
+                and tbl and reg.get('database_name') in DB_CHOICES
+                and _mig_table_ok(tbl)
+                and _mig_ddl_ok(ddl, tbl))
+
+
+def _migration_current_state():
+    """移行先の現状：登録簿・バックアップ表・定義の件数。全消去の確認と実行に使う。"""
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT table_name, database_name FROM official_data_archive_tables")
+        registry = cur.fetchall()
+        cur.execute("""SELECT DISTINCT database_name, backup_table
+                       FROM official_data_archive_updates
+                       WHERE backup_table IS NOT NULL AND backup_table <> ''""")
+        backups = cur.fetchall()
+        counts = {}
+        for key, tbl in (('indicator_views', 'official_data_archive_indicator_views'),
+                         ('composites', 'official_data_archive_composites'),
+                         ('updates', 'official_data_archive_updates')):
+            cur.execute("SELECT COUNT(*) AS n FROM %s" % tbl)
+            counts[key] = cur.fetchone()['n']
+        cur.close()
+    finally:
+        conn.close()
+    return registry, backups, counts
+
+
+def _migration_wipe():
+    """移行先の公式データ集をすべて消す。消した件数を返す。"""
+    registry, backups, counts = _migration_current_state()
+    dropped, skipped = [], []
+    targets = [(r['database_name'], r['table_name'], False) for r in registry]
+    targets += [(b['database_name'], b['backup_table'], True) for b in backups]
+    for db, tbl, is_backup in targets:
+        ok = (db in DB_CHOICES and _mig_table_ok(tbl)
+              and (not is_backup or MIG_BACKUP_RE.match(tbl or '')))
+        if not ok:
+            skipped.append('%s.%s' % (db, tbl))
+            continue
+        conn = mysql.connector.connect(**DB_CHOICES[db]())
+        try:
+            cur = conn.cursor()
+            cur.execute("SET FOREIGN_KEY_CHECKS=0")
+            cur.execute("DROP TABLE IF EXISTS `%s`" % tbl)
+            cur.execute("SET FOREIGN_KEY_CHECKS=1")
+            conn.commit()
+            cur.close()
+            dropped.append('%s.%s' % (db, tbl))
+        finally:
+            conn.close()
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cur = conn.cursor()
+        for tbl in ('official_data_archive_composite_components',
+                    'official_data_archive_composites',
+                    'official_data_archive_indicator_views',
+                    'official_data_archive_updates',
+                    'official_data_archive_tables'):
+            cur.execute("DELETE FROM %s" % tbl)
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return {'dropped': len(dropped), 'skipped': skipped,
+            'registry': len(registry), 'indicator_views': counts['indicator_views'],
+            'composites': counts['composites'], 'updates': counts['updates']}
+
+
+def _migration_import_table(item, reset):
+    """1テーブル分（または行の一部）を書き込む。
+    reset=True なら DROP → 同梱DDL（外部キーを外したもの）で CREATE してから INSERT、
+    False なら既存テーブルへ INSERT のみ（行を分割して送る2回目以降）。
+    (挿入行数, 外した外部キーの行のlist) を返す。"""
+    reg = item['registry']
+    tbl = reg['table_name']
+    ddl, dropped_fk = _strip_foreign_keys(item['ddl'])
+    conn = mysql.connector.connect(**DB_CHOICES[reg['database_name']]())
+    cur = conn.cursor()
+    try:
+        cur.execute("SET FOREIGN_KEY_CHECKS=0")
+        if reset:
+            cur.execute("DROP TABLE IF EXISTS `%s`" % tbl)
+            cur.execute(ddl)
+        cols = item.get('columns') or []
+        rows = item.get('rows') or []
+        if cols and rows:
+            sql = "INSERT INTO `%s` (%s) VALUES (%s)" % (
+                tbl, ', '.join('`%s`' % c for c in cols),
+                ', '.join(['%s'] * len(cols)))
+            for i in range(0, len(rows), MIGRATION_INSERT_CHUNK):
+                cur.executemany(sql, [tuple(r) for r in
+                                      rows[i:i + MIGRATION_INSERT_CHUNK]])
+        conn.commit()
+        return len(rows), (dropped_fk if reset else [])
+    finally:
+        try:
+            cur.execute("SET FOREIGN_KEY_CHECKS=1")
+        except Exception:
+            pass
+        cur.close(); conn.close()
+
+
+def _migration_import_definitions(pkg, user_id, now):
+    """登録簿・単一指標・複合指標を全削除して再作成する。件数を返す。"""
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, name FROM user_groups")
+        gid = {name: i for i, name in cur.fetchall()}
+
+        # ── 登録簿 ──
+        cur.execute("DELETE FROM official_data_archive_tables")
+        n_reg = 0
+        seen = set()
+        for item in pkg.get('tables') or []:
+            reg = item.get('registry') or {}
+            key = (reg.get('database_name'), reg.get('table_name'))
+            if not all(key) or key in seen:
+                continue
+            if key[0] not in DB_CHOICES or not _mig_table_ok(key[1]):
+                continue
+            seen.add(key)
+            cur.execute("""
+                INSERT INTO official_data_archive_tables
+                    (table_name, database_name, display_name, note,
+                     manager_group_id, created_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (reg['table_name'], reg['database_name'],
+                  reg.get('display_name'), reg.get('note'),
+                  gid.get(reg.get('manager_group_name')), user_id, now))
+            n_reg += 1
+
+        # ── 単一指標・複合指標 ──
+        cur.execute("DELETE FROM official_data_archive_composite_components")
+        cur.execute("DELETE FROM official_data_archive_composites")
+        cur.execute("DELETE FROM official_data_archive_indicator_views")
+
+        iv_ids = set()
+        iv_by_name = {}
+        for v in pkg.get('indicator_views') or []:
+            cur.execute("""
+                INSERT INTO official_data_archive_indicator_views
+                    (id, name, query, sort_order, chart_type,
+                     manager_group_id, created_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (v['id'], v['name'], v['query'], v.get('sort_order') or 100,
+                  v.get('chart_type') or 'bar',
+                  gid.get(v.get('manager_group_name')), user_id, now))
+            iv_ids.add(v['id'])
+            iv_by_name.setdefault(v['name'], v['id'])
+
+        n_comp = 0
+        for c in pkg.get('composites') or []:
+            cur.execute("""
+                INSERT INTO official_data_archive_composites
+                    (id, name, sort_order, manager_group_id,
+                     created_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (c['id'], c['name'], c.get('sort_order') or 100,
+                  gid.get(c.get('manager_group_name')), user_id, now))
+            n_comp += 1
+            for m in c.get('components') or []:
+                iv = m.get('indicator_view_id')
+                if iv not in iv_ids:
+                    iv = iv_by_name.get(m.get('indicator_name'))
+                if iv is None:
+                    continue
+                cur.execute("""
+                    INSERT INTO official_data_archive_composite_components
+                        (composite_id, indicator_view_id, color, seq)
+                    VALUES (%s, %s, %s, %s)
+                """, (c['id'], iv, m.get('color') or '#2e6da4',
+                      m.get('seq') or 1))
+        conn.commit()
+        return {'registry': n_reg, 'indicator_views': len(iv_ids),
+                'composites': n_comp}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close(); conn.close()
+
+
+# 取り込みはブラウザ側で JSON を分解し、テーブルごと（大きい表は行を分割して）
+# 順に送る。1リクエストを短く保ってタイムアウトを避けるため。
+# 各テーブルは最初の送信（reset=true）で作り直すので、途中で止まっても
+# 最初からやり直せば同じ結果になる（冪等）。
+
+@official_data_archive_bp.route('/api/migration/import/plan', methods=['GET'])
+@login_required
+def api_migration_import_plan():
+    """全消去の対象（移行先の現状）を返す。admin のみ。画面の確認表示に使う。"""
+    if not _mig_is_admin(session.get('user_id')):
+        return jsonify({'success': False,
+                        'error': '取り込みは管理者（admin）のみ実行できます'}), 403
+    try:
+        registry, backups, counts = _migration_current_state()
+        return jsonify({'success': True,
+                        'registry': [{'table_name': r['table_name'],
+                                      'database_name': r['database_name']}
+                                     for r in registry],
+                        'backups': len(backups), 'counts': counts})
+    except Exception as e:
+        logging.error("api_migration_import_plan: %s", e)
+        return jsonify({'success': False, 'error': '現状の取得に失敗しました'}), 500
+
+
+@official_data_archive_bp.route('/api/migration/import/wipe', methods=['POST'])
+@login_required
+def api_migration_import_wipe():
+    """移行先の公式データ集をすべて消す（取り込みの最初の段）。admin のみ。
+    リクエスト: { confirm: "wipe" }"""
+    if not _mig_is_admin(session.get('user_id')):
+        return jsonify({'success': False,
+                        'error': '取り込みは管理者（admin）のみ実行できます'}), 403
+    data = request.get_json(silent=True) or {}
+    if data.get('confirm') != 'wipe':
+        return jsonify({'success': False, 'error': '確認の指定がありません'}), 400
+    try:
+        result = _migration_wipe()
+        return jsonify({'success': True, 'wiped': result})
+    except Exception as e:
+        logging.error("api_migration_import_wipe: %s", e)
+        return jsonify({'success': False,
+                        'error': f'全消去に失敗しました：{e}'}), 500
+
+
+@official_data_archive_bp.route('/api/migration/import/table', methods=['POST'])
+@login_required
+def api_migration_import_table():
+    """1テーブル分を取り込む。admin のみ。
+    リクエスト: { registry, ddl, columns, rows, reset }"""
+    user_id = session.get('user_id')
+    if not _mig_is_admin(user_id):
+        return jsonify({'success': False,
+                        'error': '取り込みは管理者（admin）のみ実行できます'}), 403
+    item = request.get_json(silent=True) or {}
+    if not _migration_importable(item):
+        return jsonify({'success': False,
+                        'error': '取り込み対象外のテーブルです'}), 400
+    try:
+        n, dropped_fk = _migration_import_table(item, bool(item.get('reset')))
+        return jsonify({'success': True, 'rows': n, 'dropped_foreign_keys': dropped_fk})
+    except Exception as e:
+        logging.error("api_migration_import_table %s: %s",
+                      (item.get('registry') or {}).get('table_name'), e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@official_data_archive_bp.route('/api/migration/import/definitions', methods=['POST'])
+@login_required
+def api_migration_import_definitions():
+    """登録簿・単一指標・複合指標を全削除して再作成する。admin のみ。
+    リクエスト: { tables: [{registry}], indicator_views, composites }"""
+    user_id = session.get('user_id')
+    if not _mig_is_admin(user_id):
+        return jsonify({'success': False,
+                        'error': '取り込みは管理者（admin）のみ実行できます'}), 403
+    pkg = request.get_json(silent=True) or {}
+    try:
+        counts = _migration_import_definitions(pkg, user_id, get_jst_now())
+        return jsonify({'success': True, 'counts': counts})
+    except Exception as e:
+        logging.error("api_migration_import_definitions: %s", e)
+        return jsonify({'success': False,
+                        'error': f'登録簿・指標の再作成に失敗しました：{e}'}), 500
+
+
+# ────────────────────────────────────────────
 # データ更新（公式テーブルのExcel更新ワークフロー）
 #   担当者（アイテムの管理グループ所属者）がExcelを提供し、
 #   全体管理者がDBバックアップを取りながら正式テーブルへ転記する。
@@ -2021,6 +2674,10 @@ def api_update_apply():
                         'error': '対象データベースの指定が不正です'}), 400
 
     table = u['table_name']
+    # 転記はテーブルを全件消して入れ替えるので，名前の形と保護対象を必ず確かめる（2026-10-26 最終点検）
+    if not _mig_table_ok(table):
+        return jsonify({'success': False,
+                        'error': 'このテーブルには転記できません（名前が不正か，保護対象のテーブルです）'}), 400
     path = os.path.join(_upload_dir(), os.path.basename(u['stored_filename']))
     if not os.path.exists(path):
         return jsonify({'success': False,
@@ -2139,6 +2796,586 @@ def api_update_reject():
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close(); conn.close()
+
+
+# ────────────────────────────────────────────
+# 一覧ドキュメント（Web文書）
+#   所定のURLにアクセスすると、サーバがその時点の最新状態からHTML文書を
+#   組み立てて返す。いずれも閲覧権限（regular以上）で読める読み取り専用の文書。
+#     /official_data_archive/report/indicators … 指標の動き（HTML＋SVG＋CSS）
+#     /official_data_archive/report/tables     … テーブル一覧（名前と列構成・DDL）
+#   ?dl=1 を付けるとファイルとして保存させる（Content-Disposition: attachment）。
+#   グラフのSVGは画面の「⬇ SVG」（index.html の svgSingle / svgMulti）と
+#   同じ規則で、ここで Python により生成する。
+# ────────────────────────────────────────────
+
+import html as _html_mod
+
+_NUM_HEAD_RE = re.compile(r'^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?')
+
+
+def _h(s):
+    """HTML/SVG 用のエスケープ（bytes は UTF-8 で読む）。"""
+    if s is None:
+        return ''
+    if isinstance(s, (bytes, bytearray)):
+        s = s.decode('utf-8', errors='replace')
+    return _html_mod.escape(str(s))
+
+
+def _parse_float(v):
+    """JavaScript の parseFloat 相当（先頭の数値部分を読む。読めなければ None）。"""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        f = float(v)
+        return f if math.isfinite(f) else None
+    m = _NUM_HEAD_RE.match(str(v))
+    if not m:
+        return None
+    try:
+        f = float(m.group(0))
+    except ValueError:
+        return None
+    return f if math.isfinite(f) else None
+
+
+def _label(v):
+    """横軸ラベルの文字列化（画面の String(r[x] ?? '') に合わせる）。"""
+    if v is None:
+        return ''
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(safe_val(v))
+
+
+def _extract_series(columns, rows):
+    """1列目を横軸、2列目以降で最初に数値が取れる列を縦軸にする（画面と同じ規則）。"""
+    if not columns or len(columns) < 2 or not rows:
+        return None
+    x_col = columns[0]
+    for c in columns[1:]:
+        vals = [_parse_float(r.get(c)) for r in rows]
+        if any(v is not None for v in vals):
+            return {'xLabel': x_col, 'yLabel': c,
+                    'labels': [_label(r.get(x_col)) for r in rows],
+                    'values': vals}
+    return None
+
+
+def _nice_ticks(vmin, vmax, n):
+    span = (vmax - vmin) or 1
+    step0 = span / n
+    mag = 10 ** math.floor(math.log10(step0))
+    step = 10 * mag
+    for m in (1, 2, 5, 10):
+        if step0 <= m * mag:
+            step = m * mag
+            break
+    ticks = []
+    for i in range(math.ceil(vmin / step), math.floor(vmax / step) + 1):
+        ticks.append(float('%.12g' % (i * step)))
+    return ticks
+
+
+def _fmt_num(x):
+    """目盛の数値表示（整数は小数点なし）。"""
+    if float(x).is_integer():
+        return str(int(x))
+    return ('%.12g' % x)
+
+
+def _data_line(s, name=None):
+    """グラフの元データを [年度：値，…] の辞書式で書いた1行（読み手のAI向け）。
+    値が無い年度は null と書く。name を渡すと系列名を前に置く（複合指標用）。"""
+    items = []
+    for l, v in zip(s['labels'], s['values']):
+        items.append('%s：%s' % (l, 'null' if v is None else _fmt_num(v)))
+    head = ('%s（%s）' % (name, s['yLabel'])
+            if name and name != s['yLabel'] else (name or s['yLabel']))
+    return ('<p class="data"><span class="data-k">%s</span> [%s]</p>'
+            % (_h(head), _h('，'.join(items))))
+
+
+def _c(x):
+    """座標の書式（小数2桁）。"""
+    return ('%.2f' % x).rstrip('0').rstrip('.')
+
+
+def _natural_key(s):
+    """年度などを数値順に並べるキー（画面の localeCompare numeric 相当）。"""
+    parts = re.split(r'(\d+)', str(s))
+    return [(0, int(p)) if p.isdigit() else (1, p) for p in parts if p != '']
+
+
+def _x_labels_svg(o, labels, X, base_y):
+    rotate = len(labels) > 12
+    for i, lb in enumerate(labels):
+        x = X(i)
+        if rotate:
+            o.append('<text x="%s" y="%s" text-anchor="end" font-size="10" '
+                     'fill="#374151" transform="rotate(-45 %s %s)">%s</text>'
+                     % (_c(x), _c(base_y), _c(x), _c(base_y), _h(lb)))
+        else:
+            o.append('<text x="%s" y="%s" text-anchor="middle" font-size="11" '
+                     'fill="#374151">%s</text>' % (_c(x), _c(base_y), _h(lb)))
+
+
+def _svg_single(title, s, mode):
+    """単一指標のSVG（棒または折れ線。縦軸は0〜最大値の約10%上）。"""
+    nums = [v for v in s['values'] if v is not None]
+    if not nums:
+        return None
+    vmax0 = max(nums)
+    if not math.isfinite(vmax0) or vmax0 <= 0:
+        vmax0 = 1
+    ymin, ymax = 0, vmax0 * 1.1
+    W, H, mL, mR, mT, mB = 720, 340, 76, 24, 40, 64
+    pw, ph = W - mL - mR, H - mT - mB
+    n = len(s['labels'])
+    X = lambda i: mL + pw * (i + 0.5) / n
+    Y = lambda v: mT + ph * (1 - (v - ymin) / (ymax - ymin))
+    o = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
+         'viewBox="0 0 %d %d" font-family="sans-serif" role="img" aria-label="%s">'
+         % (W, H, W, H, _h(title)),
+         '<rect width="%d" height="%d" fill="#ffffff"/>' % (W, H),
+         '<text x="%s" y="22" text-anchor="middle" font-size="14" font-weight="bold" '
+         'fill="#1a3a5c">%s</text>' % (_c(W / 2), _h(title))]
+    for tk in _nice_ticks(ymin, ymax, 5):
+        y = Y(tk)
+        o.append('<line x1="%d" y1="%s" x2="%d" y2="%s" stroke="#e5e7eb" stroke-width="1"/>'
+                 % (mL, _c(y), W - mR, _c(y)))
+        o.append('<text x="%d" y="%s" text-anchor="end" font-size="11" fill="#6b7280">%s</text>'
+                 % (mL - 8, _c(y + 3.5), _fmt_num(tk)))
+    o.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>'
+             % (mL, mT, mL, mT + ph))
+    o.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>'
+             % (mL, mT + ph, W - mR, mT + ph))
+    if mode == 'bar':
+        bw = pw / n * 0.6
+        for i, v in enumerate(s['values']):
+            if v is None:
+                continue
+            y = Y(v)
+            o.append('<rect x="%s" y="%s" width="%s" height="%s" fill="#2e6da4" '
+                     'fill-opacity="0.75"/>' % (_c(X(i) - bw / 2), _c(min(y, mT + ph)),
+                                                _c(bw), _c(abs(mT + ph - y))))
+    else:
+        pts = ['%s,%s' % (_c(X(i)), _c(Y(v)))
+               for i, v in enumerate(s['values']) if v is not None]
+        if len(pts) > 1:
+            o.append('<polyline points="%s" fill="none" stroke="#2e6da4" stroke-width="2"/>'
+                     % ' '.join(pts))
+        for i, v in enumerate(s['values']):
+            if v is not None:
+                o.append('<circle cx="%s" cy="%s" r="3" fill="#2e6da4"/>'
+                         % (_c(X(i)), _c(Y(v))))
+    _x_labels_svg(o, s['labels'], X, mT + ph + 16)
+    o.append('<text x="%s" y="%d" text-anchor="middle" font-size="11" fill="#6b7280">%s</text>'
+             % (_c(mL + pw / 2), H - 10, _h(s['xLabel'])))
+    o.append('<text x="16" y="%s" text-anchor="middle" font-size="11" fill="#6b7280" '
+             'transform="rotate(-90 16 %s)">%s</text>'
+             % (_c(mT + ph / 2), _c(mT + ph / 2), _h(s['yLabel'])))
+    o.append('</svg>')
+    return '\n'.join(o)
+
+
+def _svg_multi(title, series_list):
+    """複合指標のSVG（折れ線の重ね合わせ・凡例付き。縦軸は0〜全系列の最大値の約10%上）。"""
+    if not series_list:
+        return None
+    labels = sorted({l for s in series_list for l in s['labels']}, key=_natural_key)
+    vmax = None
+    mapped = []
+    for s in series_list:
+        m = {}
+        for l, v in zip(s['labels'], s['values']):
+            m[l] = v
+        data = [m.get(l) for l in labels]
+        for v in data:
+            if v is not None and (vmax is None or v > vmax):
+                vmax = v
+        mapped.append({'name': s['name'], 'color': s['color'], 'data': data})
+    if vmax is None or not math.isfinite(vmax) or vmax <= 0:
+        vmax = 1
+    ymin, ymax = 0, vmax * 1.1
+    legH = 18 * len(mapped)
+    W, mL, mR, mT, mB = 720, 76, 24, 44 + legH, 64
+    ph = 240
+    H = mT + ph + mB
+    pw = W - mL - mR
+    n = len(labels)
+    X = lambda i: mL + pw * (i + 0.5) / n
+    Y = lambda v: mT + ph * (1 - (v - ymin) / (ymax - ymin))
+    o = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
+         'viewBox="0 0 %d %d" font-family="sans-serif" role="img" aria-label="%s">'
+         % (W, H, W, H, _h(title)),
+         '<rect width="%d" height="%d" fill="#ffffff"/>' % (W, H),
+         '<text x="%s" y="22" text-anchor="middle" font-size="14" font-weight="bold" '
+         'fill="#1a3a5c">%s</text>' % (_c(W / 2), _h(title))]
+    for i, s in enumerate(mapped):
+        ly = 38 + i * 18
+        col = _h(s['color'])
+        o.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="2"/>'
+                 % (mL, ly, mL + 24, ly, col))
+        o.append('<circle cx="%d" cy="%d" r="3" fill="%s"/>' % (mL + 12, ly, col))
+        o.append('<text x="%d" y="%s" font-size="11" fill="#374151">%s</text>'
+                 % (mL + 30, _c(ly + 3.5), _h(s['name'])))
+    for tk in _nice_ticks(ymin, ymax, 5):
+        y = Y(tk)
+        o.append('<line x1="%d" y1="%s" x2="%d" y2="%s" stroke="#e5e7eb" stroke-width="1"/>'
+                 % (mL, _c(y), W - mR, _c(y)))
+        o.append('<text x="%d" y="%s" text-anchor="end" font-size="11" fill="#6b7280">%s</text>'
+                 % (mL - 8, _c(y + 3.5), _fmt_num(tk)))
+    o.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>'
+             % (mL, mT, mL, mT + ph))
+    o.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>'
+             % (mL, mT + ph, W - mR, mT + ph))
+    for s in mapped:
+        col = _h(s['color'])
+        pts = ['%s,%s' % (_c(X(i)), _c(Y(v)))
+               for i, v in enumerate(s['data']) if v is not None]
+        if len(pts) > 1:
+            o.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="2"/>'
+                     % (' '.join(pts), col))
+        for i, v in enumerate(s['data']):
+            if v is not None:
+                o.append('<circle cx="%s" cy="%s" r="3" fill="%s"/>'
+                         % (_c(X(i)), _c(Y(v)), col))
+    _x_labels_svg(o, labels, X, mT + ph + 16)
+    o.append('<text x="%s" y="%d" text-anchor="middle" font-size="11" fill="#6b7280">%s</text>'
+             % (_c(mL + pw / 2), H - 10, _h(series_list[0]['xLabel'])))
+    o.append('</svg>')
+    return '\n'.join(o)
+
+
+_REPORT_BASE_CSS = """
+*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+     color:#222;background:#f4f6f8;line-height:1.6}
+header{background:#1a3a5c;color:#fff;padding:22px 28px}
+header h1{margin:0;font-size:22px}
+header p{margin:6px 0 0;font-size:12px;opacity:.85}
+nav,section{background:#fff;border:1px solid #dde3e9;border-radius:8px;padding:14px 18px;margin-bottom:18px}
+h2.part{font-size:18px;color:#1a3a5c;border-bottom:3px solid #2e6da4;padding-bottom:4px;margin:30px 0 14px}
+section h3{margin:0 0 8px;font-size:15px;color:#1a3a5c}
+.err{color:#991b1b;background:#fee2e2;border-radius:4px;padding:6px 10px;font-size:12px}
+.note{color:#856404;font-size:11px;margin:4px 0 0}
+@media print{body{background:#fff}header{background:#fff;color:#000;border-bottom:2px solid #000}
+  nav{display:none}section{break-inside:avoid;page-break-inside:avoid;border:none;padding:0}}
+"""
+
+_REPORT_IV_CSS = """
+main{max-width:820px;margin:0 auto;padding:20px 16px 48px}
+nav h2{font-size:14px;margin:6px 0}
+nav ol{margin:0 0 8px;padding-left:22px;font-size:13px;columns:2;column-gap:28px}
+nav a{color:#2e6da4;text-decoration:none}
+.fig svg{display:block;max-width:100%;height:auto}
+.data{margin:6px 0 0;font-size:11px;line-height:1.5;color:#555;word-break:break-all;
+      font-family:Consolas,Monaco,"Courier New",monospace}
+.data-k{color:#1a3a5c;font-weight:600}
+@media(max-width:600px){nav ol{columns:1}}
+"""
+
+
+def _report_page(title, heading, sub, css, body):
+    return ('<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+            '<title>%s - 公式データ集</title>\n<style>%s%s</style>\n</head>\n<body>\n'
+            '<header><h1>%s</h1><p>%s</p></header>\n<main>\n%s\n</main>\n</body>\n</html>\n'
+            % (_h(title), _REPORT_BASE_CSS, css, heading, sub, body))
+
+
+def _report_site_name():
+    return getattr(Config, 'SITE_NAME', None) or request.host
+
+
+def _report_indicators_html():
+    """指標の動き：全単一指標・全複合指標のグラフ（SVG）を見出しつきで並べたHTML。
+    単一指標のクエリは1回ずつだけ実行し、複合指標はその結果を共有する。"""
+    conn = mysql.connector.connect(**DatabaseConfig.default())
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id, name, query, chart_type
+            FROM official_data_archive_indicator_views
+            ORDER BY sort_order, name
+        """)
+        views = cursor.fetchall()
+        cursor.execute("""
+            SELECT id, name FROM official_data_archive_composites
+            ORDER BY sort_order, name
+        """)
+        composites = cursor.fetchall()
+        cursor.execute("""
+            SELECT cc.composite_id, cc.indicator_view_id, cc.color, cc.seq,
+                   v.name AS indicator_name
+            FROM official_data_archive_composite_components cc
+            LEFT JOIN official_data_archive_indicator_views v
+                   ON cc.indicator_view_id = v.id
+            ORDER BY cc.composite_id, cc.seq
+        """)
+        comp_rows = cursor.fetchall()
+        cursor.close()
+    finally:
+        conn.close()
+
+    # 単一指標の実行（結果は複合指標でも使う）
+    results = {}
+    for v in views:
+        r = {'name': v['name'], 'chart_type': v.get('chart_type') or 'bar'}
+        query, err = _validate_select(v['query'])
+        if err:
+            r['error'] = err
+        else:
+            try:
+                columns, rows, truncated = _run_indicator_query(
+                    query, INDICATOR_MAX_ROWS)
+                r['series'] = _extract_series(columns, rows)
+                r['nrows'] = len(rows)
+                r['truncated'] = truncated
+            except Exception as qe:
+                r['error'] = 'クエリ実行エラー：%s' % qe
+        results[v['id']] = r
+
+    toc1, toc2, sec1, sec2 = [], [], [], []
+    for v in views:
+        r = results[v['id']]
+        anchor = 'iv-%d' % v['id']
+        toc1.append('<li><a href="#%s">%s</a></li>' % (anchor, _h(v['name'])))
+        if r.get('error'):
+            body = '<p class="err">⚠️ %s</p>' % _h(r['error'])
+        else:
+            svg = (_svg_single(v['name'], r['series'],
+                               'line' if r['chart_type'] == 'line' else 'bar')
+                   if r.get('series') else None)
+            body = ('<div class="fig">%s</div>' % svg if svg else
+                    '<p class="err">⚠️ 数値列が見つからないためグラフ化できません</p>')
+            if r.get('series'):
+                body += _data_line(r['series'])
+            if r.get('truncated'):
+                body += ('<p class="note">結果が多いため先頭%d行のみで描いています</p>'
+                         % r['nrows'])
+        sec1.append('<section id="%s"><h3>%s</h3>%s</section>'
+                    % (anchor, _h(v['name']), body))
+
+    by_comp = {}
+    for cr in comp_rows:
+        by_comp.setdefault(cr['composite_id'], []).append(cr)
+    for c in composites:
+        anchor = 'cp-%d' % c['id']
+        toc2.append('<li><a href="#%s">%s</a></li>' % (anchor, _h(c['name'])))
+        series, errs = [], []
+        for cr in by_comp.get(c['id'], []):
+            nm = cr['indicator_name'] or '（削除された単一指標）'
+            r = results.get(cr['indicator_view_id'])
+            if not r:
+                errs.append('%s：構成する単一指標が削除されています' % nm)
+            elif r.get('error'):
+                errs.append('%s：%s' % (nm, r['error']))
+            elif not r.get('series'):
+                errs.append('%s：数値列が見つかりません' % nm)
+            else:
+                s = r['series']
+                series.append({'name': r['name'], 'color': cr['color'],
+                               'labels': s['labels'], 'values': s['values'],
+                               'xLabel': s['xLabel'], 'yLabel': s['yLabel']})
+        body = ''
+        if errs:
+            body += '<p class="err">⚠️ %s</p>' % '<br>⚠️ '.join(_h(e) for e in errs)
+        svg = _svg_multi(c['name'], series) if series else None
+        body += ('<div class="fig">%s</div>' % svg if svg else
+                 '<p class="err">表示できる系列がありません</p>')
+        body += ''.join(_data_line(s, s['name']) for s in series)
+        sec2.append('<section id="%s"><h3>%s</h3>%s</section>'
+                    % (anchor, _h(c['name']), body))
+
+    now = get_jst_now()
+    sub = ('公式データ集　%s　生成日時 %s JST　単一指標 %d件／複合指標 %d件'
+           % (_h(_report_site_name()), now.strftime('%Y-%m-%d %H:%M'),
+              len(views), len(composites)))
+    body = ('<nav><h2>単一指標</h2><ol>%s</ol><h2>複合指標</h2><ol>%s</ol></nav>\n'
+            '<h2 class="part">単一指標</h2>\n%s\n'
+            '<h2 class="part">複合指標</h2>\n%s'
+            % (''.join(toc1), ''.join(toc2), '\n'.join(sec1), '\n'.join(sec2)))
+    return _report_page('指標の動き', '📈 指標の動き', sub, _REPORT_IV_CSS, body)
+
+
+_REPORT_TABLES_CSS = """
+*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+     color:#222;background:#f4f6f8;line-height:1.6}
+header{background:#1a3a5c;color:#fff;padding:22px 28px}
+header h1{margin:0;font-size:22px}
+header p{margin:6px 0 0;font-size:12px;opacity:.85}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 48px}
+nav,section{background:#fff;border:1px solid #dde3e9;border-radius:8px;padding:14px 18px;margin-bottom:18px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border-bottom:1px solid #e5e7eb;padding:5px 8px;text-align:left;vertical-align:top}
+th{background:#1a3a5c;color:#fff;font-weight:600;white-space:nowrap}
+tr:nth-child(even) td{background:#f9fafb}
+nav table td a{color:#2e6da4;text-decoration:none}
+.num{text-align:right;white-space:nowrap}
+h2.part{font-size:18px;color:#1a3a5c;border-bottom:3px solid #2e6da4;padding-bottom:4px;margin:30px 0 14px}
+section h3{margin:0;font-size:15px;color:#1a3a5c}
+.meta{font-size:12px;color:#666;margin:2px 0 10px}
+.mono{font-family:Consolas,Monaco,"Courier New",monospace}
+details{margin-top:10px}
+summary{cursor:pointer;font-size:12px;color:#2e6da4}
+pre{background:#1e272e;color:#e8edf1;padding:10px 12px;border-radius:4px;font-size:11.5px;
+    overflow:auto;white-space:pre}
+.err{color:#991b1b;background:#fee2e2;border-radius:4px;padding:6px 10px;font-size:12px}
+.wrap{overflow-x:auto}
+@media print{body{background:#fff}header{background:#fff;color:#000;border-bottom:2px solid #000}
+  section{break-inside:avoid;border:none;padding:0}details{display:block}}
+"""
+
+
+def _report_tables_html():
+    """テーブル一覧：登録簿のテーブルごとに列構成（SHOW FULL COLUMNS）とDDLを並べたHTML。"""
+    import html as _html
+    h = _h
+    regs = _registered_tables()
+    now = get_jst_now()
+
+    # DBごとに接続して列構成・DDL・行数を取る
+    info = {}
+    by_db = {}
+    for r in regs:
+        by_db.setdefault(r['database_name'], []).append(r)
+    for db_key, items in by_db.items():
+        if db_key not in DB_CHOICES:
+            for r in items:
+                info[r['id']] = {'error': '未対応のデータベース指定です'}
+            continue
+        try:
+            conn = mysql.connector.connect(**DB_CHOICES[db_key]())
+        except Exception as ce:
+            for r in items:
+                info[r['id']] = {'error': f'データベース接続エラー：{ce}'}
+            continue
+        try:
+            cur = conn.cursor(dictionary=True)
+            for r in items:
+                tbl = r['table_name']
+                try:
+                    cur.execute("SHOW FULL COLUMNS FROM `%s`" % tbl)
+                    cols = cur.fetchall()
+                    cur.execute("SHOW CREATE TABLE `%s`" % tbl)
+                    row = cur.fetchone() or {}
+                    ddl = row.get('Create Table') or row.get('Create View')
+                    cur.execute("SELECT COUNT(*) AS cnt FROM `%s`" % tbl)
+                    cnt = (cur.fetchone() or {}).get('cnt')
+                    info[r['id']] = {'cols': cols, 'ddl': ddl, 'count': cnt}
+                except Exception as te:
+                    info[r['id']] = {'error': f'取得エラー：{te}'}
+            cur.close()
+        finally:
+            conn.close()
+
+    # 並びは DB → テーブル名
+    regs = sorted(regs, key=lambda r: (r['database_name'], r['table_name']))
+
+    toc = []
+    secs = []
+    for i, r in enumerate(regs, 1):
+        anchor = 't%d' % r['id']
+        x = info.get(r['id'], {})
+        cnt = x.get('count')
+        toc.append(
+            '<tr><td class="num">%d</td><td><a href="#%s" class="mono">%s</a></td>'
+            '<td>%s</td><td class="mono">%s</td><td class="num">%s</td>'
+            '<td class="num">%s</td></tr>' % (
+                i, anchor, h(r['table_name']), h(r.get('display_name') or ''),
+                h(r['database_name']),
+                len(x['cols']) if x.get('cols') is not None else '?',
+                cnt if cnt is not None else '?'))
+
+        meta = ['所在DB：%s' % h(r['database_name'])]
+        if r.get('display_name'):
+            meta.append('表示名：%s' % h(r['display_name']))
+        meta.append('管理グループ：%s' % h(r.get('manager_group_name')
+                                          or '（全体管理者専管）'))
+        if cnt is not None:
+            meta.append('%s行' % cnt)
+        body = ['<section id="%s"><h3 class="mono">%s</h3>' % (anchor, h(r['table_name'])),
+                '<div class="meta">%s</div>' % '　'.join(meta)]
+        if r.get('note'):
+            body.append('<div class="meta">📝 %s</div>' % h(r['note']))
+        if x.get('error'):
+            body.append('<p class="err">⚠️ %s</p>' % h(x['error']))
+        else:
+            rows = []
+            for k, c in enumerate(x['cols'], 1):
+                dflt = c.get('Default')
+                rows.append(
+                    '<tr><td class="num">%d</td><td class="mono">%s</td>'
+                    '<td class="mono">%s</td><td>%s</td><td>%s</td>'
+                    '<td class="mono">%s</td><td class="mono">%s</td><td>%s</td></tr>' % (
+                        k, h(c.get('Field')), h(c.get('Type')),
+                        h(c.get('Null')), h(c.get('Key')),
+                        'NULL' if dflt is None else h(dflt),
+                        h(c.get('Extra')), h(c.get('Comment'))))
+            body.append(
+                '<div class="wrap"><table><thead><tr><th>#</th><th>列名</th><th>型</th>'
+                '<th>NULL</th><th>キー</th><th>既定値</th><th>付加</th><th>コメント</th>'
+                '</tr></thead><tbody>%s</tbody></table></div>' % ''.join(rows))
+            if x.get('ddl'):
+                body.append('<details><summary>DDL（SHOW CREATE TABLE）</summary>'
+                            '<pre>%s;</pre></details>' % h(x['ddl']))
+        body.append('</section>')
+        secs.append('\n'.join(body))
+
+    site = _report_site_name()
+    return ('<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+            '<title>テーブル一覧 - 公式データ集</title>\n<style>%s</style>\n</head>\n<body>\n'
+            '<header><h1>🧱 テーブル一覧</h1><p>公式データ集　%s　生成日時 %s JST　%d テーブル</p></header>\n'
+            '<main>\n<nav><div class="wrap"><table><thead><tr><th>#</th><th>テーブル名</th>'
+            '<th>表示名</th><th>DB</th><th>列数</th><th>行数</th></tr></thead>'
+            '<tbody>%s</tbody></table></div></nav>\n'
+            '<h2 class="part">スキーマ</h2>\n%s\n</main>\n</body>\n</html>\n') % (
+                _REPORT_TABLES_CSS, h(site), now.strftime('%Y-%m-%d %H:%M'),
+                len(regs), ''.join(toc), '\n'.join(secs))
+
+
+
+def _report_response(fn, basename):
+    """一覧ドキュメントの共通応答：権限確認→生成→HTMLで返す（?dl=1 で保存）。"""
+    from flask import Response
+    user_id = session.get('user_id')
+    if not can_view(user_id):
+        return Response(_report_page('権限がありません', '公式データ集', '',
+                                     '', '<p class="err">この文書を閲覧する権限がありません．</p>'),
+                        status=403, mimetype='text/html; charset=utf-8')
+    try:
+        doc = fn()
+    except Exception as e:
+        logging.error("official_data_archive report %s error: %s", basename, e)
+        return Response(_report_page('生成エラー', '公式データ集', '', '',
+                                     '<p class="err">文書の生成に失敗しました：%s</p>'
+                                     % _h(e)),
+                        status=500, mimetype='text/html; charset=utf-8')
+    resp = Response(doc, mimetype='text/html; charset=utf-8')
+    resp.headers['Cache-Control'] = 'no-store'
+    if request.args.get('dl'):
+        fname = '%s_%s.html' % (basename, get_jst_now().strftime('%Y%m%d_%H%M%S'))
+        resp.headers['Content-Disposition'] = 'attachment; filename="%s"' % fname
+    return resp
+
+
+@official_data_archive_bp.route('/report/indicators', methods=['GET'])
+@login_required
+def report_indicators():
+    """Web文書「指標の動き」。単一指標・複合指標の全グラフ（SVG）を返す。"""
+    return _report_response(_report_indicators_html, 'official_indicators')
+
+
+@official_data_archive_bp.route('/report/tables', methods=['GET'])
+@login_required
+def report_tables():
+    """Web文書「テーブル一覧」。公式テーブルの名前と列構成・DDLを返す。"""
+    return _report_response(_report_tables_html, 'official_tables')
 
 
 # ────────────────────────────────────────────
