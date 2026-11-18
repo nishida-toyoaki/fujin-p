@@ -17,2016 +17,464 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
-まいあし (MaiAshi) Routes v2 - マルチユーザー・師弟制度対応
-FUJIN-Pスタブの段階的構築をガイドするアプリケーション
+まいあし (MaiAshi) ルート（2026-10-20 第1段）
+
+  組み込みの手引き … data_for_distribution/ の .md（導入・移行の手引き）を画面で読み，.md で受け取る．
+                     一覧はコード内の固定表 GUIDES で，DB にも他のアプリにも依存しない．
+                     まいあしのパッケージに入って一緒に移るので，移設先でもそのまま読める（2026-10-31）
+  図書館      … 文書アーカイブなどに置いたその他の文書への目次．行は題名・説明・URL・並び順だけ
+  配布ファイル … 立ち上げスクリプト fujinp_bootstrap.py（このサイトのホーム直下にある本物を配る．2026-10-31）
+
+閲覧はログインした人全員．目次の編集は admin と「まいあしインストラクター」グループの所属者．
 """
-from flask import render_template, jsonify, request, session
-from datetime import datetime, timedelta, timezone
-import mysql.connector
-# from db import default_db_config
-from config import Config
-from db import DatabaseConfig, Tables
-from auth import redirect_to_dashboard  # ← FUJIN-Pダッシュボードへ戻る用
+import datetime
+import logging
 import os
-import logging  # ← 追加
-from werkzeug.utils import secure_filename
-from markdown_converter import process_markdown
+
+import mysql.connector
+from flask import abort, jsonify, render_template, request, send_from_directory, session
+
+from auth import redirect_to_dashboard
+from db import DatabaseConfig
 
 from . import migration_assistant
 
-JST = timezone(timedelta(hours=9), 'JST')
+# まいあしが所有するテーブル（SQL では必ずこの定数を使う．アプシャは *_TABLE 定数から見つける）
+LIBRARY_TABLE = 'migration_assistant_library'
 
-# =============================================================================
-# まいあしが所有するテーブル（2026-10-09 アプリ名つきに改名）
-#   旧名: courses / course_phase_contents / course_stage_contents /
-#         course_step_contents / course_enrollments / course_progress
-#   SQL では必ずこの定数を使う（アプシャは *_TABLE 定数からテーブルを見つける）
-# =============================================================================
-COURSES_TABLE     = 'migration_assistant_courses'             # 教材
-PHASES_TABLE      = 'migration_assistant_course_phases'       # 教材コンテンツ Phase
-STAGES_TABLE      = 'migration_assistant_course_stages'       # 教材コンテンツ Stage
-STEPS_TABLE       = 'migration_assistant_course_steps'        # 教材コンテンツ Step
-ENROLLMENTS_TABLE = 'migration_assistant_course_enrollments'  # 受講登録
-PROGRESS_TABLE    = 'migration_assistant_course_progress'     # ステップ別進捗
-MENTORS_TABLE     = 'migration_assistant_mentors'             # 師匠候補の記録
+# 教材を作り，図書館の目次を編集できる人のグループ（「ユーザとグループ」で登録する）
+INSTRUCTOR_GROUP = 'まいあしインストラクター'
 
-#def get_db_connection():
-#    """データベース接続を取得"""
-#    return mysql.connector.connect(
-#        host=default_db_config['host'],
-#        user=default_db_config['user'],
-#        password=default_db_config['password'],
-#        database=default_db_config['database'],
-#        charset='utf8mb4',
-#        use_pure=True
-#    )
+HERE = os.path.dirname(os.path.abspath(__file__))
+DIST_DIR = os.path.join(HERE, 'data_for_distribution')
+# 立ち上げスクリプトはカーネルの一部としてホーム直下に置かれている（全アプリパッケージにも入る）．
+# まいあしは写しを持たず，ホーム直下の本物を配る（2026-10-31．旧 fujinp_kernel_install.py と build_installer.py は廃止）
+SITE_ROOT = os.path.dirname(os.path.dirname(HERE))
+BOOTSTRAP_NAME = 'fujinp_bootstrap.py'
+
+JST = datetime.timezone(datetime.timedelta(hours=9), 'JST')
+
+
+def get_jst_now():
+    """JST の naive datetime（DBがUTCのため，NOW() に頼らず明示的に書く）"""
+    return datetime.datetime.now(JST).replace(tzinfo=None)
+
+
 def get_db_connection():
     return mysql.connector.connect(**DatabaseConfig.default())
 
-# UPLOAD_FOLDER = '/home/nishida4fujinp/static/mdimgs'
-UPLOAD_FOLDER = Config.UPLOAD_FOLDER
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-
-# 画像アップロードのサイズ上限（フロントの 10MB チェックと同値。
-# フロント側チェックはAPIを直接叩かれると迂回できるため、サーバー側でも見る）
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
-# migration_assistant_course_progress.status の許可値（DBのENUM定義と一致させる）
-PROGRESS_STATUSES = ('未着手', '取り組み中', '苦戦', '完了', '放棄')
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 
 # =============================================================================
-# ユーティリティ関数
+# 権限
 # =============================================================================
 
-def get_now_jst():
-    """現在時刻（JST）を取得"""
-    return datetime.now(JST)
+def _ug(name):
+    """「ユーザとグループ」の公開API を遅延で取り出す（無ければ None）"""
+    try:
+        from fujinp.user_groups import utils
+        return getattr(utils, name, None)
+    except Exception:
+        return None
 
-def is_valid_now(valid_from, valid_until):
-    """現在時刻が有効期間内かチェック"""
-    now_jst_naive = get_now_jst().replace(tzinfo=None)
-    if valid_from and valid_from > now_jst_naive: return False
-    if valid_until and valid_until < now_jst_naive: return False
-    return True
 
-def check_is_admin(user_id):
-    """ユーザーがadminかチェック（簡易版）"""
+def _in_group_by_sql(user_id, group_name):
+    """公開API が無いサイト向けの代替：直接メンバーを有効期間つきで見る"""
+    now = get_jst_now()
+    conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"SELECT category FROM {Tables.USERS} WHERE id = %s", (user_id,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return user and user['category'] == 'admin'
-    except:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 1 FROM user_group_memberships m
+            JOIN user_groups g ON g.id = m.group_id
+            WHERE m.user_id = %s AND g.name = %s
+              AND (m.valid_from IS NULL OR m.valid_from <= %s)
+              AND (m.valid_until IS NULL OR m.valid_until >= %s)
+            LIMIT 1
+        """, (user_id, group_name, now, now))
+        hit = cur.fetchone() is not None
+        cur.close()
+        return hit
+    except Exception as e:
+        logging.error("migration_assistant _in_group_by_sql: %s", e)
         return False
-
-def require_course_editor(course_id):
-    """
-    教材編集APIの共通認可チェック。
-
-    ポリシーは mentor_content_editor 画面と同じ「作成者本人、または管理者」。
-    画面側だけで権限を見ていると、APIを直接叩かれた場合に他人の教材を
-    書き換えられてしまうため、各APIの入口でこの関数を必ず通す。
-
-    戻り値:
-        (user_id, None)                 … 認可OK
-        (None, (レスポンス, ステータス)) … 認可NG。呼び出し側はそのまま return する
-    """
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, (jsonify({'success': False, 'error': 'Unauthorized'}), 401)
-
-    if not course_id:
-        return None, (jsonify({'success': False, 'error': 'course_id は必須です'}), 400)
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"SELECT creator_user_id FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
-        course = cursor.fetchone()
-        cursor.close()
-    except Exception as e:
-        logging.error(f"require_course_editor error: course_id={course_id}, {e}")
-        return None, (jsonify({'success': False,
-                               'error': '権限の確認中にエラーが発生しました'}), 500)
     finally:
-        if conn and conn.is_connected():
+        if conn is not None and conn.is_connected():
             conn.close()
 
-    if not course:
-        return None, (jsonify({'success': False,
-                               'error': '指定された教材が見つかりません'}), 404)
 
-    if course['creator_user_id'] != user_id and not check_is_admin(user_id):
-        logging.warning(
-            f"[認可拒否] user_id={user_id} が course_id={course_id} "
-            f"(作成者 {course['creator_user_id']}) の編集APIを呼び出しました"
-        )
-        return None, (jsonify({'success': False,
-                               'error': 'この教材の編集権限がありません'}), 403)
-
-    return user_id, None
-
-
-def require_enrollment_owner(enrollment_id):
-    """
-    学習者APIの共通認可チェック。
-
-    受講ID（enrollment_id ＝ /api/systems が返す id）が
-    ログイン中のユーザー本人のものであることを確認し、対応する course_id を返す。
-    これを通さないと、受講IDを差し替えるだけで他人の進捗や
-    非公開教材の本文にアクセスできてしまう。
-
-    戻り値:
-        (user_id, course_id, None)            … 認可OK
-        (None, None, (レスポンス, ステータス)) … 認可NG。呼び出し側はそのまま return する
-    """
-    user_id = session.get('user_id')
+def is_instructor(user_id=None):
+    """admin，または「まいあしインストラクター」の所属者か"""
+    user_id = user_id or session.get('user_id')
     if not user_id:
-        return None, None, (jsonify({'success': False, 'error': 'Unauthorized'}), 401)
+        return False
+    if session.get('user_category') == 'admin':
+        return True
+    names_fn = _ug('get_user_group_names')
+    if names_fn is not None:
+        try:
+            return INSTRUCTOR_GROUP in (names_fn(user_id) or [])
+        except Exception as e:
+            logging.warning("migration_assistant get_user_group_names: %s", e)
+    return _in_group_by_sql(user_id, INSTRUCTOR_GROUP)
 
-    if not enrollment_id:
-        return None, None, (jsonify({'success': False,
-                                     'error': 'system_id は必須です'}), 400)
 
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            f"SELECT course_id FROM {ENROLLMENTS_TABLE} "
-            "WHERE id = %s AND student_user_id = %s",
-            (enrollment_id, user_id)
-        )
-        enrollment = cursor.fetchone()
-        cursor.close()
-    except Exception as e:
-        logging.error(f"require_enrollment_owner error: "
-                      f"enrollment_id={enrollment_id}, {e}")
-        return None, None, (jsonify({'success': False,
-                                     'error': '権限の確認中にエラーが発生しました'}), 500)
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
+def _need_login_json():
+    return jsonify({'success': False, 'error': 'ログインが切れています．再ログインしてください'}), 401
 
-    if not enrollment:
-        # 「他人の受講ID」と「存在しないID」を区別せず404で返す（存在推測を防ぐ）
-        logging.warning(
-            f"[認可拒否] user_id={user_id} が enrollment_id={enrollment_id} "
-            f"にアクセスしました（本人の受講ではありません）"
-        )
-        return None, None, (jsonify({'success': False,
-                                     'error': '受講データが見つかりません'}), 404)
 
-    return user_id, enrollment['course_id'], None
+def _need_instructor_json():
+    return jsonify({'success': False,
+                    'error': 'この操作はまいあしインストラクターだけが行えます'}), 403
 
 
 # =============================================================================
-# 画面表示（ページ遷移）
+# 組み込みの手引き（data_for_distribution/ の .md）
+# =============================================================================
+
+# key: (ファイル名, 表題, 一行の説明)．並びは画面の表示順
+GUIDES = [
+    ('overview', 'install_overview.md', '全体マニュアル',
+     '新品の PythonAnywhere に FUJIN-P を立ち上げるまでの見取り図．全アプリパッケージ1つと config.py，2つの段階，手で行う設定，アプシャが開けなくなったときの立て直し．最初にこれを読む．'),
+    ('stage1', 'install_stage1.md', '第1段階マニュアル',
+     '立ち上げスクリプト fujinp_bootstrap.py で，全アプリパッケージからカーネルとアプシャまでを立ち上げ，admin でログインできるところまで．'),
+    ('stage2', 'install_stage2.md', '第2段階マニュアル',
+     '立ち上がったサイトのアプシャで，同じ全アプリパッケージから一般のアプリをまとめて取り込む．'),
+    ('external', 'install_external_services.md', '外部サービス設定（Google認証・Slack）',
+     '新しいサイトで Google ログインのコールバック URL を登録し直す手順と，Slack の二重投稿・予約投稿を避ける切替の順序．なぜ必要かの説明つき．'),
+    ('legacy', 'legacy_docs_202607.md', 'まいあし 旧文書（2026年7月版）',
+     '正本化より前のユーザマニュアルと技術仕様書．控えとして残してある．現行のコードとは食い違う．'),
+]
+GUIDE_MAP = {k: (name, title, desc) for k, name, title, desc in GUIDES}
+
+
+def _guide_info():
+    """画面に並べる手引きの一覧（実在するものに exists=True）"""
+    rows = []
+    for key, name, title, desc in GUIDES:
+        path = os.path.join(DIST_DIR, name)
+        ok = os.path.isfile(path)
+        rows.append({
+            'key': key, 'name': name, 'title': title, 'desc': desc, 'exists': ok,
+            'mtime': (datetime.datetime.fromtimestamp(os.stat(path).st_mtime, JST).strftime('%Y-%m-%d %H:%M')
+                      if ok else ''),
+        })
+    return rows
+
+
+def _guide_text(key):
+    """(ファイル名, 表題, 本文) を返す．表に無い key は None，ファイルが無ければ本文 None"""
+    if key not in GUIDE_MAP:
+        return None
+    name, title, _desc = GUIDE_MAP[key]
+    path = os.path.join(DIST_DIR, name)
+    if not os.path.isfile(path):
+        return name, title, None
+    with open(path, encoding='utf-8') as f:
+        return name, title, f.read()
+
+
+def _md_to_html(md_text):
+    """Markdown を HTML に．カーネルの markdown_converter（無害化つき）を使い，無ければ素のテキストで出す"""
+    try:
+        from markdown_converter import process_markdown_for_preview
+        return process_markdown_for_preview(md_text)
+    except Exception as e:
+        logging.warning("migration_assistant _md_to_html: %s", e)
+        import html as _h
+        return '<pre style="white-space:pre-wrap">' + _h.escape(md_text) + '</pre>'
+
+
+# =============================================================================
+# 配布ファイル
+# =============================================================================
+
+def _dist_files():
+    """配布するファイルの一覧（名前 → 実パス）．手引きの .md は「組み込みの手引き」が配る"""
+    out = {}
+    boot = os.path.join(SITE_ROOT, BOOTSTRAP_NAME)
+    if os.path.isfile(boot):
+        out[BOOTSTRAP_NAME] = boot
+    return out
+
+
+DIST_NOTES = {
+    BOOTSTRAP_NAME: '立ち上げスクリプト．全アプリパッケージの JSON と一緒に，新しいサイトのホーム直下（/home/<アカウント名>/）に置いて使います．'
+                    'ふつうは JSON から取り出すので，ダウンロードは要りません',
+}
+
+
+def _dist_info():
+    rows = []
+    for name, path in _dist_files().items():
+        st = os.stat(path)
+        rows.append({
+            'name': name,
+            'size': st.st_size,
+            'mtime': datetime.datetime.fromtimestamp(st.st_mtime, JST).strftime('%Y-%m-%d %H:%M'),
+            'note': DIST_NOTES.get(name, ''),
+        })
+    return rows
+
+
+# =============================================================================
+# 画面
 # =============================================================================
 
 @migration_assistant.route('/')
 @migration_assistant.route('/index')
 def index():
-    """まいあしメインページ（コース未選択）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return render_template('migration_assistant/error.html', error='ログインが必要です')
-    return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
+    if not session.get('user_id'):
+        return render_template('migration_assistant/error.html', error='ログインが必要です'), 401
+    return render_template('migration_assistant/migration_assistant_index.html',
+                           can_edit=is_instructor(),
+                           guides=_guide_info(),
+                           dist_files=_dist_info(),
+                           instructor_group=INSTRUCTOR_GROUP)
 
 
-@migration_assistant.route('/course/<int:course_id>')
-def course_view(course_id):
-    """
-    学習者用: 特定のコース（教材）を選択した状態で開く。
-    あわならの canvas_view と同様、教材ごとに固有URL（course_id基準）を与える。
-    URLの course_id から本人の受講（enrollment）を引き当て、その enrollment_id を
-    テンプレートへ渡してフロント側で自動選択させる。
-    本人が受講していない／存在しないコースの場合はメインページへ戻す。
-    """
-    user_id = session.get('user_id')
-    if not user_id:
-        return render_template('migration_assistant/error.html', error='ログインが必要です')
+@migration_assistant.route('/guide/<key>')
+def guide_view(key):
+    """組み込みの手引きを画面で読む"""
+    if not session.get('user_id'):
+        return render_template('migration_assistant/error.html',
+                               error='手引きを読むにはログインが必要です'), 401
+    got = _guide_text(key)
+    if got is None:
+        abort(404)
+    name, title, text = got
+    if text is None:
+        return render_template('migration_assistant/error.html',
+                               error=f'{name} がアプリの data_for_distribution/ にありません'), 404
+    return render_template('migration_assistant/migration_assistant_guide.html',
+                           key=key, name=name, title=title, body=_md_to_html(text),
+                           guides=_guide_info())
 
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        # URLの course_id に対する、このユーザー本人の受講レコードを取得
-        cursor.execute(
-            f"SELECT id FROM {ENROLLMENTS_TABLE} "
-            "WHERE course_id = %s AND student_user_id = %s",
-            (course_id, user_id)
-        )
-        enrollment = cursor.fetchone()
-        cursor.close()
 
-        if not enrollment:
-            # 未受講、または存在しないコース → メインページへ
-            return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
+@migration_assistant.route('/guide/<key>/download')
+def guide_download(key):
+    """組み込みの手引きを .md で受け取る"""
+    if not session.get('user_id'):
+        return render_template('migration_assistant/error.html',
+                               error='手引きの受け取りにはログインが必要です'), 401
+    if key not in GUIDE_MAP:
+        abort(404)
+    name = GUIDE_MAP[key][0]
+    if not os.path.isfile(os.path.join(DIST_DIR, name)):
+        abort(404)
+    return send_from_directory(DIST_DIR, name, as_attachment=True, download_name=name,
+                               mimetype='text/markdown')
 
-        # フロントは enrollment_id（＝/api/systems の id）で照合するため、それを渡す
-        return render_template('migration_assistant/migration_assistant_index.html',
-                               initial_system_id=enrollment['id'])
-    except Exception as e:
-        logging.error(f"course_view error: {e}")
-        return render_template('migration_assistant/migration_assistant_index.html', initial_system_id=None)
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
 
-@migration_assistant.route('/mentor_dashboard')
-def mentor_dashboard():
-    """師匠ダッシュボード"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return render_template('migration_assistant/error.html', error='ログインが必要です')
-    return render_template('migration_assistant/migration_assistant_mentor_dashboard.html')
+@migration_assistant.route('/dist/<path:name>')
+def dist_download(name):
+    """配布ファイルを受け取る（ガイドの文書からもここへリンクする）"""
+    if not session.get('user_id'):
+        return render_template('migration_assistant/error.html',
+                               error='配布ファイルの受け取りにはログインが必要です'), 401
+    files = _dist_files()
+    if name not in files:
+        abort(404)
+    path = files[name]
+    return send_from_directory(os.path.dirname(path), os.path.basename(path),
+                               as_attachment=True, download_name=name)
 
-@migration_assistant.route('/mentor_content_editor/<int:course_id>')
-def mentor_content_editor(course_id):
-    """
-    師匠用コンテンツ編集ページ
-    ポリシー: 自分が制作したコンテンツであれば、誰でも師匠として編集可能。
-    """
-    user_id = session.get('user_id')
-    if not user_id:
-        return render_template('migration_assistant/error.html', error='ログインが必要です')
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 1. 教材の所有者（作成者）を特定する
-        cursor.execute(f"SELECT creator_user_id, course_title FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
-        course = cursor.fetchone()
-
-        if not course:
-            return render_template('migration_assistant/error.html', error='指定された教材が見つかりません')
-
-        # 2. 所有権のチェック
-        # 自分が作成したコースであれば、師匠テーブルの有無に関わらず編集を許可する
-        is_creator = (course['creator_user_id'] == user_id)
-
-        # (オプション) 管理者であれば他人のコンテンツも編集可能とする場合
-        is_admin = check_is_admin(user_id)
-
-        if not is_creator and not is_admin:
-            return render_template('migration_assistant/error.html', error='この教材の編集権限がありません（作成者本人のみ編集可能です）')
-
-        # 3. 師匠としての記録を（未登録なら）自動で作成、または更新する
-        # これにより「コンテンツを書いた＝師匠になった」という事実をDBに刻みます
-        now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
-        cursor.execute(f"""
-            INSERT INTO {MENTORS_TABLE} (user_id, approved_by, valid_from, notes)
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE valid_from = IFNULL(valid_from, VALUES(valid_from))
-        """, (user_id, user_id, now_jst, f"Course ID {course_id} の作成により自動昇格"))
-
-        conn.commit()
-
-        return render_template('migration_assistant/migration_assistant_mentor_content_editor.html',
-                               course_id=course_id,
-                               course_title=course['course_title'])
-
-    except Exception as e:
-        logging.error(f"Editor Access Error: {e}")
-        return render_template('migration_assistant/error.html', error='アクセス権限の確認中にエラーが発生しました')
-    finally:
-        if conn:
-            conn.close()
-
-@migration_assistant.route('/admin_panel')
-def admin_panel():
-    """管理者パネル（師匠承認）"""
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return render_template('migration_assistant/error.html', error='管理者権限が必要です')
-    return render_template('migration_assistant/migration_assistant_admin_panel.html')
 
 @migration_assistant.route('/return_to_fujin')
 def return_to_fujin():
-    """FUJIN-Pダッシュボードに戻る"""
     return redirect_to_dashboard()
 
-# =============================================================================
-# 師匠用：コンテンツ管理API (V2 - コースIDベース)
-# =============================================================================
-
-def get_course_content_v2(course_id):
-    """新テーブル (course_...) から教材の構造を取得 (内部用ヘルパー)"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # Phase取得
-        cursor.execute(f"""
-            SELECT phase_id, phase_number, phase_title, phase_description
-            FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number
-        """, (course_id,))
-        phases = cursor.fetchall()
-
-        # 【変更】辞書からリストに変更
-        content = []
-        for phase in phases:
-            p_id = phase['phase_id']
-            # 各Phaseのデータを構築
-            phase_data = {
-                'id': p_id,
-                'number': phase['phase_number'],
-                'title': phase['phase_title'],
-                'description': phase['phase_description'],
-                'stages': []
-            }
-
-            # Stage取得
-            cursor.execute(f"""
-                SELECT stage_id, stage_number, stage_title
-                FROM {STAGES_TABLE}
-                WHERE course_id = %s AND phase_id = %s ORDER BY stage_number
-            """, (course_id, p_id))
-            stages = cursor.fetchall()
-
-            for stage in stages:
-                s_id = stage['stage_id']
-                stage_data_item = {
-                    'id': s_id,
-                    'number': stage['stage_number'],
-                    'title': stage['stage_title'],
-                    'steps': []
-                }
-
-                # Step取得
-                cursor.execute(f"""
-                    SELECT step_id, step_number, step_title, step_detail
-                    FROM {STEPS_TABLE}
-                    WHERE course_id = %s AND phase_id = %s AND stage_id = %s ORDER BY step_number
-                """, (course_id, p_id, s_id))
-                steps = cursor.fetchall()
-
-                for step in steps:
-                    stage_data_item['steps'].append({
-                        'id': step['step_id'],
-                        'number': step['step_number'],
-                        'title': step['step_title'],
-                        'detail': step['step_detail'],
-                        'display_id': f"{phase['phase_number']}-{stage['stage_number']}-{step['step_number']}"
-                    })
-                phase_data['stages'].append(stage_data_item)
-
-            # 【重要】リストに追加
-            content.append(phase_data)
-
-        cursor.close()
-        conn.close()
-        return content # リストを返す
-    except Exception as e:
-        print(f"Error getting course content v2: {e}")
-        return []
 
 # =============================================================================
-# コンテンツ管理API (新テーブル course_... 専用)
+# 図書館 API
 # =============================================================================
 
-# 師匠がエディタを開いた時のデータ取得
-@migration_assistant.route('/api/v2/courses/<int:course_id>/content', methods=['GET'])
-def get_course_content_api_v2(course_id):
-    """新テーブルから教材構造を返す（師匠用。エディタとダッシュボードが使用）"""
-    # 認可チェック（作成者本人または管理者のみ。
-    # 非公開教材の全ステップ本文を返すため、編集系と同じ基準で保護する）
-    _uid, err = require_course_editor(course_id)
-    if err:
-        return err
-
-    # 既存の get_course_content_v2(course_id) 関数を呼び出し
-    content = get_course_content_v2(course_id)
-    return jsonify({'success': True, 'content': content})
-
-
-
-
-# =============================================================================
-# システム管理API
-# =============================================================================
-
-@migration_assistant.route('/api/systems', methods=['GET'])
-def get_systems():
-    """ユーザーのシステム一覧を取得（新テーブルのみを参照・単純Step集計）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 1. 完了したステップ数：migration_assistant_course_progress テーブルで '完了' になっているレコード
-        # 2. 全ステップ数：migration_assistant_course_steps テーブルに登録されているマスターデータ数
-        cursor.execute(f"""
-            SELECT
-                e.id,
-                c.course_title as system_name,
-                e.enrolled_at as created_at,
-                'course' as source_type,
-                e.course_id,
-                e.mentor_user_id,
-                u.full_name as mentor_name,
-                -- 完了したステップ数をカウント
-                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
-                 WHERE cp.student_user_id = e.student_user_id
-                 AND cp.course_id = e.course_id
-                 AND cp.status = '完了') as completed_steps,
-                -- 師匠が用意した全ステップ数をカウント
-                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
-                 WHERE csc.course_id = e.course_id) as total_steps
-            FROM {ENROLLMENTS_TABLE} e
-            JOIN {COURSES_TABLE} c ON e.course_id = c.id
-            LEFT JOIN {Tables.USERS} u ON e.mentor_user_id = u.id
-            WHERE e.student_user_id = %s
-            ORDER BY e.enrolled_at DESC
-        """, (user_id,))
-
-        course_systems = cursor.fetchall()
-
-        for sys in course_systems:
-            if sys['created_at']:
-                sys['created_at'] = sys['created_at'].strftime('%Y-%m-%d %H:%M')
-            if not sys['mentor_name']:
-                sys['mentor_name'] = "未設定"
-
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True, 'systems': course_systems})
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-
-
-
-
-
-
-
-# =============================================================================
-# ユーティリティAPI
-# =============================================================================
-
-@migration_assistant.route('/api/check_admin', methods=['GET'])
-def check_admin_api():
-    """管理者権限チェックAPI"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'is_admin': False})
-
-    try:
-        is_admin = check_is_admin(user_id)
-        return jsonify({'is_admin': is_admin})
-    except Exception as e:
-        print(f"Error checking admin: {e}")
-        return jsonify({'is_admin': False})
-
-
-
-# =============================================================================
-# 師匠ダッシュボードAPI
-# =============================================================================
-
-@migration_assistant.route('/api/mentor/students', methods=['GET'])
-def get_mentor_students():
-    """師匠用: 新テーブルから自分が担当する弟子の一覧と進捗概要を取得"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 新テーブル (migration_assistant_course_enrollments) を主軸に、コース名と学生名、進捗を集計
-        cursor.execute(f"""
-            SELECT
-                e.id as enrollment_id,
-                e.student_user_id,
-                u.full_name as student_name,
-                e.course_id,
-                c.course_title as system_name,
-                e.enrolled_at as assigned_at,
-                -- 完了したステップ数
-                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
-                 WHERE cp.student_user_id = e.student_user_id
-                   AND cp.course_id = e.course_id
-                   AND cp.status = '完了') as completed_steps,
-                -- コース内の全ステップ数
-                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
-                 WHERE csc.course_id = e.course_id) as total_steps,
-                -- 最終活動日時
-                (SELECT MAX(updated_at) FROM {PROGRESS_TABLE} cp
-                 WHERE cp.student_user_id = e.student_user_id
-                   AND cp.course_id = e.course_id) as last_activity
-            FROM {ENROLLMENTS_TABLE} e
-            JOIN {Tables.USERS} u ON e.student_user_id = u.id
-            JOIN {COURSES_TABLE} c ON e.course_id = c.id
-            WHERE e.mentor_user_id = %s
-            ORDER BY last_activity DESC, e.enrolled_at DESC
-        """, (user_id,))
-
-        students = cursor.fetchall()
-
-        # 日時フォーマットの調整
-        for student in students:
-            student['assigned_at'] = student['assigned_at'].strftime('%Y-%m-%d %H:%M') if student['assigned_at'] else None
-            # 活動がない場合は登録日を表示
-            if not student['last_activity']:
-                student['last_activity'] = student['assigned_at']
-            else:
-                student['last_activity'] = student['last_activity'].strftime('%Y-%m-%d %H:%M')
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'students': students})
-    except Exception as e:
-        print(f"Error getting mentor students: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@migration_assistant.route('/api/mentor/student/<int:student_id>/system/<int:enrollment_id>', methods=['GET'])
-def get_student_progress(student_id, enrollment_id):
-    """師匠用: 特定の弟子の詳細な進捗マップを取得（新テーブル版）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 権限チェック
-        cursor.execute(f"""
-            SELECT course_id FROM {ENROLLMENTS_TABLE}
-            WHERE id = %s AND mentor_user_id = %s AND student_user_id = %s
-        """, (enrollment_id, user_id, student_id))
-
-        enrollment = cursor.fetchone()
-        if not enrollment:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'Permission denied'}), 403
-
-        # 進捗取得
-        cursor.execute(f"""
-            SELECT phase_id, stage_id, step_id, status
-            FROM {PROGRESS_TABLE}
-            WHERE student_user_id = %s AND course_id = %s
-        """, (student_id, enrollment['course_id']))
-
-        progress_records = cursor.fetchall()
-        cursor.close()
-        conn.close()
-
-        # 【修正】NULL値を扱わず、全て実際の値として処理
-        progress = {f"{p['phase_id']}_{p['stage_id']}_{p['step_id']}": p['status']
-                    for p in progress_records}
-
-        return jsonify({'success': True, 'progress': progress})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# =============================================================================
-# 管理者API（師匠承認）
-# =============================================================================
-
-@migration_assistant.route('/api/admin/mentors', methods=['GET'])
-def get_admin_mentors():
-    """師匠候補一覧を取得（管理者専用）"""
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute(f"""
-            SELECT
-                m.id,
-                m.user_id,
-                u.full_name,
-                m.approved_by,
-                approver.full_name as approved_by_name,
-                m.valid_from,
-                m.valid_until,
-                m.notes,
-                m.created_at
-            FROM {MENTORS_TABLE} m
-            JOIN {Tables.USERS} u ON m.user_id = u.id
-            LEFT JOIN {Tables.USERS} approver ON m.approved_by = approver.id
-            ORDER BY m.created_at DESC
-        """)
-
-        mentors = cursor.fetchall()
-
-        # 有効期間チェック
-        for m in mentors:
-            m['is_active'] = is_valid_now(m['valid_from'], m['valid_until'])
-            m['valid_from'] = m['valid_from'].strftime('%Y-%m-%d %H:%M') if m['valid_from'] else None
-            m['valid_until'] = m['valid_until'].strftime('%Y-%m-%d %H:%M') if m['valid_until'] else None
-            m['created_at'] = m['created_at'].strftime('%Y-%m-%d %H:%M') if m['created_at'] else None
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'mentors': mentors})
-    except Exception as e:
-        print(f"Error getting admin mentors: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@migration_assistant.route('/api/admin/mentors', methods=['POST'])
-def approve_mentor():
-    """師匠候補を承認（管理者専用）"""
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-
-    try:
-        data = request.get_json()
-        mentor_user_id = data.get('user_id')
-        valid_from = data.get('valid_from')
-        valid_until = data.get('valid_until')
-        notes = data.get('notes', '')
-
-        if not mentor_user_id:
-            return jsonify({'success': False, 'error': 'ユーザーIDは必須です'}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(f"""
-            INSERT INTO {MENTORS_TABLE} (user_id, approved_by, valid_from, valid_until, notes)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (mentor_user_id, user_id, valid_from, valid_until, notes))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True})
-    except mysql.connector.IntegrityError:
-        return jsonify({'success': False, 'error': 'このユーザーは既に師匠候補として登録されています'}), 400
-    except Exception as e:
-        print(f"Error approving mentor: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@migration_assistant.route('/api/admin/mentors/<int:mentor_id>', methods=['DELETE'])
-def revoke_mentor(mentor_id):
-    """師匠承認を取り消し（管理者専用）"""
-    user_id = session.get('user_id')
-    if not user_id or not check_is_admin(user_id):
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(f"DELETE FROM {MENTORS_TABLE} WHERE id = %s", (mentor_id,))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True})
-    except Exception as e:
-        print(f"Error revoking mentor: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# =============================================================================
-# 師匠用コンテンツ管理API（v3.0）
-# =============================================================================
-
-
-
-@migration_assistant.route('/api/preview', methods=['POST'])
-def preview_markdown():
-    """Markdownプレビュー"""
+def _row_out(r):
+    return {
+        'id': r['id'],
+        'title': r['title'],
+        'description': r.get('description') or '',
+        'url': r['url'],
+        'sort_order': r['sort_order'],
+        'updated_at': r['updated_at'].strftime('%Y-%m-%d %H:%M') if r.get('updated_at') else '',
+    }
+
+
+def _clean_entry(data):
+    """入力を検証して (title, description, url) を返す．不正なら ValueError"""
+    title = str(data.get('title') or '').strip()
+    url = str(data.get('url') or '').strip()
+    desc = str(data.get('description') or '').strip()
+    if not title:
+        raise ValueError('題名は必須です')
+    if len(title) > 255:
+        raise ValueError('題名は255文字までです')
+    if not url:
+        raise ValueError('URLは必須です')
+    if len(url) > 1000:
+        raise ValueError('URLは1000文字までです')
+    if not (url.startswith('https://') or url.startswith('http://') or url.startswith('/')):
+        raise ValueError('URLは https:// または / で始めてください')
+    if len(desc) > 2000:
+        raise ValueError('説明は2000文字までです')
+    return title, desc, url
+
+
+@migration_assistant.route('/api/library', methods=['GET'])
+def api_library_list():
     if not session.get('user_id'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    data = request.get_json(silent=True) or {}
-    markdown_text = data.get('markdown', '')
-
-    if not markdown_text:
-        return jsonify({'html': '<p class="text-muted">プレビューがここに表示されます</p>'})
-
-    try:
-        # MarkdownをHTMLに変換（シンプルな変換）
-        import markdown as md
-        html = md.markdown(
-            markdown_text,
-            extensions=['extra', 'nl2br', 'sane_lists', 'fenced_code', 'tables']
-        )
-        return jsonify({'html': html})
-    except Exception as e:
-        print(f"Preview error: {e}")
-        import traceback
-        traceback.print_exc()
-        # エラー時はエスケープして表示
-        import html as html_module
-        escaped = html_module.escape(markdown_text)
-        return jsonify({
-            'html': f'<pre style="white-space: pre-wrap; background: #f5f5f5; padding: 15px; border-radius: 4px;">{escaped}</pre>',
-            'error': str(e)
-        })
-
-# =============================================================================
-# 【V2】師匠用コンテンツ管理API（新テーブル専用）
-# =============================================================================
-
-@migration_assistant.route('/api/v2/mentor/content/phase', methods=['POST'])
-def update_phase_content_v2():
-    """Phaseタイトルの更新（新テーブル）"""
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    p_id = data.get('phase_id')
-    title = data.get('phase_title')
-    desc = data.get('phase_description', '')
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-        UPDATE {PHASES_TABLE}
-        SET phase_title = %s, phase_description = %s
-        WHERE course_id = %s AND phase_id = %s
-    """, (title, desc, c_id, p_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'success': True})
-
-@migration_assistant.route('/api/v2/mentor/content/stage', methods=['POST'])
-def update_stage_content_v2():
-    """Stageタイトルの更新（新テーブル）"""
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    p_id = data.get('phase_id')
-    s_id = data.get('stage_id')
-    title = data.get('stage_title')
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-        UPDATE {STAGES_TABLE}
-        SET stage_title = %s
-        WHERE course_id = %s AND phase_id = %s AND stage_id = %s
-    """, (title, c_id, p_id, s_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'success': True})
-
-@migration_assistant.route('/api/v2/mentor/content/step', methods=['POST'])
-def update_step_content_v2():
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    p_id = data.get('phase_id')
-    s_id = data.get('stage_id')
-    st_id = data.get('step_id')
-    title = data.get('step_title')
-    detail = data.get('step_detail')
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    logging.info(f"[Step保存開始] course_id={c_id}, phase={p_id}, stage={s_id}, step={st_id}")
-    logging.info(f"[Step保存開始] title={title}, detail length={len(detail) if detail else 0}")
-
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # ★まずレコードが存在するか確認
-        cursor.execute(f"""
-            SELECT step_id FROM {STEPS_TABLE}
-            WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
-        """, (c_id, p_id, s_id, st_id))
-
-        existing = cursor.fetchone()
-
-        if not existing:
-            logging.error(f"[Step保存エラー] レコードが存在しません")
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'ステップが見つかりません'}), 404
-
-        # ★UPDATE実行
-        if detail is not None:
-            cursor.execute(f"""
-                UPDATE {STEPS_TABLE}
-                SET step_title = %s, step_detail = %s
-                WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
-            """, (title, detail, c_id, p_id, s_id, st_id))
-        else:
-            cursor.execute(f"""
-                UPDATE {STEPS_TABLE}
-                SET step_title = %s
-                WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
-            """, (title, c_id, p_id, s_id, st_id))
-
-        affected_rows = cursor.rowcount
-        logging.info(f"[Step保存] 更新行数: {affected_rows}")
-
-        # ★重要な修正: affected_rows が 0 でも成功とする
-        # （レコードが存在することは既に確認済み。値が同じ場合は更新不要）
-        if affected_rows == 0:
-            logging.info(f"[Step保存] 値に変更がないためスキップしました")
-
-        conn.commit()
-        logging.info(f"[Step保存] ✓ コミット完了")
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True})
-
-    except Exception as e:
-        logging.error(f"[Step保存エラー] {str(e)}")
-        import traceback
-        traceback.print_exc()
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-            try:
-                conn.close()
-            except:
-                pass
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# =============================================================================
-# 【V2】コンテンツ構造管理API (新テーブル course_... 専用)
-# =============================================================================
-
-# --- Phase追加 (V2) ---
-@migration_assistant.route('/api/v2/mentor/content/phase/add', methods=['POST'])
-def add_phase_v2():
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    position = data.get('position', 'after')
-    after_num = data.get('after_number', 0)
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 1. 挿入位置の決定と既存番号の押し上げ
-        insert_number = 1 if position == 'first' else after_num + 1
-        cursor.execute(f"""
-            UPDATE {PHASES_TABLE}
-            SET phase_number = phase_number + 1
-            WHERE course_id = %s AND phase_number >= %s
-        """, (c_id, insert_number))
-
-        # 2. 新規挿入
-        new_p_id = f"p_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute(f"""
-            INSERT INTO {PHASES_TABLE} (course_id, phase_id, phase_number, phase_title)
-            VALUES (%s, %s, %s, %s)
-        """, (c_id, new_p_id, insert_number, "新しいPhase"))
-
-        # 3. 連番の強制再整理（念のため）
-        cursor.execute(f"SELECT phase_id FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number", (c_id,))
-        phases = cursor.fetchall()
-        for idx, p in enumerate(phases, start=1):
-            cursor.execute(f"UPDATE {PHASES_TABLE} SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
-
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        conn.close()
-
-# --- Phase削除 (V2) ---
-@migration_assistant.route('/api/v2/mentor/content/phase/delete', methods=['POST'])
-def delete_phase_v2():
-    data = request.get_json(silent=True) or {}
-    c_id, p_id = data.get('course_id'), data.get('phase_id')
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # 1. 下位階層をすべて削除（Step -> Stage -> Phase）
-        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-        cursor.execute(f"DELETE FROM {PHASES_TABLE} WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-
-        # 2. 残ったPhaseの番号を詰め直す
-        cursor.execute(f"SELECT phase_id FROM {PHASES_TABLE} WHERE course_id = %s ORDER BY phase_number", (c_id,))
-        phases = cursor.fetchall()
-        for idx, p in enumerate(phases, start=1):
-            cursor.execute(f"UPDATE {PHASES_TABLE} SET phase_number = %s WHERE course_id = %s AND phase_id = %s", (idx, c_id, p[0]))
-
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        conn.close()
-
-@migration_assistant.route('/api/v2/mentor/content/stage/add', methods=['POST'])
-def add_stage_v2():
-    """新テーブルへのStage追加（挿入位置指定・連番整理）"""
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    p_id = data.get('phase_id')
-    position = data.get('position', 'after')
-    after_number = data.get('after_number', 0)
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 1. 挿入スペースを確保（指定番号より後ろを+1）
-        if position == 'first':
-            insert_number = 1
-            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s", (c_id, p_id))
-        else: # after
-            insert_number = after_number + 1
-            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = stage_number + 1 WHERE course_id = %s AND phase_id = %s AND stage_number >= %s", (c_id, p_id, insert_number))
-
-        # 2. 新規挿入
-        new_s_id = f"s_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute(f"""
-            INSERT INTO {STAGES_TABLE} (course_id, phase_id, stage_id, stage_number, stage_title)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (c_id, p_id, new_s_id, insert_number, "新しいStage"))
-
-        # 3. 番号を綺麗に振り直し（データの整合性を保証）
-        cursor.execute(f"SELECT stage_id FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
-        stages = cursor.fetchall()
-        for idx, stage in enumerate(stages, start=1):
-            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@migration_assistant.route('/api/v2/mentor/content/stage/delete', methods=['POST'])
-def delete_stage_v2():
-    """新テーブルからのStage削除（関連Step削除・連番整理）"""
-    data = request.get_json(silent=True) or {}
-    c_id = data.get('course_id')
-    p_id = data.get('phase_id')
-    s_id = data.get('stage_id')
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 1. 関連するStepを削除
-        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
-
-        # 2. Stage本体を削除
-        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s AND stage_id = %s", (c_id, p_id, s_id))
-
-        # 3. 削除後の番号詰め
-        cursor.execute(f"SELECT stage_id FROM {STAGES_TABLE} WHERE course_id = %s AND phase_id = %s ORDER BY stage_number", (c_id, p_id))
-        stages = cursor.fetchall()
-        for idx, stage in enumerate(stages, start=1):
-            cursor.execute(f"UPDATE {STAGES_TABLE} SET stage_number = %s WHERE course_id = %s AND stage_id = %s", (idx, c_id, stage[0]))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# --- Step追加 (V2) ---
-@migration_assistant.route('/api/v2/mentor/content/step/add', methods=['POST'])
-def add_step_v2():
-    data = request.get_json(silent=True) or {}
-    c_id, p_id, s_id = data.get('course_id'), data.get('phase_id'), data.get('stage_id')
-    position = data.get('position', 'after')
-    after_num = data.get('after_number', 0)
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 1. 挿入スペース確保
-        insert_number = 1 if position == 'first' else after_num + 1
-        cursor.execute(f"""
-            UPDATE {STEPS_TABLE}
-            SET step_number = step_number + 1
-            WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_number >= %s
-        """, (c_id, p_id, s_id, insert_number))
-
-        # 2. 新規挿入
-        new_st_id = f"st_{int(datetime.now().timestamp() * 1000)}"
-        cursor.execute(f"""
-            INSERT INTO {STEPS_TABLE} (course_id, phase_id, stage_id, step_id, step_number, step_title, step_detail)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (c_id, p_id, s_id, new_st_id, insert_number, "新しいStep", ""))
-
-        # 3. 番号振り直し
-        cursor.execute(f"""
-            SELECT step_id FROM {STEPS_TABLE}
-            WHERE course_id = %s AND phase_id = %s AND stage_id = %s
-            ORDER BY step_number
-        """, (c_id, p_id, s_id))
-        steps = cursor.fetchall()
-        for idx, st in enumerate(steps, start=1):
-            cursor.execute(f"UPDATE {STEPS_TABLE} SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
-
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        conn.close()
-
-# --- Step削除 (V2) ---
-# ※以前の回答で作成済みですが、番号振り直しをより確実にした版です
-@migration_assistant.route('/api/v2/mentor/content/step/delete', methods=['POST'])
-def delete_step_v2():
-    data = request.get_json(silent=True) or {}
-    c_id, p_id, s_id, st_id = (data.get('course_id'), data.get('phase_id'),
-                               data.get('stage_id'), data.get('step_id'))
-
-    # 認可チェック（作成者本人または管理者のみ）
-    _uid, err = require_course_editor(c_id)
-    if err:
-        return err
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # 1. 削除実行
-        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s AND step_id = %s", (c_id, st_id))
-
-        # 2. 番号を詰め直す
-        cursor.execute(f"""
-            SELECT step_id FROM {STEPS_TABLE}
-            WHERE course_id = %s AND phase_id = %s AND stage_id = %s
-            ORDER BY step_number
-        """, (c_id, p_id, s_id))
-        steps = cursor.fetchall()
-        for idx, st in enumerate(steps, start=1):
-            cursor.execute(f"UPDATE {STEPS_TABLE} SET step_number = %s WHERE course_id = %s AND step_id = %s", (idx, c_id, st[0]))
-
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        conn.close()
-
-
-# =============================================================================
-# 【V2】弟子用：コンテンツ・詳細取得（新テーブル専用）
-# =============================================================================
-
-@migration_assistant.route('/api/student/content', methods=['GET'])
-def get_student_content():
-    """弟子用: 受講ID(system_id)からコースIDを特定し、新テーブルから構造を返す"""
-    user_id = session.get('user_id')
-    enrollment_id = request.args.get('system_id', type=int)
-
-    if not user_id or not enrollment_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
+        return _need_login_json()
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 1. 受講情報から course_id と mentor_user_id を取得
-        # 所有者（student_user_id）のチェックも同時に行う
-        cursor.execute(f"""
-            SELECT course_id, mentor_user_id
-            FROM {ENROLLMENTS_TABLE}
-            WHERE id = %s AND student_user_id = %s
-        """, (enrollment_id, user_id))
-        enrollment = cursor.fetchone()
-
-        if not enrollment:
-            return jsonify({'success': False, 'error': 'not_found', 'message': '受講データが見つかりません'})
-
-        # 2. 師匠が未指名の場合、フロントエンドに 'no_mentor' を通知する
-        # これにより、JS側の showNoMentorMessage() が発火します
-        if enrollment['mentor_user_id'] is None:
-            return jsonify({
-                'success': False,
-                'error': 'no_mentor',
-                'message': 'この教材を進めるには師匠の指名が必要です'
-            })
-
-        # 3. 師匠が指名されていれば、新テーブル(course_...)から構造を取得
-        content = get_course_content_v2(enrollment['course_id'])
-
-        cursor.close()
-        return jsonify({'success': True, 'content': content})
-
-    except Exception as e:
-        logging.error(f"Error in get_student_content: {str(e)}")
-        return jsonify({'success': False, 'error': 'server_error', 'message': str(e)}), 500
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-@migration_assistant.route('/api/student/step_detail/<phase_id>/<stage_id>/<step_id>', methods=['GET'])
-def get_student_step_detail(phase_id, stage_id, step_id):
-    """弟子用: 受講IDからコースIDを特定し、新テーブルからステップ詳細(HTML)を取得"""
-    enrollment_id = request.args.get('system_id', type=int)
-
-    # 認可チェック（本人の受講のみ。他人の受講IDでは非公開教材の本文が読めてしまう）
-    _uid, course_id, err = require_enrollment_owner(enrollment_id)
-    if err:
-        return err
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 新テーブル (migration_assistant_course_steps) からデータを取得
-        cursor.execute(f"""
-            SELECT step_title, step_detail FROM {STEPS_TABLE}
-            WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
-        """, (course_id, phase_id, stage_id, step_id))
-
-        step = cursor.fetchone()
-        cursor.close()
-
-        detail_html = (process_markdown(step['step_detail'])
-                       if step and step['step_detail'] else '詳細情報がありません。')
-        return jsonify({'success': True,
-                        'step_title': step['step_title'] if step else "無題",
-                        'step_detail': detail_html})
-    except Exception as e:
-        logging.error(f"Error getting step detail: enrollment_id={enrollment_id}, {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-# =============================================================================
-# 進捗管理API
-# =============================================================================
-
-@migration_assistant.route('/api/student/progress', methods=['GET'])
-def get_student_progress_v2():
-    """弟子用: 新テーブル(course_progress)から進捗を取得"""
-    enrollment_id = request.args.get('system_id', type=int)
-
-    # 認可チェック（本人の受講のみ）
-    user_id, course_id, err = require_enrollment_owner(enrollment_id)
-    if err:
-        return err
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 新テーブルから進捗をロード
-        cursor.execute(
-            f"SELECT phase_id, stage_id, step_id, status FROM {PROGRESS_TABLE} "
-            "WHERE student_user_id = %s AND course_id = %s",
-            (user_id, course_id)
-        )
-
-        progress_list = cursor.fetchall()
-        cursor.close()
-
-        progress = {f"{p['phase_id']}_{p['stage_id']}_{p['step_id']}": p['status']
-                    for p in progress_list}
-        return jsonify({'success': True, 'progress': progress})
-    except Exception as e:
-        logging.error(f"Error getting student progress: enrollment_id={enrollment_id}, {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-@migration_assistant.route('/api/student/progress', methods=['POST'])
-def update_student_progress_v2():
-    """弟子用: 新テーブル(course_progress)へ進捗をUPSERT"""
-    data = request.get_json(silent=True) or {}
-    enrollment_id = data.get('system_id')
-
-    # 認可チェック（本人の受講のみ。これが無いと他人の進捗を書き換えられる）
-    user_id, c_id, err = require_enrollment_owner(enrollment_id)
-    if err:
-        return err
-
-    phase_id = data.get('phase_id')
-    stage_id = data.get('stage_id')
-    step_id = data.get('step_id')
-    status = data.get('status')
-
-    if not all([phase_id, stage_id, step_id, status]):
-        return jsonify({'success': False,
-                        'error': 'phase_id / stage_id / step_id / status は必須です'}), 400
-
-    if status not in PROGRESS_STATUSES:
-        return jsonify({'success': False,
-                        'error': f"status は {'/'.join(PROGRESS_STATUSES)} のいずれかです"}), 400
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # UPSERT (なければ挿入、あれば更新)
-        now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
-        cursor.execute(f"""
-            INSERT INTO {PROGRESS_TABLE} (student_user_id, course_id, phase_id, stage_id, step_id, status, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = VALUES(updated_at)
-        """, (user_id, c_id, phase_id, stage_id, step_id, status, now_jst))
-
-        conn.commit()
-        cursor.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        logging.error(f"Error updating student progress: enrollment_id={enrollment_id}, {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-
-@migration_assistant.route('/api/v2/mentor/content/step/detail', methods=['GET'])
-def get_mentor_step_detail_v2():
-    """師匠用: エディタモーダルを開く際に、生のMarkdownを取得する"""
-    course_id = request.args.get('course_id', type=int)
-    phase_id = request.args.get('phase_id')
-    stage_id = request.args.get('stage_id')
-    step_id = request.args.get('step_id')
-
-    if not all([course_id, phase_id, stage_id, step_id]):
-        return jsonify({'success': False, 'error': 'Missing parameters'}), 400
-
-    # 認可チェック（生Markdownを返すため、編集系と同じ基準で保護する）
-    _uid, err = require_course_editor(course_id)
-    if err:
-        return err
-
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    # 【重要】migration_assistant_course_steps (V2) から生の Markdown を取得
-    cursor.execute(f"""
-        SELECT step_title, step_detail
-        FROM {STEPS_TABLE}
-        WHERE course_id = %s AND phase_id = %s AND stage_id = %s AND step_id = %s
-    """, (course_id, phase_id, stage_id, step_id))
-
-    step = cursor.fetchone()
-    conn.close()
-
-    if step:
-        return jsonify({
-            'success': True,
-            'step_title': step['step_title'],
-            'step_detail': step['step_detail'] # 生のMarkdownを返す
-        })
-    else:
-        return jsonify({'success': False, 'error': 'Step not found'})
-
-
-# =============================================================================
-# 【V2】師匠用：進捗集計（新テーブル専用）
-# =============================================================================
-
-@migration_assistant.route('/api/v2/courses/<int:course_id>/progress_by_step', methods=['GET'])
-def get_mentor_progress_by_step_v2(course_id):
-    """師匠用: 特定コースのステップごとの進捗を新テーブルから集計"""
-    # 認可チェック（作成者本人または管理者のみ。
-    # 他人の教材の受講者の進捗分布が読めてしまうため）
-    _uid, err = require_course_editor(course_id)
-    if err:
-        return err
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"""
-            SELECT phase_id, stage_id, step_id, status, COUNT(*) as count
-            FROM {PROGRESS_TABLE} WHERE course_id = %s
-            GROUP BY phase_id, stage_id, step_id, status
-        """, (course_id,))
-        results = cursor.fetchall()
-        cursor.close()
-
-        by_step = {}
-        for r in results:
-            key = f"{r['phase_id']}_{r['stage_id']}_{r['step_id']}"
-            if key not in by_step:
-                by_step[key] = {s: 0 for s in PROGRESS_STATUSES}
-            # 想定外のstatus（NULL等）でKeyErrorにならないようにする
-            if r['status'] in by_step[key]:
-                by_step[key][r['status']] = r['count']
-        return jsonify({'success': True, 'by_step': by_step})
-    except Exception as e:
-        logging.error(f"Error getting progress by step: course_id={course_id}, {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-# =============================================================================
-# 画像アップロードAPI
-# =============================================================================
-
-@migration_assistant.route('/api/upload_image', methods=['POST'])  # ← migration_assistant_bp → migration_assistant に修正
-def upload_image():
-    """画像アップロード"""
-    # 認可チェック（未ログインでの無制限アップロードを防ぐ）
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'ファイルが選択されていません'}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'ファイルが選択されていません'}), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({'success': False, 'error': '許可されていないファイル形式です'}), 400
-
-    # サイズ上限（フロントの10MBチェックはAPI直叩きで迂回できるためサーバー側でも確認）
-    file.stream.seek(0, os.SEEK_END)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > MAX_IMAGE_BYTES:
-        logging.warning(f"[アップロード拒否] user_id={user_id} size={size} "
-                        f"> {MAX_IMAGE_BYTES}")
-        return jsonify({
-            'success': False,
-            'error': f'ファイルサイズは{MAX_IMAGE_BYTES // (1024 * 1024)}MB以下にしてください'
-        }), 400
-    if size == 0:
-        return jsonify({'success': False, 'error': '空のファイルです'}), 400
-
-    try:
-        # ディレクトリ作成
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-        # ファイル名生成（タイムスタンプ付き）
-        timestamp = datetime.now(JST).strftime('%Y%m%d_%H%M%S')  # ← JSTタイムゾーンを使用
-        filename = secure_filename(file.filename)
-        name, ext = os.path.splitext(filename)
-        unique_filename = f"{name}_{timestamp}{ext}"
-
-        filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
-        file.save(filepath)
-
-        # URL生成
-        url = f"/static/mdimgs/{unique_filename}"
-
-        return jsonify({'success': True, 'filename': unique_filename, 'url': url})
-
-    except Exception as e:
-        logging.error(f"画像アップロードエラー: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-# =============================================================================
-# コース閲覧・受講申し込みAPI（新システム）
-# =============================================================================
-
-@migration_assistant.route('/api/v2/courses/public', methods=['GET'])
-def get_public_courses_v2():
-    """公開されているコース一覧を取得（新テーブル版）"""
-    if not session.get('user_id'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute(f"""
-            SELECT
-                c.id,
-                c.course_title,
-                c.course_description,
-                c.creator_user_id,
-                u.full_name as creator_name,
-                c.created_at,
-                c.updated_at,
-                (SELECT COUNT(*) FROM {PHASES_TABLE} WHERE course_id = c.id) as phase_count
-            FROM {COURSES_TABLE} c
-            JOIN {Tables.USERS} u ON c.creator_user_id = u.id
-            WHERE c.is_public = TRUE
-            ORDER BY c.updated_at DESC
+        cur = conn.cursor(dictionary=True)
+        cur.execute(f"""
+            SELECT id, title, description, url, sort_order, updated_at
+            FROM {LIBRARY_TABLE} ORDER BY sort_order, id
         """)
-
-        courses = cursor.fetchall()
-
-        # 日時フォーマット
-        for course in courses:
-            if course['created_at']:
-                course['created_at'] = course['created_at'].isoformat()
-            if course['updated_at']:
-                course['updated_at'] = course['updated_at'].isoformat()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'courses': courses})
-
+        rows = [_row_out(r) for r in cur.fetchall()]
+        cur.close()
+        return jsonify({'success': True, 'entries': rows, 'can_edit': is_instructor()})
     except Exception as e:
-        logging.error(f"Error getting public courses: {e}")
+        logging.error("migration_assistant api_library_list: %s", e)
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn is not None and conn.is_connected():
+            conn.close()
 
 
-@migration_assistant.route('/api/v2/enrollments/enroll', methods=['POST'])
-def enroll_in_course():
-    """
-    受講登録。教材の作成者（creator_user_id）を師匠（mentor_user_id）として記録する。
-
-    エラー文字列は index.html 側の日本語化テーブルに合わせている:
-      'Unauthorized'    → ログインが必要です
-      'Course not found'→ 指定された教材が見つかりません
-      'Already enrolled'→ 現在受講中科目の重複履修はできません
-    """
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    data = request.get_json(silent=True) or {}
-    course_id = data.get('course_id')
-    if not course_id:
-        return jsonify({'success': False, 'error': 'course_id は必須です'}), 400
-
+@migration_assistant.route('/api/library', methods=['POST'])
+def api_library_add():
+    if not session.get('user_id'):
+        return _need_login_json()
+    if not is_instructor():
+        return _need_instructor_json()
+    try:
+        title, desc, url = _clean_entry(request.get_json(silent=True) or {})
+    except ValueError as ve:
+        return jsonify({'success': False, 'error': str(ve)}), 400
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 1. 教材の作成者を取得
-        cursor.execute(f"SELECT creator_user_id FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
-        course = cursor.fetchone()
-
-        if not course:
-            cursor.close()
-            return jsonify({'success': False, 'error': 'Course not found'}), 404
-
-        # 2. 重複受講の防止
-        #    migration_assistant_course_enrollments には UNIQUE(student_user_id, course_id) が無いため、
-        #    INSERT の一意制約違反には頼れない。ここで明示的に既存受講を確認する。
-        #    （DB側にも一意キーを追加することを推奨。add_unique_enrollment.sql 参照）
-        cursor.execute(f"""
-            SELECT id FROM {ENROLLMENTS_TABLE}
-            WHERE student_user_id = %s AND course_id = %s
-        """, (user_id, course_id))
-        if cursor.fetchone():
-            cursor.close()
-            return jsonify({'success': False, 'error': 'Already enrolled'}), 400
-
-        # 3. 受講登録時に著者（creator_user_id）を師匠（mentor_user_id）として保存
-        now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためデフォルト不可）
-        cursor.execute(f"""
-            INSERT INTO {ENROLLMENTS_TABLE} (student_user_id, course_id, mentor_user_id, enrolled_at)
-            VALUES (%s, %s, %s, %s)
-        """, (user_id, course_id, course['creator_user_id'], now_jst))
-
+        cur = conn.cursor()
+        cur.execute(f"SELECT COALESCE(MAX(sort_order), 0) FROM {LIBRARY_TABLE}")
+        nxt = (cur.fetchone()[0] or 0) + 10
+        now = get_jst_now()
+        cur.execute(f"""
+            INSERT INTO {LIBRARY_TABLE}
+                (title, description, url, sort_order, created_by, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (title, desc, url, nxt, session.get('user_id'), now, now))
+        new_id = cur.lastrowid
         conn.commit()
-        cursor.close()
-        return jsonify({'success': True})
-
-    except mysql.connector.IntegrityError:
-        # DB側に一意キーを追加した場合の競合（上記チェックとINSERTの間に
-        # 別リクエストが割り込んだケース）を拾う保険
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-        return jsonify({'success': False, 'error': 'Already enrolled'}), 400
+        cur.close()
+        return jsonify({'success': True, 'id': new_id})
     except Exception as e:
-        logging.error(f"Error enrolling in course: course_id={course_id}, {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        logging.error("migration_assistant api_library_add: %s", e)
+        if conn is not None:
+            conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
-        if conn and conn.is_connected():
+        if conn is not None and conn.is_connected():
             conn.close()
 
-@migration_assistant.route('/api/v2/enrollments/<int:enrollment_id>', methods=['DELETE'])
-def delete_enrollment(enrollment_id):
-    """受講を取り消す（新テーブル版）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
+@migration_assistant.route('/api/library/<int:entry_id>', methods=['PUT'])
+def api_library_update(entry_id):
+    if not session.get('user_id'):
+        return _need_login_json()
+    if not is_instructor():
+        return _need_instructor_json()
+    try:
+        title, desc, url = _clean_entry(request.get_json(silent=True) or {})
+    except ValueError as ve:
+        return jsonify({'success': False, 'error': str(ve)}), 400
+    conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 自分の受講かチェック
-        cursor.execute(f"""
-            SELECT id, course_id FROM {ENROLLMENTS_TABLE}
-            WHERE id = %s AND student_user_id = %s
-        """, (enrollment_id, user_id))
-
-        enrollment = cursor.fetchone()
-        if not enrollment:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'Enrollment not found'}), 404
-
-        course_id = enrollment['course_id']
-
-        # 進捗データを削除
-        cursor.execute(f"""
-            DELETE FROM {PROGRESS_TABLE}
-            WHERE student_user_id = %s AND course_id = %s
-        """, (user_id, course_id))
-
-        # 受講登録を削除
-        cursor.execute(f"""
-            DELETE FROM {ENROLLMENTS_TABLE}
+        cur = conn.cursor()
+        cur.execute(f"SELECT id FROM {LIBRARY_TABLE} WHERE id = %s", (entry_id,))
+        if cur.fetchone() is None:
+            cur.close()
+            return jsonify({'success': False, 'error': '見つかりません'}), 404
+        cur.execute(f"""
+            UPDATE {LIBRARY_TABLE}
+            SET title = %s, description = %s, url = %s, updated_at = %s
             WHERE id = %s
-        """, (enrollment_id,))
-
+        """, (title, desc, url, get_jst_now(), entry_id))
         conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True})
-
-    except Exception as e:
-        logging.error(f"Error deleting enrollment: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# =============================================================================
-# 師匠用: コース管理API（新システム）
-# =============================================================================
-
-@migration_assistant.route('/api/v2/mentor/my_courses', methods=['GET'])
-def get_my_courses():
-    """自分が作成したコース一覧を取得"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute(f"""
-            SELECT
-                c.id,
-                c.course_title,
-                c.course_description,
-                c.is_public,
-                c.created_at,
-                c.updated_at,
-                (SELECT COUNT(*) FROM {PHASES_TABLE} WHERE course_id = c.id) as phase_count,
-                (SELECT COUNT(*) FROM {ENROLLMENTS_TABLE} WHERE course_id = c.id) as student_count
-            FROM {COURSES_TABLE} c
-            WHERE c.creator_user_id = %s
-            ORDER BY c.updated_at DESC
-        """, (user_id,))
-
-        courses = cursor.fetchall()
-
-        # 日時フォーマット
-        for course in courses:
-            if course['created_at']:
-                course['created_at'] = course['created_at'].strftime('%Y-%m-%d %H:%M')
-            if course['updated_at']:
-                course['updated_at'] = course['updated_at'].strftime('%Y-%m-%d %H:%M')
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'courses': courses})
-
-    except Exception as e:
-        logging.error(f"Error getting my courses: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@migration_assistant.route('/api/v2/courses/create', methods=['POST'])
-def create_course():
-    """新規コースを作成"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        data = request.get_json()
-        course_title = data.get('course_title', '').strip()
-        course_description = data.get('course_description', '').strip()
-        is_public = data.get('is_public', True)
-
-        if not course_title:
-            return jsonify({'success': False, 'error': 'コースタイトルは必須です'}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためデフォルト不可）
-        cursor.execute(f"""
-            INSERT INTO {COURSES_TABLE} (creator_user_id, course_title, course_description, is_public, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (user_id, course_title, course_description, is_public, now_jst, now_jst))
-
-        course_id = cursor.lastrowid
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'course_id': course_id})
-
-    except Exception as e:
-        logging.error(f"Error creating course: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@migration_assistant.route('/api/v2/courses/<int:course_id>', methods=['DELETE'])
-def delete_course(course_id):
-    """コースを削除（弟子がいない場合のみ）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 自分のコースかチェック
-        cursor.execute(f"""
-            SELECT id, course_title FROM {COURSES_TABLE}
-            WHERE id = %s AND creator_user_id = %s
-        """, (course_id, user_id))
-
-        course = cursor.fetchone()
-        if not course:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'コースが見つかりません'}), 404
-
-        # 弟子がいないかチェック
-        cursor.execute(f"""
-            SELECT COUNT(*) as count FROM {ENROLLMENTS_TABLE}
-            WHERE course_id = %s
-        """, (course_id,))
-
-        result = cursor.fetchone()
-        if result['count'] > 0:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': '弟子が受講中のため削除できません'}), 400
-
-        # コンテンツを削除
-        cursor.execute(f"DELETE FROM {STEPS_TABLE} WHERE course_id = %s", (course_id,))
-        cursor.execute(f"DELETE FROM {STAGES_TABLE} WHERE course_id = %s", (course_id,))
-        cursor.execute(f"DELETE FROM {PHASES_TABLE} WHERE course_id = %s", (course_id,))
-
-        # コースを削除
-        cursor.execute(f"DELETE FROM {COURSES_TABLE} WHERE id = %s", (course_id,))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True})
-
-    except Exception as e:
-        logging.error(f"Error deleting course: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@migration_assistant.route('/api/v2/courses/<int:course_id>/students', methods=['GET'])
-def get_course_students(course_id):
-    """師匠用: 特定コースの弟子一覧と進捗を取得（SQLを修正）"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 弟子一覧を取得 (total_stepsの数え方をCSCに変更)
-        cursor.execute(f"""
-            SELECT
-                e.id as enrollment_id,
-                e.student_user_id,
-                u.full_name,
-                e.enrolled_at,
-                -- 完了したステップ数
-                (SELECT COUNT(*) FROM {PROGRESS_TABLE} cp
-                 WHERE cp.student_user_id = e.student_user_id
-                 AND cp.course_id = e.course_id
-                 AND cp.status = '完了') as completed_steps,
-                -- 【重要】コース内の全ステップ数（マスターから数える）
-                (SELECT COUNT(*) FROM {STEPS_TABLE} csc
-                 WHERE csc.course_id = e.course_id) as total_steps
-            FROM {ENROLLMENTS_TABLE} e
-            JOIN {Tables.USERS} u ON e.student_user_id = u.id
-            WHERE e.course_id = %s AND e.mentor_user_id = %s
-            ORDER BY e.enrolled_at DESC
-        """, (course_id, user_id))
-
-        students = cursor.fetchall()
-
-        for student in students:
-            if student['enrolled_at']:
-                student['enrolled_at'] = student['enrolled_at'].strftime('%Y-%m-%d %H:%M')
-
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True, 'students': students})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@migration_assistant.route('/api/v2/courses/<int:course_id>/students/<int:student_id>/progress', methods=['GET'])
-def get_student_course_progress(course_id, student_id):
-    """特定の弟子の詳細進捗を取得"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 自分のコースかチェック
-        cursor.execute(f"""
-            SELECT id FROM {COURSES_TABLE}
-            WHERE id = %s AND creator_user_id = %s
-        """, (course_id, user_id))
-
-        if not cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'error': 'コースが見つかりません'}), 404
-
-        # 進捗詳細を取得
-        cursor.execute(f"""
-            SELECT
-                phase_id,
-                stage_id,
-                step_id,
-                status,
-                updated_at
-            FROM {PROGRESS_TABLE}
-            WHERE student_user_id = %s AND course_id = %s
-            ORDER BY updated_at DESC
-        """, (student_id, course_id))
-
-        progress = cursor.fetchall()
-
-        # 日時フォーマット
-        for p in progress:
-            if p['updated_at']:
-                p['updated_at'] = p['updated_at'].strftime('%Y-%m-%d %H:%M')
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({'success': True, 'progress': progress})
-
-    except Exception as e:
-        logging.error(f"Error getting student progress: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@migration_assistant.route('/api/v2/courses/<int:course_id>', methods=['PUT'])
-def update_course_settings_api(course_id):
-    """コースのタイトル、説明、公開設定を更新"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-
-    try:
-        data = request.get_json()
-        title = data.get('course_title')
-        description = data.get('course_description')
-        is_public = data.get('is_public', True)
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        now_jst = get_now_jst().replace(tzinfo=None)  # JSTで記録（DBはUTCサーバのためNOW()不可）
-        # 権限チェック：自分が作成したコースのみ更新可能
-        cursor.execute(f"""
-            UPDATE {COURSES_TABLE}
-            SET course_title = %s, course_description = %s, is_public = %s, updated_at = %s
-            WHERE id = %s AND creator_user_id = %s
-        """, (title, description, is_public, now_jst, course_id, user_id))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
+        cur.close()
         return jsonify({'success': True})
     except Exception as e:
-        logging.error(f"Error updating course settings: {e}")
+        logging.error("migration_assistant api_library_update: %s", e)
+        if conn is not None:
+            conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn is not None and conn.is_connected():
+            conn.close()
 
-# =============================================================================
-# 教材一括結合（検証用）: 全 Phase/Stage/Step の Markdown を1本につなぐ
-#   - 既存の get_course_content_v2(course_id) を再利用
-#   - つないだ生Markdown と、HTMLレンダリング結果の両方を返す
-# このブロックを migration_assistant_routes.py の末尾付近に貼り付けてください。
-# =============================================================================
-@migration_assistant.route('/api/v2/courses/<int:course_id>/aggregate', methods=['GET'])
-def aggregate_course_markdown(course_id):
-    """教材の全ステップ本文を結合して返す（検証用）。
 
-    返却:
-      success    : bool
-      title      : コースタイトル
-      markdown   : 全ステップを連結した生Markdown
-      html       : それをHTMLレンダリングした文字列
-    """
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'success': False, 'error': 'ログインが必要です'}), 401
-
+@migration_assistant.route('/api/library/<int:entry_id>', methods=['DELETE'])
+def api_library_delete(entry_id):
+    if not session.get('user_id'):
+        return _need_login_json()
+    if not is_instructor():
+        return _need_instructor_json()
     conn = None
     try:
-        # コースタイトルと所有者を取得（自分の教材か管理者のみ許可）
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            f"SELECT creator_user_id, course_title FROM {COURSES_TABLE} WHERE id = %s",
-            (course_id,)
-        )
-        course = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        conn = None
-
-        if not course:
-            return jsonify({'success': False, 'error': '指定された教材が見つかりません'}), 404
-
-        if course['creator_user_id'] != user_id and not check_is_admin(user_id):
-            return jsonify({'success': False, 'error': 'この教材を閲覧する権限がありません'}), 403
-
-        # 全 Phase/Stage/Step を取得（既存ヘルパーを再利用）
-        content = get_course_content_v2(course_id)
-
-        # Markdown を組み立てる
-        parts = []
-        course_title = course['course_title'] or '（無題の教材）'
-        parts.append(f"# {course_title}\n")
-
-        for phase in content:
-            parts.append(
-                f"\n# Phase {phase['number']}: {phase['title']}\n"
-            )
-            if phase.get('description'):
-                parts.append(f"\n{phase['description']}\n")
-
-            for stage in phase['stages']:
-                parts.append(
-                    f"\n## Stage {phase['number']}-{stage['number']}: {stage['title']}\n"
-                )
-
-                for step in stage['steps']:
-                    parts.append(
-                        f"\n### Step {step['display_id']}: {step['title']}\n"
-                    )
-                    detail = step.get('detail') or ''
-                    if detail.strip():
-                        parts.append(f"\n{detail}\n")
-                    else:
-                        parts.append("\n*（本文未記入）*\n")
-
-        merged_markdown = "\n".join(parts)
-
-        # HTML レンダリング（preview と同じ拡張で統一）
-        try:
-            import markdown as md
-            merged_html = md.markdown(
-                merged_markdown,
-                extensions=['extra', 'nl2br', 'sane_lists', 'fenced_code', 'tables']
-            )
-        except Exception as e:
-            print(f"Aggregate render error: {e}")
-            import html as html_module
-            merged_html = (
-                '<pre style="white-space:pre-wrap;">'
-                + html_module.escape(merged_markdown)
-                + '</pre>'
-            )
-
-        return jsonify({
-            'success': True,
-            'title': course_title,
-            'markdown': merged_markdown,
-            'html': merged_html
-        })
-
+        cur = conn.cursor()
+        cur.execute(f"DELETE FROM {LIBRARY_TABLE} WHERE id = %s", (entry_id,))
+        n = cur.rowcount
+        conn.commit()
+        cur.close()
+        if not n:
+            return jsonify({'success': False, 'error': '見つかりません'}), 404
+        return jsonify({'success': True})
     except Exception as e:
-        print(f"Aggregate error: {e}")
-        import traceback
-        traceback.print_exc()
-        if conn:
-            conn.close()
+        logging.error("migration_assistant api_library_delete: %s", e)
+        if conn is not None:
+            conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn is not None and conn.is_connected():
+            conn.close()
+
+
+@migration_assistant.route('/api/library/order', methods=['POST'])
+def api_library_order():
+    """並び順を ids の順に振り直す（10, 20, 30…）"""
+    if not session.get('user_id'):
+        return _need_login_json()
+    if not is_instructor():
+        return _need_instructor_json()
+    ids = (request.get_json(silent=True) or {}).get('ids')
+    if not isinstance(ids, list):
+        return jsonify({'success': False, 'error': 'ids は配列で渡してください'}), 400
+    try:
+        ids = [int(x) for x in ids]
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'ids が不正です'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        now = get_jst_now()
+        for i, eid in enumerate(ids, 1):
+            cur.execute(f"UPDATE {LIBRARY_TABLE} SET sort_order = %s, updated_at = %s WHERE id = %s",
+                        (i * 10, now, eid))
+        conn.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        logging.error("migration_assistant api_library_order: %s", e)
+        if conn is not None:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn is not None and conn.is_connected():
+            conn.close()

@@ -1,0 +1,63 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }} — まいあし</title>
+<style>
+  :root { --primary: #6a1b9a; --accent: #ab47bc; --border: #e0d4ea; --bg: #f6f3f8; --muted: #777; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', 'Meiryo', sans-serif; background: var(--bg); color: #333; }
+  header { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff;
+           display: flex; align-items: center; justify-content: space-between; padding: 10px 20px;
+           box-shadow: 0 2px 8px rgba(0,0,0,.2); gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .hdr-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hdr-btns a { background: #fff; color: var(--primary); border: 1px solid #fff; text-decoration: none;
+                padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold; white-space: nowrap; }
+  .hdr-btns a.ret { color: #c0392b; border-color: #c0392b; }
+  main { max-width: 920px; margin: 0 auto; padding: 22px 16px 60px; }
+  nav.others { font-size: 13px; margin-bottom: 14px; color: var(--muted); line-height: 1.9; }
+  nav.others a { color: var(--primary); text-decoration: none; margin-right: 12px; }
+  nav.others a.cur { font-weight: bold; text-decoration: underline; }
+  .doc { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 24px 28px; line-height: 1.9; }
+  .doc h1 { font-size: 22px; color: var(--primary); }
+  .doc h2 { margin: 26px 0 12px; font-size: 19px; color: var(--primary); border-bottom: 2px solid #f0e6f6; padding-bottom: 6px; }
+  .doc h3 { margin: 20px 0 10px; font-size: 16px; }
+  .doc p, .doc li { font-size: 15px; }
+  .doc ul, .doc ol { padding-left: 1.6em; }
+  .doc code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; font-size: .88em; }
+  .doc pre { background: #1f2937; color: #e5e7eb; padding: 14px 16px; border-radius: 8px; overflow-x: auto; }
+  .doc pre code { background: none; color: inherit; padding: 0; }
+  .doc table { border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  .doc th, .doc td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .doc th { background: #faf6fc; }
+  .foot { font-size: 12px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📘 {{ title }}</h1>
+  <div class="hdr-btns">
+    <a href="{{ url_for('migration_assistant.guide_download', key=key) }}">⬇ .md</a>
+    <a href="{{ url_for('migration_assistant.index') }}">👣 まいあしへ</a>
+    <a class="ret" href="{{ url_for('migration_assistant.return_to_fujin') }}">FUJIN-P に戻る</a>
+  </div>
+</header>
+<main>
+  <nav class="others">ほかの手引き：
+    {% for g in guides if g.exists %}
+    <a href="{{ url_for('migration_assistant.guide_view', key=g.key) }}"{% if g.key == key %} class="cur"{% endif %}>{{ g.title }}</a>
+    {% endfor %}
+  </nav>
+  <div class="doc">{{ body|safe }}</div>
+  <div class="foot">この手引きはまいあしに組み込まれた固定の版です（{{ name }}）．</div>
+</main>
+</body>
+</html>

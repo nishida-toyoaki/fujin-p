@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Source: https://github.com/u-fukuchiyama/fujin-p
+# Source: https://github.com/nishida-toyoaki/fujin-p
 
 """
 まいあし (MaiAshi) 教材と履修記録のエクスポート／インポート（サイト間移設用）
@@ -165,7 +165,9 @@ def _table_columns(cursor, table):
 
 
 def _detect_email_column(cursor):
-    cols = _table_columns(cursor, Tables.USERS)
+    # Tables.USERS は「DB名.users」の形のことがあるので逆引用符で囲まない
+    cursor.execute(f"SHOW COLUMNS FROM {Tables.USERS}")
+    cols = [r["Field"] for r in cursor.fetchall()]
     for c in EMAIL_CANDIDATES:
         if c in cols:
             return c
@@ -221,7 +223,7 @@ def build_transfer_package(course_ids=None, with_images=True):
         if user_ids:
             ph = ','.join(['%s'] * len(user_ids))
             users = _fetch(cursor,
-                           f"SELECT id, full_name, `{email_col}` AS email FROM `{Tables.USERS}` "
+                           f"SELECT id, full_name, `{email_col}` AS email FROM {Tables.USERS} "
                            f"WHERE id IN ({ph}) ORDER BY id", tuple(sorted(user_ids)))
         found = {u['id'] for u in users}
         for uid in sorted(user_ids - found):
@@ -378,7 +380,7 @@ def import_transfer_package(pkg, commit=False, force=False, remap=None):
         by_email = defaultdict(list)
         if wanted:
             ph = ','.join(['%s'] * len(wanted))
-            cursor.execute(f"SELECT id, full_name, `{email_col}` AS email FROM `{Tables.USERS}` "
+            cursor.execute(f"SELECT id, full_name, `{email_col}` AS email FROM {Tables.USERS} "
                            f"WHERE LOWER(TRIM(`{email_col}`)) IN ({ph})", tuple(wanted))
             for r in cursor.fetchall():
                 by_email[_norm_email(r['email'])].append(r)
