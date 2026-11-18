@@ -1,3 +1,24 @@
+# SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# This file is part of FUJIN-P.
+# Copyright (C) 2024-2026 Toyoaki Nishida
+#
+# FUJIN-P is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# FUJIN-P is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with FUJIN-P.  If not, see <https://www.gnu.org/licenses/>.
+#
+# Source: https://github.com/nishida-toyoaki/fujin-p
+
 """倉庫（台帳）と，量子のあいだのやり取り —— ファイル＋メモリ版。
 
 原理は三つだけ。
@@ -477,21 +498,17 @@ class Record(Recipe):
         return Answer(worst, fields, '' if worst == 'ok' else '未達があります', pending)
 
 
-_TAG_SCRIPT = re.compile(r'<\s*(script|iframe|object|embed)\b.*?<\s*/\s*\1\s*>',
-                         re.I | re.S)
-_TAG_OPEN = re.compile(r'<\s*(script|iframe|object|embed|link|meta)\b[^>]*>', re.I)
-_ON_ATTR = re.compile(r'\son[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', re.I)
-_JS_URL = re.compile(r'(href|src)\s*=\s*("|\')\s*javascript:[^"\']*\2', re.I)
-
-
 def clean_html(raw):
-    """書かれた HTML から，動くものを落とす。見た目の指定はそのまま通す。"""
+    """書かれた HTML から，動くものを落とす。見た目の指定（表・style など）は残す。
+    2026-10-26（R-10）：正規表現の除去をやめ，カーネルの許可リスト型サニタイザに任せる。
+    カーネルが古くて使えないときは，HTML として解釈させず文字として出す。"""
     h = raw or ''
-    h = _TAG_SCRIPT.sub('', h)
-    h = _TAG_OPEN.sub('', h)
-    h = _ON_ATTR.sub('', h)
-    h = _JS_URL.sub('', h)
-    return h
+    try:
+        from markdown_converter import sanitize_html
+    except ImportError:
+        import html as _h
+        return _h.escape(h)
+    return sanitize_html(h)
 
 
 @recipe('text')
@@ -990,6 +1007,15 @@ def group_names(ids):
         return {i: '#%s' % i for i in ids}
 
 
+def _ug(name):
+    """まいぐる（ユーザとグループ）の公開APIを遅延取得する。無ければ None（従来の直読みに戻る）。"""
+    try:
+        from fujinp.user_groups import utils as _ug_utils
+        return getattr(_ug_utils, name, None)
+    except Exception:
+        return None
+
+
 def principals(user_id):
     """本人が名乗れる札：user:<id> と，いま有効な所属の group:<id>。
     旧データ（名前で書かれた割り当て）のために，氏名・メール・グループ名も添える。"""
@@ -1006,6 +1032,15 @@ def principals(user_id):
                     if r.get(k):
                         names.add(str(r[k]))
             now = _now()
+            fn = _ug('get_user_group_ids')
+            if fn:
+                gids = [int(g) for g in (fn(user_id) or [])]
+                for gid in gids:
+                    names.add('group:%s' % gid)
+                for nm in group_names(gids).values() if gids else []:
+                    if nm:
+                        names.add(str(nm))
+                return names
             cur.execute(
                 "SELECT m.group_id, g.name FROM user_group_memberships m "
                 "JOIN user_groups g ON g.id = m.group_id WHERE m.user_id = %s "

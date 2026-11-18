@@ -1,0 +1,100 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>#{{ q.id }} {{ q.title or q.key_path or q.level_label }} — こんか</title>
+<style>
+ body{font-family:system-ui,"Hiragino Kaku Gothic ProN",sans-serif;margin:0;
+      background:#f6f7f9;color:#1d2330;line-height:1.7}
+ .wrap{max-width:1100px;margin:0;padding:16px}
+ .bar{display:flex;justify-content:space-between;align-items:center;
+      padding:10px 0;border-bottom:1px solid #e2e6ec;margin-bottom:12px;font-size:14px}
+ h1{font-size:19px;margin:6px 0}
+ h2{font-size:15px;margin:0 0 6px}
+ .key,.mono{font-family:ui-monospace,monospace;font-size:12px;color:#6b7280}
+ .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:12px 14px;margin-bottom:12px}
+ .lv{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:10px;margin-right:6px}
+ .lv-work{background:#e8eefc;color:#1b4fa8} .lv-part{background:#fdeee6;color:#a8451b}
+ .lv-box{background:#f3eee2;color:#7a5a1b} .lv-item{background:#eef2f5;color:#4a5568}
+ table{border-collapse:collapse;width:100%;font-size:13px}
+ td,th{border-bottom:1px solid #edf0f4;padding:4px 6px;text-align:left;vertical-align:top}
+ th{font-weight:600;color:#4a5568;background:#fafbfc}
+ .body{white-space:pre-wrap;font-size:14px;background:#fafbfc;border-radius:8px;padding:8px 10px}
+ a{color:#1b5fa8;text-decoration:none} a:hover{text-decoration:underline}
+ .small{font-size:12px;color:#6b7280}
+ .links a{margin-right:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a href="{{ url_for('cqm.index') }}">← こんか</a>
+    <span class="mono">{{ url_for('cqm.q_page', qid=q.id, _external=True) }}</span>
+  </div>
+
+  <h1><span class="lv lv-{{ q.level }}">{{ q.level_label }}</span>#{{ q.id }} {{ q.title }}</h1>
+  <div class="key">{% if q.key_path %}key_path: <a href="{{ url_for('cqm.k_page', key_path=q.key_path) }}">{{ q.key_path }}</a>　{% endif %}recipe: {{ q.recipe or '-' }}　更新: {{ q.updated_at }}</div>
+
+  <div class="card links">
+    {% if q.level in ('work', 'part') %}
+      <a href="{{ url_for('cqm.arena_view', arena_id=q.id) }}">👁 閲覧</a>
+      <a href="{{ url_for('cqm.arena_edit', arena_id=q.id) }}">✏ 編集</a>
+      <a href="{{ url_for('cqm.work_graph_api', arena_id=q.id) }}">🕸 構成グラフ（JSON）</a>
+    {% elif q.level == 'box' %}
+      <a href="{{ url_for('cqm.box', box_id=q.id) }}">👁 箱</a>
+      <a href="{{ url_for('cqm.box_edit', box_id=q.id) }}">✏ 編集</a>
+    {% endif %}
+    <a href="{{ url_for('cqm.q_api', qid=q.id) }}">{ } 身元（JSON）</a>
+  </div>
+
+  {% if q.body is defined and q.body and q.level in ('box', 'item') %}
+  <div class="card"><h2>中身</h2><div class="body">{{ q.body }}</div></div>
+  {% endif %}
+
+  <div class="card">
+    <h2>構成するもの（{{ q.parts|length }}）</h2>
+    {% if q.parts %}
+    <table>
+      <tr><th>置き場所</th><th>種別</th><th>ID</th><th>key_path</th><th>題名／中身</th></tr>
+      {% for p in q.parts %}
+      <tr>
+        <td class="mono">{% if p.relation == 'lists' %}{{ p.ord }} 番目{% else %}{{ p.shape }}{% if p.cells %} [{{ p.cells.w or '' }}×{{ p.cells.h or '' }}]{% endif %}{% endif %}</td>
+        <td>{% if p.level %}<span class="lv lv-{{ p.level }}">{{ p.level_label }}</span>{% endif %}</td>
+        <td>{% if p.id %}<a href="{{ p.url }}">#{{ p.id }}</a>{% else %}<span class="small">{{ p.ref or '' }}</span>{% endif %}</td>
+        <td class="mono">{{ p.key_path }}</td>
+        <td>{{ p.snippet or p.title }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}<div class="small">ありません</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>これを使っているもの（{{ q.used_by|length }}）</h2>
+    {% if q.used_by %}
+    <table>
+      <tr><th>種別</th><th>ID</th><th>題名</th><th>置き場所</th></tr>
+      {% for p in q.used_by %}
+      <tr><td><span class="lv lv-{{ p.level }}">{{ p.level_label }}</span></td>
+          <td><a href="{{ p.url }}">#{{ p.id }}</a></td><td>{{ p.title or p.key_path }}</td>
+          <td class="mono">{{ p.slot }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<div class="small">どこからも使われていません</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>効いている作品（{{ q.works|length }}）</h2>
+    {% for w in q.works %}<div><a href="{{ w.url }}">#{{ w.id }}</a> {{ w.title }}</div>
+    {% else %}<div class="small">ありません</div>{% endfor %}
+  </div>
+</div>
+</body>
+</html>
