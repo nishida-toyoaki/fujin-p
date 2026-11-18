@@ -74,6 +74,50 @@ def _is_admin():
     return session.get('user_category') in ('admin',)
 
 
+# ------------------------------------------------------------
+# 2026-10-25 セキュリティ改修（C-4）
+#   一般ユーザが触れるのは「有効なプロジェクトに割り当てられたテーブル」だけにする．
+#   旧版は download_table / submit_request が database・table を無検証で受け取り，
+#   ログインした誰でも users を含む任意テーブルを xlsx で取得でき，
+#   割り当て外のテーブルへの全置換申請も積めた．
+# ------------------------------------------------------------
+_BAD_IDENT_CHARS = ('`', ';', "'", '"', '\\', '\x00', '\n', '\r')
+
+
+def _safe_ident(name):
+    """DB名・テーブル名として受け付けてよい文字列か（識別子注入の防止）"""
+    if not name or len(name) > 255:
+        return False
+    return not any(ch in name for ch in _BAD_IDENT_CHARS)
+
+
+def _is_assigned(database, table_name, project_id=None):
+    """(database, table_name) が有効なプロジェクトに割り当て済みか．
+    project_id を渡せばそのプロジェクトに限って照合する．"""
+    if not (_safe_ident(database) and _safe_ident(table_name)):
+        return False
+    try:
+        conn = mysql.connector.connect(**DatabaseConfig.default())
+        cursor = conn.cursor()
+        sql = (f"SELECT 1 FROM {T_STATUS} s "
+               f"JOIN {T_PROJECTS} p ON p.id = s.project_id "
+               f"WHERE s.database_name = %s AND s.table_name = %s "
+               f"AND p.is_active = 1")
+        args = [database, table_name]
+        if project_id is not None:
+            sql += " AND s.project_id = %s"
+            args.append(project_id)
+        cursor.execute(sql + " LIMIT 1", tuple(args))
+        return cursor.fetchone() is not None
+    except mysql.connector.Error as e:
+        logging.error("_is_assigned error: %s", e)
+        return False
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
 def _current_user():
     """更新者として記録するアカウント名"""
     return (session.get('username')
@@ -109,6 +153,125 @@ def _get_table_schema(cursor, table_name):
     """テーブルのカラム名リスト（定義順）を返す"""
     cursor.execute(f"DESCRIBE `{table_name}`")
     return [row[0] for row in cursor.fetchall()]
+
+
+def _get_table_constraints(conn, table_name):
+    """
+    対象テーブルの制約情報を返す。
+      col_info: {列名: {'type','nullable','default','auto'}}
+      uniques : {索引名: [列名, ...]}   PRIMARY と UNIQUE 索引（複合含む）
+    """
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        col_info = {}
+        for r in cursor.fetchall():
+            col_info[r['Field']] = {
+                'type': (r['Type'] or '').lower(),
+                'nullable': r['Null'] == 'YES',
+                'default': r['Default'],
+                'auto': 'auto_increment' in (r['Extra'] or '').lower(),
+            }
+        cursor.execute(f"SHOW INDEX FROM `{table_name}` WHERE Non_unique = 0")
+        idx = {}
+        for r in cursor.fetchall():
+            idx.setdefault(r['Key_name'], []).append(
+                (r['Seq_in_index'], r['Column_name']))
+        uniques = {k: [c for _, c in sorted(v)] for k, v in idx.items()}
+        return col_info, uniques
+    finally:
+        cursor.close()
+
+
+_STRING_TYPES = ('char', 'varchar', 'text', 'tinytext', 'mediumtext',
+                 'longtext', 'enum', 'set')
+
+
+def _fmt_val(v):
+    """エラーメッセージ表示用（2.0 → 2 など）"""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return repr(v) if isinstance(v, str) else str(v)
+
+
+def _validate_rows(columns, rows, col_info, uniques, max_show=10):
+    """
+    行データを対象テーブルの制約で点検する。
+    戻り値: (rows, filled, problems)
+      rows     : 補正後の行（NOT NULL 列の空値を '' または既定値に置換）
+      filled   : 補正したセル数
+      problems : 違反の説明文リスト（空なら合格）
+    補正の理由: xlsx へ書き出した '' は読み戻すと NaN→None になるため、
+    NOT NULL の文字列列では '' に戻す（往復で壊れないようにする）。
+    非文字列列は既定値があればそれを使い、無ければ違反として報告する。
+    Excel の行番号はヘッダを1行目として index+2 で表示する。
+    """
+    problems = []
+    filled = 0
+    null_hits = {}   # 列名 → [Excel行番号]
+
+    fixed = []
+    for i, row in enumerate(rows):
+        row = list(row)
+        for j, col in enumerate(columns):
+            if row[j] is not None:
+                continue
+            info = col_info.get(col)
+            if info is None or info['nullable'] or info['auto']:
+                continue
+            if info['type'].startswith(_STRING_TYPES):
+                row[j] = ''
+                filled += 1
+            elif info['default'] is not None:
+                row[j] = info['default']
+                filled += 1
+            else:
+                null_hits.setdefault(col, []).append(i + 2)
+        fixed.append(row)
+
+    for col, lines in null_hits.items():
+        head = ', '.join(str(x) for x in lines[:max_show])
+        more = f' …他 {len(lines) - max_show} 行' if len(lines) > max_show else ''
+        problems.append(f'[NOT NULL] 列「{col}」が空: {len(lines)} 行'
+                        f'（行 {head}{more}）')
+
+    col_pos = {c: k for k, c in enumerate(columns)}
+    for key_name, key_cols in uniques.items():
+        if not all(c in col_pos for c in key_cols):
+            continue
+        seen = {}
+        for i, row in enumerate(fixed):
+            key = tuple(row[col_pos[c]] for c in key_cols)
+            seen.setdefault(key, []).append(i + 2)
+        dups = {k: v for k, v in seen.items() if len(v) > 1}
+        if not dups:
+            continue
+        total = sum(len(v) for v in dups.values())
+        lines = [f'[{key_name}] キー({", ".join(key_cols)}) の重複: '
+                 f'{len(dups)} 組 / {total} 行']
+        for n, (k, v) in enumerate(dups.items()):
+            if n >= max_show:
+                lines.append(f'  …他 {len(dups) - max_show} 組')
+                break
+            kv = ', '.join(_fmt_val(x) for x in k)
+            rv = ', '.join(str(x) for x in v[:8])
+            if len(v) > 8:
+                rv += f' …計 {len(v)} 行'
+            lines.append(f'  ({kv}) : 行 {rv}')
+        problems.append('\n'.join(lines))
+
+    return fixed, filled, problems
+
+
+def _check_payload(database, table_name, columns, rows):
+    """制約点検の入口。DB接続して制約を取り、(rows, filled, problems) を返す。"""
+    conn = mysql.connector.connect(**DatabaseConfig.get_config(database))
+    try:
+        col_info, uniques = _get_table_constraints(conn, table_name)
+    finally:
+        if conn.is_connected():
+            conn.close()
+    return _validate_rows(columns, rows, col_info, uniques)
 
 
 def _read_table_as_dict(database, table_name):
@@ -480,6 +643,11 @@ def download_table():
     table_name = request.args.get('table')
     if not database or not table_name:
         return "database or table not specified", 400
+    # 一般ユーザは割り当て済みテーブルのみ．admin も識別子の検査は通す
+    if not (_safe_ident(database) and _safe_ident(table_name)):
+        return "不正なテーブル名です", 400
+    if not _is_admin() and not _is_assigned(database, table_name):
+        return "このテーブルはダウンロードの対象ではありません", 403
 
     try:
         conn = mysql.connector.connect(**DatabaseConfig.get_config(database))
@@ -589,6 +757,7 @@ def submit_request():
     """
     編集済xlsxをアップロードして更新申請を登録する。
     スキーマ（カラム名・順序）が対象テーブルと不一致なら reject。
+    NOT NULL 列の空値、PRIMARY/UNIQUE 索引での重複も reject（_validate_rows）。
     内容はJSON化して table_post_requests に保存。本番テーブルは触らない。
     """
     project_id = request.form.get('project_id')
@@ -599,6 +768,10 @@ def submit_request():
     if not all([project_id, database, table_name, file]):
         return jsonify({'success': False,
                         'error': 'パラメータが不足しています'}), 400
+    # 申請できるのは，そのプロジェクトに割り当てられたテーブルだけ（admin も同じ）
+    if not _is_assigned(database, table_name, project_id):
+        return jsonify({'success': False,
+                        'error': 'このテーブルはこのプロジェクトの申請対象ではありません'}), 403
 
     try:
         df = pd.read_excel(file, engine='openpyxl')
@@ -634,6 +807,21 @@ def submit_request():
         if pd.api.types.is_datetime64_any_dtype(df[col]):
             df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
     rows = [[_to_python(v) for v in row] for row in df.values]
+
+    # --- 制約点検（NOT NULL・PRIMARY/UNIQUE 重複）。違反は受理しない ---
+    try:
+        rows, filled, problems = _check_payload(database, table_name,
+                                                table_columns, rows)
+    except mysql.connector.Error as e:
+        return jsonify({'success': False,
+                        'error': f'制約参照失敗: {e}'}), 500
+    if problems:
+        return jsonify({
+            'success': False,
+            'error': ('制約違反のため受理できません。xlsx を修正して'
+                      '再申請してください。\n' + '\n'.join(problems))
+        }), 400
+
     payload = json.dumps({'columns': table_columns, 'rows': rows},
                           ensure_ascii=False, default=str)
 
@@ -657,8 +845,11 @@ def submit_request():
         _notify_request_submitted(request_id, project_id, database,
                                   table_name, len(rows))
 
+        note = (f'（空セル {filled} 個は NOT NULL 列のため空文字／既定値'
+                f'として扱いました）' if filled else '')
         return jsonify({'success': True,
-                        'message': f'{len(rows)} 行の更新申請を受け付けました。',
+                        'message': f'{len(rows)} 行の更新申請を'
+                                   f'受け付けました。{note}',
                         'request_id': request_id})
     except mysql.connector.Error as e:
         logging.error("submit_request error: %s", e)
@@ -745,10 +936,28 @@ def apply_request():
     database = req['database_name']
     table_name = req['table_name']
 
+    # 適用直前にも割り当てを再確認する（割り当て外テーブルへの申請・旧データの救済）
+    if not _is_assigned(database, table_name, req['project_id']):
+        return jsonify({'success': False,
+                        'error': ('この申請の対象テーブルは現在プロジェクトに割り当てられて'
+                                  'いないため適用できません（'
+                                  f'{database}.{table_name}）')}), 400
+
     try:
         payload = json.loads(req['payload'])
         new_columns = payload['columns']
         new_rows = payload['rows']
+
+        # 制約点検（点検前に登録された申請の救済。違反は適用せず理由を返す）
+        new_rows, _filled, problems = _check_payload(
+            database, table_name, new_columns, new_rows)
+        if problems:
+            return jsonify({
+                'success': False,
+                'error': ('制約違反のため適用できません。申請者に xlsx の'
+                          '修正と再申請を依頼してください。\n'
+                          + '\n'.join(problems))
+            }), 400
 
         # 適用前の本番内容を履歴に退避
         before = _read_table_as_dict(database, table_name)
@@ -916,6 +1125,8 @@ def rollback():
 
     database = hist['database_name']
     table_name = hist['table_name']
+    if not (_safe_ident(database) and _safe_ident(table_name)):
+        return jsonify({'success': False, 'error': '不正なテーブル名の記録です'}), 400
     try:
         snapshot = json.loads(hist['snapshot'])
 
