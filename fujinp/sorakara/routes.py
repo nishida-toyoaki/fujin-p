@@ -54,6 +54,11 @@ from . import sorakara_bp
 # ────────────────────────────────────────────
 PUBLIC_ACCESS = True
 
+# 入力の上限（R-5）
+NAME_MAX = 60
+DESC_MAX = 200
+MAX_REGIONS_PER_USER = 20
+
 
 @sorakara_bp.record_once
 def _register_public_flag(state):
@@ -156,7 +161,6 @@ def _flight():
     return render_template(
         'sorakara/flight.html',
         region=region,
-        region_json=json.dumps(region, ensure_ascii=False),
         quality=quality
     )
 
@@ -190,7 +194,12 @@ def api_save_region():
     try:
         data = request.json or {}
         user_id = session.get('user_id')
-        name = (data.get('name') or '').strip()
+        raw_name = data.get('name') or ''
+        raw_desc = data.get('description') or ''
+        if not isinstance(raw_name, str) or not isinstance(raw_desc, str):
+            return jsonify({'success': False, 'error': '地域名・説明は文字列で指定してください'}), 400
+        name = raw_name.strip()
+        description = raw_desc.strip()
         try:
             lat = float(data.get('lat'))
             lon = float(data.get('lon'))
@@ -199,6 +208,10 @@ def api_save_region():
 
         if not name:
             return jsonify({'success': False, 'error': '地域名は必須です'}), 400
+        if len(name) > NAME_MAX:
+            return jsonify({'success': False, 'error': f'地域名は{NAME_MAX}文字以内にしてください'}), 400
+        if len(description) > DESC_MAX:
+            return jsonify({'success': False, 'error': f'説明は{DESC_MAX}文字以内にしてください'}), 400
         if not (20.0 <= lat <= 46.0 and 122.0 <= lon <= 154.0):
             return jsonify({'success': False, 'error': '日本国内の緯度経度を指定してください'}), 400
 
@@ -207,11 +220,15 @@ def api_save_region():
 
         conn = mysql.connector.connect(**DatabaseConfig.default())
         cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM sorakara_regions WHERE user_id = %s", (user_id,))
+        if cursor.fetchone()[0] >= MAX_REGIONS_PER_USER:
+            return jsonify({'success': False,
+                            'error': f'登録できる地域は1人{MAX_REGIONS_PER_USER}件までです'}), 400
         cursor.execute("""
             INSERT INTO sorakara_regions
                 (user_id, name, description, lat, lon, zoom, radius, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (user_id, name, data.get('description', ''), lat, lon,
+        """, (user_id, name, description, lat, lon,
               zoom, radius, get_jst_now()))
         conn.commit()
         return jsonify({'success': True, 'id': cursor.lastrowid})
@@ -220,7 +237,7 @@ def api_save_region():
         logging.error("sorakara api_save_region error: %s", e)
         if 'conn' in locals():
             conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': '保存に失敗しました'}), 500
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
