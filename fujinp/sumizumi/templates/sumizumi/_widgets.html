@@ -1,0 +1,281 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<script>
+/* すみずみ：数値の段のウィジェット（ブラウザだけで計算する．サーバには何も送らない） */
+(function () {
+  'use strict';
+
+  /* ── 小道具 ───────────────────────────────────────── */
+  function sinc(x) { if (Math.abs(x) < 1e-12) return 1; const p = Math.PI * x; return Math.sin(p) / p; }
+  function linspace(a, b, n) { const out = new Array(n); for (let i = 0; i < n; i++) out[i] = a + (b - a) * i / (n - 1); return out; }
+  function h(tag, attrs, children) {
+    const e = document.createElement(tag);
+    for (const k in (attrs || {})) {
+      if (k === 'text') e.textContent = attrs[k];
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
+      else e.setAttribute(k, attrs[k]);
+    }
+    (children || []).forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    return e;
+  }
+  /* スライダ1本：ラベル・値表示つき */
+  function slider(label, min, max, step, value, onInput, fmt) {
+    const out = h('span', {text: ''});
+    const inp = h('input', {type: 'range', min: min, max: max, step: step, value: value});
+    const show = () => { out.textContent = (fmt || (v => v))(parseFloat(inp.value)); };
+    inp.addEventListener('input', () => { show(); onInput(parseFloat(inp.value)); });
+    show();
+    const lab = h('label', {}, [label, inp, out]);
+    lab.set = v => { inp.value = v; show(); };
+    lab.get = () => parseFloat(inp.value);
+    return lab;
+  }
+
+  /* 折れ線・点・縦線を描く汎用の作図（座標は数学の向き） */
+  function plot(canvas, o) {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth || 900, H = Math.round(W * (o.aspect || 0.42));
+    canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.height = H + 'px';
+    const c = canvas.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const m = {l: 46, r: 12, t: 14, b: 28};
+    const X = x => m.l + (x - o.xmin) / (o.xmax - o.xmin) * (W - m.l - m.r);
+    const Y = y => m.t + (o.ymax - y) / (o.ymax - o.ymin) * (H - m.t - m.b);
+    c.clearRect(0, 0, W, H);
+    // 目盛り
+    c.font = '11px sans-serif'; c.fillStyle = '#6b7280'; c.strokeStyle = '#eef0f3'; c.lineWidth = 1;
+    const tick = (a, b, n) => { const s = Math.pow(10, Math.floor(Math.log10((b - a) / n))); const st = [1, 2, 5, 10].map(k => k * s).find(k => (b - a) / k <= n) || s * 10; const out = []; for (let v = Math.ceil(a / st) * st; v <= b + 1e-9; v += st) out.push(+v.toFixed(10)); return out; };
+    tick(o.xmin, o.xmax, 10).forEach(v => { c.beginPath(); c.moveTo(X(v), m.t); c.lineTo(X(v), H - m.b); c.stroke(); c.fillText(String(v), X(v) - 6, H - 10); });
+    tick(o.ymin, o.ymax, 6).forEach(v => { c.beginPath(); c.moveTo(m.l, Y(v)); c.lineTo(W - m.r, Y(v)); c.stroke(); c.fillText(String(v), 4, Y(v) + 4); });
+    c.strokeStyle = '#9ca3af'; c.beginPath();
+    if (o.ymin < 0 && o.ymax > 0) { c.moveTo(m.l, Y(0)); c.lineTo(W - m.r, Y(0)); }
+    if (o.xmin < 0 && o.xmax > 0) { c.moveTo(X(0), m.t); c.lineTo(X(0), H - m.b); }
+    c.stroke();
+    if (o.xlabel) { c.fillStyle = '#374151'; c.fillText(o.xlabel, W - m.r - 40, H - 10); }
+    // 縦の帯（帯域など）
+    (o.bands || []).forEach(b => { c.fillStyle = b.color; c.fillRect(X(b.x0), m.t, X(b.x1) - X(b.x0), H - m.t - m.b); });
+    // 折れ線
+    c.save(); c.beginPath(); c.rect(m.l, m.t, W - m.l - m.r, H - m.t - m.b); c.clip();
+    (o.lines || []).forEach(L => {
+      c.strokeStyle = L.color; c.lineWidth = L.width || 1.5; c.setLineDash(L.dash || []);
+      c.beginPath(); let started = false;
+      for (let i = 0; i < L.xs.length; i++) {
+        const y = L.ys[i]; if (!isFinite(y)) { started = false; continue; }
+        if (!started) { c.moveTo(X(L.xs[i]), Y(y)); started = true; } else c.lineTo(X(L.xs[i]), Y(y));
+      }
+      c.stroke();
+    });
+    c.setLineDash([]);
+    // 標本（棒つきの点）
+    (o.stems || []).forEach(S => {
+      c.strokeStyle = S.color; c.fillStyle = S.color; c.lineWidth = 1;
+      for (let i = 0; i < S.xs.length; i++) {
+        if (S.xs[i] < o.xmin || S.xs[i] > o.xmax) continue;
+        c.beginPath(); c.moveTo(X(S.xs[i]), Y(0)); c.lineTo(X(S.xs[i]), Y(S.ys[i])); c.stroke();
+        c.beginPath(); c.arc(X(S.xs[i]), Y(S.ys[i]), S.r || 3.5, 0, 2 * Math.PI); c.fill();
+      }
+    });
+    (o.vlines || []).forEach(V => { c.strokeStyle = V.color; c.lineWidth = 2; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(X(V.x), m.t); c.lineTo(X(V.x), H - m.b); c.stroke(); c.setLineDash([]); });
+    c.restore();
+    // 凡例
+    let lx = m.l + 8;
+    (o.legend || []).forEach(g => { c.fillStyle = g.color; c.fillRect(lx, m.t + 4, 14, 4); c.fillStyle = '#374151'; c.fillText(g.label, lx + 18, m.t + 10); lx += 26 + c.measureText(g.label).width; });
+    return {X: X, Y: Y, W: W, H: H, m: m};
+  }
+
+  /* ── 1. サンプリング定理 ──────────────────────────── */
+  function widgetSampling(root, preset) {
+    const comps = [ {f: 0.5, a: 0.8, ph: 0.3}, {f: 1.2, a: 0.5, ph: 1.1}, {f: 0, a: 0, ph: 0} ];
+    let fs = 3.0;
+    const T0 = 0, T1 = 4, PAD = 40;           // 表示区間と，和に使うサンプルの余白（秒）
+    const canvas = h('canvas');
+    const read = h('div', {class: 'readout'});
+    const sig = t => comps.reduce((s, c) => s + c.a * Math.cos(2 * Math.PI * c.f * t + c.ph), 0);
+    const ctrls = h('div', {class: 'ctrls'});
+    const sl = [];
+    comps.forEach((c, i) => {
+      const sf = slider(`成分${i + 1} 周波数`, 0, 3, 0.05, c.f, v => { c.f = v; draw(); }, v => v.toFixed(2) + ' Hz');
+      const sa = slider('振幅', 0, 1, 0.05, c.a, v => { c.a = v; draw(); }, v => v.toFixed(2));
+      sl.push([sf, sa]); ctrls.appendChild(sf); ctrls.appendChild(sa);
+    });
+    const sfs = slider('標本化周波数 fs', 0.5, 8, 0.05, fs, v => { fs = v; draw(); }, v => v.toFixed(2) + ' 回/秒');
+    const presets = h('div', {class: 'ctrls'}, [
+      h('button', {class: 'btn btn-sm', text: '標準', onclick: () => set([[0.5, 0.8, 0.3], [1.2, 0.5, 1.1], [0, 0, 0]], 3.0)}),
+      h('button', {class: 'btn btn-sm', text: '境界（F=1，fs=2）', onclick: () => set([[1, 1, -Math.PI / 2], [0, 0, 0], [0, 0, 0]], 2.0)}),
+      h('button', {class: 'btn btn-sm', text: 'エイリアシング（1.5 Hz，fs=2）', onclick: () => set([[1.5, 1, 0], [0, 0, 0], [0, 0, 0]], 2.0)}),
+      sfs
+    ]);
+    function set(cs, fsv) {
+      cs.forEach((v, i) => { comps[i].f = v[0]; comps[i].a = v[1]; comps[i].ph = v[2]; sl[i][0].set(v[0]); sl[i][1].set(v[1]); });
+      fs = fsv; sfs.set(fsv); draw();
+    }
+    function draw() {
+      const active = comps.filter(c => c.a > 0 && c.f >= 0);
+      const F = active.length ? Math.max(...active.map(c => c.f)) : 0;
+      const ts = linspace(T0, T1, 700);
+      const orig = ts.map(sig);
+      const n0 = Math.ceil((T0 - PAD) * fs), n1 = Math.floor((T1 + PAD) * fs);
+      const sx = [], sy = [];
+      for (let n = n0; n <= n1; n++) { sx.push(n / fs); sy.push(sig(n / fs)); }
+      const rec = ts.map(t => { let s = 0; for (let k = 0; k < sx.length; k++) s += sy[k] * sinc(fs * t - (n0 + k)); return s; });
+      let err = 0; ts.forEach((t, i) => { if (t > 0.5 && t < 3.5) err = Math.max(err, Math.abs(rec[i] - orig[i])); });
+      const amp = comps.reduce((s, c) => s + c.a, 0) || 1;
+      plot(canvas, {xmin: T0, xmax: T1, ymin: -amp * 1.2, ymax: amp * 1.2, xlabel: 't [秒]',
+        lines: [{xs: ts, ys: orig, color: '#9ca3af', width: 4}, {xs: ts, ys: rec, color: '#2563eb', width: 1.8}],
+        stems: [{xs: sx, ys: sy, color: '#dc2626'}],
+        legend: [{label: '元の信号', color: '#9ca3af'}, {label: 'サンプルから組み立て直した信号', color: '#2563eb'}, {label: 'サンプル', color: '#dc2626'}]});
+      let v;
+      if (F === 0) v = '<span class="verdict-ok">直流だけ：どんな fs でも復元できる</span>';
+      else if (fs > 2 * F + 1e-9) v = '<span class="verdict-ok">fs ＞ 2F：復元できるはず</span>';
+      else if (Math.abs(fs - 2 * F) <= 1e-9) v = '<span class="verdict-warn">fs ＝ 2F：境界（成分によっては捉えられない）</span>';
+      else v = `<span class="verdict-ng">fs ＜ 2F：エイリアシング（${F.toFixed(2)} Hz の成分は ${Math.abs(F - fs * Math.round(F / fs)).toFixed(2)} Hz に見える）</span>`;
+      read.innerHTML = `いちばん高い周波数 F = ${F.toFixed(2)} Hz，2F = ${(2 * F).toFixed(2)}，fs = ${fs.toFixed(2)} 回/秒　→ ${v}<br>` +
+        `0.5≦t≦3.5 での最大誤差：${err.toFixed(4)}（和は −${PAD}〜${T1 + PAD} 秒のサンプルで打ち切っている）`;
+    }
+    root.appendChild(presets); root.appendChild(ctrls); root.appendChild(canvas); root.appendChild(read);
+    window.addEventListener('resize', draw);
+    if (preset === 'boundary') set([[1, 1, -Math.PI / 2], [0, 0, 0], [0, 0, 0]], 2.0);
+    else if (preset === 'alias') set([[1.5, 1, 0], [0, 0, 0], [0, 0, 0]], 2.0);
+    else draw();
+  }
+
+  /* ── 2. フーリエ級数の部分和 ───────────────────────── */
+  function widgetSeries(root) {
+    let kind = 'tri', N = 5;
+    const FN = {
+      tri: {label: '三角波 1−|u|', f: u => 1 - Math.abs(u), s: (u, N) => { let s = 0.5; for (let k = 1; k <= N; k += 2) s += 4 / (Math.PI * Math.PI * k * k) * Math.cos(Math.PI * k * u); return s; }},
+      sq: {label: '矩形波 ±1', f: u => (u > 0 ? 1 : (u < 0 ? -1 : 0)), s: (u, N) => { let s = 0; for (let k = 1; k <= N; k += 2) s += 4 / (Math.PI * k) * Math.sin(Math.PI * k * u); return s; }},
+      saw: {label: 'のこぎり波 u', f: u => u, s: (u, N) => { let s = 0; for (let k = 1; k <= N; k++) s += 2 * Math.pow(-1, k + 1) / (Math.PI * k) * Math.sin(Math.PI * k * u); return s; }}
+    };
+    const canvas = h('canvas'), read = h('div', {class: 'readout'});
+    const sel = h('select', {}, Object.keys(FN).map(k => h('option', {value: k, text: FN[k].label})));
+    sel.addEventListener('change', () => { kind = sel.value; draw(); });
+    const sN = slider('項の数 N', 1, 200, 1, N, v => { N = v; draw(); }, v => String(v));
+    root.appendChild(h('div', {class: 'ctrls'}, [h('label', {}, ['関数', sel]), sN]));
+    root.appendChild(canvas); root.appendChild(read);
+    function draw() {
+      const us = linspace(-1.5, 1.5, 1500);
+      const per = u => { let v = ((u + 1) % 2 + 2) % 2 - 1; return v; };   // 周期 2 で延ばす
+      const tgt = us.map(u => FN[kind].f(per(u)));
+      const ps = us.map(u => FN[kind].s(u, N));
+      let maxv = -Infinity, err = 0, l2 = 0;
+      const inner = linspace(-1, 1, 2001);
+      inner.forEach(u => { const d = FN[kind].s(u, N) - FN[kind].f(u); maxv = Math.max(maxv, FN[kind].s(u, N)); err = Math.max(err, Math.abs(d)); l2 += d * d * (2 / 2000); });
+      plot(canvas, {xmin: -1.5, xmax: 1.5, ymin: -1.4, ymax: 1.4, xlabel: 'u',
+        bands: [{x0: -1, x1: 1, color: 'rgba(99,102,241,0.06)'}],
+        lines: [{xs: us, ys: tgt, color: '#9ca3af', width: 4}, {xs: us, ys: ps, color: '#2563eb', width: 1.8}],
+        legend: [{label: '元の関数（周期2で延ばしたもの）', color: '#9ca3af'}, {label: `部分和（N=${N}）`, color: '#2563eb'}]});
+      read.innerHTML = `区間 [−1,1] での最大誤差：${err.toFixed(4)}，二乗誤差の積分：${l2.toExponential(2)}，部分和の最大値：${maxv.toFixed(4)}` +
+        (kind === 'sq' ? '　（跳びの近くの行き過ぎ：約 1.179 に近づいて消えない）' : '');
+    }
+    window.addEventListener('resize', draw); draw();
+  }
+
+  /* ── 3. フーリエ変換の組 ──────────────────────────── */
+  function widgetTransform(root) {
+    let kind = 'rect', T = 1.0, F = 1.0;
+    const c1 = h('canvas'), c2 = h('canvas'), read = h('div', {class: 'readout'});
+    const sel = h('select', {}, [h('option', {value: 'rect', text: '矩形（時間）↔ sinc（周波数）'}), h('option', {value: 'tri', text: 'sinc²（時間）↔ 三角スペクトル（周波数）'})]);
+    const sT = slider('矩形の幅 T', 0.2, 4, 0.05, T, v => { T = v; draw(); }, v => v.toFixed(2));
+    const sF = slider('帯域 F', 0.2, 3, 0.05, F, v => { F = v; draw(); }, v => v.toFixed(2));
+    sel.addEventListener('change', () => { kind = sel.value; draw(); });
+    root.appendChild(h('div', {class: 'ctrls'}, [h('label', {}, ['組', sel]), sT, sF]));
+    const two = h('div', {style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;'}, [h('div', {}, [h('div', {class: 'muted', text: '時間の上の x(t)'}), c1]), h('div', {}, [h('div', {class: 'muted', text: '周波数の上の X(f)'}), c2])]);
+    root.appendChild(two); root.appendChild(read);
+    function draw() {
+      sT.style.display = kind === 'rect' ? '' : 'none'; sF.style.display = kind === 'tri' ? '' : 'none';
+      const ts = linspace(-4, 4, 1601), fsx = linspace(-5, 5, 1601);
+      let xt, Xf, ymaxT, ymaxF;
+      if (kind === 'rect') {
+        xt = ts.map(t => (Math.abs(t) < T / 2 ? 1 : 0)); Xf = fsx.map(f => T * sinc(f * T)); ymaxT = 1.3; ymaxF = Math.max(1.2, T * 1.15);
+        read.innerHTML = `幅 T = ${T.toFixed(2)}：X(f) の最初の零点は f = 1/T = ${(1 / T).toFixed(2)}．T を小さくするほど，周波数の上で広がる．`;
+      } else {
+        xt = ts.map(t => F * Math.pow(sinc(F * t), 2)); Xf = fsx.map(f => (Math.abs(f) <= F ? 1 - Math.abs(f) / F : 0)); ymaxT = Math.max(1.2, F * 1.15); ymaxF = 1.3;
+        read.innerHTML = `帯域 F = ${F.toFixed(2)}：X(f) は |f|>F で 0（帯域制限）．時間の上の山の幅（最初の零点）は 1/F = ${(1 / F).toFixed(2)} で，裾は 1/t² で減る．`;
+      }
+      plot(c1, {xmin: -4, xmax: 4, ymin: -0.35 * ymaxT, ymax: ymaxT, xlabel: 't', aspect: 0.7, lines: [{xs: ts, ys: xt, color: '#2563eb', width: 2}]});
+      plot(c2, {xmin: -5, xmax: 5, ymin: -0.35 * ymaxF, ymax: ymaxF, xlabel: 'f', aspect: 0.7,
+        bands: kind === 'tri' ? [{x0: -F, x1: F, color: 'rgba(16,185,129,0.10)'}] : [],
+        lines: [{xs: fsx, ys: Xf, color: '#059669', width: 2}]});
+    }
+    window.addEventListener('resize', draw); draw();
+  }
+
+  /* ── 4. sinc のプロット ──────────────────────────── */
+  function widgetSincPlot(root) {
+    let nn = 0, F = 1;
+    const canvas = h('canvas'), read = h('div', {class: 'readout'});
+    const sn = slider('中心の番号 n', -5, 5, 1, nn, v => { nn = v; draw(); }, v => String(v));
+    const sF = slider('帯域 F', 0.5, 2, 0.25, F, v => { F = v; draw(); }, v => v.toFixed(2));
+    root.appendChild(h('div', {class: 'ctrls'}, [sn, sF])); root.appendChild(canvas); root.appendChild(read);
+    function draw() {
+      const ts = linspace(-4, 4, 1600);
+      const fs = 2 * F, sx = [], sy = [];
+      for (let m = Math.ceil(-4 * fs); m <= Math.floor(4 * fs); m++) { sx.push(m / fs); sy.push(sinc(fs * (m / fs) - nn)); }
+      plot(canvas, {xmin: -4, xmax: 4, ymin: -0.35, ymax: 1.15, xlabel: 't',
+        lines: [{xs: ts, ys: ts.map(t => sinc(2 * F * t)), color: '#d1d5db', width: 1.5, dash: [4, 4]},
+                {xs: ts, ys: ts.map(t => sinc(2 * F * t - nn)), color: '#2563eb', width: 2.2}],
+        stems: [{xs: sx, ys: sy, color: '#dc2626', r: 3}],
+        vlines: [{x: nn / fs, color: '#6b7280'}],
+        legend: [{label: 'sinc(2Ft)（n=0）', color: '#d1d5db'}, {label: `sinc(2Ft−n)（n=${nn}）`, color: '#2563eb'}, {label: 'サンプル点での値', color: '#dc2626'}]});
+      read.innerHTML = `中心 t = n/(2F) = ${(nn / fs).toFixed(3)}，サンプル点の間隔 1/(2F) = ${(1 / fs).toFixed(3)}．` +
+        `赤い点は中心で 1，ほかのサンプル点ではすべて 0．`;
+    }
+    window.addEventListener('resize', draw); draw();
+  }
+
+  /* ── 5. sinc による組み立て ───────────────────────── */
+  function widgetSinc(root) {
+    const F = 1, fs = 2 * F;
+    const SIG = {
+      tri: {label: 'sinc²(t)（三角スペクトル）', f: t => Math.pow(sinc(t), 2)},
+      mix: {label: '0.6cos(2π·0.4t)+0.4sin(2π·0.9t)', f: t => 0.6 * Math.cos(2 * Math.PI * 0.4 * t) + 0.4 * Math.sin(2 * Math.PI * 0.9 * t)},
+      one: {label: 'サンプル1つだけ 1（ほかは 0）', f: t => (Math.abs(t) < 1e-9 ? 1 : 0)}
+    };
+    let kind = 'tri', t0 = 0.25;
+    const canvas = h('canvas'), read = h('div', {class: 'readout'});
+    const sel = h('select', {}, Object.keys(SIG).map(k => h('option', {value: k, text: SIG[k].label})));
+    sel.addEventListener('change', () => { kind = sel.value; draw(); });
+    const st = slider('縦の線 t', -3, 3, 0.01, t0, v => { t0 = v; draw(); }, v => v.toFixed(2));
+    root.appendChild(h('div', {class: 'ctrls'}, [h('label', {}, ['信号', sel]), st]));
+    root.appendChild(canvas); root.appendChild(read);
+    const palette = ['#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16', '#ec4899'];
+    function draw() {
+      const ts = linspace(-3, 3, 1200), N = 6;
+      const lines = [], sx = [], sy = [];
+      const smp = n => SIG[kind].f(n / fs);
+      for (let n = -N; n <= N; n++) {
+        const a = smp(n); sx.push(n / fs); sy.push(a);
+        if (Math.abs(a) > 1e-12) lines.push({xs: ts, ys: ts.map(t => a * sinc(fs * t - n)), color: palette[(n + N) % palette.length], width: 1, dash: [3, 3]});
+      }
+      // 和は広い範囲のサンプルで計算する（細線の合計とは端で少しずれる）
+      const wide = 200, sum = ts.map(t => { let s = 0; for (let n = -wide; n <= wide; n++) { const a = smp(n); if (a) s += a * sinc(fs * t - n); } return s; });
+      lines.push({xs: ts, ys: sum, color: '#1d4ed8', width: 2.5});
+      if (kind !== 'one') lines.unshift({xs: ts, ys: ts.map(SIG[kind].f), color: '#d1d5db', width: 6});
+      plot(canvas, {xmin: -3, xmax: 3, ymin: -0.5, ymax: 1.25, xlabel: 't', lines: lines, stems: [{xs: sx, ys: sy, color: '#dc2626'}],
+        vlines: [{x: t0, color: '#111827'}],
+        legend: [{label: '各サンプル × sinc（|n|≦6）', color: '#f59e0b'}, {label: 'その和', color: '#1d4ed8'}, {label: 'サンプル', color: '#dc2626'}]});
+      const rows = [];
+      let tot = 0;
+      for (let n = -N; n <= N; n++) { const a = smp(n); const c = a * sinc(fs * t0 - n); tot += c; rows.push(`<tr><td>${n}</td><td>${(n / fs).toFixed(2)}</td><td>${a.toFixed(4)}</td><td>${sinc(fs * t0 - n).toFixed(4)}</td><td>${c.toFixed(4)}</td></tr>`); }
+      const onSample = Math.abs(fs * t0 - Math.round(fs * t0)) < 1e-6;
+      read.innerHTML = `t = ${t0.toFixed(2)} での寄与（F=1，サンプル間隔 1/2）` + (onSample ? '　<span class="verdict-ok">サンプル点：寄与は1本だけ</span>' : '') +
+        `<table class="contrib"><tr><th>n</th><th>n/2F</th><th>x(n/2F)</th><th>sinc(2Ft−n)</th><th>寄与</th></tr>${rows.join('')}` +
+        `<tr><th colspan="4">|n|≦6 の合計</th><th>${tot.toFixed(4)}</th></tr></table>`;
+    }
+    window.addEventListener('resize', draw); draw();
+  }
+
+  const KINDS = {sampling: widgetSampling, series: widgetSeries, transform: widgetTransform,
+                 sinc_sum: widgetSinc, sinc_plot: widgetSincPlot};
+  window.SumizumiWidgets = {
+    mount: function (root, kind, preset) {
+      const W = KINDS[kind];
+      if (W) W(root, preset); else root.textContent = 'このウィジェットは用意されていません：' + kind;
+    }
+  };
+})();
+</script>

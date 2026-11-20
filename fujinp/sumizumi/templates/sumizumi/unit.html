@@ -1,0 +1,254 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'sumizumi/_base.html' %}
+{% block title %}{{ u.title }} — すみずみ{% endblock %}
+{% block style %}
+  .trail { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:14px; }
+  .trail b { color:var(--warn); }
+  .trail a { font-weight:700; }
+  .head .ttl { font-size:24px; font-weight:700; }
+  .head .sub { color:var(--acc2); }
+  .role { display:inline-block; font-size:12px; padding:0 8px; border-radius:10px; background:var(--soft); color:var(--acc2); vertical-align:middle; margin-left:6px; }
+  .tabs { display:flex; gap:4px; border-bottom:2px solid var(--line); margin:14px 0 16px; flex-wrap:wrap; }
+  .tab { padding:8px 16px; text-decoration:none; color:var(--sub); border:1px solid transparent; border-bottom:none;
+         border-radius:8px 8px 0 0; margin-bottom:-2px; background:transparent; }
+  .tab small { display:block; font-size:11px; }
+  .tab.on { color:var(--acc2); background:#fff; border-color:var(--line); border-bottom:2px solid #fff; font-weight:700; }
+  .uses a { margin-right:8px; }
+  .step { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin-bottom:12px; scroll-margin-top:80px; }
+  .step:target { border-color:var(--warn); box-shadow:0 0 0 3px #fde68a; }
+  .step .no { font-weight:700; color:var(--acc); }
+  .step .eq { margin:6px 0; }
+  .step .why { margin:4px 0 8px; }
+  .step .ops { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .fold { display:none; margin-top:10px; padding:10px 14px; border-radius:8px; }
+  .fold.open { display:block; }
+  .fold.hint { background:#f0fdf4; border-left:4px solid #22c55e; }
+  .fold.detail { background:var(--soft); border-left:4px solid var(--acc); }
+  .fold.res { background:#f9fafb; border-left:4px solid #9ca3af; }
+  .fold.res.ok { border-left-color:var(--ok); }
+  .fold.res.ng { border-left-color:var(--bad); }
+  .res .verdict { font-weight:700; }
+  .res .item { margin:6px 0; }
+  .res .item .lab { font-size:13px; color:var(--sub); }
+  .back-link { background:#fff7ed; border-color:#fdba74; color:#9a3412; }
+  .tasks li { margin-bottom:6px; }
+  .note-wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:900px) { .note-wrap { grid-template-columns:1fr; } }
+  textarea { width:100%; min-height:420px; font-family:'Noto Sans Mono','Consolas',monospace; font-size:14px; line-height:1.6;
+             border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .preview { min-height:420px; border:1px solid var(--line); border-radius:8px; padding:10px 14px; background:#fff; overflow:auto; }
+  .prompts li { margin-bottom:4px; }
+  .nav-next { display:flex; justify-content:space-between; margin-top:18px; gap:8px; flex-wrap:wrap; }
+  .widget-box { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .ctrls { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:8px 0; font-size:14px; }
+  .ctrls label { display:flex; align-items:center; gap:6px; }
+  .ctrls input[type=range] { width:160px; }
+  .readout { font-size:14px; background:#f9fafb; border-radius:8px; padding:8px 12px; margin-top:8px; }
+  canvas { width:100%; height:auto; display:block; background:#fff; border:1px solid var(--line); border-radius:8px; }
+  .verdict-ok { color:var(--ok); font-weight:700; }
+  .verdict-ng { color:var(--bad); font-weight:700; }
+  .verdict-warn { color:var(--warn); font-weight:700; }
+  table.contrib { border-collapse:collapse; font-size:13px; margin-top:6px; }
+  table.contrib td, table.contrib th { border:1px solid var(--line); padding:2px 8px; text-align:right; }
+{% endblock %}
+{% block content %}
+
+{% if crumbs %}
+<div class="trail">
+  <b>↩ 戻り道</b>：
+  {% for c in crumbs %}
+    <a href="{{ c.url }}">{{ c.title }} の証明 第{{ c.n }}行</a> ›
+  {% endfor %}
+  <span>{{ u.title }}（いまここ）</span>
+  <div class="muted">用が済んだら，左のリンクで元の行へ帰れます．いちばん右のリンクが，直前にいた行です．</div>
+</div>
+{% endif %}
+
+<div class="head">
+  <div class="ttl">{{ u.icon }} {{ u.title }}<span class="role">{{ '主単元' if u.role == 'main' else '前提' }}</span></div>
+  <div class="sub">{{ u.subtitle }}</div>
+</div>
+
+<nav class="tabs">
+  {% for key, label, desc in stages %}
+  <a class="tab {{ 'on' if key == stage else '' }}" href="{{ url_for('sumizumi.unit', unit_id=u.id, stage=key, trail=trail_keep) }}">{{ label }}<small>{{ desc }}</small></a>
+  {% endfor %}
+</nav>
+
+{# ─────────────── 1 解説 ─────────────── #}
+{% if stage == 'explain' %}
+<div class="card">
+  {{ u.explain | safe }}
+  {% if uses %}
+  <h3>この単元で使う前提</h3>
+  <p class="uses">{% for p in uses %}<a href="{{ url_for('sumizumi.unit', unit_id=p.id) }}">{{ p.icon }} {{ p.title }}</a>{% endfor %}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ─────────────── 2 数値 ─────────────── #}
+{% if stage == 'numeric' %}
+<div class="card">
+  {{ u.numeric.intro | safe }}
+  <h3>やってみること</h3>
+  <ol class="tasks">{% for t in u.numeric.tasks %}<li>{{ t }}</li>{% endfor %}</ol>
+</div>
+<div class="widget-box" id="widget" data-widget="{{ u.numeric.widget }}"></div>
+{% endif %}
+
+{# ─────────────── 3 証明 ─────────────── #}
+{% if stage == 'proof' %}
+<div class="card">
+  {{ u.proof.intro | safe }}
+  <div class="ops" style="display:flex;gap:6px;flex-wrap:wrap;">
+    <button class="btn btn-sm" onclick="foldAll('hint', true)">ヒントを全部開く</button>
+    <button class="btn btn-sm" onclick="foldAll('detail', true)">くわしくを全部開く</button>
+    <button class="btn btn-sm" onclick="foldAll('hint', false); foldAll('detail', false)">全部閉じる</button>
+    <button class="btn btn-sm" onclick="checkAll()">全部の行を確かめる</button>
+  </div>
+</div>
+{% for s in steps %}
+<div class="step" id="step-{{ s.n }}">
+  <div class="no">第{{ s.n }}行</div>
+  <div class="eq">\[ {{ s.latex }} \]</div>
+  <div class="why">{{ s.text }}</div>
+  <div class="ops">
+    <button class="btn btn-sm" onclick="toggleFold('hint-{{ s.n }}')">ヒント</button>
+    <button class="btn btn-sm" onclick="toggleFold('detail-{{ s.n }}')">くわしく</button>
+    {% if s.check %}<button class="btn btn-sm btn-acc" data-check="{{ s.check }}" data-n="{{ s.n }}" onclick="runCheck(this)">SymPyで確かめる</button>{% endif %}
+    {% for l in s.links %}<a class="btn btn-sm back-link" href="{{ l.url }}">↩ 前提へ戻る：{{ l.icon }} {{ l.title }}</a>{% endfor %}
+  </div>
+  <div class="fold hint" id="hint-{{ s.n }}">💡 {{ s.hint }}</div>
+  <div class="fold detail" id="detail-{{ s.n }}">{{ s.detail | safe }}</div>
+  <div class="fold res" id="res-{{ s.n }}"></div>
+</div>
+{% endfor %}
+{% endif %}
+
+{# ─────────────── 4 ノート ─────────────── #}
+{% if stage == 'note' %}
+<div class="card">
+  <p>わかったことを，自分の言葉で整理します．次の問いは手がかりです．使っても使わなくてもかまいません．</p>
+  <ul class="prompts">{% for p in u.note.prompts %}<li>{{ p }}</li>{% endfor %}</ul>
+  <p class="muted">数式は <code>$ … $</code>（文中）と <code>$$ … $$</code>（別行）で書けます．ノートは自分だけが見られます．</p>
+  {% if not notes_ready %}<div class="flash flash-error">テーブル sumizumi_notes が無いため，保存できません．</div>{% endif %}
+</div>
+<div class="ops" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+  <button class="btn btn-acc" id="btnSave" onclick="saveNote()" {{ 'disabled' if not notes_ready }}>保存</button>
+  <button class="btn" onclick="preview()">プレビュー</button>
+  <button class="btn" onclick="insertPrompts()">問いを差し込む</button>
+  <button class="btn" id="btnExport" onclick="exportNote()" {{ 'disabled' if not notes_ready }}>マイノートへ書き出す</button>
+  <span class="muted" id="noteStatus">{% if note %}最終保存 {{ fmt_dt(note.updated_at) }}{% if note.my_md_note_id %}（マイノートへ書き出し済み）{% endif %}{% else %}まだ保存していません{% endif %}</span>
+</div>
+<div id="noteMsg"></div>
+<div class="note-wrap">
+  <textarea id="noteText" placeholder="ここに書きます">{{ note.content if note else '' }}</textarea>
+  <div class="preview" id="notePreview"><span class="muted">「プレビュー」で表示します．</span></div>
+</div>
+{% endif %}
+
+{# ─────────────── 段の送り ─────────────── #}
+<div class="nav-next">
+  {% set keys = stages | map(attribute=0) | list %}
+  {% set i = keys.index(stage) %}
+  <span>{% if i > 0 %}<a class="btn" href="{{ url_for('sumizumi.unit', unit_id=u.id, stage=keys[i-1], trail=trail_keep) }}">← {{ stages[i-1][1] }}</a>{% endif %}</span>
+  <span>
+    {% if crumbs %}<a class="btn back-link" href="{{ crumbs[-1].url }}">↩ {{ crumbs[-1].title }} の第{{ crumbs[-1].n }}行へ帰る</a>{% endif %}
+    {% if i < keys|length - 1 %}<a class="btn btn-acc" href="{{ url_for('sumizumi.unit', unit_id=u.id, stage=keys[i+1], trail=trail_keep) }}">{{ stages[i+1][1] }} →</a>{% endif %}
+  </span>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const UNIT_ID = {{ u.id | tojson }};
+const PROMPTS = {{ u.note.prompts | tojson }};
+const URLS = {
+  check: {{ url_for('sumizumi.api_check', name='__N__') | tojson }},
+  save: {{ url_for('sumizumi.api_note_save', unit_id=u.id) | tojson }},
+  preview: {{ url_for('sumizumi.api_preview') | tojson }},
+  exportNote: {{ url_for('sumizumi.api_note_export', unit_id=u.id) | tojson }}
+};
+
+function typeset(el) {
+  if (window.MathJax && MathJax.typesetPromise) { return MathJax.typesetPromise([el]).catch(() => {}); }
+  return Promise.resolve();
+}
+function toggleFold(id) { const el = document.getElementById(id); if (el) el.classList.toggle('open'); }
+function foldAll(kind, open) {
+  document.querySelectorAll('.fold.' + kind).forEach(el => el.classList.toggle('open', open));
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+async function runCheck(btn) {
+  const n = btn.dataset.n, box = document.getElementById('res-' + n);
+  btn.disabled = true; const label = btn.textContent; btn.textContent = '計算中…';
+  box.className = 'fold res open'; box.textContent = 'SymPy が計算しています…';
+  try {
+    const r = await fetch(URLS.check.replace('__N__', encodeURIComponent(btn.dataset.check)), {credentials: 'same-origin'});
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || '失敗しました');
+    const res = j.result;
+    box.innerHTML = '';
+    box.classList.add(res.ok ? 'ok' : 'ng');
+    box.appendChild(el('div', 'verdict', (res.ok ? '✅ 成り立ちました' : '⚠️ 成り立ちませんでした') + '（' + res.elapsed + ' 秒）'));
+    box.appendChild(el('div', '', res.summary));
+    (res.items || []).forEach(it => {
+      const d = el('div', 'item'); d.appendChild(el('div', 'lab', it.label));
+      d.appendChild(el('div', '', '\\[' + it.latex + '\\]')); box.appendChild(d);
+    });
+    if (res.note) box.appendChild(el('div', 'muted', res.note));
+    await typeset(box);
+  } catch (e) {
+    box.classList.add('ng'); box.textContent = '確かめられませんでした：' + e.message;
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
+async function checkAll() {
+  for (const b of document.querySelectorAll('button[data-check]')) { await runCheck(b); }
+}
+
+function showMsg(text, kind) {
+  const m = document.getElementById('noteMsg'); if (!m) return;
+  m.innerHTML = ''; const d = el('div', 'flash flash-' + (kind || 'info'), text); m.appendChild(d);
+}
+async function postJSON(url, body) {
+  const r = await fetch(url, {method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  let j = {}; try { j = await r.json(); } catch (e) { j = {success: false, error: 'サーバの応答を読めませんでした（' + r.status + '）'}; }
+  return j;
+}
+async function saveNote() {
+  const j = await postJSON(URLS.save, {content: document.getElementById('noteText').value});
+  if (j.success) { document.getElementById('noteStatus').textContent = '最終保存 ' + j.updated_at; showMsg('保存しました．', 'ok'); }
+  else showMsg(j.error || '保存できませんでした．', 'error');
+}
+async function preview() {
+  const box = document.getElementById('notePreview');
+  const j = await postJSON(URLS.preview, {content: document.getElementById('noteText').value});
+  if (j.success) { box.innerHTML = j.html; await typeset(box); }
+  else box.textContent = j.error || 'プレビューできませんでした．';
+}
+function insertPrompts() {
+  const ta = document.getElementById('noteText');
+  const text = PROMPTS.map(p => '## ' + p + '\n\n').join('');
+  const pos = ta.selectionStart || ta.value.length;
+  ta.value = ta.value.slice(0, pos) + text + ta.value.slice(pos); ta.focus();
+}
+async function exportNote() {
+  await saveNote();
+  const j = await postJSON(URLS.exportNote, {});
+  if (j.success) {
+    const m = document.getElementById('noteMsg'); m.innerHTML = '';
+    const d = el('div', 'flash flash-ok', (j.action === 'created' ? 'マイノートに新しく書き出しました．' : 'マイノートの同じノートを上書きしました．'));
+    if (j.url) { const a = el('a', '', ' マイノートで開く'); a.href = j.url; d.appendChild(a); }
+    m.appendChild(d);
+  } else showMsg(j.error || '書き出せませんでした．', 'error');
+}
+</script>
+{% if stage == 'numeric' %}{% include 'sumizumi/_widgets.html' %}{% endif %}
+{% endblock %}

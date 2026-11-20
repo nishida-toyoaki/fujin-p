@@ -1,0 +1,46 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'sumizumi/_base.html' %}
+{% block title %}すみずみ{% endblock %}
+{% block style %}
+  .hero { border:2px solid var(--acc); }
+  .hero .ttl { font-size:22px; font-weight:700; }
+  .hero .sub { color:var(--acc2); margin-bottom:6px; }
+  .goal { margin:8px 0; }
+  .how li { margin-bottom:4px; }
+{% endblock %}
+{% block content %}
+<h1>定理をすみずみまで</h1>
+
+{% if not progress_ready %}
+<div class="flash flash-error">進み具合を記録するテーブル sumizumi_progress が見つかりません．閲覧はできますが，確かめた印は残りません．管理者に，アプシャの台帳からテーブルを作るよう依頼してください．</div>
+{% endif %}
+
+{% for th in theorems %}
+{% set done = progress.get(th.id, {}) %}
+<div class="card hero">
+  <div class="ttl">{{ th.icon }} {{ th.title }}</div>
+  <div class="sub">{{ th.subtitle }}</div>
+  <div class="goal">\[ {{ th.goal_latex }} \]</div>
+  <p>{{ th.summary }}</p>
+  <a class="btn btn-acc" href="{{ url_for('sumizumi.theorem', theorem_id=th.id) }}">{{ '続きから' if done else 'ここから始める' }}</a>
+</div>
+{% endfor %}
+
+<h2>使い方</h2>
+<div class="card how">
+  <ul>
+    <li>証明は 6 つの節点に分かれています．画面の上に「節点1 → 節点2 → … → ノート」が並び，押した節点に移れます．確かめた節点には ✓ がつきます．</li>
+    <li>節点ごとに，その段階で示すことを，説明，式の順に書いてあります．下の「← 節点」「節点 →」ボタンで前後に移れます．</li>
+    <li>節点の下の「脇道」には，説明・プロット・数値・SymPyで導く，の項目が並んでいます．見出しを押すとその場で開き，もう一度押すと閉じます．必要なものだけ開いてください．</li>
+    <li>「SymPyで導く」の項目には，示す命題 P，出発点 X，目標 Y が書いてあります．「SymPy で X から Y を導く」ボタンを押すと，途中の式が順に出て，最後に Y に届いたかどうかが出ます．</li>
+    <li>右側（画面が狭いときは下）の「文字の棚」には，今の節点までに出てきた文字とその意味が並びます．今の節点で初めて出てきた文字には「新」がつきます．</li>
+    <li>節点の内容がわかったら「この節点を確かめた」を押します．もう一度押すと取り消せます．全部の節点に ✓ がついたら終わりです．</li>
+    <li>最後の「ノート」で，わかったことを自分の言葉で書いて保存できます．ノートは自分だけが見られ，「マイノートへ書き出す」でマイノートに移せます．</li>
+  </ul>
+</div>
+{% endblock %}

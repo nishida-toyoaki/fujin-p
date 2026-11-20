@@ -1,0 +1,298 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+{% extends 'sumizumi/_base.html' %}
+{% block title %}{{ th.title }} — すみずみ{% endblock %}
+{% block style %}
+  .thead .ttl { font-size:22px; font-weight:700; }
+  .thead .sub { color:var(--acc2); }
+  /* 骨格の地図 */
+  .spine { display:flex; align-items:stretch; gap:0; overflow-x:auto; margin:12px 0 16px; padding-bottom:4px; }
+  .spine a { text-decoration:none; }
+  .nd { min-width:120px; max-width:170px; border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px 10px;
+        font-size:12px; color:var(--ink); line-height:1.4; position:relative; }
+  .nd .no { font-weight:700; color:var(--sub); }
+  .nd.done { border-color:#a7f3d0; background:#ecfdf5; }
+  .nd.done .no { color:var(--ok); }
+  .nd.cur { border:2px solid var(--acc); box-shadow:0 0 0 3px var(--soft); }
+  .arrow { align-self:center; color:#9ca3af; padding:0 4px; font-size:16px; }
+  /* 本体 */
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:16px; align-items:start; }
+  @media (max-width:980px) { .layout { grid-template-columns:1fr; } }
+  .node-card { border:2px solid var(--acc); }
+  .node-card .kicker { font-size:13px; color:var(--acc); font-weight:700; }
+  .node-card .ttl { font-size:19px; font-weight:700; margin:2px 0 6px; }
+  .node-card .eq { margin:8px 0; }
+  .node-ops { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .done-btn.on { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .branch { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:8px; }
+  .branch > .bh { display:flex; align-items:center; gap:8px; padding:10px 14px; cursor:pointer; user-select:none; }
+  .branch > .bh:hover { background:#fafafa; }
+  .branch .caret { color:var(--sub); width:14px; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:10px; white-space:nowrap; }
+  .k-explain { background:#eef2ff; color:#3730a3; }
+  .k-plot { background:#ecfeff; color:#0e7490; }
+  .k-numeric { background:#fef3c7; color:#92400e; }
+  .k-sympy { background:#f0fdf4; color:#166534; }
+  .branch > .bb { display:none; padding:4px 16px 14px; border-top:1px solid var(--line); }
+  .branch.open > .bb { display:block; }
+  .task { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:8px 0; }
+  .task .row { display:grid; grid-template-columns:92px 1fr; gap:6px; align-items:center; margin:2px 0; }
+  .task .lab { font-weight:700; color:var(--acc2); font-size:13px; }
+  .deriv { margin-top:10px; }
+  .dstep { border-left:3px solid #d1d5db; padding:4px 0 4px 12px; margin:6px 0; }
+  .dstep .op { font-size:13px; }
+  .dstep .op .no { font-weight:700; color:var(--sub); margin-right:4px; }
+  .dstep pre { margin:4px 0; padding:4px 8px; background:#f3f4f6; border-radius:6px; font-size:12px; white-space:pre-wrap; color:#374151; }
+  .verdict { margin-top:8px; padding:8px 12px; border-radius:8px; }
+  .verdict.ok { background:#ecfdf5; color:#065f46; }
+  .verdict.ng { background:#fef2f2; color:var(--bad); }
+  /* 文字の棚 */
+  .shelf { position:sticky; top:72px; }
+  .shelf h3 { margin-top:0; }
+  .sym { padding:6px 0; border-bottom:1px dashed var(--line); font-size:13px; }
+  .sym .s { font-size:15px; }
+  .sym .new { font-size:11px; background:#fde68a; color:#92400e; border-radius:8px; padding:0 6px; margin-left:4px; }
+  .sym .from { font-size:11px; color:var(--sub); }
+  /* ノート */
+  .note-wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:900px) { .note-wrap { grid-template-columns:1fr; } }
+  textarea { width:100%; min-height:420px; font-family:'Noto Sans Mono','Consolas',monospace; font-size:14px; line-height:1.6;
+             border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .preview { min-height:420px; border:1px solid var(--line); border-radius:8px; padding:10px 14px; background:#fff; overflow:auto; }
+  /* ウィジェット */
+  .widget-box { margin-top:8px; }
+  .ctrls { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:8px 0; font-size:14px; }
+  .ctrls label { display:flex; align-items:center; gap:6px; }
+  .ctrls input[type=range] { width:150px; }
+  .readout { font-size:14px; background:#f9fafb; border-radius:8px; padding:8px 12px; margin-top:8px; }
+  canvas { width:100%; height:auto; display:block; background:#fff; border:1px solid var(--line); border-radius:8px; }
+  .verdict-ok { color:var(--ok); font-weight:700; }
+  .verdict-ng { color:var(--bad); font-weight:700; }
+  .verdict-warn { color:var(--warn); font-weight:700; }
+  table.contrib { border-collapse:collapse; font-size:13px; margin-top:6px; }
+  table.contrib td, table.contrib th { border:1px solid var(--line); padding:2px 8px; text-align:right; }
+  .finish { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }
+{% endblock %}
+{% block content %}
+<div class="thead">
+  <div class="ttl">{{ th.icon }} {{ th.title }}</div>
+  <div class="sub">{{ th.subtitle }}</div>
+</div>
+
+{# ── 骨格の地図 ── #}
+<nav class="spine">
+  {% for nd in nodes %}
+    <a class="nd {{ 'done' if nd.id in done }} {{ 'cur' if loop.index0 == idx }}" href="{{ url_for('sumizumi.theorem', theorem_id=th.id, node=nd.id) }}" title="{{ nd.title }}">
+      <div class="no">{{ '✓' if nd.id in done else '' }} 節点{{ loop.index }}</div>{{ nd.title }}
+    </a>
+    <span class="arrow">→</span>
+  {% endfor %}
+  <a class="nd {{ 'cur' if idx == nodes|length }}" href="{{ url_for('sumizumi.theorem', theorem_id=th.id, node='note') }}">
+    <div class="no">📝</div>ノート
+  </a>
+</nav>
+{% if not progress_ready %}<div class="flash flash-error">テーブル sumizumi_progress が無いため，確かめた印は残りません．</div>{% endif %}
+
+<div class="layout">
+<div>
+{% if node %}
+  {# ── 節点 ── #}
+  <div class="card node-card">
+    <div class="kicker">節点 {{ idx + 1 }} ／ {{ nodes|length }}</div>
+    <div class="ttl">{{ node.title }}</div>
+    {{ node.statement | safe }}
+    <div class="node-ops">
+      <button class="btn done-btn {{ 'on' if node.id in done }}" id="doneBtn" data-done="{{ 1 if node.id in done else 0 }}" onclick="toggleDone(this)">{{ '✓ 確かめた' if node.id in done else 'この節点を確かめた' }}</button>
+      {% if idx > 0 %}<a class="btn" href="{{ url_for('sumizumi.theorem', theorem_id=th.id, node=nodes[idx-1].id) }}">← 節点{{ idx }}</a>{% endif %}
+      {% if idx + 1 < nodes|length %}<a class="btn btn-acc" href="{{ url_for('sumizumi.theorem', theorem_id=th.id, node=nodes[idx+1].id) }}">節点{{ idx + 2 }} →</a>
+      {% else %}<a class="btn btn-acc" href="{{ url_for('sumizumi.theorem', theorem_id=th.id, node='note') }}">ノートへ →</a>{% endif %}
+      <span class="muted" id="doneMsg"></span>
+    </div>
+  </div>
+
+  {# ── 脇道 ── #}
+  {% if node.branches %}
+  <h3>脇道 <span class="muted" style="font-weight:400;">必要なものだけ開いてください</span>
+    <button class="btn btn-sm" style="margin-left:8px;" onclick="closeAll()">全部閉じる</button></h3>
+  {% for b in node.branches %}
+  <div class="branch" id="b-{{ b.id }}" data-kind="{{ b.kind }}" {% if b.widget %}data-widget="{{ b.widget }}" data-preset="{{ b.preset }}"{% endif %}>
+    <div class="bh" onclick="toggleBranch('{{ b.id }}')">
+      <span class="caret">▸</span><span class="badge k-{{ b.kind }}">{{ kind_labels[b.kind] }}</span><span>{{ b.title }}</span>
+    </div>
+    <div class="bb">
+      {% if b.kind == 'sympy' %}
+        {% set d = b.derivation %}
+        <div class="task">
+          <div class="row"><span class="lab">示す命題 P</span><span>{{ d.P }}</span></div>
+          <div class="row"><span class="lab">出発点 X</span><span>\( {{ d.X }} \)</span></div>
+          <div class="row"><span class="lab">目標 Y</span><span>\( {{ d.Y }} \)</span></div>
+          <div style="margin-top:6px;">命題 P を示すために，SymPy を用いて X から Y を導きます．{{ d.note }}</div>
+        </div>
+        <button class="btn btn-acc" data-name="{{ d.name }}" data-target="res-{{ b.id }}" onclick="derive(this)">SymPy で X から Y を導く</button>
+        <div class="deriv" id="res-{{ b.id }}"></div>
+      {% else %}
+        {{ b.html | safe }}
+        {% if b.widget %}<div class="widget-box" data-widget-root></div>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+{% else %}
+  {# ── ノート ── #}
+  {% if done|length == nodes|length %}
+  <div class="card finish">骨格の節点をすべて確かめました．最初の式に戻ってきたところです．</div>
+  {% else %}
+  <div class="flash flash-info">まだ確かめていない節点があります（{{ done|length }} ／ {{ nodes|length }}）．ノートはいつでも書けます．</div>
+  {% endif %}
+  <div class="card">
+    <p>骨格の出発点であり，終着点でもある式：</p>
+    <div class="eq">\[ {{ th.goal_latex }} \]</div>
+    <p>わかったことを，自分の言葉で整理します．次の問いは手がかりです．使っても使わなくてもかまいません．</p>
+    <ul>{% for p in th.note_prompts %}<li>{{ p }}</li>{% endfor %}</ul>
+    <p class="muted">数式は <code>$ … $</code>（文中）と <code>$$ … $$</code>（別行）で書けます．ノートは自分だけが見られます．</p>
+    {% if not note_ready %}<div class="flash flash-error">テーブル sumizumi_notes が無いため，保存できません．</div>{% endif %}
+  </div>
+  <div class="node-ops" style="margin-bottom:8px;">
+    <button class="btn btn-acc" id="btnSave" onclick="saveNote()" {{ 'disabled' if not note_ready }}>保存</button>
+    <button class="btn" onclick="preview()">プレビュー</button>
+    <button class="btn" onclick="insertPrompts()">問いを差し込む</button>
+    <button class="btn" id="btnExport" onclick="exportNote()" {{ 'disabled' if not note_ready }}>マイノートへ書き出す</button>
+    <span class="muted" id="noteStatus">{% if note %}最終保存 {{ fmt_dt(note.updated_at) }}{% if note.my_md_note_id %}（マイノートへ書き出し済み）{% endif %}{% else %}まだ保存していません{% endif %}</span>
+  </div>
+  <div id="noteMsg"></div>
+  <div class="note-wrap">
+    <textarea id="noteText" placeholder="ここに書きます">{{ note.content if note else '' }}</textarea>
+    <div class="preview" id="notePreview"><span class="muted">「プレビュー」で表示します．</span></div>
+  </div>
+{% endif %}
+</div>
+
+{# ── 文字の棚 ── #}
+<aside class="card shelf">
+  <h3>🔤 文字の棚</h3>
+  <div class="muted" style="margin-bottom:6px;">{{ '節点' ~ (idx + 1) ~ ' までに' if node else '骨格の全体で' }}出てきた文字</div>
+  {% for s in shelf %}
+  <div class="sym"><span class="s">\( {{ s.sym }} \)</span>{% if s.is_new and node %}<span class="new">新</span>{% endif %}
+    <div>{{ s.meaning | safe }} <span class="from">（節点{{ s.node_no }}）</span></div></div>
+  {% else %}
+  <div class="muted">まだありません</div>
+  {% endfor %}
+</aside>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const TH = {{ th.id | tojson }};
+const NODE = {{ (node.id if node else 'note') | tojson }};
+const PROMPTS = {{ th.note_prompts | tojson }};
+const URLS = {
+  derive: {{ url_for('sumizumi.api_derive', name='__N__') | tojson }},
+  progress: {{ url_for('sumizumi.api_progress', theorem_id=th.id, node_id='__ND__') | tojson }},
+  save: {{ url_for('sumizumi.api_note_save', theorem_id=th.id) | tojson }},
+  preview: {{ url_for('sumizumi.api_preview') | tojson }},
+  exportNote: {{ url_for('sumizumi.api_note_export', theorem_id=th.id) | tojson }}
+};
+function typeset(el) {
+  if (window.MathJax && MathJax.typesetPromise) return MathJax.typesetPromise([el]).catch(() => {});
+  return Promise.resolve();
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+async function postJSON(url, body) {
+  const r = await fetch(url, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  try { return await r.json(); } catch (e) { return {success: false, error: 'サーバの応答を読めませんでした（' + r.status + '）'}; }
+}
+
+/* 脇道：その場で開閉．ウィジェットは初めて開いたときに組み立てる */
+function toggleBranch(id) {
+  const b = document.getElementById('b-' + id); if (!b) return;
+  const open = b.classList.toggle('open');
+  b.querySelector('.caret').textContent = open ? '▾' : '▸';
+  if (open) {
+    const root = b.querySelector('[data-widget-root]');
+    if (root && !root.dataset.mounted && window.SumizumiWidgets) {
+      root.dataset.mounted = '1';
+      window.SumizumiWidgets.mount(root, b.dataset.widget, b.dataset.preset);
+    }
+    typeset(b.querySelector('.bb'));
+  }
+}
+function closeAll() { document.querySelectorAll('.branch.open').forEach(b => { b.classList.remove('open'); b.querySelector('.caret').textContent = '▸'; }); }
+
+/* SymPy で導く */
+async function derive(btn) {
+  const box = document.getElementById(btn.dataset.target);
+  btn.disabled = true; const label = btn.textContent; btn.textContent = 'SymPy が計算しています…';
+  box.innerHTML = '';
+  try {
+    const r = await fetch(URLS.derive.replace('__N__', encodeURIComponent(btn.dataset.name)), {credentials: 'same-origin'});
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || '失敗しました');
+    const res = j.result;
+    (res.steps || []).forEach((s, i) => {
+      const d = el('div', 'dstep');
+      const op = el('div', 'op'); op.appendChild(el('span', 'no', (i + 1) + '.')); op.appendChild(document.createTextNode(s.op)); d.appendChild(op);
+      if (s.code) d.appendChild(el('pre', '', s.code));
+      d.appendChild(el('div', '', '\\[' + s.latex + '\\]'));
+      box.appendChild(d);
+    });
+    const v = el('div', 'verdict ' + (res.reached ? 'ok' : 'ng'));
+    v.appendChild(el('div', '', (res.reached ? '✅ Y に届きました．' : '⚠️ Y に届きませんでした．') + '（' + res.elapsed + ' 秒）'));
+    v.appendChild(el('div', '', res.result));
+    box.appendChild(v);
+    await typeset(box);
+  } catch (e) {
+    box.appendChild(el('div', 'verdict ng', '導けませんでした：' + e.message));
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+/* 節点を確かめた印 */
+async function toggleDone(btn) {
+  const now = btn.dataset.done !== '1';
+  const j = await postJSON(URLS.progress.replace('__ND__', encodeURIComponent(NODE)), {done: now});
+  const msg = document.getElementById('doneMsg');
+  if (!j.success) { msg.textContent = j.error || '記録できませんでした．'; return; }
+  btn.dataset.done = now ? '1' : '0';
+  btn.classList.toggle('on', now);
+  btn.textContent = now ? '✓ 確かめた' : 'この節点を確かめた';
+  const chip = document.querySelector('.spine .nd.cur'); if (chip) chip.classList.toggle('done', now);
+  msg.textContent = now ? '記録しました．' : '印を外しました．';
+}
+
+/* ノート */
+function showMsg(text, kind) { const m = document.getElementById('noteMsg'); if (!m) return; m.innerHTML = ''; m.appendChild(el('div', 'flash flash-' + (kind || 'info'), text)); }
+async function saveNote() {
+  const j = await postJSON(URLS.save, {content: document.getElementById('noteText').value});
+  if (j.success) { document.getElementById('noteStatus').textContent = '最終保存 ' + j.updated_at; showMsg('保存しました．', 'ok'); }
+  else showMsg(j.error || '保存できませんでした．', 'error');
+}
+async function preview() {
+  const box = document.getElementById('notePreview');
+  const j = await postJSON(URLS.preview, {content: document.getElementById('noteText').value});
+  if (j.success) { box.innerHTML = j.html; await typeset(box); } else box.textContent = j.error || 'プレビューできませんでした．';
+}
+function insertPrompts() {
+  const ta = document.getElementById('noteText');
+  const text = PROMPTS.map(p => '## ' + p + '\n\n').join('');
+  const pos = ta.selectionStart || ta.value.length;
+  ta.value = ta.value.slice(0, pos) + text + ta.value.slice(pos); ta.focus();
+}
+async function exportNote() {
+  await saveNote();
+  const j = await postJSON(URLS.exportNote, {});
+  if (j.success) {
+    const m = document.getElementById('noteMsg'); m.innerHTML = '';
+    const d = el('div', 'flash flash-ok', (j.action === 'created' ? 'マイノートに新しく書き出しました．' : 'マイノートの同じノートを上書きしました．'));
+    if (j.url) { const a = el('a', '', ' マイノートで開く'); a.href = j.url; d.appendChild(a); }
+    m.appendChild(d);
+  } else showMsg(j.error || '書き出せませんでした．', 'error');
+}
+</script>
+{% include 'sumizumi/_widgets.html' %}
+{% endblock %}

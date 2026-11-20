@@ -1,0 +1,70 @@
+{#
+  This file is part of FUJIN-P.
+  SPDX-FileCopyrightText: 2024-2026 Toyoaki Nishida
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Source: https://github.com/nishida-toyoaki/fujin-p
+#}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}すみずみ{% endblock %}</title>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]'], ['$$', '$$']] },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
+    startup: { typeset: true }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<style>
+  :root { --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb; --bg:#f6f7f9; --acc:#3730a3; --acc2:#312e81;
+          --soft:#eef2ff; --ok:#047857; --bad:#b91c1c; --warn:#b45309; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif; color:var(--ink);
+         background:var(--bg); font-size:15px; line-height:1.75; }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+  .bar { max-width:1100px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:18px; margin-right:auto; }
+  .brand small { font-weight:400; color:var(--sub); font-size:12px; margin-left:8px; }
+  main { max-width:1100px; margin:0 auto; padding:18px 16px 60px; }
+  a { color:var(--acc); }
+  .btn { display:inline-block; padding:6px 14px; border-radius:8px; border:1px solid var(--line); background:#fff;
+         color:var(--ink); text-decoration:none; cursor:pointer; font-size:14px; font-family:inherit; line-height:1.5; }
+  .btn:hover { background:#f3f4f6; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .btn-acc { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .btn-acc:hover { background:var(--acc2); }
+  .btn-fujin { background:#dc2626; border-color:#dc2626; color:#fff; font-weight:700; }
+  .btn-fujin:hover { background:#b91c1c; }
+  .btn-home { background:#3730a3; border-color:#3730a3; color:#fff; font-weight:700; }
+  .btn-home:hover { background:#312e81; }
+  .btn-sm { padding:3px 10px; font-size:13px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  .muted { color:var(--sub); font-size:13px; }
+  .flash { padding:8px 12px; border-radius:8px; margin:8px 0; font-size:14px; }
+  .flash-info { background:var(--soft); color:var(--acc2); }
+  .flash-error { background:#fef2f2; color:var(--bad); }
+  .flash-ok { background:#ecfdf5; color:var(--ok); }
+  h1 { font-size:24px; margin:4px 0 6px; }
+  h2 { font-size:19px; margin:18px 0 8px; }
+  h3 { font-size:16px; margin:18px 0 6px; color:var(--acc2); }
+  mjx-container[display="true"] { overflow-x:auto; overflow-y:hidden; padding:2px 0; }
+  {% block style %}{% endblock %}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">🔍 すみずみ<small>定理をすみずみまで</small></div>
+    <a class="btn btn-home" href="{{ url_for('sumizumi.index') }}">すみずみのトップ</a>
+    <a class="btn btn-fujin" href="{{ url_for('sumizumi.return_to_fujin') }}">FUJIN-P</a>
+  </div>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+{% block script %}{% endblock %}
+</body>
+</html>
